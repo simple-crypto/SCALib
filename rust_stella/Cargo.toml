@@ -1,0 +1,19 @@
+[package]
+name = "rust_stella"
+version = "0.1.0"
+authors = ["obronchain <olivier.bronchain@uclouvain.be>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "rust_stella"
+crate-type = ["cdylib"]
+
+[dependencies.pyo3]
+version = "0.8.5"
+features = ["extension-module"]
+
+[dependencies]
+numpy = "0.7.0"
+ndarray = "0.13"
+
