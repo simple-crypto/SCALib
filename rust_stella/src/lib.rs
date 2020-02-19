@@ -22,6 +22,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         let mut sum2 = sum2.as_array_mut();
         let mut ns = ns.as_array_mut();
         let n_traces = traces.shape()[0];
+
         sum.axis_iter_mut(Axis(0))
             .into_par_iter()
             .zip(sum2.outer_iter_mut().into_par_iter())

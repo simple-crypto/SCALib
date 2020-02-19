@@ -48,7 +48,7 @@ class SNR:
             traces: (?,Ns) int16 or int8 array containing the array.
             X: (Np,?) uint16 array coutaining
         """
-        if not (traces.dtype == np.int16 or traces.dtype == np.int8):
+        if not (traces.dtype == np.int16):
             raise Exception("Trace type not supported {}".format(Trace.dtype))
         if self._Np == 1 and X.ndim == 1:
             X = X.reshape((1,len(X)))
