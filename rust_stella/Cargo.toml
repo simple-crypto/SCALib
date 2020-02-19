@@ -17,3 +17,5 @@ features = ["extension-module"]
 numpy = "0.7.0"
 ndarray = "0.13"
 
+[profile.release]
+debug = true
