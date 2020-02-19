@@ -5,7 +5,7 @@ import re
 Nc = 16
 Np = 8
 l = 50000
-n = 10000
+n = 1000
 def test_SNR_RUST(benchmark):
     traces = np.random.randint(0,256,(n,l),dtype=np.int16)
     x = np.random.randint(0,Nc,(Np,l),dtype=np.int16)
