@@ -1,4 +1,5 @@
 import numpy as np
+import stella.rust_stella as rust
 from scipy.special import comb
 class Ttest:
     """
@@ -24,39 +25,47 @@ class Ttest:
         # central moment up to D*2
         self._CS = np.zeros((2,2*D,Ns),dtype=np.float64)
 
-    def fit_u(self,traces,X,use_rust=False):
+    def fit_u(self,traces,C,use_rust=True):
         """
             Updates the Ttest status to take the fresh samples into account
 
             traces: (?,Ns) int16 or int8 array containing the array.
-            X: (?)  uint16 array coutaining the traces id (set 0 or ones)
+            C: (?)  uint16 array coutaining the traces id (set 0 or ones)
         """
         if not (traces.dtype == np.int16):
             raise Exception("Trace type not supported {}".format(Trace.dtype))
 
-        if X.ndim != 1:
+        if C.ndim != 1:
             raise Exception("Input X array does not match: Expected {} given {}".format(len(traces),len(X)))
-        if use_rust == True:
-            raise Exception("Rust not yet implemented")
 
         M = self._M
         n = self._n
         CS = self._CS
         D = self._D
 
-        for i in range(len(traces)):
-            y = traces[i,:]
-            x = X[i]
-            n[x] += 1
-            delta = y - M[x,:]
-            CS[x,0,:] = M[x,:]
-            for d in np.flip(range(2,(D*2)+1)):
-                if n[x]>1:
-                    tmp = (((n[x]-1)*delta/n[x])**(d)) * (1 - (-1/(n[x]-1))**(d-1))
-                    CS[x,(d-1),:] += tmp
-                for k in range(1,(d-2)+1):
-                    CS[x,(d-1),:] += comb(d,k)*CS[x,(d-k)-1,:]*(-delta/n[x])**k
-            M[x,:] += delta/n[x]
+        if use_rust:
+            rust.update_ttest(traces,
+                    C,
+                    n,
+                    CS,
+                    M,
+                    D);
+        else:
+            for i in range(len(traces)):
+                y = traces[i,:]
+                x = C[i]
+                n[x] += 1
+                delta = y - M[x,:]
+                for d in np.flip(range(2,(D*2)+1)):
+                    if n[x]>1:
+                        tmp = (((n[x]-1)*delta/n[x])**(d)) * (1 - (-1/(n[x]-1))**(d-1))
+
+                        CS[x,(d-1),:] += tmp
+                    for k in range(1,(d-2)+1):
+                        print("lol")
+                        CS[x,(d-1),:] += comb(d,k)*CS[x,(d-k)-1,:]*(-delta/n[x])**k
+                M[x,:] += delta/n[x]
+                CS[x,0,:] = M[x,:]
 
         CM0 = CS[0]/n[0]
         CM1 = CS[1]/n[1]
@@ -85,8 +94,12 @@ class Ttest:
 if __name__ == "__main__":
     Nt = 10000
     l = 10
+    np.random.seed(0);
     traces = np.random.normal(0,10,(Nt,l)).astype(np.int16)
-    c = np.random.randint(0,2,Nt).astype(np.int16)
-    traces = (traces.T + c).T
-    ttest = Ttest(l,D=2)
-    ttest.fit_u(traces,c)
+    c = np.random.randint(0,2,Nt).astype(np.uint16)
+    traces = (traces.T + c).T.astype(np.int16)
+    ttest = Ttest(l,D=1)
+    ttest.fit_u(traces,c,use_rust=False)
+
+    ttest_r = Ttest(l,D=1)
+    ttest_r.fit_u(traces,c,use_rust=True)
