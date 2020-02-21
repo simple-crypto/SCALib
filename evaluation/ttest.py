@@ -25,7 +25,7 @@ class Ttest:
         # central moment up to D*2
         self._CS = np.zeros((2,2*D,Ns),dtype=np.float64)
 
-    def fit_u(self,traces,C,use_rust=True):
+    def fit_u(self,traces,C,use_rust=True,nchunks=12):
         """
             Updates the Ttest status to take the fresh samples into account
 
@@ -49,7 +49,7 @@ class Ttest:
                     n,
                     CS,
                     M,
-                    D);
+                    D,nchunks);
         else:
             for i in range(len(traces)):
                 y = traces[i,:]
@@ -91,8 +91,8 @@ class Ttest:
         return t
 
 if __name__ == "__main__":
-    Nt = 10000
-    l = 10
+    Nt = 1000
+    l = 5000
     D = 2
     np.random.seed(0);
     traces = np.random.normal(0,10,(Nt,l)).astype(np.int16)

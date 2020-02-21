@@ -15,21 +15,23 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         n: &mut PyArray1<f64>,  // (len)
         cs: &mut PyArray3<f64>, // (2,D*2,N_sample)
         m: &mut PyArray2<f64>,  // (2,D*2,N_sample)
-        d: i32,                 //
+        d: i32,
+        nchunks: i32, //
     ) -> PyResult<()> {
         let traces = traces.as_array();
         let c = c.as_array();
         let mut n = n.as_array_mut();
         let mut cs = cs.as_array_mut();
         let mut m = m.as_array_mut();
-        let mut delta = Array::<f64, _>::zeros(traces.shape()[1]);
-
+        let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
         traces
-            .axis_chunks_iter(Axis(1), 100)
-            .zip(cs.axis_chunks_iter_mut(Axis(2), 100))
-            .zip(m.axis_chunks_iter_mut(Axis(1), 100))
+            .axis_chunks_iter(Axis(1), chunk_size)
+            .into_par_iter()
+            .zip(cs.axis_chunks_iter_mut(Axis(2), chunk_size).into_par_iter())
+            .zip(m.axis_chunks_iter_mut(Axis(1), chunk_size).into_par_iter())
             .for_each(|((traces, mut cs), mut m)| {
                 let mut n = n.to_owned();
+                let mut delta = Array::<f64, _>::zeros(traces.shape()[1]);
                 traces.outer_iter().enumerate().for_each(|(i, traces)| {
                     // iterates over all the traces
                     let x = c[i] as usize;
