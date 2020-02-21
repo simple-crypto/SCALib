@@ -31,6 +31,10 @@ class Ttest:
 
             traces: (?,Ns) int16 or int8 array containing the array.
             C: (?)  uint16 array coutaining the traces id (set 0 or ones)
+
+            use_rust: use low level rust function
+            nchunks: number of threads used to compute the ttest. only works
+            for use_rust mode.
         """
         if not (traces.dtype == np.int16):
             raise Exception("Trace type not supported {}".format(Trace.dtype))
