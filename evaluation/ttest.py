@@ -59,7 +59,6 @@ class Ttest:
                 for d in np.flip(range(2,(D*2)+1)):
                     if n[x]>1:
                         tmp = (((n[x]-1)*delta/n[x])**(d)) * (1 - (-1/(n[x]-1))**(d-1))
-
                         CS[x,(d-1),:] += tmp
                     for k in range(1,(d-2)+1):
                         print("lol")

@@ -31,19 +31,24 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             let nx = n[[x]];
 
             delta
+                .view_mut()
+                .into_slice()
+                .unwrap()
                 .iter_mut()
-                .zip(traces.slice(s![i, ..]).iter())
-                .zip(m.slice(s![x, ..]).iter())
+                .zip(traces.slice(s![i, ..]).into_slice().unwrap().iter())
+                .zip(m.slice(s![x, ..]).into_slice().unwrap().iter())
                 .for_each({ |((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx });
             for j in 2..(d * 2 + 1) {
                 if nx > 1.0 {
                     let mut r = cs.slice_mut(s![x, j - 1, ..]);
                     let mult = (nx - 1.0).powi(j) * (1.0 - (-1.0 / (nx - 1.0)).powi(j - 1));
-                    //let tmp = delta.mapv(|x| x * mult);
-                    //r += &(tmp);
-                    r.iter_mut().zip(delta.iter()).for_each(|(r, x)| {
-                        *r += x.powi(j as i32) * mult;
-                    });
+                    r.into_slice()
+                        .unwrap()
+                        .iter_mut()
+                        .zip(delta.view().into_slice().unwrap().iter())
+                        .for_each(|(r, x)| {
+                            *r += x.powi(j as i32) * mult;
+                        });
                 }
                 for k in 1..((j - 1) + 1) {
                     let I = (0..1);

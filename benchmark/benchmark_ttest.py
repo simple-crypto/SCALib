@@ -1,7 +1,7 @@
 from stella.evaluation.ttest import Ttest
 import numpy as np
 import re
-l = 2000
+l = 50000
 n = 5000
 D = 1
 
