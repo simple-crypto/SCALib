@@ -22,10 +22,10 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         let mut n = n.as_array_mut();
         let mut cs = cs.as_array_mut();
         let mut m = m.as_array_mut();
-        let n_traces = traces.shape()[0];
         let mut delta = Array::<f64, _>::zeros(traces.shape()[1]);
 
-        for i in 0..n_traces {
+        traces.outer_iter().enumerate().for_each(|(i, traces)| {
+            // iterates over all the traces
             let x = c[i] as usize;
             n[[x]] += 1.0;
             let nx = n[[x]];
@@ -34,7 +34,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                 .into_slice()
                 .unwrap()
                 .iter_mut()
-                .zip(traces.slice(s![i, ..]).into_slice().unwrap().iter())
+                .zip(traces.into_slice().unwrap().iter())
                 .zip(m.slice(s![x, ..]).into_slice().unwrap().iter())
                 .for_each({ |((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx });
             for j in (2..((d * 2) + 1)).rev() {
@@ -66,7 +66,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             let mut ret = m.slice_mut(s![x, ..]);
             ret += &(delta);
             cs.slice_mut(s![x, 0, ..]).assign(&ret);
-        }
+        });
         Ok(())
     }
 
