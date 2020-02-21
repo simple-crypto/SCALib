@@ -1,9 +1,9 @@
 from stella.evaluation.ttest import Ttest
 import numpy as np
 import re
-l = 50000
-n = 5000
-D = 1
+l = 25000
+n = 1000
+D = 2
 
 
 traces = np.random.normal(0,10,(n,l)).astype(np.int16)

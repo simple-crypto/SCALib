@@ -29,7 +29,6 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             let x = c[i] as usize;
             n[[x]] += 1.0;
             let nx = n[[x]];
-
             delta
                 .view_mut()
                 .into_slice()
@@ -38,7 +37,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                 .zip(traces.slice(s![i, ..]).into_slice().unwrap().iter())
                 .zip(m.slice(s![x, ..]).into_slice().unwrap().iter())
                 .for_each({ |((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx });
-            for j in 2..(d * 2 + 1) {
+            for j in (2..((d * 2) + 1)).rev() {
                 if nx > 1.0 {
                     let mut r = cs.slice_mut(s![x, j - 1, ..]);
                     let mult = (nx - 1.0).powi(j) * (1.0 - (-1.0 / (nx - 1.0)).powi(j - 1));
@@ -50,9 +49,9 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                             *r += x.powi(j as i32) * mult;
                         });
                 }
-                for k in 1..((j - 1) + 1) {
-                    let I = (0..1);
-                    let tab = cs.slice_mut(s![x, I, ..]);
+                for k in 1..((j - 2) + 1) {
+                    let I = ((j - k - 1)..(j));
+                    let tab = cs.slice_mut(s![x, I;k, ..]);
                     let (a, b) = tab.split_at(Axis(0), 1);
                     let cb = binomial(j, k) as f64;
                     inner_loop_ttest(
@@ -126,5 +125,5 @@ fn inner_loop_ttest(dest: &mut [f64], cs: &[f64], delta: &[f64], comb: f64, k: i
     dest.iter_mut()
         .zip(delta.iter())
         .zip(cs.iter())
-        .for_each(|((dest, delta), cs)| *dest -= comb * delta.powi(k) * cs);
+        .for_each(|((dest, delta), cs)| *dest += comb * (-delta).powi(k) * cs);
 }

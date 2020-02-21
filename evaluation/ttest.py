@@ -61,8 +61,8 @@ class Ttest:
                         tmp = (((n[x]-1)*delta/n[x])**(d)) * (1 - (-1/(n[x]-1))**(d-1))
                         CS[x,(d-1),:] += tmp
                     for k in range(1,(d-2)+1):
-                        print("lol")
-                        CS[x,(d-1),:] += comb(d,k)*CS[x,(d-k)-1,:]*(-delta/n[x])**k
+                        cb = comb(d,k);
+                        CS[x,(d-1),:] += cb*CS[x,(d-k)-1,:]*(-delta/n[x])**k
                 M[x,:] += delta/n[x]
                 CS[x,0,:] = M[x,:]
 
@@ -93,12 +93,13 @@ class Ttest:
 if __name__ == "__main__":
     Nt = 10000
     l = 10
+    D = 2
     np.random.seed(0);
     traces = np.random.normal(0,10,(Nt,l)).astype(np.int16)
     c = np.random.randint(0,2,Nt).astype(np.uint16)
     traces = (traces.T + c).T.astype(np.int16)
-    ttest = Ttest(l,D=1)
+    ttest = Ttest(l,D=D)
     ttest.fit_u(traces,c,use_rust=False)
 
-    ttest_r = Ttest(l,D=1)
+    ttest_r = Ttest(l,D=D)
     ttest_r.fit_u(traces,c,use_rust=True)
