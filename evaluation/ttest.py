@@ -25,7 +25,7 @@ class Ttest:
         # central moment up to D*2
         self._CS = np.zeros((2,2*D,Ns),dtype=np.float64)
 
-    def fit_u(self,traces,C,use_rust=True,nchunks=12):
+    def fit_u(self,traces,C,use_rust=True,nchunks=2):
         """
             Updates the Ttest status to take the fresh samples into account
 
@@ -35,6 +35,9 @@ class Ttest:
             use_rust: use low level rust function
             nchunks: number of threads used to compute the ttest. only works
             for use_rust mode.
+
+            return:
+            t: (D,Ns) then contains all the ttest up to the order D
         """
         if not (traces.dtype == np.int16):
             raise Exception("Trace type not supported {}".format(Trace.dtype))
@@ -72,21 +75,23 @@ class Ttest:
 
         CM0 = CS[0]/n[0]
         CM1 = CS[1]/n[1]
-        if self._D == 1:
-            u0 = M[0,:];u1 = M[1,:]
-            v0 = CM0[1,:];v1=CM1[1,:]
-        elif self._D == 2:
-            u0 = CM0[1,:];u1=CM1[1,:]
-            v0 = CM0[3,:] - CM0[1,:]**2
-            v1 = CM1[3,:] - CM1[1,:]**2
-        else:
-            u0 = CM0[D-1,:]/np.power(CM0[1,:],D/2);
-            u1 = CM1[D-1,:]/np.power(CM1[1,:],D/2);
+        t = np.zeros((self._D,len(traces[0,:])))
+        for d in range(1,self._D+1):
+            if d == 1:
+                u0 = M[0,:];u1 = M[1,:]
+                v0 = CM0[1,:];v1=CM1[1,:]
+            elif d == 2:
+                u0 = CM0[1,:];u1=CM1[1,:]
+                v0 = CM0[3,:] - CM0[1,:]**2
+                v1 = CM1[3,:] - CM1[1,:]**2
+            else:
+                u0 = CM0[D-1,:]/np.power(CM0[1,:],D/2);
+                u1 = CM1[D-1,:]/np.power(CM1[1,:],D/2);
+                
+                v0 = (CM0[(D*2)-1,:] - CM0[(D)-1,:]**2)/(CM0[1,:]**D) 
+                v1 = (CM1[(D*2)-1,:] - CM1[(D)-1,:]**2)/(CM1[1,:]**D) 
             
-            v0 = (CM0[(D*2)-1,:] - CM0[(D)-1,:]**2)/(CM0[1,:]**D) 
-            v1 = (CM1[(D*2)-1,:] - CM1[(D)-1,:]**2)/(CM1[1,:]**D) 
-        
-        t = (u0-u1)/(np.sqrt((v0/n[0]) + (v1/n[1])))
+            t[d-1,:] = (u0-u1)/(np.sqrt((v0/n[0]) + (v1/n[1])))
         self._t = t
         self._v0 = v0
         self._u0 = u0
