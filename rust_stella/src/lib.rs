@@ -24,49 +24,60 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         let mut m = m.as_array_mut();
         let mut delta = Array::<f64, _>::zeros(traces.shape()[1]);
 
-        traces.outer_iter().enumerate().for_each(|(i, traces)| {
-            // iterates over all the traces
-            let x = c[i] as usize;
-            n[[x]] += 1.0;
-            let nx = n[[x]];
-            delta
-                .view_mut()
-                .into_slice()
-                .unwrap()
-                .iter_mut()
-                .zip(traces.into_slice().unwrap().iter())
-                .zip(m.slice(s![x, ..]).into_slice().unwrap().iter())
-                .for_each({ |((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx });
-            for j in (2..((d * 2) + 1)).rev() {
-                if nx > 1.0 {
-                    let mut r = cs.slice_mut(s![x, j - 1, ..]);
-                    let mult = (nx - 1.0).powi(j) * (1.0 - (-1.0 / (nx - 1.0)).powi(j - 1));
-                    r.into_slice()
+        traces
+            .axis_chunks_iter(Axis(1), 100)
+            .zip(cs.axis_chunks_iter_mut(Axis(2), 100))
+            .zip(m.axis_chunks_iter_mut(Axis(1), 100))
+            .for_each(|((traces, mut cs), mut m)| {
+                let mut n = n.to_owned();
+                traces.outer_iter().enumerate().for_each(|(i, traces)| {
+                    // iterates over all the traces
+                    let x = c[i] as usize;
+                    n[[x]] += 1.0;
+                    let nx = n[[x]];
+                    delta
+                        .view_mut()
+                        .into_slice()
                         .unwrap()
                         .iter_mut()
-                        .zip(delta.view().into_slice().unwrap().iter())
-                        .for_each(|(r, x)| {
-                            *r += x.powi(j as i32) * mult;
-                        });
-                }
-                for k in 1..((j - 2) + 1) {
-                    let I = ((j - k - 1)..(j));
-                    let tab = cs.slice_mut(s![x, I;k, ..]);
-                    let (a, b) = tab.split_at(Axis(0), 1);
-                    let cb = binomial(j, k) as f64;
-                    inner_loop_ttest(
-                        b.into_slice().unwrap(),
-                        a.into_slice().unwrap(),
-                        delta.as_slice().unwrap(),
-                        cb,
-                        k,
-                    );
-                }
-            }
-            let mut ret = m.slice_mut(s![x, ..]);
-            ret += &(delta);
-            cs.slice_mut(s![x, 0, ..]).assign(&ret);
-        });
+                        .zip(traces.into_slice().unwrap().iter())
+                        .zip(m.slice(s![x, ..]).into_slice().unwrap().iter())
+                        .for_each({ |((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx });
+                    for j in (2..((d * 2) + 1)).rev() {
+                        if nx > 1.0 {
+                            let mut r = cs.slice_mut(s![x, j - 1, ..]);
+                            let mult = (nx - 1.0).powi(j) * (1.0 - (-1.0 / (nx - 1.0)).powi(j - 1));
+                            r.into_slice()
+                                .unwrap()
+                                .iter_mut()
+                                .zip(delta.view().into_slice().unwrap().iter())
+                                .for_each(|(r, x)| {
+                                    *r += x.powi(j as i32) * mult;
+                                });
+                        }
+                        for k in 1..((j - 2) + 1) {
+                            let I = ((j - k - 1)..(j));
+                            let tab = cs.slice_mut(s![x, I;k, ..]);
+                            let (a, b) = tab.split_at(Axis(0), 1);
+                            let cb = binomial(j, k) as f64;
+                            inner_loop_ttest(
+                                b.into_slice().unwrap(),
+                                a.into_slice().unwrap(),
+                                delta.as_slice().unwrap(),
+                                cb,
+                                k,
+                            );
+                        }
+                    }
+                    let mut ret = m.slice_mut(s![x, ..]);
+                    ret += &(delta);
+                    cs.slice_mut(s![x, 0, ..]).assign(&ret);
+                });
+            });
+        for i in 0..traces.shape()[0] {
+            let x = c[i] as usize;
+            n[[x]] += 1.0;
+        }
         Ok(())
     }
 
