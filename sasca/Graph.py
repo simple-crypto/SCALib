@@ -32,11 +32,11 @@ class VNode:
     N = 0
     buff = []
 
-    @classmethod
+    @staticmethod
     def reset_all():
-        for b in buff:
+        for b in VNode.buff:
             del b
-        buff = []
+        VNode.buff = []
         N = 0
     def __init__(self,value=None,result_of=None):
         """
@@ -81,7 +81,15 @@ class VNode:
             args:
                 - distri: the initial distribution of the node
                 - Nk: the number of possible values that this node can take
-            the two cannot be None at the same time ... 
+            the two cannot be None at the same time ...
+
+            created state:
+                - relative contains the position of this variable in its functions nodes
+                - distri extrinsic distribution of the node
+                - distri_orig intrinsic distriution of the node
+                - header: information about this node:
+                    | ID | is a result | len(used_by)|
+                - id_neighboor: if of the neighboors, starting with the result_of
         """
         if Nk is None and distri is None:
             raise Exception("Nk and distri cannot be None at the same time")
@@ -90,39 +98,45 @@ class VNode:
             distri = np.ones(Nk,dtype=distribution_dtype)/Nk
         else:
             distri = distri.astype(distribution_dtype)
+            Nk = len(distri)
 
+        # header
+        Ni = self._result_of is not None
+        Nf = len(self._used_by)
+        self._header = np.array([self._id,
+                            Ni,
+                            Nf,
+                            Nk,
+                            1]).astype(np.uint32)
         # relative contains the position of this variable node
-        # at in input of each of the functions that use it
-        self._relative = [fnode._inputs.index(self) for fnode in self._used_by]
+        # at in input of each of the functions that use it. In fnodes, 
+        # the msg with index 0 is always the output. There comes the 1+. 
+        self._relative = np.array([1 + fnode._inputs.index(self) for fnode in self._used_by]).astype(np.uint32)
         self._distri = distri
         self._distri_orig = distri.copy()
 
-    def dump(self):
-        tobytes = np.ndarray.tobytes
-        if self._i is None:
-            Ni = 0
+        # one message to result_of and on to each function using this node
+        nmsg = Ni + Nf
+        self._msg = np.zeros((nmsg,Nk),dtype=distribution_dtype)
+        
+        # function node that outputs this node
+        if Ni > 0:
+            self._id_input = np.uint32(self._result_of._id)
         else:
-            Ni = 1
-        if self._fnodes is None:
-            Nf = 0
+            self._id_input = np.uint32(0)
+
+        # function node that uses this node
+        if Nf > 0:
+            self._id_output = np.array([node._id for node in self._used_by],dtype=np.uint32)
         else:
-            Nf = len(self._fnodes)
-
-        header = tobytes(np.array([self._id,Ni,Nf,self._Nk,self._update]).astype(np.uint32))
-        ids = tobytes(np.concatenate(([i for i in self._relative],)).astype(np.uint32))
-        self._all_related = np.concatenate(([self._i._id for i in range(Ni)],[self._fnodes[i]._id for i in range(Nf)])).astype(np.uint32)
-        all_related = tobytes(self._all_related)
-        distri = tobytes(np.concatenate((self._distri_orig,)).astype(doublet))
-
-        header = np.frombuffer(header,dtype=np.uint8)
-        distri = np.frombuffer(distri,dtype=np.uint8)
-        ids = np.frombuffer(ids,dtype=np.uint8)
-        r = np.frombuffer(all_related,dtype=np.uint8)
-        buff = np.concatenate((header,ids,r,distri)).astype(np.uint8)
-        self._buff = buff
-
-        return buff
-
+            self._id_output = np.array([],dtype=np.uint32)
+        
+        tmp = []
+        if self._result_of is not None:
+            tmp.append(self._result_of._id)
+        for node in self._used_by:
+            tmp.append(node._id)
+        self._id_neighboor = np.array(tmp,dtype=np.uint32)
 
 class FNode:
     """
@@ -138,11 +152,11 @@ class FNode:
 
     N = 0
     buff = []
-    @classmethod
+    @staticmethod
     def reset_all():
-        for b in buff:
+        for b in FNode.buff:
             del b
-        buff = []
+        FNode.buff = []
         N = 0
 
     def __init__(self,func,inputs=None,offset=None):
@@ -161,7 +175,12 @@ class FNode:
         self._func = func
         self._func_id = all_functions.index(func)
         self._inputs = inputs
-        self._offset = offset
+        if offset is None:
+            self._has_offset = False
+            self._offset = np.uint32(0)
+        else:
+            self._has_offset = True
+            self._offset = np.uint32(offset)
 
         # notify that all the inputs that they are used here
         if inputs is not None:
@@ -172,12 +191,16 @@ class FNode:
         return str(self._id)
 
     def eval(self):
+        """
+            apply the function to its inputs and return 
+            the output
+        """
         I = []
-        for v in self._i:
+        for v in self._inputs:
             I.append(v.eval())
 
         if len(I) == 1:
-            if self._offset is not None:
+            if self._has_offset:
                 return self._func(I[0],self._offset)
             else:
                 return self._func(I[0])
@@ -186,49 +209,49 @@ class FNode:
 
     def add_output(self,vnode):
         self._output = vnode
+    
+    def initialize(self,Nk):
+        """ initialize the message memory for this function node"""
+        nmsg = len(self._inputs) + 1
+        self._header = np.array([self._id,
+                    len(self._inputs),
+                    self._has_offset,
+                    self._offset,
+                    self._func_id]).astype(np.uint32)
 
-    def dump(self):
-        tobytes = np.ndarray.tobytes
-        FILE = "fnode_%d.dat"%(self._id)
-        has_offset = self._offset is not None
-        if has_offset == True:
-            offset = self._offset
-        else:
-            offset = 0
-
-        if self._func == band:
-            func_id = 0
-        elif self._func == binv:
-            func_id = 1
-        elif self._func == bxor:
-            func_id = 2
-        elif self._func == ROL16:
-            func_id = 3
-        elif self._func == SBOX:
-            func_id = 4
-        elif self._func == SBOX_inv:
-            func_id = 5
-        elif self._func == xtime:
-            func_id = 6
-        elif self._func == delta:
-            func_id = 7
-
-        self._relatives = np.array([np.where(vnode._all_related==self._id)[0] for vnode in self._i]).astype(np.uint32)
-        relatives = tobytes(self._relatives) # for the inputs, outputed value is always at index 0 in the variable node
-        header = tobytes(np.array([self._id,len(self._i),has_offset,offset,func_id]).astype(np.uint32))
-        ids = tobytes(np.concatenate(([i._id for i in self._i],[self._outputvnode._id])).astype(np.uint32))
-
-        header = np.frombuffer(header,dtype=np.uint8)
-        ids = np.frombuffer(ids,dtype=np.uint8)
-        relatives = np.frombuffer(relatives,dtype=np.uint8)
-        buff = np.concatenate((header,ids,relatives)).astype(np.uint8)
-        self._buff = buff
-        return buff
+        ## Position of the inputs in the variable nodes. 
+        # The output node is always first in the variable node
+        self._i = np.array([node._id for node in self._inputs]).astype(np.uint32)
+        self._o = np.uint32(self._output._id)
+        self._relatives = np.array([np.where(vnode._id_neighboor==self._id)[0] for vnode in self._inputs]).astype(np.uint32)
+        self._msg = np.zeros((nmsg,Nk),dtype=distribution_dtype)
+        self._indexes = np.zeros((3,Nk),dtype=np.uint32)
+        for i in range(3):
+            self._indexes[i,:] = np.arange(Nk)
 
 def apply_func(func=bxor,inputs=[None],offset=None):
+    """ apply the functionc func to the inputs and 
+        returns the output node 
+    """
     FTMP = FNode(func=func,inputs=inputs,offset=offset)
     return VNode(result_of=FTMP)
 
+def initialize_graph(distri=None,Nk=None):
+    """
+        initialize the complete factor graph
+        distri: (#ofVnode,Nk) or None. The row of distri are assigned to 
+            the VNode with the row index
+        Nk: the number of possible values for the variable nodes
+    """
+    for p,node in enumerate(VNode.buff):
+        if distri is not None:
+            d = distri[p,:]
+            Nk = len(d)
+        else:
+            d = None
+        node.initialize(distri=d,Nk=Nk)
+    for node in FNode.buff:
+        node.initialize(Nk=Nk)
 def build_nx_grah(fnodes):
     G = nx.DiGraph()
     off = 0
@@ -237,6 +260,7 @@ def build_nx_grah(fnodes):
             G.add_edges_from([(vnode,F)])
         G.add_edges_from([(F,F._output)])
     return G
+
 def plot_graph(fnodes=None):
     if fnodes is None:
         fnodes = FNode.buff
