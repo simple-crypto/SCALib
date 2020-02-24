@@ -44,14 +44,14 @@ void update_vnode_log(Vnode *vnode){
     // add msg to input node if exists, substracts its contribution to tmp1
     if(Ni > 0){
         apply_log10(tmp2,fnodes[vnode->id_input].msg,Nk); 
-        sub_vec(vnode->distri,tmp1,tmp2,0,Nk);
-        add_cst_dest(vnode->distri,vnode->distri,-get_max(vnode->distri,Nk),Nk);
-        apply_P10(vnode->distri,vnode->distri,Nk);
-        normalize_vec(vnode->distri,vnode->distri,Nk,0);
+        sub_vec(vnode->msg,tmp1,tmp2,0,Nk);
+        add_cst_dest(vnode->msg,vnode->msg,-get_max(vnode->msg,Nk),Nk);
+        apply_P10(vnode->msg,vnode->msg,Nk);
+        normalize_vec(vnode->msg,vnode->msg,Nk,0);
     }
 
     for(i=0;i<Nf;i++){
-        proba_t *curr_msg = &(vnode->distri[index((Ni+i),0,Nk)]);
+        proba_t *curr_msg = &(vnode->msg[index((Ni+i),0,Nk)]);
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
         apply_log10(tmp2,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
@@ -81,7 +81,7 @@ void update_vnode(Vnode *vnode){
         return;
     }
     for(i=0;i<((Nf+Ni)*Nk);i++)
-        vnode->distri[i] = 1.0;
+        vnode->msg[i] = 1.0;
     // init the distri with original distri
 
     // compute to the function that outputed that variable
@@ -91,14 +91,14 @@ void update_vnode(Vnode *vnode){
         for(i=0;i<Nf;i++){
             fnode_id = vnode->id_output[i];
             r = vnode->relative[i];
-            mult_vec(vnode->distri,vnode->distri,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
+            mult_vec(vnode->msg,vnode->msg,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
         }
-        mult_vec(vnode->distri,vnode->distri,vnode->distri_orig,Nk);
-        normalize_vec(vnode->distri,vnode->distri,Nk,0);
+        mult_vec(vnode->msg,vnode->msg,vnode->distri_orig,Nk);
+        normalize_vec(vnode->msg,vnode->msg,Nk,0);
     }
 
     for(i=0;i<Nf;i++){
-        proba_t *curr_msg = &(vnode->distri[index((Ni+i),0,Nk)]);
+        proba_t *curr_msg = &(vnode->msg[index((Ni+i),0,Nk)]);
         if(Ni>0)
             mult_vec(curr_msg,curr_msg,fnodes[vnode->id_input].msg,Nk);
         for(j=0;j<Nf;j++){
@@ -140,8 +140,8 @@ void update_fnode(Fnode *fnode){
     // compute the distri of first input and output distribution
     vnode0 = &vnodes[fnode->i[0]];
     vnodeO = &vnodes[fnode->o];
-    distriO = vnodeO->distri;
-    distri0 = &(vnode0->distri[index(fnode->relative[0],0,Nk)]);
+    distriO = vnodeO->msg;
+    distri0 = &(vnode0->msg[index(fnode->relative[0],0,Nk)]);
 
     if(distriO == NULL)
         exit(EXIT_FAILURE);
@@ -153,27 +153,12 @@ void update_fnode(Fnode *fnode){
 
         // get the last input node messages
         vnode1 = &vnodes[fnode->i[1]];
-        printf("vnode1.id %d \n",vnode1->id);
-        printf("vnode0.id %d \n",vnode0->id);
-        distri1 = &(vnode1->distri[index(fnode->relative[1],0,Nk)]);
-        for(int cnt =0; cnt<Nk;cnt++)
-            printf("%f ",distri0[cnt]);
-        printf("\n");
-        
-        for(int cnt =0; cnt<Nk;cnt++)
-            printf("%f ",distri1[cnt]);
-        printf("\n");
-        for(int cnt =0; cnt<Nk;cnt++)
-            printf("%f ",distriO[cnt]);
-        printf("\n");
-        
+        distri1 = &(vnode1->msg[index(fnode->relative[1],0,Nk)]);
         if(fnode->func_id == 2){ // XOR NODES
-            printf("XOR \n");
             xor_fwht(fnode->msg,distri0,distri1,distriO);
             tile(fnode->msg,fnode->msg,TILE,Nk);
         }
         else if(fnode->func_id == 0){ // AND Nodes
-            printf("AND \n");
             and_ex(fnode->msg,distri0,distri1,distriO);
         }
         else

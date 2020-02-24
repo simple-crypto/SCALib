@@ -17,7 +17,7 @@ struct Vnode{
     uint32_t*   relative;   // the relative within the function node input (of size Ni)
     uint32_t    id_input;   // id of input function node
     uint32_t*   id_output;  // id of output function node
-    proba_t*    distri;     // message to pass
+    proba_t*    msg;     // message to pass
     proba_t*    distri_orig; // initial log distribution of the node
     proba_t*    distri_all; // actual distribution of the nodes
 }typedef Vnode;

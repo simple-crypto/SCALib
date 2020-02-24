@@ -21,8 +21,8 @@ if __name__ == "__main__":
     print("C has a value %02x \n"%(C.eval()))
 
     print("plot the factor graph")
-#    plot_graph()
-#    plt.show(block=False)
+    #plot_graph()
+    #plt.show()
 
     print("Initialize the complete Graph")
     distri = np.ones((3,Nk))/Nk
@@ -34,3 +34,5 @@ if __name__ == "__main__":
     initialize_graph(distri=distri,Nk=Nk)
 
     graph = Graph(Nk=Nk,DIR="../",nthread=1)
+    graph.run_bp(it=1)
+    print('The guessed C is %d and expected %d'%(np.argmax(C._distri_all),C.eval()))

@@ -58,7 +58,6 @@ class Graph():
                 ctypes.c_uint32,
                 ctypes.c_uint32,
                 ctypes.c_uint32])
-        
     def run_bp(self,it=1):
         self._run_bp(self._vnodes_array,
             self._fnodes_array,
@@ -78,21 +77,6 @@ class VNode(ctypes.Structure):
             - result_of: is the function node that outputs this variable node
             - used_by: is the function node that use this variable node
 
-struct Vnode{
-    uint32_t    id;         // id
-    uint32_t    Ni;         // functions outputing this node
-    uint32_t    Nf;         // Number of function using this variable
-    uint32_t    Ns;         // dimention of the distribution at this node
-    uint32_t    update;     // that node needs to be update
-
-    uint32_t*   relative;   // the relative within the function node input (of size Ni)
-    uint32_t    id_input;   // id of input function node
-    uint32_t*   id_output;  // id of output function node
-    proba_t*    distri;     // message to pass
-    proba_t*    distri_orig; // initial log distribution of the node
-    proba_t*    distri_all; // actual distribution of the nodes
-}typedef Vnode;
-
     """
     N = 0
     buff = []
@@ -104,7 +88,7 @@ struct Vnode{
             ('relative', ctypes.POINTER(ctypes.c_uint32)),
             ('id_input', ctypes.c_uint32),
             ('id_output', ctypes.POINTER(ctypes.c_uint32)),
-            ('distri', ctypes.POINTER(ctypes.c_double)),
+            ('msg', ctypes.POINTER(ctypes.c_double)),
             ('distri_orig', ctypes.POINTER(ctypes.c_double)),
             ('distri_all', ctypes.POINTER(ctypes.c_double))] 
     @staticmethod
@@ -148,7 +132,7 @@ struct Vnode{
         """
         self._used_by.append(fnode)
     def __str__(self):
-        return str(self._id)
+        return "v" + str(self._id)
 
     def initialize(self,Nk=None,distri=None):
         """ Initialize the variable node. It goes in all its neighboors and
@@ -163,8 +147,6 @@ struct Vnode{
                 - relative contains the position of this variable in its functions nodes
                 - distri extrinsic distribution of the node
                 - distri_orig intrinsic distriution of the node
-                - header: information about this node:
-                    | ID | is a result | len(used_by)|
                 - id_neighboor: if of the neighboors, starting with the result_of
         """
         if Nk is None and distri is None:
@@ -192,9 +174,9 @@ struct Vnode{
 
         nmsg = self.Ni + self.Nf
         # one message to result_of and on to each function using this node
-        self._distri = np.zeros((nmsg,Nk),dtype=distribution_dtype)
+        self._msg = np.zeros((nmsg,Nk),dtype=distribution_dtype)
         for i in range(nmsg):
-            self._distri[i,:] = distri
+            self._msg[i,:] = distri
         
         # function node that outputs this node
         if self.Ni > 0:
@@ -218,7 +200,7 @@ struct Vnode{
         self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.id_output = self._id_output.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.id_input = self._id_input
-        self.distri = self._distri.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.distri_orig = self._distri_orig.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.distri_all = self._distri_all.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
@@ -232,20 +214,6 @@ class FNode(ctypes.Structure):
             - id: is the id of then node. The ids are distributed in ordre
             - inputs: are the variable nodes at the input of this function
             - output: is the ouput of this function node.
-struct Fnode{
-    uint32_t    id;         // id
-    uint32_t    li;         // number of inputs
-    uint32_t    has_offset; // Does function requires cst
-    uint32_t    offset;     // constant
-    uint32_t    func_id;       // fct code (ie 0 = AND, 2 == XOR)
-
-    uint32_t*   i;          // list of input nodes ids
-    uint32_t    o;          // output node id
-    uint32_t*   relative;   // the position within each related nodes 
-    proba_t*    msg;        // msg send to the vnodes index(0) = output
-    uint32_t*   indexes[3];// sorted indexes for and gates (to avoid worst case complexity)
-} typedef Fnode;
-
     """
     _fields_ = [('id', ctypes.c_uint32),
             ('li', ctypes.c_uint32),
@@ -296,7 +264,7 @@ struct Fnode{
                 n.used_by(self)
 
     def __str__(self):
-        return str(self._id)
+        return "f" + str(self._id)
 
     def eval(self):
         """
@@ -375,6 +343,8 @@ def build_nx_grah(fnodes):
     off = 0
     for F in fnodes:
         for vnode in F._inputs:
+            print(vnode)
+            print(F)
             G.add_edges_from([(vnode,F)])
         G.add_edges_from([(F,F._output)])
     return G
