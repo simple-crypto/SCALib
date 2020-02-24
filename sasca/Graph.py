@@ -1,7 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 import networkx as nx
-
+import ctypes
 ############################
 #     Function for nodes
 ############################ 
@@ -15,10 +15,59 @@ def ROL16(a, offset):   #ID 3
         return a
     rs = int(np.log2(Nk) - offset)
     return  (((a) << offset) ^ (a >> (rs)))%Nk
+
 ##############################
-distribution_dtype = np.float64
+distribution_dtype = np.double
 all_functions = [band,binv,bxor,ROL16]
-class VNode:
+
+class Graph():
+    @staticmethod
+    def wrap_function(lib, funcname, restype, argtypes):
+        """Simplify wrapping ctypes functions"""
+        func = lib.__getattr__(funcname)
+        func.restype = restype
+        func.argtypes = argtypes
+        return func
+
+    def __init__(self,Nk,nthread=8,vnodes=None,fnodes=None,DIR=""):
+        if vnodes is None:
+            vnodes = VNode.buff
+        self._vnodes = vnodes
+
+        if fnodes is None:
+            fnodes = FNode.buff
+        self._fnodes = fnodes
+
+        self._nthread = nthread
+        self._Nk = Nk
+
+        self._fnodes_array = (FNode*len(fnodes))()
+        self._vnodes_array = (VNode*len(vnodes))()
+
+        for i,node in enumerate(fnodes):
+            self._fnodes_array[i] = node
+
+        for i,node in enumerate(vnodes):
+            self._vnodes_array[i] = node
+
+        self._lib = ctypes.CDLL(DIR+"./libbp.so")
+        self._run_bp = self.wrap_function(self._lib,"run_bp",None,[ctypes.POINTER(VNode),
+                ctypes.POINTER(FNode),
+                ctypes.c_uint32,
+                ctypes.c_uint32,
+                ctypes.c_uint32,
+                ctypes.c_uint32,
+                ctypes.c_uint32])
+        
+    def run_bp(self,it=1):
+        self._run_bp(self._vnodes_array,
+            self._fnodes_array,
+            ctypes.c_uint32(self._Nk),
+            ctypes.c_uint32(len(self._vnodes)),
+            ctypes.c_uint32(len(self._fnodes)),
+            ctypes.c_uint32(it),
+            ctypes.c_uint32(self._nthread))
+class VNode(ctypes.Structure):
     """
         This object contains the variable nodes of the factor graph
 
@@ -28,16 +77,43 @@ class VNode:
             - id: is the id of then node. The ids are distributed in ordre
             - result_of: is the function node that outputs this variable node
             - used_by: is the function node that use this variable node
+
+struct Vnode{
+    uint32_t    id;         // id
+    uint32_t    Ni;         // functions outputing this node
+    uint32_t    Nf;         // Number of function using this variable
+    uint32_t    Ns;         // dimention of the distribution at this node
+    uint32_t    update;     // that node needs to be update
+
+    uint32_t*   relative;   // the relative within the function node input (of size Ni)
+    uint32_t    id_input;   // id of input function node
+    uint32_t*   id_output;  // id of output function node
+    proba_t*    distri;     // message to pass
+    proba_t*    distri_orig; // initial log distribution of the node
+    proba_t*    distri_all; // actual distribution of the nodes
+}typedef Vnode;
+
     """
     N = 0
     buff = []
-
+    _fields_ = [('id', ctypes.c_uint32),
+            ('Ni', ctypes.c_uint32),
+            ('Nf', ctypes.c_uint32),
+            ('Ns', ctypes.c_uint32),
+            ('update', ctypes.c_uint32),
+            ('relative', ctypes.POINTER(ctypes.c_uint32)),
+            ('id_input', ctypes.c_uint32),
+            ('id_output', ctypes.POINTER(ctypes.c_uint32)),
+            ('distri', ctypes.POINTER(ctypes.c_double)),
+            ('distri_orig', ctypes.POINTER(ctypes.c_double)),
+            ('distri_all', ctypes.POINTER(ctypes.c_double))] 
     @staticmethod
     def reset_all():
         for b in VNode.buff:
             del b
         VNode.buff = []
         N = 0
+
     def __init__(self,value=None,result_of=None):
         """
             value: is the value of the node
@@ -101,32 +177,33 @@ class VNode:
             Nk = len(distri)
 
         # header
-        Ni = self._result_of is not None
-        Nf = len(self._used_by)
-        self._header = np.array([self._id,
-                            Ni,
-                            Nf,
-                            Nk,
-                            1]).astype(np.uint32)
+        self.id = np.uint32(self._id)
+        self.Ni = np.uint32(self._result_of is not None)
+        self.Nf = np.uint32(len(self._used_by))
+        self.Ns = np.uint32(Nk)
+        self.update = np.uint32(1)
+        
         # relative contains the position of this variable node
         # at in input of each of the functions that use it. In fnodes, 
         # the msg with index 0 is always the output. There comes the 1+. 
         self._relative = np.array([1 + fnode._inputs.index(self) for fnode in self._used_by]).astype(np.uint32)
-        self._distri = distri
-        self._distri_orig = distri.copy()
+        self._distri_all = distri.astype(dtype=distribution_dtype)
+        self._distri_orig = self._distri_all.copy()
 
+        nmsg = self.Ni + self.Nf
         # one message to result_of and on to each function using this node
-        nmsg = Ni + Nf
-        self._msg = np.zeros((nmsg,Nk),dtype=distribution_dtype)
+        self._distri = np.zeros((nmsg,Nk),dtype=distribution_dtype)
+        for i in range(nmsg):
+            self._distri[i,:] = distri
         
         # function node that outputs this node
-        if Ni > 0:
+        if self.Ni > 0:
             self._id_input = np.uint32(self._result_of._id)
         else:
             self._id_input = np.uint32(0)
 
         # function node that uses this node
-        if Nf > 0:
+        if self.Nf > 0:
             self._id_output = np.array([node._id for node in self._used_by],dtype=np.uint32)
         else:
             self._id_output = np.array([],dtype=np.uint32)
@@ -137,8 +214,15 @@ class VNode:
         for node in self._used_by:
             tmp.append(node._id)
         self._id_neighboor = np.array(tmp,dtype=np.uint32)
+        
+        self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
+        self.id_output = self._id_output.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
+        self.id_input = self._id_input
+        self.distri = self._distri.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        self.distri_orig = self._distri_orig.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        self.distri_all = self._distri_all.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
-class FNode:
+class FNode(ctypes.Structure):
     """
         This object contains the function nodes of the factor graph
 
@@ -148,7 +232,31 @@ class FNode:
             - id: is the id of then node. The ids are distributed in ordre
             - inputs: are the variable nodes at the input of this function
             - output: is the ouput of this function node.
+struct Fnode{
+    uint32_t    id;         // id
+    uint32_t    li;         // number of inputs
+    uint32_t    has_offset; // Does function requires cst
+    uint32_t    offset;     // constant
+    uint32_t    func_id;       // fct code (ie 0 = AND, 2 == XOR)
+
+    uint32_t*   i;          // list of input nodes ids
+    uint32_t    o;          // output node id
+    uint32_t*   relative;   // the position within each related nodes 
+    proba_t*    msg;        // msg send to the vnodes index(0) = output
+    uint32_t*   indexes[3];// sorted indexes for and gates (to avoid worst case complexity)
+} typedef Fnode;
+
     """
+    _fields_ = [('id', ctypes.c_uint32),
+            ('li', ctypes.c_uint32),
+            ('has_offset', ctypes.c_uint32),
+            ('offset', ctypes.c_uint32),
+            ('func_id', ctypes.c_uint32),
+            ('i', ctypes.POINTER(ctypes.c_uint32)),
+            ('o', ctypes.c_uint32),
+            ('relative', ctypes.POINTER(ctypes.c_uint32)),
+            ('msg', ctypes.POINTER(ctypes.c_double)),
+            ('indexes', ctypes.POINTER(ctypes.c_uint32))] 
 
     N = 0
     buff = []
@@ -223,12 +331,22 @@ class FNode:
         # The output node is always first in the variable node
         self._i = np.array([node._id for node in self._inputs]).astype(np.uint32)
         self._o = np.uint32(self._output._id)
-        self._relatives = np.array([np.where(vnode._id_neighboor==self._id)[0] for vnode in self._inputs]).astype(np.uint32)
+        self._relative = np.array([np.where(vnode._id_neighboor==self._id)[0] for vnode in self._inputs]).astype(np.uint32)
         self._msg = np.zeros((nmsg,Nk),dtype=distribution_dtype)
         self._indexes = np.zeros((3,Nk),dtype=np.uint32)
         for i in range(3):
             self._indexes[i,:] = np.arange(Nk)
 
+        self.id = np.uint32(self._id)
+        self.li = np.uint32(len(self._i))
+        self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
+        self.i = self._i.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
+        self.indexes = self._indexes.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
+        self.o = np.uint32(self._o)
+        self.has_offset = np.uint32(self._has_offset)
+        self.offset = np.uint32(self._offset)
+        self.func_id = np.uint32(self._func_id)
+        self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 def apply_func(func=bxor,inputs=[None],offset=None):
     """ apply the functionc func to the inputs and 
         returns the output node 
