@@ -63,9 +63,9 @@ void update_vnode_log(Vnode *vnode){
     }
 
     //add_vec(tmp1,tmp1,tmp3,Nk);
-    add_cst_dest(vnode->distri_all,tmp1,-get_max(tmp1,Nk),Nk);
-    apply_P10(vnode->distri_all,vnode->distri_all,Nk);
-    normalize_vec(vnode->distri_all,vnode->distri_all,Nk,0);
+    add_cst_dest(vnode->distri,tmp1,-get_max(tmp1,Nk),Nk);
+    apply_P10(vnode->distri,vnode->distri,Nk);
+    normalize_vec(vnode->distri,vnode->distri,Nk,0);
 
     free(tmp1);free(tmp2);
 }
@@ -115,17 +115,17 @@ void update_vnode(Vnode *vnode){
     // compute all
     // add all the functions that use this node
     for(i=0;i<Nk;i++)
-        vnode->distri_all[i] = 256*(Nf+Ni);
+        vnode->distri[i] = 256*(Nf+Ni);
     for(i=0;i<Nf;i++){
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
-        mult_vec(vnode->distri_all,vnode->distri_all,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
+        mult_vec(vnode->distri,vnode->distri,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
     }
     if(Ni > 0){
-        mult_vec(vnode->distri_all,vnode->distri_all,fnodes[vnode->id_input].msg,Nk);
+        mult_vec(vnode->distri,vnode->distri,fnodes[vnode->id_input].msg,Nk);
     }
-    mult_vec(vnode->distri_all,vnode->distri_all,vnode->distri_orig,Nk);
-    normalize_vec(vnode->distri_all,vnode->distri_all,Nk,0);
+    mult_vec(vnode->distri,vnode->distri,vnode->distri_orig,Nk);
+    normalize_vec(vnode->distri,vnode->distri,Nk,0);
 }
 void update_fnode(Fnode *fnode){
     Vnode *vnode0,*vnode1,*vnodeO;
@@ -163,9 +163,6 @@ void update_fnode(Fnode *fnode){
         }
         else
             exit(EXIT_FAILURE);
-        for(int cnt =0; cnt<Nk;cnt++)
-            printf("%f ",fnode->msg[cnt]);
-        printf("\n");
     }
     else if(fnode->li == 1){
         // iterate over the (single) sets of input

@@ -90,7 +90,7 @@ class VNode(ctypes.Structure):
             ('id_output', ctypes.POINTER(ctypes.c_uint32)),
             ('msg', ctypes.POINTER(ctypes.c_double)),
             ('distri_orig', ctypes.POINTER(ctypes.c_double)),
-            ('distri_all', ctypes.POINTER(ctypes.c_double))] 
+            ('distri', ctypes.POINTER(ctypes.c_double))] 
     @staticmethod
     def reset_all():
         for b in VNode.buff:
@@ -169,8 +169,8 @@ class VNode(ctypes.Structure):
         # at in input of each of the functions that use it. In fnodes, 
         # the msg with index 0 is always the output. There comes the 1+. 
         self._relative = np.array([1 + fnode._inputs.index(self) for fnode in self._used_by]).astype(np.uint32)
-        self._distri_all = distri.astype(dtype=distribution_dtype)
-        self._distri_orig = self._distri_all.copy()
+        self._distri = distri.astype(dtype=distribution_dtype)
+        self._distri_orig = self._distri.copy()
 
         nmsg = self.Ni + self.Nf
         # one message to result_of and on to each function using this node
@@ -202,7 +202,7 @@ class VNode(ctypes.Structure):
         self.id_input = self._id_input
         self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.distri_orig = self._distri_orig.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        self.distri_all = self._distri_all.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+        self.distri = self._distri.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
 class FNode(ctypes.Structure):
     """

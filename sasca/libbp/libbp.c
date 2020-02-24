@@ -105,7 +105,7 @@ void run_bp(Vnode * vnodes_i,
     Nk = nk; 
     vnodes = vnodes_i;
     fnodes = fnodes_i;
-    print_vnode(vnodes);
+    //print_vnode(vnodes);
     lim[0] = nvnodes;
     lim[1] = nfnodes;
     pthread_t threads[nthread];

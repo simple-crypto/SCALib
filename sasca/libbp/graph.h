@@ -19,7 +19,7 @@ struct Vnode{
     uint32_t*   id_output;  // id of output function node
     proba_t*    msg;     // message to pass
     proba_t*    distri_orig; // initial log distribution of the node
-    proba_t*    distri_all; // actual distribution of the nodes
+    proba_t*    distri; // actual distribution of the nodes
 }typedef Vnode;
 
 struct Fnode{

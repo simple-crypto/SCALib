@@ -35,4 +35,4 @@ if __name__ == "__main__":
 
     graph = Graph(Nk=Nk,DIR="../",nthread=1)
     graph.run_bp(it=1)
-    print('The guessed C is %d and expected %d'%(np.argmax(C._distri_all),C.eval()))
+    print('The guessed C is %d and expected %d'%(np.argmax(C._distri),C.eval()))
