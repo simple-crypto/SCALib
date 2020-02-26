@@ -17,7 +17,8 @@ if __name__ == "__main__":
     print("Example to build a Factor Graph")
     A = VNode(value=0x3)
     B = VNode(value=0x8)
-    C = apply_func(band,inputs=[A,B])
+    D = apply_func(band,inputs=[A,B])
+    C = apply_func(bxor,inputs=[D,A])
     print("C has a value %02x \n"%(C.eval()))
 
     print("plot the factor graph")
@@ -25,7 +26,7 @@ if __name__ == "__main__":
     #plt.show()
 
     print("Initialize the complete Graph")
-    distri = np.ones((3,Nk))/Nk
+    distri = np.ones((4,Nk))/Nk
     distri[0,:] = 0
     distri[0,A.eval()] = 1
     distri[1,:] = 0
@@ -34,5 +35,5 @@ if __name__ == "__main__":
     initialize_graph(distri=distri,Nk=Nk)
 
     graph = Graph(Nk=Nk,DIR="../",nthread=1)
-    graph.run_bp(it=1)
+    graph.run_bp(it=2)
     print('The guessed C is %d and expected %d'%(np.argmax(C._distri),C.eval()))

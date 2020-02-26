@@ -10,9 +10,7 @@
 #include "graph.h"
 #include "graph_utils.h"
 
-#ifndef N_PER_THREAD
-#define NPERTHREAD 1
-#endif
+#define NPERTHREAD 10
 
 Vnode *vnodes;
 Fnode *fnodes;
@@ -20,8 +18,8 @@ Fnode *fnodes;
 uint32_t cnt_vnodes,cnt_fnodes;
 pthread_mutex_t lock_vnodes,lock_fnodes;
 uint32_t Nk;
-void print_vnode(Vnode vnode_all[]){
-    for(int j=0;j<3;j++){
+void print_vnode(Vnode vnode_all[],uint32_t size){
+        for(int j=0;j<size;j++){
         Vnode *vnode = &vnode_all[j];
         printf("ID %d \n",vnode->id);
         printf("Ni %d \n",vnode->Ni);
@@ -33,9 +31,23 @@ void print_vnode(Vnode vnode_all[]){
             printf(" %.4f ",vnode->distri_orig[i]);
         }
         printf("\n");
-    }
+        }
 }
+void print_fnode(Fnode fnode_all[],uint32_t size){
+        for(int j=0;j<size;j++){
+        Fnode *fnode = &fnode_all[j];
+        printf("ID %d \n",fnode->id);
+        printf("li %d \n",fnode->li);
+        printf("offset %d \n",fnode->offset);
+        printf("func_id %d \n",fnode->func_id);
 
+        uint32_t i =0;
+        for(i=0;i<(fnode->li*Nk);i++){
+            printf(" %.4f ",fnode->msg[i]);
+        }
+        printf("\n");
+        }
+}
 void shuffle(uint32_t *tab,uint32_t len){
     uint32_t i,j,r;
     for(i=0;i<len;i++){
@@ -83,8 +95,9 @@ void* my_thread_fnodes(void *in){
         init = cnt_fnodes;
         cnt_fnodes += NPERTHREAD;
         pthread_mutex_unlock(&lock_fnodes);
-        for(id=init;(id<(init+NPERTHREAD)) && (id<nfnodes);id++)
+        for(id=init;(id<(init+NPERTHREAD)) && (id<nfnodes);id++){
             update_fnode(&fnodes[id]);
+        }
         pthread_mutex_lock(&lock_fnodes);
     }
     pthread_mutex_unlock(&lock_fnodes);
@@ -105,7 +118,8 @@ void run_bp(Vnode * vnodes_i,
     Nk = nk; 
     vnodes = vnodes_i;
     fnodes = fnodes_i;
-    //print_vnode(vnodes);
+    //print_vnode(vnodes,nvnodes);
+    //print_fnode(fnodes,nfnodes);
     lim[0] = nvnodes;
     lim[1] = nfnodes;
     pthread_t threads[nthread];
@@ -113,6 +127,7 @@ void run_bp(Vnode * vnodes_i,
     pthread_mutex_init(&lock_fnodes,NULL);
 
     for(i=0;i<it_c;i++){
+        printf("Iteration %d \n",i);
         // update fnodes
         cnt_fnodes = 0;
         cnt_vnodes = 0;
@@ -122,7 +137,7 @@ void run_bp(Vnode * vnodes_i,
         for(j=0;j<nthread;j++){
             pthread_join(threads[j],NULL);
         }
-
+        printf("Vnodes");
         // update vnodes
         for(j=0;j<nthread;j++){
             pthread_create(&threads[j],NULL,my_thread_vnodes,(void*)lim);

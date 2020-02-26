@@ -41,12 +41,14 @@ class SNR:
         del self._ns,self._sum,self._sum2,self._means
         del self._SNR,self._vars
 
-    def fit_u(self,traces,X,use_rust=True):
+    def fit_u(self,traces,X,use_rust=True,nchunks=1):
         """
             Updates the SNR status to take the fresh samples into account
 
             traces: (?,Ns) int16 or int8 array containing the array.
             X: (Np,?) uint16 array coutaining
+            use_rust: use low level rust
+            nchunks: in how many chunks to // the snr
         """
         if not (traces.dtype == np.int16):
             raise Exception("Trace type not supported {}".format(Trace.dtype))
@@ -58,7 +60,7 @@ class SNR:
         I = np.arange(self._Np)
 
         if use_rust:
-            rust.update_snr(traces,X,self._sum,self._sum2,self._ns)
+            rust.update_snr(traces,X,self._sum,self._sum2,self._ns,nchunks)
         else:
             n = len(traces[:,0])
             for i in tqdm(range(n),desc="SNR"):

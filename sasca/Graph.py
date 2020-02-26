@@ -2,6 +2,7 @@ import numpy as np
 from tqdm import tqdm
 import networkx as nx
 import ctypes
+
 ############################
 #     Function for nodes
 ############################ 
@@ -109,7 +110,7 @@ class VNode(ctypes.Structure):
         self._id = VNode.N
         VNode.N += 1
         VNode.buff.append(self)
-
+        self._flag = 0
         # say to the funciton node that this is its output. 
         if result_of is not None: 
             result_of.add_output(self)
@@ -168,7 +169,7 @@ class VNode(ctypes.Structure):
         # relative contains the position of this variable node
         # at in input of each of the functions that use it. In fnodes, 
         # the msg with index 0 is always the output. There comes the 1+. 
-        self._relative = np.array([1 + fnode._inputs.index(self) for fnode in self._used_by]).astype(np.uint32)
+        self._relative = np.array([1+fnode._inputs.index(self) for fnode in self._used_by]).astype(np.uint32)
         self._distri = distri.astype(dtype=distribution_dtype)
         self._distri_orig = self._distri.copy()
 
@@ -223,8 +224,7 @@ class FNode(ctypes.Structure):
             ('i', ctypes.POINTER(ctypes.c_uint32)),
             ('o', ctypes.c_uint32),
             ('relative', ctypes.POINTER(ctypes.c_uint32)),
-            ('msg', ctypes.POINTER(ctypes.c_double)),
-            ('indexes', ctypes.POINTER(ctypes.c_uint32))] 
+            ('msg', ctypes.POINTER(ctypes.c_double))] 
 
     N = 0
     buff = []
@@ -289,11 +289,6 @@ class FNode(ctypes.Structure):
     def initialize(self,Nk):
         """ initialize the message memory for this function node"""
         nmsg = len(self._inputs) + 1
-        self._header = np.array([self._id,
-                    len(self._inputs),
-                    self._has_offset,
-                    self._offset,
-                    self._func_id]).astype(np.uint32)
 
         ## Position of the inputs in the variable nodes. 
         # The output node is always first in the variable node
@@ -307,14 +302,15 @@ class FNode(ctypes.Structure):
 
         self.id = np.uint32(self._id)
         self.li = np.uint32(len(self._i))
-        self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
-        self.i = self._i.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
-        self.indexes = self._indexes.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
-        self.o = np.uint32(self._o)
         self.has_offset = np.uint32(self._has_offset)
         self.offset = np.uint32(self._offset)
         self.func_id = np.uint32(self._func_id)
+
+        self.i = self._i.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
+        self.o = np.uint32(self._o)
+        self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+
 def apply_func(func=bxor,inputs=[None],offset=None):
     """ apply the functionc func to the inputs and 
         returns the output node 
@@ -343,8 +339,6 @@ def build_nx_grah(fnodes):
     off = 0
     for F in fnodes:
         for vnode in F._inputs:
-            print(vnode)
-            print(F)
             G.add_edges_from([(vnode,F)])
         G.add_edges_from([(F,F._output)])
     return G

@@ -65,7 +65,7 @@ void update_vnode_log(Vnode *vnode){
     //add_vec(tmp1,tmp1,tmp3,Nk);
     add_cst_dest(vnode->distri,tmp1,-get_max(tmp1,Nk),Nk);
     apply_P10(vnode->distri,vnode->distri,Nk);
-    normalize_vec(vnode->distri,vnode->distri,Nk,0);
+    normalize_vec(vnode->distri,vnode->distri,Nk,1);
 
     free(tmp1);free(tmp2);
 }
@@ -76,10 +76,6 @@ void update_vnode(Vnode *vnode){
     Ni = vnode->Ni;
     Nf = vnode->Nf;
    
-    if((Nf+Ni)>D){
-        update_vnode_log(vnode);
-        return;
-    }
     for(i=0;i<((Nf+Ni)*Nk);i++)
         vnode->msg[i] = 1.0;
     // init the distri with original distri
@@ -136,7 +132,6 @@ void update_fnode(Fnode *fnode){
 
 
     memset(fnode->msg,0,sizeof(proba_t)*Nk*(fnode->li +1));
-
     // compute the distri of first input and output distribution
     vnode0 = &vnodes[fnode->i[0]];
     vnodeO = &vnodes[fnode->o];

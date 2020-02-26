@@ -91,6 +91,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         sum: &mut PyArray3<i64>,  // (Np,Nc,N_sample)
         sum2: &mut PyArray3<i64>, // (Np,Nc,N_sample)
         ns: &mut PyArray2<u32>,   // (Np,Nc)
+        nchunks: i32,
     ) -> PyResult<()> {
         let traces = traces.as_array();
         let x = x.as_array();
@@ -98,23 +99,39 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         let mut sum2 = sum2.as_array_mut();
         let mut ns = ns.as_array_mut();
         let n_traces = traces.shape()[0];
-
+        let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
         sum.axis_iter_mut(Axis(0))
             .into_par_iter()
             .zip(sum2.outer_iter_mut().into_par_iter())
             .zip(ns.outer_iter_mut().into_par_iter())
             .enumerate()
             .for_each(|(p, ((mut sum, mut sum2), mut ns))| {
+                traces
+                    .axis_chunks_iter(Axis(1), chunk_size)
+                    .into_par_iter()
+                    .zip(
+                        sum.axis_chunks_iter_mut(Axis(1), chunk_size)
+                            .into_par_iter(),
+                    )
+                    .zip(
+                        sum2.axis_chunks_iter_mut(Axis(1), chunk_size)
+                            .into_par_iter(),
+                    )
+                    .for_each(|((traces, mut sum), mut sum2)| {
+                        for i in 0..n_traces {
+                            let v = x[[p, i]] as usize;
+                            let m = sum.slice_mut(s![v, ..]);
+                            let sq = sum2.slice_mut(s![v, ..]);
+                            let l = traces.slice(s![i, ..]);
+                            inner_loop_snr(
+                                m.into_slice().unwrap(),
+                                sq.into_slice().unwrap(),
+                                l.into_slice().unwrap(),
+                            );
+                        }
+                    });
                 for i in 0..n_traces {
                     let v = x[[p, i]] as usize;
-                    let m = sum.slice_mut(s![v, ..]);
-                    let sq = sum2.slice_mut(s![v, ..]);
-                    let l = traces.slice(s![i, ..]);
-                    inner_loop_snr(
-                        m.into_slice().unwrap(),
-                        sq.into_slice().unwrap(),
-                        l.into_slice().unwrap(),
-                    );
                     ns[v] += 1;
                 }
             });
