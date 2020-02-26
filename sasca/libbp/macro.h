@@ -1,13 +1,4 @@
 #include <math.h>
-#ifndef ERROR_FACTOR
-    #define ERROR_FACTOR 1E-4
-#endif
-#ifndef MIN_AND
-    #define MIN_AND 4096
-#endif
-#ifndef MAX_IT
-    #define MAX_IT (0x02ffff)
-#endif
 #ifndef ZERO
     #define ZERO 1E-10 
 #endif

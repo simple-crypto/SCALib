@@ -13,22 +13,6 @@
 
 extern uint32_t Nk;
 
-int cmpfunc_inv(const void *a, const void *b, void * tab){
-    uint32_t id_a,id_b;
-    proba_t *proba_to_sort = (proba_t *) tab;
-
-    id_a = (uint32_t) *(uint32_t *)a;
-    id_b = (uint32_t) *(uint32_t *)b;
-
-    //printf("%.20f and %.20f \n",proba_to_sort[id_a],proba_to_sort[id_b]);
-    if(proba_to_sort[id_a]>proba_to_sort[id_b])
-        return -1;
-    else if(proba_to_sort[id_a] < proba_to_sort[id_b])
-        return 1;
-    else
-        return 0;
-}
-
 void and_ex(proba_t *msg,proba_t *distri0,proba_t *distri1,proba_t *distriO){
     uint32_t i0,i1,o;
     for(i0=0;i0<Nk;i0++){
@@ -90,16 +74,6 @@ void xor_fwht(proba_t *msg,proba_t *distri0,proba_t *distri1,proba_t *distriO){
     fwht(&msg[index(2,0,Nk)],Nk);
 }
 
-void hard_thr(proba_t *distri,proba_t thr,uint32_t len){
-    uint32_t *index,i,lim;
-    index = (uint32_t *) malloc(sizeof(uint32_t)*len);
-    arange(index,0,len,1);
-    qsort_r(index,len,sizeof(uint32_t),cmpfunc_inv,(void*)distri);
-    lim = cum_at_index(distri,index,thr,len);
-    for(i=(lim+1);i<len;i++)
-        distri[index[i]] = distri[index[lim]]*1E-20;
-    free(index);
-}
 
 /*
  * pre: in is a distri of size len
@@ -109,29 +83,15 @@ void hard_thr(proba_t *distri,proba_t thr,uint32_t len){
  */
 proba_t normalize_vec(proba_t *out, const proba_t *in,uint32_t len,uint32_t tile_flag){
     proba_t norm;
-    uint32_t *index;
-    int32_t i,lim;
-
-    index = (uint32_t *) malloc(sizeof(uint32_t)*len);
-    arange(index,0,len,1);
+    int32_t i;
     norm = 0;
-    qsort_r(index,len,sizeof(uint32_t),cmpfunc_inv,(void*)in);
-    tile(out,in,TILE,len); 
     for(i=(len-1);i>=0;i--){
-        norm += out[index[i]];
+        norm += in[i];
     }
-    if(norm<=0){
-        printf("Norm 0 %f \n",norm);
-        for(i=(len-1);i>=0;i--)
-            out[i] = 1.0/Nk;
+    for(i=(len-1);i>=0;i--){
+        out[i] /=norm;
     }
-    else{
-        for(i=(len-1);i>=0;i--){
-            out[i] /=norm;
-        }
-    }
-    
-    free(index);
+
     if(tile_flag == 0){
 	    return norm;
     }else{

@@ -98,7 +98,8 @@ class VNode(ctypes.Structure):
             del b
         VNode.buff = []
         N = 0
-
+    def __hash__(self):
+        return self._id
     def __init__(self,value=None,result_of=None):
         """
             value: is the value of the node
@@ -190,14 +191,14 @@ class VNode(ctypes.Structure):
             self._id_output = np.array([node._id for node in self._used_by],dtype=np.uint32)
         else:
             self._id_output = np.array([],dtype=np.uint32)
-        
+
         tmp = []
         if self._result_of is not None:
             tmp.append(self._result_of._id)
         for node in self._used_by:
             tmp.append(node._id)
         self._id_neighboor = np.array(tmp,dtype=np.uint32)
-        
+
         self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.id_output = self._id_output.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.id_input = self._id_input
@@ -310,7 +311,8 @@ class FNode(ctypes.Structure):
         self.o = np.uint32(self._o)
         self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-
+    def __hash__(self):
+        return self._id  | 0xf00000
 def apply_func(func=bxor,inputs=[None],offset=None):
     """ apply the functionc func to the inputs and 
         returns the output node 
@@ -334,8 +336,8 @@ def initialize_graph(distri=None,Nk=None):
         node.initialize(distri=d,Nk=Nk)
     for node in FNode.buff:
         node.initialize(Nk=Nk)
-def build_nx_grah(fnodes):
-    G = nx.DiGraph()
+def build_nx_graph(fnodes):
+    G = nx.Graph()
     off = 0
     for F in fnodes:
         for vnode in F._inputs:
@@ -346,7 +348,7 @@ def build_nx_grah(fnodes):
 def plot_graph(fnodes=None):
     if fnodes is None:
         fnodes = FNode.buff
-    G = build_nx_grah(fnodes)
+    G = build_nx_graph(fnodes)
     color_map=[]
     for node in G.nodes:
         if isinstance(node,VNode):

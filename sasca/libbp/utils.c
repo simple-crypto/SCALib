@@ -6,13 +6,6 @@
 #include "utils.h"
 #include "macro.h"
 #include <assert.h>
-void arange(uint32_t *tab,uint32_t begin, uint32_t end, uint32_t step){
-    uint32_t val;
-    for(val=begin;val<end;val+=step){
-        *tab = val;
-        tab++;
-    }
-}
 /*
  * pre: in is a distribution
  *      len of a
@@ -51,7 +44,6 @@ void apply_P10(proba_t * out,const lproba_t *in,uint32_t len){
     for(i=0;i<len;i++){
         out[i] = P10(in[i]);
     }
-    sanity_check(out,out,len);
 }
 
 
@@ -169,19 +161,4 @@ proba_t get_max(const proba_t *in,uint32_t len){
         in++;
     }
     return max;
-}
-
-uint32_t cum_at_index(const proba_t *distr, uint32_t *indexes, const proba_t thr, uint32_t len){
-    int32_t i;
-    proba_t acc=0;
-    for(i=len-1;i>0;i--){
-        acc += distr[indexes[i]];
-        if(acc > thr)
-            return i+1;
-    }
-    return 1;
-}
-
-
-void sanity_check(proba_t *out,const proba_t *in,uint32_t len){
 }

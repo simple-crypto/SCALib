@@ -11,11 +11,9 @@
 #include "utils.h"
 #include "graph.h"
 #include "graph_utils.h"
-#define D 200
 extern Vnode *vnodes;
 extern Fnode *fnodes;
 extern int32_t Nk;
-extern int32_t all_it;
 
 void update_vnode_log(Vnode *vnode){
     uint32_t i,j,fnode_id,r,Ni,Nf;
@@ -47,7 +45,7 @@ void update_vnode_log(Vnode *vnode){
         sub_vec(vnode->msg,tmp1,tmp2,0,Nk);
         add_cst_dest(vnode->msg,vnode->msg,-get_max(vnode->msg,Nk),Nk);
         apply_P10(vnode->msg,vnode->msg,Nk);
-        normalize_vec(vnode->msg,vnode->msg,Nk,0);
+        normalize_vec(vnode->msg,vnode->msg,Nk,1);
     }
 
     for(i=0;i<Nf;i++){
@@ -59,7 +57,7 @@ void update_vnode_log(Vnode *vnode){
         sub_vec(curr_msg,tmp1,tmp1,0,Nk);
         add_cst_dest(curr_msg,curr_msg,-(get_max(curr_msg,Nk)),Nk);
         apply_P10(curr_msg,curr_msg,Nk);
-        normalize_vec(curr_msg,curr_msg,Nk,0);
+        normalize_vec(curr_msg,curr_msg,Nk,1);
     }
 
     //add_vec(tmp1,tmp1,tmp3,Nk);
@@ -110,8 +108,7 @@ void update_vnode(Vnode *vnode){
 
     // compute all
     // add all the functions that use this node
-    for(i=0;i<Nk;i++)
-        vnode->distri[i] = 256*(Nf+Ni);
+    memcpy(vnode->distri,vnode->distri,Nk*sizeof(proba_t));
     for(i=0;i<Nf;i++){
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
@@ -120,8 +117,7 @@ void update_vnode(Vnode *vnode){
     if(Ni > 0){
         mult_vec(vnode->distri,vnode->distri,fnodes[vnode->id_input].msg,Nk);
     }
-    mult_vec(vnode->distri,vnode->distri,vnode->distri_orig,Nk);
-    normalize_vec(vnode->distri,vnode->distri,Nk,0);
+    normalize_vec(vnode->distri,vnode->distri,Nk,1);
 }
 void update_fnode(Fnode *fnode){
     Vnode *vnode0,*vnode1,*vnodeO;
