@@ -57,10 +57,7 @@ void update_vnode_log(Vnode *vnode){
         normalize_vec(curr_msg,curr_msg,Nk,1);
     }
 
-    //add_vec(tmp1,tmp1,tmp3,Nk);
     add_cst_dest(vnode->distri,tmp1,-get_max(tmp1,Nk),Nk);
-    //apply_P10(vnode->distri,vnode->distri,Nk);
-    //normalize_vec(vnode->distri,vnode->distri,Nk,1);
 
     free(tmp1);
 }
@@ -108,7 +105,7 @@ void update_vnode(Vnode *vnode){
 
     // compute all
     // add all the functions that use this node
-    memcpy(vnode->distri,vnode->distri,Nk*sizeof(proba_t));
+    memcpy(vnode->distri,vnode->distri_orig,Nk*sizeof(proba_t));
     for(i=0;i<Nf;i++){
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
