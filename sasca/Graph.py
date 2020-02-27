@@ -97,10 +97,10 @@ class VNode(ctypes.Structure):
         for b in VNode.buff:
             del b
         VNode.buff = []
-        N = 0
+        VNode.N = 0
     def __hash__(self):
         return self._id
-    def __init__(self,value=None,result_of=None):
+    def __init__(self,value=None,result_of=None,str=None):
         """
             value: is the value of the node
             result_of: is the function node that output this variable
@@ -119,6 +119,11 @@ class VNode(ctypes.Structure):
         # all the function nodes taking self as input
         self._used_by = []
 
+        if str is None:
+            str =  "v %d"%(self._id)
+
+        self._str = str
+
     def eval(self):
         """
             returns the value of this variable node. To do so, 
@@ -134,8 +139,7 @@ class VNode(ctypes.Structure):
         """
         self._used_by.append(fnode)
     def __str__(self):
-        return "v" + str(self._id)
-
+        return self._str
     def initialize(self,Nk=None,distri=None):
         """ Initialize the variable node. It goes in all its neighboors and
             searchs for its relative position with their lists
@@ -234,9 +238,9 @@ class FNode(ctypes.Structure):
         for b in FNode.buff:
             del b
         FNode.buff = []
-        N = 0
+        FNode.N = 0
 
-    def __init__(self,func,inputs=None,offset=None):
+    def __init__(self,func,inputs=None,offset=None,str=None):
         """
             func: the function implemented by the nodes
             input: a list with the input variable nodes that are the 
@@ -263,10 +267,18 @@ class FNode(ctypes.Structure):
         if inputs is not None:
             for n in inputs:
                 n.used_by(self)
-
+        
+        if str is None:
+            if self._func_id == 0:
+                str = "AND"
+            elif self._func_id == 2:
+                str = "XOR"
+            else:
+                str = " f %d"%(self._func_id)# + " " + str(self._id) 
+        self._str = str
+    
     def __str__(self):
-        return "f" + str(self._id)
-
+        return self._str
     def eval(self):
         """
             apply the function to its inputs and return 
@@ -345,17 +357,27 @@ def build_nx_graph(fnodes):
         G.add_edges_from([(F,F._output)])
     return G
 
-def plot_graph(fnodes=None):
+def plot_graph(fnodes=None,G=None,cycle=None,pos=None):
     if fnodes is None:
         fnodes = FNode.buff
-    G = build_nx_graph(fnodes)
+    if G is None:
+        G = build_nx_graph(fnodes)
     color_map=[]
     for node in G.nodes:
         if isinstance(node,VNode):
             color_map.append('r')
         else:
             color_map.append('g')
-    nx.draw(G,with_labels=True,node_color=color_map)
+    edge_map = []
+    for ed in G.edges:
+        if (cycle is not None) and (ed[0] in cycle) and (ed[1] in cycle):
+            edge_map.append('r')
+        else:
+            edge_map.append('k')
+
+    if pos is None:
+        pos = nx.spring_layout(G)
+    nx.draw(G,with_labels=True,pos=pos,node_color=color_map,edge_color=edge_map)
 
 def longest_path(fnodes):
     G = build_nx_graph(fnodes)
