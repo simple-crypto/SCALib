@@ -12,7 +12,7 @@ struct Vnode{
     uint32_t    Ni;         // functions outputing this node
     uint32_t    Nf;         // Number of function using this variable
     uint32_t    Ns;         // dimention of the distribution at this node
-    uint32_t    update;     // that node needs to be update
+    uint32_t    use_log;     // use update_log_vnode function
 
     uint32_t*   relative;   // the relative within the function node input (of size Ni)
     uint32_t    id_input;   // id of input function node

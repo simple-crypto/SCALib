@@ -85,7 +85,7 @@ class VNode(ctypes.Structure):
             ('Ni', ctypes.c_uint32),
             ('Nf', ctypes.c_uint32),
             ('Ns', ctypes.c_uint32),
-            ('update', ctypes.c_uint32),
+            ('use_log', ctypes.c_uint32),
             ('relative', ctypes.POINTER(ctypes.c_uint32)),
             ('id_input', ctypes.c_uint32),
             ('id_output', ctypes.POINTER(ctypes.c_uint32)),
@@ -100,7 +100,7 @@ class VNode(ctypes.Structure):
         VNode.N = 0
     def __hash__(self):
         return self._id
-    def __init__(self,value=None,result_of=None,str=None):
+    def __init__(self,value=None,result_of=None,str=None,use_log=0):
         """
             value: is the value of the node
             result_of: is the function node that output this variable
@@ -112,6 +112,7 @@ class VNode(ctypes.Structure):
         VNode.N += 1
         VNode.buff.append(self)
         self._flag = 0
+        self._use_log = use_log
         # say to the funciton node that this is its output. 
         if result_of is not None: 
             result_of.add_output(self)
@@ -169,7 +170,7 @@ class VNode(ctypes.Structure):
         self.Ni = np.uint32(self._result_of is not None)
         self.Nf = np.uint32(len(self._used_by))
         self.Ns = np.uint32(Nk)
-        self.update = np.uint32(1)
+        self.use_log = np.uint32(self._use_log)
         
         # relative contains the position of this variable node
         # at in input of each of the functions that use it. In fnodes, 

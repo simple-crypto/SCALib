@@ -19,30 +19,28 @@ void update_vnode_log(Vnode *vnode){
     uint32_t i,j,fnode_id,r,Ni,Nf;
     Ni = vnode->Ni;
     Nf = vnode->Nf;
-    proba_t *tmp1,*tmp2;
+    proba_t *tmp1;
     
     tmp1 = (proba_t *) malloc(sizeof(proba_t)*Nk); // accumulate self distri + all messages
-    tmp2 = (proba_t *) malloc(sizeof(proba_t)*Nk); // tmp
     apply_log10(tmp1,vnode->distri_orig,Nk);
 
     // Accumulate all in tmp1 as a log distri
     if(Ni > 0){
         // add all the functions that use this node
-        apply_log10(tmp2,fnodes[vnode->id_input].msg,Nk); 
-        add_vec(tmp1,tmp1,tmp2,Nk);
+        apply_log10(fnodes[vnode->id_input].msg,fnodes[vnode->id_input].msg,Nk); 
+        add_vec(tmp1,tmp1,fnodes[vnode->id_input].msg,Nk);
     }
    
     for(i=0;i<Nf;i++){
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
-        apply_log10(tmp2,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
-        add_vec(tmp1,tmp1,tmp2,Nk);
+        apply_log10(&(fnodes[fnode_id].msg[index(r,0,Nk)]),&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
+        add_vec(tmp1,tmp1,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
     }
 
     // add msg to input node if exists, substracts its contribution to tmp1
     if(Ni > 0){
-        apply_log10(tmp2,fnodes[vnode->id_input].msg,Nk); 
-        sub_vec(vnode->msg,tmp1,tmp2,0,Nk);
+        sub_vec(vnode->msg,tmp1,fnodes[vnode->id_input].msg,0,Nk);
         add_cst_dest(vnode->msg,vnode->msg,-get_max(vnode->msg,Nk),Nk);
         apply_P10(vnode->msg,vnode->msg,Nk);
         normalize_vec(vnode->msg,vnode->msg,Nk,1);
@@ -52,9 +50,8 @@ void update_vnode_log(Vnode *vnode){
         proba_t *curr_msg = &(vnode->msg[index((Ni+i),0,Nk)]);
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
-        apply_log10(tmp2,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
 
-        sub_vec(curr_msg,tmp1,tmp1,0,Nk);
+        sub_vec(curr_msg,tmp1,&(fnodes[fnode_id].msg[index(r,0,Nk)]),0,Nk);
         add_cst_dest(curr_msg,curr_msg,-(get_max(curr_msg,Nk)),Nk);
         apply_P10(curr_msg,curr_msg,Nk);
         normalize_vec(curr_msg,curr_msg,Nk,1);
@@ -62,18 +59,21 @@ void update_vnode_log(Vnode *vnode){
 
     //add_vec(tmp1,tmp1,tmp3,Nk);
     add_cst_dest(vnode->distri,tmp1,-get_max(tmp1,Nk),Nk);
-    apply_P10(vnode->distri,vnode->distri,Nk);
-    normalize_vec(vnode->distri,vnode->distri,Nk,1);
+    //apply_P10(vnode->distri,vnode->distri,Nk);
+    //normalize_vec(vnode->distri,vnode->distri,Nk,1);
 
-    free(tmp1);free(tmp2);
+    free(tmp1);
 }
 
 
 void update_vnode(Vnode *vnode){
     uint32_t i,j,fnode_id,r,Ni,Nf;
+    if(vnode->use_log){
+        return update_vnode_log(vnode);
+    }
     Ni = vnode->Ni;
     Nf = vnode->Nf;
-   
+
     for(i=0;i<((Nf+Ni)*Nk);i++)
         vnode->msg[i] = 1.0;
     // init the distri with original distri
@@ -88,7 +88,7 @@ void update_vnode(Vnode *vnode){
             mult_vec(vnode->msg,vnode->msg,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
         }
         mult_vec(vnode->msg,vnode->msg,vnode->distri_orig,Nk);
-        normalize_vec(vnode->msg,vnode->msg,Nk,0);
+        normalize_vec(vnode->msg,vnode->msg,Nk,1);
     }
 
     for(i=0;i<Nf;i++){
@@ -103,7 +103,7 @@ void update_vnode(Vnode *vnode){
             mult_vec(curr_msg,curr_msg,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
         }
         mult_vec(curr_msg,curr_msg,vnode->distri_orig,Nk);
-        normalize_vec(curr_msg,curr_msg,Nk,0);
+        normalize_vec(curr_msg,curr_msg,Nk,1);
     }
 
     // compute all
@@ -184,7 +184,7 @@ void update_fnode(Fnode *fnode){
         exit(EXIT_FAILURE);
     // tiling the data and normalizing
     for(l0=0;l0<(fnode->li+1);l0++){
-        normalize_vec(&(fnode->msg[index(l0,0,Nk)]),&(fnode->msg[index(l0,0,Nk)]),Nk,0);
+        normalize_vec(&(fnode->msg[index(l0,0,Nk)]),&(fnode->msg[index(l0,0,Nk)]),Nk,1);
     }
     return;
 }
