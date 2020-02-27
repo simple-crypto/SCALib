@@ -10,7 +10,7 @@
 #include "graph.h"
 #include "graph_utils.h"
 
-#define NPERTHREAD 10
+#define NPERTHREAD 100
 
 Vnode *vnodes;
 Fnode *fnodes;
@@ -73,7 +73,7 @@ void* my_thread_vnodes(void *in){
         pthread_mutex_unlock(&lock_vnodes);
         for(id=init;(id<(init+NPERTHREAD)) && (id<nvnodes);id++){
             vnode = &vnodes[id];
-            if(vnode->update){update_vnode(vnode);}
+            update_vnode(vnode);
         }
         pthread_mutex_lock(&lock_vnodes);
     }
@@ -127,7 +127,6 @@ void run_bp(Vnode * vnodes_i,
     pthread_mutex_init(&lock_fnodes,NULL);
 
     for(i=0;i<it_c;i++){
-        printf("Iteration %d \n",i);
         // update fnodes
         cnt_fnodes = 0;
         cnt_vnodes = 0;
@@ -137,7 +136,6 @@ void run_bp(Vnode * vnodes_i,
         for(j=0;j<nthread;j++){
             pthread_join(threads[j],NULL);
         }
-        printf("Vnodes");
         // update vnodes
         for(j=0;j<nthread;j++){
             pthread_create(&threads[j],NULL,my_thread_vnodes,(void*)lim);
