@@ -20,3 +20,7 @@ cd rust_stella
 cargo build --release
 cd ..
 ```
+Add this dir to your PYTHONPATH to call it from everywhere
+```
+export PYTHONPATH=$PYTHONPATH:/DIR/CONTAINING/STELLA
+```
