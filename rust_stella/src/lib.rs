@@ -91,50 +91,88 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         sum: &mut PyArray3<i64>,  // (Np,Nc,N_sample)
         sum2: &mut PyArray3<i64>, // (Np,Nc,N_sample)
         ns: &mut PyArray2<u32>,   // (Np,Nc)
+        means: &mut PyArray3<f32>,
+        vars: &mut PyArray3<f32>,
         nchunks: i32,
     ) -> PyResult<()> {
         let traces = traces.as_array();
         let x = x.as_array();
         let mut sum = sum.as_array_mut();
+        let mut means = means.as_array_mut();
+        let mut vars = vars.as_array_mut();
         let mut sum2 = sum2.as_array_mut();
         let mut ns = ns.as_array_mut();
         let n_traces = traces.shape()[0];
+        let nc = sum.shape()[1];
         let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
         sum.axis_iter_mut(Axis(0))
             .into_par_iter()
             .zip(sum2.outer_iter_mut().into_par_iter())
             .zip(ns.outer_iter_mut().into_par_iter())
+            .zip(means.outer_iter_mut().into_par_iter())
+            .zip(vars.outer_iter_mut().into_par_iter())
             .enumerate()
-            .for_each(|(p, ((mut sum, mut sum2), mut ns))| {
-                traces
-                    .axis_chunks_iter(Axis(1), chunk_size)
-                    .into_par_iter()
-                    .zip(
-                        sum.axis_chunks_iter_mut(Axis(1), chunk_size)
-                            .into_par_iter(),
-                    )
-                    .zip(
-                        sum2.axis_chunks_iter_mut(Axis(1), chunk_size)
-                            .into_par_iter(),
-                    )
-                    .for_each(|((traces, mut sum), mut sum2)| {
-                        for i in 0..n_traces {
-                            let v = x[[p, i]] as usize;
-                            let m = sum.slice_mut(s![v, ..]);
-                            let sq = sum2.slice_mut(s![v, ..]);
-                            let l = traces.slice(s![i, ..]);
-                            inner_loop_snr(
-                                m.into_slice().unwrap(),
-                                sq.into_slice().unwrap(),
-                                l.into_slice().unwrap(),
-                            );
-                        }
-                    });
-                for i in 0..n_traces {
-                    let v = x[[p, i]] as usize;
-                    ns[v] += 1;
-                }
-            });
+            .for_each(
+                |(p, ((((mut sum, mut sum2), mut ns), mut means), mut vars))| {
+                    traces
+                        .axis_chunks_iter(Axis(1), chunk_size)
+                        .into_par_iter()
+                        .zip(
+                            sum.axis_chunks_iter_mut(Axis(1), chunk_size)
+                                .into_par_iter(),
+                        )
+                        .zip(
+                            sum2.axis_chunks_iter_mut(Axis(1), chunk_size)
+                                .into_par_iter(),
+                        )
+                        .for_each(|((traces, mut sum), mut sum2)| {
+                            for i in 0..n_traces {
+                                let v = x[[p, i]] as usize;
+                                let m = sum.slice_mut(s![v, ..]);
+                                let sq = sum2.slice_mut(s![v, ..]);
+                                let l = traces.slice(s![i, ..]);
+                                inner_loop_snr(
+                                    m.into_slice().unwrap(),
+                                    sq.into_slice().unwrap(),
+                                    l.into_slice().unwrap(),
+                                );
+                            }
+                        });
+                    for i in 0..n_traces {
+                        let v = x[[p, i]] as usize;
+                        ns[v] += 1;
+                    }
+                    means
+                        .axis_chunks_iter_mut(Axis(1), chunk_size)
+                        .into_par_iter()
+                        .zip(
+                            vars.axis_chunks_iter_mut(Axis(1), chunk_size)
+                                .into_par_iter(),
+                        )
+                        .zip(sum.axis_chunks_iter(Axis(1), chunk_size).into_par_iter())
+                        .zip(sum2.axis_chunks_iter(Axis(1), chunk_size).into_par_iter())
+                        .for_each(|(((mut means, mut vars), sum), sum2)| {
+                            for i in 0..nc {
+                                let mut m =
+                                    means.slice_mut(s![(i as usize), ..]).into_slice().unwrap();
+                                let mut v = vars.slice_mut(s![i, ..]).into_slice().unwrap();
+
+                                let s = sum.slice(s![i, ..]).into_slice().unwrap();
+                                let s2 = sum2.slice(s![i, ..]).into_slice().unwrap();
+                                let n = ns[i] as f32;
+                                m.iter_mut()
+                                    .zip(v.iter_mut())
+                                    .zip(s.iter())
+                                    .zip(s2.iter())
+                                    .for_each(|(((m, v), s), s2)| {
+                                        *m = ((*s as f32) / n);
+                                        let tmp = *m;
+                                        *v = ((*s2 as f32) / n) - tmp.powi(2);
+                                    });
+                            }
+                        });
+                },
+            );
 
         Ok(())
     }

@@ -60,7 +60,7 @@ class SNR:
         I = np.arange(self._Np)
 
         if use_rust:
-            rust.update_snr(traces,X,self._sum,self._sum2,self._ns,nchunks)
+            rust.update_snr(traces,X,self._sum,self._sum2,self._ns,self._means,self._vars,nchunks)
         else:
             n = len(traces[:,0])
             for i in tqdm(range(n),desc="SNR"):
@@ -68,8 +68,9 @@ class SNR:
                 t = traces[i,:]
                 self._sum[I,X[:,i],:] += t
                 self._sum2[I,X[:,i],:] += t*t.astype(np.int32)
-        for c in range(self._Nc):
-            self._means[I,c,:] = (self._sum[I,c,:].T / self._ns[I,c]).T
-            self._vars[I,c,:] = (self._sum2[I,c,:].T/self._ns[I,c]).T - (self._means[I,c,:]**2)
+            for c in range(self._Nc):
+                self._means[I,c,:] = (self._sum[I,c,:].T / self._ns[I,c]).T
+                self._vars[I,c,:] = (self._sum2[I,c,:].T/self._ns[I,c]).T - (self._means[I,c,:]**2)
+
         self._SNR[:] = np.var(self._means,axis=1)/np.mean(self._vars,axis=1)
         return self._SNR
