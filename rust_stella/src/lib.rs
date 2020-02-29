@@ -11,7 +11,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     fn update_ttest(
         _py: Python,
         traces: &PyArray2<i16>, // (len,N_sample)
-        c: &PyArray1<u16>,      // (len)
+        c: &PyArray1<u8>,       // (len)
         n: &mut PyArray1<f64>,  // (len)
         cs: &mut PyArray3<f64>, // (2,D*2,N_sample)
         m: &mut PyArray2<f64>,  // (2,D*2,N_sample)
