@@ -25,12 +25,12 @@ class Ttest:
         # central moment up to D*2
         self._CS = np.zeros((2,2*D,Ns),dtype=np.float64)
 
-    def fit_u(self,traces,C,use_rust=True,nchunks=2):
+    def fit_u(self,traces,C,use_rust=True,nchunks=8):
         """
             Updates the Ttest status to take the fresh samples into account
 
             traces: (?,Ns) int16 or int8 array containing the array.
-            C: (?)  uint16 array coutaining the traces id (set 0 or ones)
+            C: (?)  uint8 array coutaining the traces id (set 0 or ones)
 
             use_rust: use low level rust function
             nchunks: number of threads used to compute the ttest. only works
@@ -41,9 +41,16 @@ class Ttest:
         """
         if not (traces.dtype == np.int16):
             raise Exception("Trace type not supported {}".format(Trace.dtype))
-
+        if not (C.dtype == np.uint8):
+            raise Exception("C type not supported {}".format(Trace.dtype))
         if C.ndim != 1:
-            raise Exception("Input X array does not match: Expected {} given {}".format(len(traces),len(X)))
+            raise Exception("Input C array does not match: waiting  ndim=1 vector")
+        l,x = traces.shape()
+        lc = len(C)
+        if x != self._Ns:
+            raise Exception("Trace len does not match: Expected {} given {}".format(self._Ns,x))
+        if lc != l:
+            raise Exception("Trace and C dim does not match")
 
         M = self._M
         n = self._n
@@ -87,16 +94,12 @@ class Ttest:
             else:
                 u0 = CM0[D-1,:]/np.power(CM0[1,:],D/2);
                 u1 = CM1[D-1,:]/np.power(CM1[1,:],D/2);
-                
-                v0 = (CM0[(D*2)-1,:] - CM0[(D)-1,:]**2)/(CM0[1,:]**D) 
-                v1 = (CM1[(D*2)-1,:] - CM1[(D)-1,:]**2)/(CM1[1,:]**D) 
-            
+                v0 = (CM0[(D*2)-1,:] - CM0[(D)-1,:]**2)/(CM0[1,:]**D)
+                v1 = (CM1[(D*2)-1,:] - CM1[(D)-1,:]**2)/(CM1[1,:]**D)
             t[d-1,:] = (u0-u1)/(np.sqrt((v0/n[0]) + (v1/n[1])))
         self._t = t
-        self._v0 = v0
-        self._u0 = u0
-        self._v1 = v1
-        self._u1 = u1
+        self._CM0 = CM0
+        self._CM1 = CM1
         return t
 
 if __name__ == "__main__":
