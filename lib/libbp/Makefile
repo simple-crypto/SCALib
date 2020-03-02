@@ -1,5 +1,5 @@
 BDIR = build
-SRCDIR = libbp
+SRCDIR = ./
 object:= $(BDIR)/utils.o $(BDIR)/libbp.o $(BDIR)/graph.o $(BDIR)/graph_utils.o
 
 .PHONY: lib 
