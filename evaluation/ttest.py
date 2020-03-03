@@ -1,5 +1,5 @@
 import numpy as np
-import stella.rust_stella as rust
+import stella.lib.rust_stella as rust
 from scipy.special import comb
 class Ttest:
     """

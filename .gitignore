@@ -1,0 +1,6 @@
+**/*.o
+**/__pycache__/
+**/build/
+**/*.swp
+**/*.lock
+lib/rust_stella/target
