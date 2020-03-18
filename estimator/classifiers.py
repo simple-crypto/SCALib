@@ -22,7 +22,7 @@ class MultivariateGaussianClassifier():
 
         if covs.ndim != 3:
             raise Exception("Waiting 3 dim array for covs")
-        cx,cy,cz
+        cx,cy,cz = covs.shape
         if cy != cz:
             raise Exception("Covariance matrices are not square")
         if cy != my:
@@ -41,7 +41,7 @@ class MultivariateGaussianClassifier():
         self._covs = covs
         self._Nc = Nc
         self._dim_reduce = dim_reduce
-        self._l = len(mx)
+        self._Ns = my
     def predict_proba(self,X):
         """
             Returns the probability of each classes by applying 
@@ -58,7 +58,7 @@ class MultivariateGaussianClassifier():
 
         n_samples,Ns = X.shape
         if Ns != self._Ns:
-            raise Exception("Traces do not have the expected lenght {} waiting {}".format(ny,self._l))
+            raise Exception("Traces do not have the expected lenght {} waiting {}".format(ny,self._Ns))
 
         prs = np.zeros((n_samples,self._Nc))
 

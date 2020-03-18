@@ -18,6 +18,7 @@ Fnode *fnodes;
 uint32_t cnt_vnodes,cnt_fnodes;
 pthread_mutex_t lock_vnodes,lock_fnodes;
 uint32_t Nk;
+uint32_t mode;
 void print_vnode(Vnode vnode_all[],uint32_t size){
         for(int j=0;j<size;j++){
         Vnode *vnode = &vnode_all[j];
@@ -57,7 +58,7 @@ void shuffle(uint32_t *tab,uint32_t len){
         tab[i] = j;
     }
 }
-void* my_thread_vnodes(void *in){
+void* thread_vnodes(void *in){
     uint32_t *lim;
     uint32_t nvnodes,nfnodes;
     uint32_t id,init;
@@ -73,7 +74,10 @@ void* my_thread_vnodes(void *in){
         pthread_mutex_unlock(&lock_vnodes);
         for(id=init;(id<(init+NPERTHREAD)) && (id<nvnodes);id++){
             vnode = &vnodes[id];
-            update_vnode(vnode);
+            if(mode == 0)
+                update_vnode(vnode);
+            else
+                update_vnode_information(vnode);
         }
         pthread_mutex_lock(&lock_vnodes);
     }
@@ -82,7 +86,7 @@ void* my_thread_vnodes(void *in){
     pthread_exit(NULL);
     return NULL;
 }
-void* my_thread_fnodes(void *in){
+void* thread_fnodes(void *in){
     uint32_t *lim;
     uint32_t nvnodes,nfnodes;
     lim = (uint32_t *)in;
@@ -96,7 +100,11 @@ void* my_thread_fnodes(void *in){
         cnt_fnodes += NPERTHREAD;
         pthread_mutex_unlock(&lock_fnodes);
         for(id=init;(id<(init+NPERTHREAD)) && (id<nfnodes);id++){
-            update_fnode(&fnodes[id]);
+            if(mode == 0)
+                update_fnode(&fnodes[id]);
+            else
+                update_fnode_information(&fnodes[id]);
+
         }
         pthread_mutex_lock(&lock_fnodes);
     }
@@ -111,15 +119,16 @@ void run_bp(Vnode * vnodes_i,
             uint32_t nvnodes,
             uint32_t nfnodes,
             uint32_t it_c,
-            uint32_t nthread){
+            uint32_t nthread,
+            uint32_t m){
 
     int i,j;
     uint32_t it,lim[2];
-    Nk = nk; 
+    Nk = nk;
+    mode = m;
     vnodes = vnodes_i;
     fnodes = fnodes_i;
-    //print_vnode(vnodes,nvnodes);
-    //print_fnode(fnodes,nfnodes);
+    
     lim[0] = nvnodes;
     lim[1] = nfnodes;
     pthread_t threads[nthread];
@@ -131,14 +140,14 @@ void run_bp(Vnode * vnodes_i,
         cnt_fnodes = 0;
         cnt_vnodes = 0;
         for(j=0;j<nthread;j++){
-            pthread_create(&threads[j],NULL,my_thread_fnodes,(void*)lim);
+            pthread_create(&threads[j],NULL,thread_fnodes,(void*)lim);
         }
         for(j=0;j<nthread;j++){
             pthread_join(threads[j],NULL);
         }
         // update vnodes
         for(j=0;j<nthread;j++){
-            pthread_create(&threads[j],NULL,my_thread_vnodes,(void*)lim);
+            pthread_create(&threads[j],NULL,thread_vnodes,(void*)lim);
         }
         for(j=0;j<nthread;j++){
             pthread_join(threads[j],NULL);

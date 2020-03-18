@@ -36,7 +36,9 @@ struct Fnode{
 } typedef Fnode;
 
 void update_vnode(Vnode *vnode);
+void update_vnode_information(Vnode *vnode);
 void update_fnode(Fnode *fnode);
+void update_fnode_information(Fnode *fnode);
 void print_vnode(Vnode *vnode,uint32_t size);
 void print_fnode(Fnode *fnode,uint32_t size);
 

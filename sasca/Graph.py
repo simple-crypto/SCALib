@@ -16,10 +16,11 @@ def ROL16(a, offset):   #ID 3
         return a
     rs = int(np.log2(Nk) - offset)
     return  (((a) << offset) ^ (a >> (rs)))%Nk
-
+def tab_call(a,offset): #ID4
+    return FNode.tab[offset,a];
 ##############################
 distribution_dtype = np.double
-all_functions = [band,binv,bxor,ROL16]
+all_functions = [band,binv,bxor,ROL16,tab_call]
 
 class Graph():
     @staticmethod
@@ -58,15 +59,25 @@ class Graph():
                 ctypes.c_uint32,
                 ctypes.c_uint32,
                 ctypes.c_uint32,
-                ctypes.c_uint32])
-    def run_bp(self,it=1):
+                ctypes.c_uint32,
+                ctypes.c_uint32,
+                ctypes.POINTER(ctypes.c_uint32)])
+    def run_bp(self,it=1,mode=0):
+        """
+            run belief propagation algorithm on the fed graph
+            it: number of iterations
+            mode: 0 -> on distributions; 1 -> on information metrics
+        """
         self._run_bp(self._vnodes_array,
             self._fnodes_array,
             ctypes.c_uint32(self._Nk),
             ctypes.c_uint32(len(self._vnodes)),
             ctypes.c_uint32(len(self._fnodes)),
             ctypes.c_uint32(it),
-            ctypes.c_uint32(self._nthread))
+            ctypes.c_uint32(self._nthread),
+            ctypes.c_uint32(mode),
+            FNode.tab.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)))
+
 class VNode(ctypes.Structure):
     """
         This object contains the variable nodes of the factor graph
@@ -171,7 +182,7 @@ class VNode(ctypes.Structure):
         self.Nf = np.uint32(len(self._used_by))
         self.Ns = np.uint32(Nk)
         self.use_log = np.uint32(self._use_log)
-        
+
         # relative contains the position of this variable node
         # at in input of each of the functions that use it. In fnodes, 
         # the msg with index 0 is always the output. There comes the 1+. 
@@ -234,6 +245,7 @@ class FNode(ctypes.Structure):
 
     N = 0
     buff = []
+    tab = None
     @staticmethod
     def reset_all():
         for b in FNode.buff:
