@@ -74,21 +74,18 @@ void update_vnode_information(Vnode *vnode){
     for(i=0;i<Nf;i++){
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
-        total_sum += fnodes[fnode_id].msg[index(r,0,Nk)];
+        total_sum += fnodes[fnode_id].msg[r];
     }
 
     vnode->distri[0] = min(total_sum,1.0);
 
-    i = 0;
     if(Ni > 0){
-        vnode->msg[index(i,0,Nk)] = min(total_sum - fnodes[vnode->id_input].msg[0],1.0);
-        i++;
+        vnode->msg[0] = min(total_sum - fnodes[vnode->id_input].msg[0],1.0);
     }
     for(i=0;i<Nf;i++){
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
-        vnode->msg[index((i+Ni),0,Nk)] = min(total_sum - fnodes[fnode_id].msg[index(r,0,Nk)],1.0);
-        i++;
+        vnode->msg[i+Ni] = min(total_sum - fnodes[fnode_id].msg[r],1.0);
     }
 
 }
@@ -154,7 +151,7 @@ void update_fnode_information(Fnode *fnode){
     prod_all = 1.0;
     for(i=0;i<fnode->li;i++){
         Vnode vnodei = vnodes[fnode->i[i]];
-        prod_all *= vnodei.msg[index(fnode->relative[i],0,Nk)];
+        prod_all *= vnodei.msg[fnode->relative[i]];
     }
     fnode->msg[0] = min(prod_all,1.0);
 
@@ -162,9 +159,8 @@ void update_fnode_information(Fnode *fnode){
     for(i=0;i<fnode->li;i++){
         prod_all = vnodes[fnode->o].msg[0];
         for(j = 0;j<fnode->li;j++){
-            if (i == j)
-                continue;
-            prod_all *= vnodes[fnode->i[j]].msg[fnode->relative[j]];
+            if (i != j)
+                prod_all *= vnodes[fnode->i[j]].msg[fnode->relative[j]];
         }
         fnode->msg[i+1] = min(prod_all,1.0);
     }
