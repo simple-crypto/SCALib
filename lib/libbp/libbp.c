@@ -19,6 +19,7 @@ uint32_t cnt_vnodes,cnt_fnodes;
 pthread_mutex_t lock_vnodes,lock_fnodes;
 uint32_t Nk;
 uint32_t mode;
+uint32_t *tab;
 void print_vnode(Vnode vnode_all[],uint32_t size){
         for(int j=0;j<size;j++){
         Vnode *vnode = &vnode_all[j];
@@ -120,15 +121,16 @@ void run_bp(Vnode * vnodes_i,
             uint32_t nfnodes,
             uint32_t it_c,
             uint32_t nthread,
-            uint32_t m){
+            uint32_t m,
+            uint32_t *t){
 
     int i,j;
     uint32_t it,lim[2];
     Nk = nk;
     mode = m;
+    tab = t;
     vnodes = vnodes_i;
     fnodes = fnodes_i;
-    
     lim[0] = nvnodes;
     lim[1] = nfnodes;
     pthread_t threads[nthread];

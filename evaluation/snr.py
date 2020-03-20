@@ -2,7 +2,7 @@ import numpy as np
 import stella.lib.rust_stella as rust
 from tqdm import tqdm
 class SNR:
-    def __init__(self,Nc,Ns,Np=1):
+    def __init__(self,Nc,Ns,Np=1,use_rust=True):
         """
             This function computes the Signal-to-Noise ratio between the traces
             and the intermediate values. It is ment to work on traces being 
@@ -18,18 +18,34 @@ class SNR:
         self._Nc = Nc
         self._Ns = Ns
         self._Np = Np
-        # Number of observed traces with given intermediate variable
-        self._ns = np.zeros((Np,Nc),dtype=np.uint32)
-        # Sum for each class
-        self._sum = np.zeros((Np,Nc,Ns),dtype=np.int64)
-        # Sum of squared traces for each class
-        self._sum2 = np.zeros((Np,Nc,Ns),dtype=np.int64)
-        # Mean of each class
-        self._means = np.zeros((Np,Nc,Ns),dtype=np.float32)
-        # Variance in each class
-        self._vars= np.zeros((Np,Nc,Ns),dtype=np.float32)
-        # SNR on each class
-        self._SNR = np.zeros((Np,Ns),dtype=np.float32)
+
+        if use_rust:
+            # Number of observed traces with given intermediate variable
+            self._ns = np.zeros((Np,Nc),dtype=np.uint32)
+            # Sum for each class
+            self._sum = np.zeros((Np,Nc,Ns),dtype=np.int64)
+            # Sum of squared traces for each class
+            self._sum2 = np.zeros((Np,Nc,Ns),dtype=np.int64)
+            # Mean of each class
+            self._means = np.zeros((Np,Nc,Ns),dtype=np.float32)
+            # Variance in each class
+            self._vars= np.zeros((Np,Nc,Ns),dtype=np.float32)
+            # SNR on each class
+            self._SNR = np.zeros((Np,Ns),dtype=np.float32)
+        else:
+            # Number of observed traces with given intermediate variable
+            self._ns = np.zeros((Np,Nc),dtype=np.uint32)
+            # Sum for each class
+            self._sum = np.zeros((Np,Nc,Ns),dtype=np.float64)
+            # Sum of squared traces for each class
+            self._sum2 = np.zeros((Np,Nc,Ns),dtype=np.float64)
+            # Mean of each class
+            self._means = np.zeros((Np,Nc,Ns),dtype=np.float64)
+            # Variance in each class
+            self._vars= np.zeros((Np,Nc,Ns),dtype=np.float64)
+            # SNR on each class
+            self._SNR = np.zeros((Np,Ns),dtype=np.float32)
+
 
         self._means[:,:] = np.nan
 
@@ -50,15 +66,16 @@ class SNR:
             use_rust: use low level rust
             nchunks: in how many chunks to // the snr
         """
-        if not (traces.dtype == np.int16):
-            raise Exception("Trace type not supported {}".format(Trace.dtype))
+        X = (X%self._Nc).astype(np.uint16)
         if self._Np == 1 and X.ndim == 1:
             X = X.reshape((1,len(X)))
-        elif len(X) != self._Np:
-            raise Exception("Input X array does not match: Expected {} given {}".format((self._Np,len(traces)),X.shape))
-        X = (X%self._Nc).astype(np.uint16)
 
         if use_rust:
+            if not (traces.dtype == np.int16):
+                raise Exception("Trace type not supported {}".format(Trace.dtype))
+            elif len(X) != self._Np:
+                raise Exception("Input X array does not match: Expected {} given {}".format((self._Np,len(traces)),X.shape))
+ 
             rust.update_snr(traces,X,self._sum,self._sum2,self._ns,self._means,self._vars,nchunks)
         else:
             n = len(traces[:,0])
@@ -67,7 +84,7 @@ class SNR:
                     self._ns[v,X[v,i]] += 1
                     t = traces[i,:]
                     self._sum[v,X[v,i],:] += t
-                    self._sum2[v,X[v,i],:] += t*t.astype(np.int32)
+                    self._sum2[v,X[v,i],:] += t*t.astype(np.float32)
 
                 for c in range(self._Nc):
                     self._means[v,c,:] = (self._sum[v,c,:].T / self._ns[v,c]).T

@@ -14,13 +14,14 @@
 extern Vnode *vnodes;
 extern Fnode *fnodes;
 extern int32_t Nk;
+extern int32_t *tab;
 
 void update_vnode_log(Vnode *vnode){
     uint32_t i,j,fnode_id,r,Ni,Nf;
     Ni = vnode->Ni;
     Nf = vnode->Nf;
     proba_t *tmp1;
-    
+
     tmp1 = (proba_t *) malloc(sizeof(proba_t)*Nk); // accumulate self distri + all messages
     apply_log10(tmp1,vnode->distri_orig,Nk);
 
@@ -30,7 +31,7 @@ void update_vnode_log(Vnode *vnode){
         apply_log10(fnodes[vnode->id_input].msg,fnodes[vnode->id_input].msg,Nk); 
         add_vec(tmp1,tmp1,fnodes[vnode->id_input].msg,Nk);
     }
-   
+
     for(i=0;i<Nf;i++){
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
@@ -87,8 +88,8 @@ void update_vnode_information(Vnode *vnode){
         r = vnode->relative[i];
         vnode->msg[i+Ni] = min(total_sum - fnodes[fnode_id].msg[r],1.0);
     }
-
 }
+
 void update_vnode(Vnode *vnode){
     uint32_t i,j,fnode_id,r,Ni,Nf;
     if(vnode->use_log){
@@ -212,13 +213,9 @@ void update_fnode(Fnode *fnode){
                 o = i0 ^ fnode->offset;
             else if(fnode->func_id == 3 && fnode->has_offset)
                 o = ROL16(i0,fnode->offset);
-            else if(fnode->func_id == 4)
-                o = sbox[i0];
-            else if(fnode->func_id == 5)
-                o = rsbox[i0];
-            else if(fnode->func_id == 6)
-                o = xtime(i0);
-            else
+            else if(fnode->func_id == 4){
+                o = tab[index(fnode->offset,i0,Nk)];
+            }else
                 exit(EXIT_FAILURE);
             o &=0xffff;
 

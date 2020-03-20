@@ -78,6 +78,7 @@ class Graph():
             ctypes.c_uint32(mode),
             FNode.tab.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)))
 
+
 class VNode(ctypes.Structure):
     """
         This object contains the variable nodes of the factor graph
@@ -338,6 +339,8 @@ class FNode(ctypes.Structure):
         self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
     def __hash__(self):
         return self._id  | 0xf00000
+
+
 def apply_func(func=bxor,inputs=[None],offset=None):
     """ apply the functionc func to the inputs and 
         returns the output node 
