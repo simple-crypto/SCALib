@@ -68,6 +68,8 @@ class Graph():
             it: number of iterations
             mode: 0 -> on distributions; 1 -> on information metrics
         """
+        if FNode.tab is None:
+            FNode.tab = np.zeros((2,self._Nk),dtype=np.uint32)
         self._run_bp(self._vnodes_array,
             self._fnodes_array,
             ctypes.c_uint32(self._Nk),
@@ -153,6 +155,7 @@ class VNode(ctypes.Structure):
         self._used_by.append(fnode)
     def __str__(self):
         return self._str
+
     def initialize(self,Nk=None,distri=None):
         """ Initialize the variable node. It goes in all its neighboors and
             searchs for its relative position with their lists
@@ -184,19 +187,7 @@ class VNode(ctypes.Structure):
         self.Ns = np.uint32(Nk)
         self.use_log = np.uint32(self._use_log)
 
-        # relative contains the position of this variable node
-        # at in input of each of the functions that use it. In fnodes, 
-        # the msg with index 0 is always the output. There comes the 1+. 
-        self._relative = np.array([1+fnode._inputs.index(self) for fnode in self._used_by]).astype(np.uint32)
-        self._distri = distri.astype(dtype=distribution_dtype)
-        self._distri_orig = self._distri.copy()
-
-        nmsg = self.Ni + self.Nf
-        # one message to result_of and on to each function using this node
-        self._msg = np.zeros((nmsg,Nk),dtype=distribution_dtype)
-        for i in range(nmsg):
-            self._msg[i,:] = distri
-        
+        # relative positionning with other nodes
         # function node that outputs this node
         if self.Ni > 0:
             self._id_input = np.uint32(self._result_of._id)
@@ -216,12 +207,37 @@ class VNode(ctypes.Structure):
             tmp.append(node._id)
         self._id_neighboor = np.array(tmp,dtype=np.uint32)
 
+        # relative contains the position of this variable node
+        # at in input of each of the functions that use it. In fnodes, 
+        # the msg with index 0 is always the output. There comes the 1+. 
+        self._relative = np.array([1+fnode._inputs.index(self) for fnode in self._used_by]).astype(np.uint32)
+
+        # the distributions and messages to pass
+        self._distri = distri.astype(dtype=distribution_dtype)
+        self._distri_orig = self._distri.copy()
+
+        # one message to result_of and on to each function using this node
+        nmsg = self.Ni + self.Nf
+        self._msg = np.zeros((nmsg,Nk),dtype=distribution_dtype)
+        for i in range(nmsg):
+            self._msg[i,:] = distri
+
         self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.id_output = self._id_output.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.id_input = self._id_input
         self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.distri_orig = self._distri_orig.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.distri = self._distri.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+
+    def reset_distri(self,distri=None):
+        if distri is None:
+            distri = self._distri_orig
+
+        self._distri_orig[:]=distri
+        self._distri[:] = 0
+        nmsg = self.Ni + self.Nf
+        for i in range(nmsg):
+            self._msg[i,:] =  distri
 
 class FNode(ctypes.Structure):
     """
