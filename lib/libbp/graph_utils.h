@@ -2,6 +2,7 @@
 #include <stdint.h>
 
 void and_ex(proba_t *msg,proba_t *distri0,proba_t *distri1,proba_t *distriO);
+void xor_ex(proba_t *msg,proba_t *distri0,proba_t *distri1,proba_t *distriO);
 void and_indep(proba_t *msg,proba_t *distri0,proba_t *distri1,proba_t *distriO);
 proba_t normalize_vec(proba_t *out, const proba_t *in,uint32_t len,uint32_t tile_flag);
 void init_table();

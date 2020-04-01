@@ -31,7 +31,7 @@ class Graph():
         func.argtypes = argtypes
         return func
 
-    def __init__(self,Nk,nthread=8,vnodes=None,fnodes=None,DIR=""):
+    def __init__(self,Nk,nthread=16,vnodes=None,fnodes=None,DIR=""):
         if vnodes is None:
             vnodes = VNode.buff
         self._vnodes = vnodes
@@ -138,7 +138,7 @@ class VNode(ctypes.Structure):
             str =  "v %d"%(self._id)
 
         self._str = str
-
+        self._is_initialized = False
     def eval(self):
         """
             returns the value of this variable node. To do so, 
@@ -228,7 +228,8 @@ class VNode(ctypes.Structure):
         self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.distri_orig = self._distri_orig.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.distri = self._distri.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-
+        
+        self._is_initialized = True
     def reset_distri(self,distri=None):
         if distri is None:
             distri = self._distri_orig
@@ -306,7 +307,7 @@ class FNode(ctypes.Structure):
             else:
                 str = " f %d"%(self._func_id)# + " " + str(self._id) 
         self._str = str
-    
+        self._is_initialized=False 
     def __str__(self):
         return self._str
     def eval(self):
@@ -339,8 +340,8 @@ class FNode(ctypes.Structure):
         self._o = np.uint32(self._output._id)
         self._relative = np.array([np.where(vnode._id_neighboor==self._id)[0] for vnode in self._inputs]).astype(np.uint32)
         self._msg = np.zeros((nmsg,Nk),dtype=distribution_dtype)
-        self._indexes = np.zeros((3,Nk),dtype=np.uint32)
-        for i in range(3):
+        self._indexes = np.zeros((len(self._i)+1,Nk),dtype=np.uint32)
+        for i in range(len(self._i)+1):
             self._indexes[i,:] = np.arange(Nk)
 
         self.id = np.uint32(self._id)
@@ -353,6 +354,8 @@ class FNode(ctypes.Structure):
         self.o = np.uint32(self._o)
         self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+
+        self._is_initialized=True 
     def __hash__(self):
         return self._id  | 0xf00000
 
@@ -410,6 +413,10 @@ def plot_graph(fnodes=None,G=None,cycle=None,pos=None):
     if pos is None:
         pos = nx.spring_layout(G)
     nx.draw(G,with_labels=True,pos=pos,node_color=color_map,edge_color=edge_map)
+
+def get_diameter(fnodes):
+    G = build_nx_graph(fnodes)
+    return nx.algorithms.distance_measures.diameter(G)
 
 def longest_path(fnodes):
     G = build_nx_graph(fnodes)

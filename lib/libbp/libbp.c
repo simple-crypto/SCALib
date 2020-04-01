@@ -10,7 +10,7 @@
 #include "graph.h"
 #include "graph_utils.h"
 
-#define NPERTHREAD 100
+#define NPERTHREAD 2000
 
 Vnode *vnodes;
 Fnode *fnodes;
@@ -20,6 +20,7 @@ pthread_mutex_t lock_vnodes,lock_fnodes;
 uint32_t Nk;
 uint32_t mode;
 uint32_t *tab;
+uint32_t *index_vnodes;
 void print_vnode(Vnode vnode_all[],uint32_t size){
         for(int j=0;j<size;j++){
         Vnode *vnode = &vnode_all[j];
@@ -74,7 +75,7 @@ void* thread_vnodes(void *in){
         cnt_vnodes += NPERTHREAD;
         pthread_mutex_unlock(&lock_vnodes);
         for(id=init;(id<(init+NPERTHREAD)) && (id<nvnodes);id++){
-            vnode = &vnodes[id];
+            vnode = &vnodes[index_vnodes[id]];
             if(mode == 0)
                 update_vnode(vnode);
             else
@@ -136,7 +137,9 @@ void run_bp(Vnode * vnodes_i,
     pthread_t threads[nthread];
     pthread_mutex_init(&lock_vnodes,NULL);
     pthread_mutex_init(&lock_fnodes,NULL);
-
+    index_vnodes = (uint32_t *) malloc(sizeof(uint32_t)*nvnodes);
+    for(i=0;i<nvnodes;i++)
+        index_vnodes[i] = i;
     for(i=0;i<it_c;i++){
         // update fnodes
         cnt_fnodes = 0;
@@ -148,6 +151,7 @@ void run_bp(Vnode * vnodes_i,
             pthread_join(threads[j],NULL);
         }
         // update vnodes
+        shuffle(index_vnodes,nvnodes);
         for(j=0;j<nthread;j++){
             pthread_create(&threads[j],NULL,thread_vnodes,(void*)lim);
         }

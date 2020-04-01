@@ -12,7 +12,17 @@
 #include <assert.h>
 
 extern uint32_t Nk;
-
+void xor_ex(proba_t *msg,proba_t *distri0,proba_t *distri1,proba_t *distriO){
+    uint32_t i0,i1,o;
+    for(i0=0;i0<Nk;i0++){
+        for(i1=0;i1<Nk;i1++){
+            o = i1 ^ i0;
+            msg[index(0,o,Nk)] += distri0[i0] * distri1[i1];
+            msg[index(1,i0,Nk)]+= distri1[i1] * distriO[o];
+            msg[index(2,i1,Nk)]+= distri0[i0] * distriO[o];
+        }
+    }
+}
 void and_ex(proba_t *msg,proba_t *distri0,proba_t *distri1,proba_t *distriO){
     uint32_t i0,i1,o;
     for(i0=0;i0<Nk;i0++){
@@ -85,10 +95,10 @@ proba_t normalize_vec(proba_t *out, const proba_t *in,uint32_t len,uint32_t tile
     proba_t norm;
     int32_t i;
     norm = 0;
-    for(i=(len-1);i>=0;i--){
+    for(i=0;i<len;i++){
         norm += in[i];
     }
-    for(i=(len-1);i>=0;i--){
+    for(i=0;i<len;i++){
         out[i] /=norm;
     }
 

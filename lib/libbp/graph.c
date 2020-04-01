@@ -197,6 +197,7 @@ void update_fnode(Fnode *fnode){
         if(fnode->func_id == 2){ // XOR NODES
             xor_fwht(fnode->msg,distri0,distri1,distriO);
             tile(fnode->msg,fnode->msg,TILE,Nk);
+            //xor_ex(fnode->msg,distri0,distri1,distriO);
         }
         else if(fnode->func_id == 0){ // AND Nodes
             and_ex(fnode->msg,distri0,distri1,distriO);
