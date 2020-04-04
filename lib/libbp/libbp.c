@@ -10,7 +10,8 @@
 #include "graph.h"
 #include "graph_utils.h"
 
-#define NPERTHREAD 2000
+int NPERTHREAD_V ;
+int NPERTHREAD_F ;
 
 Vnode *vnodes;
 Fnode *fnodes;
@@ -21,6 +22,7 @@ uint32_t Nk;
 uint32_t mode;
 uint32_t *tab;
 uint32_t *index_vnodes;
+uint32_t *index_fnodes;
 void print_vnode(Vnode vnode_all[],uint32_t size){
         for(int j=0;j<size;j++){
         Vnode *vnode = &vnode_all[j];
@@ -72,9 +74,9 @@ void* thread_vnodes(void *in){
     pthread_mutex_lock(&lock_vnodes);
     while(cnt_vnodes<nvnodes){
         init = cnt_vnodes;
-        cnt_vnodes += NPERTHREAD;
+        cnt_vnodes += NPERTHREAD_V;
         pthread_mutex_unlock(&lock_vnodes);
-        for(id=init;(id<(init+NPERTHREAD)) && (id<nvnodes);id++){
+        for(id=init;(id<(init+NPERTHREAD_V)) && (id<nvnodes);id++){
             vnode = &vnodes[index_vnodes[id]];
             if(mode == 0)
                 update_vnode(vnode);
@@ -99,11 +101,11 @@ void* thread_fnodes(void *in){
     pthread_mutex_lock(&lock_fnodes);
     while(cnt_fnodes<nfnodes){
         init = cnt_fnodes;
-        cnt_fnodes += NPERTHREAD;
+        cnt_fnodes += NPERTHREAD_F;
         pthread_mutex_unlock(&lock_fnodes);
-        for(id=init;(id<(init+NPERTHREAD)) && (id<nfnodes);id++){
+        for(id=init;(id<(init+NPERTHREAD_F)) && (id<nfnodes);id++){
             if(mode == 0)
-                update_fnode(&fnodes[id]);
+                update_fnode(&fnodes[index_fnodes[id]]);
             else
                 update_fnode_information(&fnodes[id]);
 
@@ -132,6 +134,8 @@ void run_bp(Vnode * vnodes_i,
     tab = t;
     vnodes = vnodes_i;
     fnodes = fnodes_i;
+    NPERTHREAD_V = max(10,nvnodes / (nthread*10));
+    NPERTHREAD_F = max(10,nfnodes / (nthread*10));
     lim[0] = nvnodes;
     lim[1] = nfnodes;
     pthread_t threads[nthread];
@@ -140,10 +144,15 @@ void run_bp(Vnode * vnodes_i,
     index_vnodes = (uint32_t *) malloc(sizeof(uint32_t)*nvnodes);
     for(i=0;i<nvnodes;i++)
         index_vnodes[i] = i;
+    index_fnodes = (uint32_t *) malloc(sizeof(uint32_t)*nfnodes);
+    for(i=0;i<nfnodes;i++)
+        index_fnodes[i] = i;
+
     for(i=0;i<it_c;i++){
         // update fnodes
         cnt_fnodes = 0;
         cnt_vnodes = 0;
+        shuffle(index_fnodes,nfnodes);
         for(j=0;j<nthread;j++){
             pthread_create(&threads[j],NULL,thread_fnodes,(void*)lim);
         }

@@ -57,7 +57,7 @@ class SNR:
         del self._ns,self._sum,self._sum2,self._means
         del self._SNR,self._vars
 
-    def fit_u(self,traces,X,use_rust=True,nchunks=1):
+    def fit_u(self,traces,X,use_rust=True,nchunks=10):
         """
             Updates the SNR status to take the fresh samples into account
 
@@ -90,5 +90,6 @@ class SNR:
                     self._means[v,c,:] = (self._sum[v,c,:].T / self._ns[v,c]).T
                     self._vars[v,c,:] = (self._sum2[v,c,:].T/self._ns[v,c]).T - (self._means[v,c,:]**2)
 
-                self._SNR[v,:] = np.var(self._means[v,:],axis=0)/np.mean(self._vars[v,:],axis=0)
+        for v in range(self._Np):
+            self._SNR[v,:] = np.var(self._means[v,:],axis=0)/np.mean(self._vars[v,:],axis=0)
         return self._SNR

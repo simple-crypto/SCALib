@@ -99,7 +99,7 @@ void update_vnode(Vnode *vnode){
     Nf = vnode->Nf;
 
     for(i=0;i<((Nf+Ni)*Nk);i++)
-        vnode->msg[i] = 1.0;
+        vnode->msg[i] = vnode->distri_orig[i%Nk];
     // init the distri with original distri
 
     // compute to the function that outputed that variable
@@ -111,7 +111,6 @@ void update_vnode(Vnode *vnode){
             r = vnode->relative[i];
             mult_vec(vnode->msg,vnode->msg,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
         }
-        mult_vec(vnode->msg,vnode->msg,vnode->distri_orig,Nk);
         normalize_vec(vnode->msg,vnode->msg,Nk,1);
     }
 
@@ -126,7 +125,6 @@ void update_vnode(Vnode *vnode){
             r = vnode->relative[j];
             mult_vec(curr_msg,curr_msg,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
         }
-        mult_vec(curr_msg,curr_msg,vnode->distri_orig,Nk);
         normalize_vec(curr_msg,curr_msg,Nk,1);
     }
 

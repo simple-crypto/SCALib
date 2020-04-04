@@ -99,7 +99,7 @@ proba_t normalize_vec(proba_t *out, const proba_t *in,uint32_t len,uint32_t tile
         norm += in[i];
     }
     for(i=0;i<len;i++){
-        out[i] /=norm;
+        out[i] = (in[i]) / norm;
     }
 
     if(tile_flag == 0){
