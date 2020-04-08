@@ -259,7 +259,8 @@ class FNode(ctypes.Structure):
             ('i', ctypes.POINTER(ctypes.c_uint32)),
             ('o', ctypes.c_uint32),
             ('relative', ctypes.POINTER(ctypes.c_uint32)),
-            ('msg', ctypes.POINTER(ctypes.c_double))] 
+            ('msg', ctypes.POINTER(ctypes.c_double)),
+            ('lf',ctypes.c_double)]
 
     N = 0
     buff = []
@@ -271,7 +272,7 @@ class FNode(ctypes.Structure):
         FNode.buff = []
         FNode.N = 0
 
-    def __init__(self,func,inputs=None,offset=None,str=None):
+    def __init__(self,func,inputs=None,offset=None,str=None,lf=1):
         """
             func: the function implemented by the nodes
             input: a list with the input variable nodes that are the 
@@ -287,6 +288,7 @@ class FNode(ctypes.Structure):
         self._func = func
         self._func_id = all_functions.index(func)
         self._inputs = inputs
+        self._lf=lf
         if offset is None:
             self._has_offset = False
             self._offset = np.uint32(0)
@@ -354,7 +356,7 @@ class FNode(ctypes.Structure):
         self.o = np.uint32(self._o)
         self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-
+        self.lf = np.double(self._lf)
         self._is_initialized=True 
     def __hash__(self):
         return self._id  | 0xf00000

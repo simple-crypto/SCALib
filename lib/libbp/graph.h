@@ -33,6 +33,7 @@ struct Fnode{
     uint32_t    o;          // output node id
     uint32_t*   relative;   // the position within each related nodes 
     proba_t*    msg;        // msg send to the vnodes index(0) = output
+    proba_t     lf;        // msg send to the vnodes index(0) = output
 } typedef Fnode;
 
 void update_vnode(Vnode *vnode);

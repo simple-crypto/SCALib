@@ -15,6 +15,7 @@ extern Vnode *vnodes;
 extern Fnode *fnodes;
 extern int32_t Nk;
 extern int32_t *tab;
+extern double lf;
 
 void update_vnode_log(Vnode *vnode){
     uint32_t i,j,fnode_id,r,Ni,Nf;
@@ -145,9 +146,9 @@ void update_vnode(Vnode *vnode){
 void update_fnode_information(Fnode *fnode){
     uint32_t i,j;
     proba_t prod_all;
-
+    
     // to the outputs nodes
-    prod_all = 1.0;
+    prod_all = fnode->lf;
     for(i=0;i<fnode->li;i++){
         Vnode vnodei = vnodes[fnode->i[i]];
         prod_all *= vnodei.msg[fnode->relative[i]];
