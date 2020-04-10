@@ -93,3 +93,88 @@ class SNR:
         for v in range(self._Np):
             self._SNR[v,:] = np.var(self._means[v,:],axis=0)/np.mean(self._vars[v,:],axis=0)
         return self._SNR
+
+
+class SNROrder:
+    def __init__(self,Nc,Ns,Np=1,D=1):
+        """
+            This function computes the Signal-to-Noise ratio between the traces
+            and the intermediate values. It is ment to work on traces being 
+            int16.
+
+            Nc: Possible values for the intermediate values X
+            Ns: Number of samples in a single traces
+            Np: Number of intermediates variable to comptue the SNR on. Default
+            to 1
+        """
+        if Nc >= (2**16):
+            raise Exception("SNR can be computed on max 16 bit, {} given".format(Nc))
+        self._Nc = Nc
+        self._Ns = Ns
+        self._Np = Np
+        self._D = D
+
+        # Number of observed traces with given intermediate variable
+        self._ns = np.zeros((Np,Nc),dtype=np.float64)
+        # First order moment of each class
+        self._M = np.zeros((Np,Nc,Ns),dtype=np.float64)
+        # Centered moment of each class
+        self._CS = np.zeros((Np,Nc,2*D,Ns),dtype=np.float64)
+        # SNR on each class up to order D
+        self._SNR = np.zeros((Np,D,Ns),dtype=np.float32)
+
+    def fit_u(self,traces,X,use_rust=True,nchunks=1):
+        """
+            Updates the SNR status to take the fresh samples into account
+
+            traces: (?,Ns) int16 or int8 array containing the array.
+            X: (Np,?) uint16 array coutaining
+            use_rust: use low level rust
+            nchunks: in how many chunks to // the snr
+        """
+        X = (X%self._Nc).astype(np.uint16)
+        if self._Np == 1 and X.ndim == 1:
+            X = X.reshape((1,len(X)))
+
+        if not (traces.dtype == np.int16):
+            raise Exception("Trace type not supported {}".format(Trace.dtype))
+        elif len(X) != self._Np:
+            raise Exception("Input X array does not match: Expected {} given {}".format((self._Np,len(traces)),X.shape))
+ 
+        rust.update_snrorder(traces,
+                X,
+                self._ns,
+                self._CS,
+                self._M,
+                self._D,
+                nchunks)
+
+        for i in range(self._Np): # for each class
+            
+            CM = (self._CS[i].T/self._ns[i]).T # (Nc,D*2,Ns)
+            for d in range(1,self._D+1):
+                if d == 1:
+                    u = self._M[i,:] #(Nc,Ns)
+                    v = CM[:,1,:]
+                elif d==2:
+                    u = CM[:,1,:]
+                    v = CM[:,3,:] - CM[:,1,:]**2
+                else:
+                    u = CM[:,d-1,:]/np.power(CM[:,1,:],d/2);
+                    v = (CM[:,(d*2)-1,:] - CM[:,(d)-1]**2)/(CM[:,1,:]**d)
+                self._SNR[i,d-1,:] = np.var(u,axis=0)/np.mean(v,axis=0)
+
+if __name__ == "__main__":
+    Ns = 100
+    Np = 2
+    D = 3
+    Nc = 4
+    nt = 1000
+    traces = np.random.randint(0,256,(nt,Ns),dtype=np.int16)
+    X = np.random.randint(0,Nc,(Np,nt),dtype=np.uint8)
+
+    snr_o = SNROrder(Nc,Ns,Np,D)
+    snr_o.fit_u(traces,X)
+
+    snr = SNR(Nc,Ns,Np)
+    snr.fit_u(traces,X)

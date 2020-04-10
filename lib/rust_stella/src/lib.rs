@@ -2,11 +2,98 @@ extern crate ndarray;
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Array, ArrayBase, Axis};
 use num_integer::binomial;
-use numpy::{PyArray1, PyArray2, PyArray3};
+use numpy::{PyArray1, PyArray2, PyArray3, PyArrayDyn};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 use rayon::prelude::*;
 #[pymodule]
 fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
+    #[pyfn(m, "update_snrorder")]
+    fn update_snrorder(
+        _py: Python,
+        traces: &PyArray2<i16>,   // (len,N_sample)
+        c: &PyArray2<u16>,        // (Np,len)
+        n: &mut PyArray2<f64>,    // (Np,len)
+        cs: &mut PyArrayDyn<f64>, // (Np,Nc,D*2,N_sample)
+        m: &mut PyArray3<f64>,    // (Np,Nc,N_sample)
+        d: i32,
+        nchunks: i32, //
+    ) -> PyResult<()> {
+        let traces = traces.as_array();
+        let c = c.as_array();
+        let mut n = n.as_array_mut();
+        let mut cs = cs.as_array_mut();
+        let mut m = m.as_array_mut();
+        let np = c.shape()[0];
+        let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
+        c.axis_iter(Axis(0))
+            .into_par_iter()
+            .zip(n.outer_iter_mut().into_par_iter())
+            .zip(cs.outer_iter_mut().into_par_iter())
+            .zip(m.outer_iter_mut().into_par_iter())
+            .enumerate()
+            .for_each(|(p, (((mut c, mut n), mut cs), mut m))| {
+                traces
+                    .axis_chunks_iter(Axis(1), chunk_size)
+                    .into_par_iter()
+                    .zip(cs.axis_chunks_iter_mut(Axis(2), chunk_size).into_par_iter())
+                    .zip(m.axis_chunks_iter_mut(Axis(1), chunk_size).into_par_iter())
+                    .for_each(|((traces, mut cs), mut m)| {
+                        let mut n = n.to_owned();
+                        let mut delta = Array::<f64, _>::zeros(traces.shape()[1]);
+                        traces.outer_iter().enumerate().for_each(|(i, traces)| {
+                            // iterates over all the traces
+                            let x = c[i] as usize;
+                            n[[x]] += 1.0;
+                            let nx = n[[x]];
+                            delta
+                                .view_mut()
+                                .into_slice()
+                                .unwrap()
+                                .iter_mut()
+                                .zip(traces.into_slice().unwrap().iter())
+                                .zip(m.slice(s![x, ..]).into_slice().unwrap().iter())
+                                .for_each({ |((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx });
+                            for j in (2..((d * 2) + 1)).rev() {
+                                if nx > 1.0 {
+                                    let mut r = cs.slice_mut(s![x, j - 1, ..]);
+                                    let mult = (nx - 1.0).powi(j)
+                                        * (1.0 - (-1.0 / (nx - 1.0)).powi(j - 1));
+                                    r.into_slice()
+                                        .unwrap()
+                                        .iter_mut()
+                                        .zip(delta.view().into_slice().unwrap().iter())
+                                        .for_each(|(r, x)| {
+                                            *r += x.powi(j as i32) * mult;
+                                        });
+                                }
+                                for k in 1..((j - 2) + 1) {
+                                    let I = ((j - k - 1)..(j));
+                                    let tab = cs.slice_mut(s![x, I;k, ..]);
+                                    let (a, b) = tab.split_at(Axis(0), 1);
+                                    let cb = binomial(j, k) as f64;
+                                    inner_loop_ttest(
+                                        b.into_slice().unwrap(),
+                                        a.into_slice().unwrap(),
+                                        delta.as_slice().unwrap(),
+                                        cb,
+                                        k,
+                                    );
+                                }
+                            }
+                            let mut ret = m.slice_mut(s![x, ..]);
+                            ret += &(delta);
+                            cs.slice_mut(s![x, 0, ..]).assign(&ret);
+                        });
+                    });
+
+                for i in 0..traces.shape()[0] {
+                    let x = c[i] as usize;
+                    n[[x]] += 1.0;
+                }
+            });
+        Ok(())
+    }
+
     #[pyfn(m, "update_ttest")]
     fn update_ttest(
         _py: Python,
@@ -14,7 +101,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         c: &PyArray1<u8>,       // (len)
         n: &mut PyArray1<f64>,  // (len)
         cs: &mut PyArray3<f64>, // (2,D*2,N_sample)
-        m: &mut PyArray2<f64>,  // (2,D*2,N_sample)
+        m: &mut PyArray2<f64>,  // (2,N_sample)
         d: i32,
         nchunks: i32, //
     ) -> PyResult<()> {
