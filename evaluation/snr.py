@@ -164,6 +164,35 @@ class SNROrder:
                     v = (CM[:,(d*2)-1,:] - CM[:,(d)-1]**2)/(CM[:,1,:]**d)
                 self._SNR[i,d-1,:] = np.var(u,axis=0)/np.mean(v,axis=0)
 
+    def get_sm(self,D):
+        """
+            returns the standardized moments to peform MCP-DPA
+
+            returns:
+            SM: standardized moments
+            s: standard deviation
+            u: means
+
+        """
+        SM = np.zeros((self._Np,self._Nc,self._Ns))
+        s = np.zeros((self._Np,self._Nc,self._Ns))
+        u = self._M.copy()
+
+        for i in range(self._Np): # for each class
+            CM = (self._CS[i].T/self._ns[i]).T # (Nc,D*2,Ns)
+            if D == 1:
+                m = self._M[i,:] #(Nc,Ns)
+            elif D==2:
+                m = CM[:,1,:]
+            else:
+                m = CM[:,D-1,:]/np.power(CM[:,1,:],D/2);
+
+            s[i,:] = np.sqrt(CM[:,1,:])
+            SM[i,:,:] = m
+
+        return SM,u,s
+
+
 if __name__ == "__main__":
     Ns = 100
     Np = 2

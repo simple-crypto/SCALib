@@ -12,7 +12,8 @@ struct Vnode{
     uint32_t    Ni;         // functions outputing this node
     uint32_t    Nf;         // Number of function using this variable
     uint32_t    Ns;         // dimention of the distribution at this node
-    uint32_t    use_log;     // use update_log_vnode function
+    uint32_t    use_log;    // use update_log_vnode function
+    uint32_t    acc;        // use update_log_vnode function
 
     uint32_t*   relative;   // the relative within the function node input (of size Ni)
     uint32_t    id_input;   // id of input function node
@@ -33,6 +34,7 @@ struct Fnode{
     uint32_t    o;          // output node id
     uint32_t*   relative;   // the position within each related nodes 
     proba_t*    msg;        // msg send to the vnodes index(0) = output
+    double      repeat;    // fct code (ie 0 = AND, 2 == XOR)
     proba_t     lf;        // msg send to the vnodes index(0) = output
 } typedef Fnode;
 

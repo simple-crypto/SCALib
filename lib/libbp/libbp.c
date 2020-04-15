@@ -62,6 +62,33 @@ void shuffle(uint32_t *tab,uint32_t len){
         tab[i] = j;
     }
 }
+void* thread_vnodes_reset(void *in){
+    uint32_t *lim;
+    uint32_t nvnodes,nfnodes;
+    uint32_t id,init;
+    lim = (uint32_t *)in;
+    nvnodes = lim[0];
+    nfnodes = lim[1];
+    Vnode *vnode;
+
+    pthread_mutex_lock(&lock_vnodes);
+    while(cnt_vnodes<nvnodes){
+        init = cnt_vnodes;
+        cnt_vnodes += NPERTHREAD_V;
+        pthread_mutex_unlock(&lock_vnodes);
+        for(id=init;(id<(init+NPERTHREAD_V)) && (id<nvnodes);id++){
+            vnode = &vnodes[index_vnodes[id]];
+            for(int i = 0; i<(vnode->Ni+vnode->Nf);i++){
+                memcpy(&vnode->msg[index(i,0,Nk)],vnode->distri_orig,sizeof(proba_t)*Nk);
+            }
+        }
+        pthread_mutex_lock(&lock_vnodes);
+    }
+    pthread_mutex_unlock(&lock_vnodes);
+
+    pthread_exit(NULL);
+    return NULL;
+}
 void* thread_vnodes(void *in){
     uint32_t *lim;
     uint32_t nvnodes,nfnodes;
@@ -70,7 +97,7 @@ void* thread_vnodes(void *in){
     nvnodes = lim[0];
     nfnodes = lim[1];
     Vnode *vnode;
-    
+
     pthread_mutex_lock(&lock_vnodes);
     while(cnt_vnodes<nvnodes){
         init = cnt_vnodes;
@@ -145,8 +172,18 @@ void run_bp(Vnode * vnodes_i,
     for(i=0;i<nvnodes;i++)
         index_vnodes[i] = i;
     index_fnodes = (uint32_t *) malloc(sizeof(uint32_t)*nfnodes);
-    for(i=0;i<nfnodes;i++)
+    for(i=0;i<nfnodes;i++){
         index_fnodes[i] = i;
+    }
+    
+    // update vnodes
+    shuffle(index_vnodes,nvnodes);
+    for(j=0;j<nthread;j++){
+        pthread_create(&threads[j],NULL,thread_vnodes_reset,(void*)lim);
+    }
+    for(j=0;j<nthread;j++){
+        pthread_join(threads[j],NULL);
+    }
 
     for(i=0;i<it_c;i++){
         // update fnodes

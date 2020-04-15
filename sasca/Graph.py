@@ -100,6 +100,7 @@ class VNode(ctypes.Structure):
             ('Nf', ctypes.c_uint32),
             ('Ns', ctypes.c_uint32),
             ('use_log', ctypes.c_uint32),
+            ('acc', ctypes.c_uint32),
             ('relative', ctypes.POINTER(ctypes.c_uint32)),
             ('id_input', ctypes.c_uint32),
             ('id_output', ctypes.POINTER(ctypes.c_uint32)),
@@ -114,7 +115,7 @@ class VNode(ctypes.Structure):
         VNode.N = 0
     def __hash__(self):
         return self._id
-    def __init__(self,value=None,result_of=None,str=None,use_log=0):
+    def __init__(self,value=None,result_of=None,str=None,use_log=0,acc=0):
         """
             value: is the value of the node
             result_of: is the function node that output this variable
@@ -127,6 +128,7 @@ class VNode(ctypes.Structure):
         VNode.buff.append(self)
         self._flag = 0
         self._use_log = use_log
+        self._acc = acc
         # say to the funciton node that this is its output. 
         if result_of is not None: 
             result_of.add_output(self)
@@ -186,6 +188,7 @@ class VNode(ctypes.Structure):
         self.Nf = np.uint32(len(self._used_by))
         self.Ns = np.uint32(Nk)
         self.use_log = np.uint32(self._use_log)
+        self.acc = np.uint32(self._acc)
 
         # relative positionning with other nodes
         # function node that outputs this node
@@ -260,6 +263,7 @@ class FNode(ctypes.Structure):
             ('o', ctypes.c_uint32),
             ('relative', ctypes.POINTER(ctypes.c_uint32)),
             ('msg', ctypes.POINTER(ctypes.c_double)),
+            ('repeat', ctypes.c_double),
             ('lf',ctypes.c_double)]
 
     N = 0
@@ -272,7 +276,7 @@ class FNode(ctypes.Structure):
         FNode.buff = []
         FNode.N = 0
 
-    def __init__(self,func,inputs=None,offset=None,str=None,lf=1):
+    def __init__(self,func,inputs=None,offset=None,str=None,lf=1,repeat=1):
         """
             func: the function implemented by the nodes
             input: a list with the input variable nodes that are the 
@@ -289,6 +293,7 @@ class FNode(ctypes.Structure):
         self._func_id = all_functions.index(func)
         self._inputs = inputs
         self._lf=lf
+        self._repeat = repeat
         if offset is None:
             self._has_offset = False
             self._offset = np.uint32(0)
@@ -357,6 +362,7 @@ class FNode(ctypes.Structure):
         self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
         self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.lf = np.double(self._lf)
+        self.repeat = np.double(self._repeat)
         self._is_initialized=True 
     def __hash__(self):
         return self._id  | 0xf00000

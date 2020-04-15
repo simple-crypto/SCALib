@@ -76,7 +76,7 @@ void update_vnode_information(Vnode *vnode){
     for(i=0;i<Nf;i++){
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
-        total_sum += fnodes[fnode_id].msg[r];
+        total_sum += (fnodes[fnode_id].msg[r] * (vnode->acc ? fnodes[fnode_id].repeat : 1));
     }
 
     vnode->distri[0] = min(total_sum,1.0);
@@ -157,7 +157,7 @@ void update_fnode_information(Fnode *fnode){
 
     // to each input nodes
     for(i=0;i<fnode->li;i++){
-        prod_all = vnodes[fnode->o].msg[0];
+        prod_all = vnodes[fnode->o].msg[0]*(fnode->lf);
         for(j = 0;j<fnode->li;j++){
             if (i != j)
                 prod_all *= vnodes[fnode->i[j]].msg[fnode->relative[j]];
