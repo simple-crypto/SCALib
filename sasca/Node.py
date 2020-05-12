@@ -210,6 +210,7 @@ class VNode(ctypes.Structure):
     """
     N = 0
     buff = []
+    default_profile = True
 
     _fields_ = [('id', ctypes.c_uint32),
             ('Ni', ctypes.c_uint32),
@@ -241,7 +242,7 @@ class VNode(ctypes.Structure):
             use_log: if set, the VNode BP is run on log distribitions. This is needed
                 when many there it alot of neighboors since it avoids computational errors
             flag: the flag of the node. It is a tuple with the first element being True if the node
-                must be profiled. Other elements are free. Default flag=(True,)
+                must be profiled. Other elements are free. Default flag=(True,id,..)
             acc: used only in LRPM. acc if is used in several encryptions (i.e. key schedule node)
         """
         if value is None and result_of is None:
@@ -259,7 +260,7 @@ class VNode(ctypes.Structure):
         VNode.buff.append(self)
 
         if flag is None:
-            flag = (True,)
+            flag = (VNode.default_profile,self._id)
         self._flag = flag
 
         self._use_log = use_log
@@ -274,6 +275,7 @@ class VNode(ctypes.Structure):
         if str is None:
             str =  "v %d"%(self._id)
         self._str = str
+        self._is_initialized = True
 
     def eval(self):
         """
@@ -375,6 +377,7 @@ class VNode(ctypes.Structure):
         self.distri_orig = self._distri_orig.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.distri = self._distri.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
+        self._is_initialized = True
     def __and__(self,other):
         if isinstance(other,VNode):
             return apply_func(band,inputs=[self,other])
