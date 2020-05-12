@@ -1,27 +1,13 @@
+from stella.sasca.Node import *
+import os
 import numpy as np
 import networkx as nx
 import ctypes
 
-############################
-#     Function for nodes
-############################ 
-bxor = np.bitwise_xor   #ID 2
-band = np.bitwise_and   #ID 0
-binv = np.invert        #ID 1
-def ROL16(a, offset):   #ID 3
-    Nk = 2**16
-    a = a
-    if offset == 0:
-        return a
-    rs = int(np.log2(Nk) - offset)
-    return  (((a) << offset) ^ (a >> (rs)))%Nk
-def tab_call(a,offset): #ID4
-    return FNode.tab[offset,a];
-##############################
-distribution_dtype = np.double
-all_functions = [band,binv,bxor,ROL16,tab_call]
-
 class Graph():
+    """
+        Graph allows to interface with the C Belief Progation Library.
+    """
     @staticmethod
     def wrap_function(lib, funcname, restype, argtypes):
         """Simplify wrapping ctypes functions"""
@@ -30,7 +16,14 @@ class Graph():
         func.argtypes = argtypes
         return func
 
-    def __init__(self,Nk,nthread=16,vnodes=None,fnodes=None,DIR=""):
+    def __init__(self,Nk,nthread=16,vnodes=None,fnodes=None,DIR=None):
+        """
+            Nk: number of possible value. i.e. if running on 8-bit value, Nk=256
+            nthread: number of CPU used for BP
+            vnodes: a list of vnodes. If None, VNode.buff is taken
+            fnodes: a list of fnodes. If None, FNode.buff is taken
+            DIR: directory of shared lib.
+        """
         if vnodes is None:
             vnodes = VNode.buff
         self._vnodes = vnodes
@@ -51,6 +44,9 @@ class Graph():
         for i,node in enumerate(vnodes):
             self._vnodes_array[i] = node
 
+        if DIR == None:
+            DIR = os.path.dirname(__file__)+"/../lib/"
+
         self._lib = ctypes.CDLL(DIR+"./libbp.so")
         self._run_bp = self.wrap_function(self._lib,"run_bp",None,[ctypes.POINTER(VNode),
                 ctypes.POINTER(FNode),
@@ -65,11 +61,15 @@ class Graph():
         """
             run belief propagation algorithm on the fed graph
             it: number of iterations
-            mode:   0 -> on distributions; 
+            mode:   0 -> on distribution,for attack
                     1 -> on information metrics for LRPM
         """
+        if mode == 1 and Nk != 1:
+            raise Exception("For LRPM, Nk should be equal to 1")
+
         if FNode.tab is None:
             FNode.tab = np.zeros((2,self._Nk),dtype=np.uint32)
+
         self._run_bp(self._vnodes_array,
             self._fnodes_array,
             ctypes.c_uint32(self._Nk),

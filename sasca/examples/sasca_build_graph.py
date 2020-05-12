@@ -1,4 +1,6 @@
 from stella.sasca.Graph import *
+from stella.sasca.utils import *
+from stella.sasca.Node import *
 import matplotlib.pyplot as plt
 
 def wrap_function(lib, funcname, restype, argtypes):
@@ -11,29 +13,47 @@ def wrap_function(lib, funcname, restype, argtypes):
 
 if __name__ == "__main__":
     #remove run from previous execution
+    print(VNode)
     VNode.reset_all();
     FNode.reset_all();
     Nk = 16
     print("Example to build a Factor Graph")
     A = VNode(value=0x3)
+    A = A & (0x03<<2)
     B = VNode(value=0x8)
-    D = apply_func(band,inputs=[A,B])
-    C = apply_func(bxor,inputs=[D,A])
-    print("C has a value %02x \n"%(C.eval()))
+    D = A & B
+    C = A ^ B
+    print("C has a value %d \n"%(C.eval()))
 
     print("plot the factor graph")
-    #plot_graph()
-    #plt.show()
+    plt.figure()
+    plot_graph()
+    plt.show(block=False)
 
+    #initialize prior distribution
+    N = VNode.N
+    distri_in = np.ones((N,Nk),dtype=np.float64)/Nk
+    distri_in[A._id,:] = 0
+    distri_in[A._id,A.eval()] = 1
+    distri_in[B._id,:] = 0
+    distri_in[B._id,B.eval()] = 1
+
+    #initialize posterior distribution
+    distri_out = np.ones((N,Nk),dtype=np.float64)/Nk
+
+    #init all variable nodes with prior distri and output one
+    for i,node in enumerate(VNode.buff):
+        node.initialize(Nk=Nk,distri_orig=distri_in[i],
+            distri=distri_out[i])
+
+    # same on function nodes
+    for node in FNode.buff:
+        node.initialize(Nk=Nk)
     print("Initialize the complete Graph")
-    distri = np.ones((4,Nk))/Nk
-    distri[0,:] = 0
-    distri[0,A.eval()] = 1
-    distri[1,:] = 0
-    distri[1,B.eval()] = 1
 
-    initialize_graph(distri=distri,Nk=Nk)
+    # init the C lib
+    graph = Graph(Nk=Nk,nthread=1)
+    # run 2 iterations of BP
+    graph.run_bp(it=4)
 
-    graph = Graph(Nk=Nk,DIR="../",nthread=1)
-    graph.run_bp(it=2)
     print('The guessed C is %d and expected %d'%(np.argmax(C._distri),C.eval()))

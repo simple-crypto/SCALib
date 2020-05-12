@@ -21,9 +21,8 @@ void update_vnode_log(Vnode *vnode){
     uint32_t i,j,fnode_id,r,Ni,Nf;
     Ni = vnode->Ni;
     Nf = vnode->Nf;
-    proba_t *tmp1;
 
-    tmp1 = (proba_t *) malloc(sizeof(proba_t)*Nk); // accumulate self distri + all messages
+    proba_t tmp1[Nk]; // accumulate self distri + all messages
     apply_log10(tmp1,vnode->distri_orig,Nk);
 
     // Accumulate all in tmp1 as a log distri
@@ -61,7 +60,6 @@ void update_vnode_log(Vnode *vnode){
 
     add_cst_dest(vnode->distri,tmp1,-get_max(tmp1,Nk),Nk);
     apply_P10(vnode->distri,vnode->distri,Nk);
-    free(tmp1);
 }
 
 void update_vnode_information(Vnode *vnode){
@@ -208,13 +206,15 @@ void update_fnode(Fnode *fnode){
         // iterate over the (single) sets of input
         for(i0=0;i0<Nk;i0++){
             if(fnode->func_id == 1)
-                o = (~i0&0xffff);
+                o = (~i0);
             else if(fnode->func_id == 2 && fnode->has_offset)
-                o = i0 ^ fnode->offset;
+                o = i0 ^ *(fnode->offset);
+            else if(fnode->func_id == 0 && fnode->has_offset)
+                o = i0 & *(fnode->offset);
             else if(fnode->func_id == 3 && fnode->has_offset)
-                o = ROL16(i0,fnode->offset);
+                o = ROL16(i0,*(fnode->offset));
             else if(fnode->func_id == 4){
-                o = tab[index(fnode->offset,i0,Nk)];
+                o = tab[index(*(fnode->offset),i0,Nk)];
             }else
                 exit(EXIT_FAILURE);
             o &=0xffff;

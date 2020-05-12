@@ -32,7 +32,7 @@ struct Fnode{
 
     uint32_t*   i;          // list of input nodes ids
     uint32_t    o;          // output node id
-    uint32_t*   relative;   // the position within each related nodes 
+    uint32_t*   relative;   // the position within each related nodes
     proba_t*    msg;        // msg send to the vnodes index(0) = output
     double      repeat;    // fct code (ie 0 = AND, 2 == XOR)
     proba_t     lf;        // msg send to the vnodes index(0) = output
