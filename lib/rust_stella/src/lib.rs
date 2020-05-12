@@ -31,7 +31,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             .zip(cs.outer_iter_mut().into_par_iter())
             .zip(m.outer_iter_mut().into_par_iter())
             .enumerate()
-            .for_each(|(p, (((mut c, mut n), mut cs), mut m))| {
+            .for_each(|(p, (((c, mut n), mut cs), mut m))| {
                 traces
                     .axis_chunks_iter(Axis(1), chunk_size)
                     .into_par_iter()

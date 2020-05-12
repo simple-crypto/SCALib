@@ -115,7 +115,7 @@ class VNode(ctypes.Structure):
         VNode.N = 0
     def __hash__(self):
         return self._id
-    def __init__(self,value=None,result_of=None,str=None,use_log=0,acc=0):
+    def __init__(self,value=None,result_of=None,str=None,use_log=0,acc=0,flag=0):
         """
             value: is the value of the node
             result_of: is the function node that output this variable
@@ -126,7 +126,7 @@ class VNode(ctypes.Structure):
         self._id = VNode.N
         VNode.N += 1
         VNode.buff.append(self)
-        self._flag = 0
+        self._flag = flag
         self._use_log = use_log
         self._acc = acc
         # say to the funciton node that this is its output. 
@@ -158,7 +158,7 @@ class VNode(ctypes.Structure):
     def __str__(self):
         return self._str
 
-    def initialize(self,Nk=None,distri=None):
+    def initialize(self,Nk=None,distri=None,copy=True,distri_out=None):
         """ Initialize the variable node. It goes in all its neighboors and
             searchs for its relative position with their lists
 
@@ -178,9 +178,9 @@ class VNode(ctypes.Structure):
 
         if distri is None:
             distri = np.ones(Nk,dtype=distribution_dtype)/Nk
-        else:
-            distri = distri.astype(distribution_dtype)
-            Nk = len(distri)
+        elif copy:
+            distri = distri.astype(distribution_dtype).copy()
+        Nk = len(distri)
 
         # header
         self.id = np.uint32(self._id)
@@ -216,8 +216,15 @@ class VNode(ctypes.Structure):
         self._relative = np.array([1+fnode._inputs.index(self) for fnode in self._used_by]).astype(np.uint32)
 
         # the distributions and messages to pass
-        self._distri = distri.astype(dtype=distribution_dtype)
-        self._distri_orig = self._distri.copy()
+        if copy == True:
+            self._distri_orig = distri.astype(dtype=distribution_dtype).copy()
+            self._distri = self._distri_orig.copy()
+        else:
+            self._distri_orig = distri
+            if distri_out is None:
+                self._distri = distri.copy()
+            else:
+                self._distri = distri_out
 
         # one message to result_of and on to each function using this node
         nmsg = self.Ni + self.Nf
@@ -231,7 +238,7 @@ class VNode(ctypes.Structure):
         self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.distri_orig = self._distri_orig.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
         self.distri = self._distri.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        
+
         self._is_initialized = True
     def reset_distri(self,distri=None):
         if distri is None:
@@ -314,7 +321,9 @@ class FNode(ctypes.Structure):
             else:
                 str = " f %d"%(self._func_id)# + " " + str(self._id) 
         self._str = str
-        self._is_initialized=False 
+        self._is_initialized=False
+
+
     def __str__(self):
         return self._str
     def eval(self):

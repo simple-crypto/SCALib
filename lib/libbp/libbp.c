@@ -178,6 +178,7 @@ void run_bp(Vnode * vnodes_i,
     
     // update vnodes
     shuffle(index_vnodes,nvnodes);
+    cnt_vnodes = 0;
     for(j=0;j<nthread;j++){
         pthread_create(&threads[j],NULL,thread_vnodes_reset,(void*)lim);
     }

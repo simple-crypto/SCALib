@@ -60,7 +60,7 @@ void update_vnode_log(Vnode *vnode){
     }
 
     add_cst_dest(vnode->distri,tmp1,-get_max(tmp1,Nk),Nk);
-
+    apply_P10(vnode->distri,vnode->distri,Nk);
     free(tmp1);
 }
 

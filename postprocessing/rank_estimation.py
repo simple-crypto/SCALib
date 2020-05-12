@@ -1,6 +1,7 @@
 import numpy as np
 import ctypes
 from ctypes import POINTER
+import os
 def wrap_function(lib, funcname, restype, argtypes):
     """Simplify wrapping ctypes functions"""
     func = lib.__getattr__(funcname)
@@ -8,7 +9,7 @@ def wrap_function(lib, funcname, restype, argtypes):
     func.argtypes = argtypes
     return func
 
-def rank_estimation(logproba,init_key,nb_bins,merge_value=1,DIR=""):
+def rank_estimation(logproba,init_key,nb_bins,merge_value=1,DIR=None):
     """
         estimates the rank of the correct key using hel_lib
         https://eprint.iacr.org/2016/571.pdf published at CHES2016
@@ -21,6 +22,8 @@ def rank_estimation(logproba,init_key,nb_bins,merge_value=1,DIR=""):
     if Ns != 16 or Nl != 256:
         raise Exception("Does not accept yet these shapes")
 
+    if DIR is None:
+        DIR = os.path.dirname(__file__)+"/../lib/"
     lib = ctypes.CDLL(DIR+"./hellib.so")
     run_hellib = wrap_function(lib,"stella_wrapper",None,[ctypes.c_int64,
                         ctypes.c_int32,
@@ -53,5 +56,5 @@ if __name__ == "__main__":
     logproba = np.random.normal(0,1,(16,256)).astype(np.double)
     init_key = np.random.randint(0,256,16).astype(np.int)
 
-    r,mi,ma = rank_estimation(logproba,init_key,nb_bins=4096,merge_value=1,DIR="../lib/")
+    r,mi,ma = rank_estimation(logproba,init_key,nb_bins=4096,merge_value=1)
 

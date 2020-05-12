@@ -169,12 +169,13 @@ class SNROrder:
             returns the standardized moments to peform MCP-DPA
 
             returns:
-            SM: standardized moments
+            SM: standardized moments of order D
             s: standard deviation
             u: means
 
         """
         SM = np.zeros((self._Np,self._Nc,self._Ns))
+        CM_all = np.zeros((self._Np,self._Nc,self._Ns))
         s = np.zeros((self._Np,self._Nc,self._Ns))
         u = self._M.copy()
 
@@ -189,21 +190,34 @@ class SNROrder:
 
             s[i,:] = np.sqrt(CM[:,1,:])
             SM[i,:,:] = m
-
-        return SM,u,s
+            CM_all[i,:,:] = CM[:,D-1,:]
+        return SM,u,s,CM_all
 
 
 if __name__ == "__main__":
-    Ns = 100
-    Np = 2
-    D = 3
+    Ns = 10
+    Np = 1
+    D = 2
+    D_SNR = 6
     Nc = 4
-    nt = 1000
-    traces = np.random.randint(0,256,(nt,Ns),dtype=np.int16)
-    X = np.random.randint(0,Nc,(Np,nt),dtype=np.uint8)
+    nt = 1000000
+    v = np.random.randint(0,Nc,(nt,D),dtype=np.uint8)
 
-    snr_o = SNROrder(Nc,Ns,Np,D)
-    snr_o.fit_u(traces,X)
+    r = 0
+    for d in range(D):
+        r = np.bitwise_xor(v[:,d],r)
 
-    snr = SNR(Nc,Ns,Np)
-    snr.fit_u(traces,X)
+    X = r.reshape((1,nt))
+    leakage = np.sum(np.random.normal(loc=v,scale=1),axis=1)
+    leakage -= np.mean(leakage)
+    leakage /= np.std(leakage)
+    leakage *= 2**12
+    leakage = leakage.astype(np.int16) + 2343
+    tr = np.random.randint(0,2**12,(nt,Ns)).astype(np.int16)
+    tr[:,1] = leakage 
+    snr_o = SNROrder(Nc,Ns,Np,D_SNR)
+    snr_o.fit_u(tr,X)
+
+    for d in range(1,D_SNR+1):
+        print("SNR at order %d"%(d))
+        print(snr_o._SNR[0,d-1,:])
