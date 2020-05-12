@@ -27,7 +27,7 @@ struct Fnode{
     uint32_t    id;         // id
     uint32_t    li;         // number of inputs
     uint32_t    has_offset; // Does function requires cst
-    uint32_t    offset;     // constant
+    uint32_t    *offset;     // constant
     uint32_t    func_id;    // fct code (ie 0 = AND, 2 == XOR)
 
     uint32_t*   i;          // list of input nodes ids
