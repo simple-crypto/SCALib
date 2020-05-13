@@ -210,7 +210,7 @@ class VNode(ctypes.Structure):
     """
     N = 0
     buff = []
-    default_profile = True
+    default_flag = {"profile":True,"method":"LDA"}
 
     _fields_ = [('id', ctypes.c_uint32),
             ('Ni', ctypes.c_uint32),
@@ -260,7 +260,8 @@ class VNode(ctypes.Structure):
         VNode.buff.append(self)
 
         if flag is None:
-            flag = (VNode.default_profile,self._id)
+            flag = VNode.default_flag.copy()
+        flag["id"] = self._id
         self._flag = flag
 
         self._use_log = use_log
@@ -391,4 +392,8 @@ class VNode(ctypes.Structure):
             return apply_func(bxor,inputs=[self],offset=other)
 
     def __invert__(self):
-        return apply_func(binv,inputs=[self])
+        ret = apply_func(binv,inputs=[self])
+        # No need to profile this node since bijectively related to 
+        # the input
+        ret._flag["profile"] = False
+        return ret

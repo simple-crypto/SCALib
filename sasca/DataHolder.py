@@ -7,7 +7,7 @@ class DataHolder():
         or distribution) by accessing updating a single update.
     """
 
-    def __init__(self,data=None):
+    def __init__(self,data):
         """
             data: the numpy array to hold. rows of data will be distributed
         """
