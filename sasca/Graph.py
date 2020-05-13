@@ -38,7 +38,6 @@ class Graph():
         self._fnodes_array = (FNode*len(fnodes))()
         self._vnodes_array = (VNode*len(vnodes))()
 
-
         if DIR == None:
             DIR = os.path.dirname(__file__)+"/../lib/"
 
@@ -100,7 +99,6 @@ class Graph():
         if FNode.tab is None:
             FNode.tab = np.zeros((2,self._Nk),dtype=np.uint32)
 
-
         self._run_bp(self._vnodes_array,
             self._fnodes_array,
             ctypes.c_uint32(self._Nk),
@@ -110,7 +108,32 @@ class Graph():
             ctypes.c_uint32(self._nthread),
             ctypes.c_uint32(mode),
             FNode.tab.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)))
-    
+
+    def eval(self,nodes):
+        """
+            this function returns an array with the same length as nodes.
+            This array contains the value of nodes
+        """
+        for node in self._vnodes: node._evaluated = False
+        
+        ret = [None for _ in nodes]
+        for node in self._vnodes:
+            if node in nodes:
+                ret[nodes.index(node)] = node.eval()
+
+        return ret
+ 
+    def get_nodes(self,func):
+        """
+            return the nodes of all the nodes maching with func
+
+            func should return a boolean function
+        """
+        return list(filter(func,self._vnodes))
+
+    ###############
+    # utils methods
+    ###############
     def build_nx_graph(self):
         fnodes = self._fnodes
         G = nx.Graph()

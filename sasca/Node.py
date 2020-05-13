@@ -210,7 +210,7 @@ class VNode(ctypes.Structure):
     """
     N = 0
     buff = []
-    default_flag = {"profile":True,"method":"LDA"}
+    default_flag = {"profile":True,"method":"LDA","and_output":False}
 
     _fields_ = [('id', ctypes.c_uint32),
             ('Ni', ctypes.c_uint32),
@@ -276,15 +276,23 @@ class VNode(ctypes.Structure):
         if str is None:
             str =  "v %d"%(self._id)
         self._str = str
-        self._is_initialized = True
+        self._is_initialized = False
+        self._evaluated = False
 
     def eval(self):
         """
             returns the value of this variable node. To do so, 
             search of the output of the parent node
         """
-        if self._value is None:
-            return self._result_of.eval()
+
+        # if being node not evaluated yet, update 
+        if self._evaluated == False and self._result_of is not None:
+            if self._value is None: # value has not alread been declared
+                self._value = self._result_of.eval()
+            else: #update the value array
+                self._value[:] = self._result_of.eval()
+
+        self._evaluated = True
         return self._value
 
     def used_by(self,fnode):
@@ -381,7 +389,10 @@ class VNode(ctypes.Structure):
         self._is_initialized = True
     def __and__(self,other):
         if isinstance(other,VNode):
-            return apply_func(band,inputs=[self,other])
+            ret = apply_func(band,inputs=[self,other])
+            ret._flag["method"]="LR"
+            ret._flag["and_output"]=True
+            return ret
         else:
             return apply_func(band,inputs=[self],offset=other)
 
