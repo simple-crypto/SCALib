@@ -172,13 +172,14 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "update_snr")]
     fn update_snr(
         _py: Python,
-        traces: &PyArray2<i16>,   // (len,N_sample)
-        x: &PyArray2<u16>,        // (Np,len)
-        sum: &mut PyArray3<i64>,  // (Np,Nc,N_sample)
-        sum2: &mut PyArray3<i64>, // (Np,Nc,N_sample)
-        ns: &mut PyArray2<u32>,   // (Np,Nc)
-        means: &mut PyArray3<f32>,
-        vars: &mut PyArray3<f32>,
+        traces: &PyArray2<i16>,    // (len,N_sample)
+        x: &PyArray2<u16>,         // (Np,len)
+        sum: &mut PyArray3<i64>,   // (Np,Nc,N_sample)
+        sum2: &mut PyArray3<i64>,  // (Np,Nc,N_sample)
+        ns: &mut PyArray2<u32>,    // (Np,Nc)
+        means: &mut PyArray3<f32>, // (Np,Nc,N_sample)
+        vars: &mut PyArray3<f32>,  // (Np,Nc,N_sample)
+        snr: &mut PyArray2<f32>,   // (Np,N_sample)
         nchunks: i32,
     ) -> PyResult<()> {
         let traces = traces.as_array();
@@ -188,6 +189,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         let mut vars = vars.as_array_mut();
         let mut sum2 = sum2.as_array_mut();
         let mut ns = ns.as_array_mut();
+        let mut snr = snr.as_array_mut();
         let n_traces = traces.shape()[0];
         let nc = sum.shape()[1];
         let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
@@ -197,9 +199,10 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             .zip(ns.outer_iter_mut().into_par_iter())
             .zip(means.outer_iter_mut().into_par_iter())
             .zip(vars.outer_iter_mut().into_par_iter())
+            .zip(snr.outer_iter_mut().into_par_iter())
             .enumerate()
             .for_each(
-                |(p, ((((mut sum, mut sum2), mut ns), mut means), mut vars))| {
+                |(p, (((((mut sum, mut sum2), mut ns), mut means), mut vars), mut snr))| {
                     traces
                         .axis_chunks_iter(Axis(1), chunk_size)
                         .into_par_iter()
@@ -257,6 +260,11 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                                     });
                             }
                         });
+
+                    let num = means.mean_axis(Axis(0));
+                    let den = means.mean_axis(Axis(0));
+                    let x = means + vars;
+                    snr.assign(&(snr + 1.0));
                 },
             );
 

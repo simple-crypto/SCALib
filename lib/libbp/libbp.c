@@ -161,21 +161,25 @@ void run_bp(Vnode * vnodes_i,
     tab = t;
     vnodes = vnodes_i;
     fnodes = fnodes_i;
-    NPERTHREAD_V = max(10,nvnodes / (nthread*10));
-    NPERTHREAD_F = max(10,nfnodes / (nthread*10));
+    NPERTHREAD_V = max(10,nvnodes / (nthread*1));
+    NPERTHREAD_F = max(10,nfnodes / (nthread*1));
     lim[0] = nvnodes;
     lim[1] = nfnodes;
     pthread_t threads[nthread];
     pthread_mutex_init(&lock_vnodes,NULL);
     pthread_mutex_init(&lock_fnodes,NULL);
+
+
     index_vnodes = (uint32_t *) malloc(sizeof(uint32_t)*nvnodes);
     for(i=0;i<nvnodes;i++)
         index_vnodes[i] = i;
+    
     index_fnodes = (uint32_t *) malloc(sizeof(uint32_t)*nfnodes);
     for(i=0;i<nfnodes;i++){
         index_fnodes[i] = i;
     }
-    
+    //print_vnode(vnodes,10);
+
     // update vnodes
     shuffle(index_vnodes,nvnodes);
     cnt_vnodes = 0;

@@ -206,18 +206,18 @@ void update_fnode(Fnode *fnode){
         // iterate over the (single) sets of input
         for(i0=0;i0<Nk;i0++){
             if(fnode->func_id == 1)
-                o = (~i0);
+                o = ((~i0)%Nk);
             else if(fnode->func_id == 2 && fnode->has_offset)
-                o = i0 ^ *(fnode->offset);
+                o = (i0 ^ *(fnode->offset)) % Nk;
             else if(fnode->func_id == 0 && fnode->has_offset)
-                o = i0 & *(fnode->offset);
+                o = (i0 & *(fnode->offset)) % Nk;
             else if(fnode->func_id == 3 && fnode->has_offset)
                 o = ROL16(i0,*(fnode->offset));
             else if(fnode->func_id == 4){
                 o = tab[index(*(fnode->offset),i0,Nk)];
             }else
                 exit(EXIT_FAILURE);
-            o &=0xffff;
+            o= o%Nk;
 
             // update message to the output
             fnode->msg[index(0,o,Nk)] += (distri0[i0]);

@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 import scipy.stats 
 class MultivariateGaussianClassifier():
     def __init__(self,Nc,means,covs,priors=None,dim_reduce=None):
@@ -42,6 +43,7 @@ class MultivariateGaussianClassifier():
         self._Nc = Nc
         self._dim_reduce = dim_reduce
         self._Ns = my
+
     def predict_proba(self,X):
         """
             Returns the probability of each classes by applying 
@@ -69,3 +71,36 @@ class MultivariateGaussianClassifier():
         I = np.where(np.sum(prs,axis=1)==0)[0]
         prs[I] = 1
         return (prs.T/np.sum(prs,axis=1)).T
+
+class LDAClassifier():
+    def __init__(self,traces,labels,solver="svd",dim_projection=4,priors=None):
+        Ns = traces[0,:]
+        Nk = Nc = len(np.unique(labels))
+        C_i = labels
+
+        dim_reduce = LDA(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors)
+        traces_i = dim_reduce.fit_transform(traces,C_i)
+        lx,ly = traces_i.shape
+        model = np.zeros((Nk,ly))
+
+        noise = np.zeros((Nk,ly,ly))
+        for k in range(Nk):
+            I = np.where(C_i==k)[0]
+            model[k] = np.mean(traces_i[I,:],axis=0)
+        noise = traces_i-model[C_i]
+        cov = np.cov(noise.T)
+        covs = np.tile(cov,(Nc,1,1))
+
+        self._trained_on = len(labels)
+        self._mvGC = MultivariateGaussianClassifier(Nk,model,covs,dim_reduce=dim_reduce,priors=priors)
+
+    def predict_proba(self,X):
+        """
+            Returns the probability of each classes by applying 
+            Bayes law.
+
+            X (n_traces,Ns): n_traces traces to evaluate
+
+            returns a (n_traces,Nc) array
+        """
+        return self._mvGC.predict_proba(X)

@@ -152,6 +152,7 @@ class FNode(ctypes.Structure):
         """
         if self._output is None:
             raise Exception("Initialize FNode which has no output node")
+        
 
         ## number of messages to passed
         nmsg = len(self._inputs) + 1
@@ -326,6 +327,8 @@ class VNode(ctypes.Structure):
         if Nk is None and distri_orig is None:
             raise Exception("Nk and distri_orig cannot be None at the same time")
 
+        if self._is_initialized == True:
+            raise Exception("Node cannot be initialized twice")
         # setting up distri and Nk
         if distri_orig is None:
             distri_orig = np.ones(Nk,dtype=distribution_dtype)/Nk
@@ -406,5 +409,5 @@ class VNode(ctypes.Structure):
         ret = apply_func(binv,inputs=[self])
         # No need to profile this node since bijectively related to 
         # the input
-        ret._flag["profile"] = False
+        self._flag["profile"] = False
         return ret

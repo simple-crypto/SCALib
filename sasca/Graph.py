@@ -52,8 +52,8 @@ class Graph():
                 ctypes.c_uint32,
                 ctypes.POINTER(ctypes.c_uint32)])
 
-    def initialize_nodes(self,distri_in,flag_in,
-                        distri_out,flag_out):
+    def initialize_nodes(self,data_in,
+                        data_out):
         """
             initialize the fnodes and the vnodes
 
@@ -63,19 +63,29 @@ class Graph():
                 same as distri_in but for output distribution
         """
         Nk = self._Nk
-        for node in self._vnodes:
-            if node._flag in flag_in:
-                distri_i = distri_in[flag_in.index(node._flag)]
+
+        self._vnodes = list(sorted(self._vnodes,key=lambda node: node._id))
+        data_in = list(sorted(data_in,key=lambda f: f[0]["id"]))
+        data_out = list(sorted(data_out,key=lambda f: f[0]["id"]))
+        from tqdm import tqdm
+        for node in tqdm(self._vnodes):
+            if len(data_in) > 0 and node._flag == data_in[0][0]:
+                distri_i = data_in[0][1]
+                data_in.pop(0)
             else:
                 distri_i = None
 
-            if node._flag in flag_out:
-                distri_o = distri_out[flag_out.index(node._flag)]
+            if len(data_out) > 0 and node._flag == data_out[0][0]:
+                distri_o = data_out[0][1]
+                data_out.pop(0)
             else:
                 distri_o = None
 
             node.initialize(Nk=Nk,distri_orig=distri_i,
                     distri=distri_o)
+
+        assert len(data_out) == 0
+        assert len(data_in) == 0
 
         for node in self._fnodes:
             node.initialize(Nk=Nk)
@@ -115,14 +125,14 @@ class Graph():
             This array contains the value of nodes
         """
         for node in self._vnodes: node._evaluated = False
-        
+
         ret = [None for _ in nodes]
         for node in self._vnodes:
             if node in nodes:
                 ret[nodes.index(node)] = node.eval()
 
         return ret
- 
+
     def get_nodes(self,func):
         """
             return the nodes of all the nodes maching with func

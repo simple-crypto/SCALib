@@ -1,5 +1,12 @@
 from stella.sasca.DataHolder import *
 from stella.sasca.Node import *
+from functools import reduce
+
+def UNSHARE(encoding):
+    acc = encoding[0]
+    for d in range(1,len(encoding)):
+        acc = acc ^ encoding[d]
+    return acc
 
 def XOR(out,a,b,D):
     for d in range(D):
