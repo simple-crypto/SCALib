@@ -1,10 +1,9 @@
 extern crate ndarray;
 use ndarray::parallel::prelude::*;
-use ndarray::{s, Array, ArrayBase, Axis};
+use ndarray::{s, Array, Axis};
 use num_integer::binomial;
 use numpy::{PyArray1, PyArray2, PyArray3, PyArrayDyn};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
-use rayon::prelude::*;
 #[pymodule]
 fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "update_snrorder")]
@@ -23,15 +22,13 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         let mut n = n.as_array_mut();
         let mut cs = cs.as_array_mut();
         let mut m = m.as_array_mut();
-        let np = c.shape()[0];
         let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
         c.axis_iter(Axis(0))
             .into_par_iter()
             .zip(n.outer_iter_mut().into_par_iter())
             .zip(cs.outer_iter_mut().into_par_iter())
             .zip(m.outer_iter_mut().into_par_iter())
-            .enumerate()
-            .for_each(|(p, (((c, mut n), mut cs), mut m))| {
+            .for_each(|(((c, mut n), mut cs), mut m)| {
                 traces
                     .axis_chunks_iter(Axis(1), chunk_size)
                     .into_par_iter()
@@ -50,25 +47,25 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                                 .into_slice()
                                 .unwrap()
                                 .iter_mut()
-                                .zip(traces.into_slice().unwrap().iter())
-                                .zip(m.slice(s![x, ..]).into_slice().unwrap().iter())
+                                .zip(traces.to_slice().unwrap().iter())
+                                .zip(m.slice(s![x, ..]).to_slice().unwrap().iter())
                                 .for_each({ |((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx });
                             for j in (2..((d * 2) + 1)).rev() {
                                 if nx > 1.0 {
-                                    let mut r = cs.slice_mut(s![x, j - 1, ..]);
+                                    let r = cs.slice_mut(s![x, j - 1, ..]);
                                     let mult = (nx - 1.0).powi(j)
                                         * (1.0 - (-1.0 / (nx - 1.0)).powi(j - 1));
                                     r.into_slice()
                                         .unwrap()
                                         .iter_mut()
-                                        .zip(delta.view().into_slice().unwrap().iter())
+                                        .zip(delta.view().to_slice().unwrap().iter())
                                         .for_each(|(r, x)| {
                                             *r += x.powi(j as i32) * mult;
                                         });
                                 }
                                 for k in 1..((j - 2) + 1) {
-                                    let I = ((j - k - 1)..(j));
-                                    let tab = cs.slice_mut(s![x, I;k, ..]);
+                                    let i = (j - k - 1)..(j);
+                                    let tab = cs.slice_mut(s![x, i;k, ..]);
                                     let (a, b) = tab.split_at(Axis(0), 1);
                                     let cb = binomial(j, k) as f64;
                                     inner_loop_ttest(
@@ -129,24 +126,24 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                         .into_slice()
                         .unwrap()
                         .iter_mut()
-                        .zip(traces.into_slice().unwrap().iter())
-                        .zip(m.slice(s![x, ..]).into_slice().unwrap().iter())
+                        .zip(traces.to_slice().unwrap().iter())
+                        .zip(m.slice(s![x, ..]).to_slice().unwrap().iter())
                         .for_each({ |((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx });
                     for j in (2..((d * 2) + 1)).rev() {
                         if nx > 1.0 {
-                            let mut r = cs.slice_mut(s![x, j - 1, ..]);
+                            let r = cs.slice_mut(s![x, j - 1, ..]);
                             let mult = (nx - 1.0).powi(j) * (1.0 - (-1.0 / (nx - 1.0)).powi(j - 1));
                             r.into_slice()
                                 .unwrap()
                                 .iter_mut()
-                                .zip(delta.view().into_slice().unwrap().iter())
+                                .zip(delta.view().to_slice().unwrap().iter())
                                 .for_each(|(r, x)| {
                                     *r += x.powi(j as i32) * mult;
                                 });
                         }
                         for k in 1..((j - 2) + 1) {
-                            let I = ((j - k - 1)..(j));
-                            let tab = cs.slice_mut(s![x, I;k, ..]);
+                            let i = (j - k - 1)..(j);
+                            let tab = cs.slice_mut(s![x, i;k, ..]);
                             let (a, b) = tab.split_at(Axis(0), 1);
                             let cb = binomial(j, k) as f64;
                             inner_loop_ttest(
@@ -223,7 +220,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                                 inner_loop_snr(
                                     m.into_slice().unwrap(),
                                     sq.into_slice().unwrap(),
-                                    l.into_slice().unwrap(),
+                                    l.to_slice().unwrap(),
                                 );
                             }
                         });
@@ -246,19 +243,18 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                         )
                         .for_each(|((((mut means, mut vars), sum), sum2), mut snr)| {
                             for i in 0..nc {
-                                let mut m =
-                                    means.slice_mut(s![(i as usize), ..]).into_slice().unwrap();
-                                let mut v = vars.slice_mut(s![i, ..]).into_slice().unwrap();
+                                let m = means.slice_mut(s![i as usize, ..]).into_slice().unwrap();
+                                let v = vars.slice_mut(s![i, ..]).into_slice().unwrap();
 
-                                let s = sum.slice(s![i, ..]).into_slice().unwrap();
-                                let s2 = sum2.slice(s![i, ..]).into_slice().unwrap();
+                                let s = sum.slice(s![i, ..]).to_slice().unwrap();
+                                let s2 = sum2.slice(s![i, ..]).to_slice().unwrap();
                                 let n = ns[i] as f32;
                                 m.iter_mut()
                                     .zip(v.iter_mut())
                                     .zip(s.iter())
                                     .zip(s2.iter())
                                     .for_each(|(((m, v), s), s2)| {
-                                        *m = ((*s as f32) / n);
+                                        *m = (*s as f32) / n;
                                         let tmp = *m;
                                         *v = ((*s2 as f32) / n) - tmp.powi(2);
                                     });
@@ -357,10 +353,10 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                                         sumy.as_slice_mut().unwrap(),
                                         sumy2.as_slice_mut().unwrap(),
                                         sumxy.as_slice_mut().unwrap(),
-                                        sm_tmp.into_slice().unwrap(),
-                                        s_tmp.into_slice().unwrap(),
-                                        u_tmp.into_slice().unwrap(),
-                                        l.into_slice().unwrap(),
+                                        sm_tmp.to_slice().unwrap(),
+                                        s_tmp.to_slice().unwrap(),
+                                        u_tmp.to_slice().unwrap(),
+                                        l.to_slice().unwrap(),
                                         d,
                                     );
                                 }
