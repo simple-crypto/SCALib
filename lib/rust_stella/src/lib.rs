@@ -240,7 +240,11 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                         )
                         .zip(sum.axis_chunks_iter(Axis(1), chunk_size).into_par_iter())
                         .zip(sum2.axis_chunks_iter(Axis(1), chunk_size).into_par_iter())
-                        .for_each(|(((mut means, mut vars), sum), sum2)| {
+                        .zip(
+                            snr.axis_chunks_iter_mut(Axis(0), chunk_size)
+                                .into_par_iter(),
+                        )
+                        .for_each(|((((mut means, mut vars), sum), sum2), mut snr)| {
                             for i in 0..nc {
                                 let mut m =
                                     means.slice_mut(s![(i as usize), ..]).into_slice().unwrap();
@@ -259,12 +263,12 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                                         *v = ((*s2 as f32) / n) - tmp.powi(2);
                                     });
                             }
+                            let num = means.var_axis(Axis(0), 1.0);
+                            let den = vars.mean_axis(Axis(0)).unwrap();
+                            //#let x = means + vars;
+                            let tmp = num / den;
+                            snr.assign(&tmp);
                         });
-
-                    let num = means.mean_axis(Axis(0));
-                    let den = means.mean_axis(Axis(0));
-                    let x = means + vars;
-                    snr.assign(&(snr + 1.0));
                 },
             );
 

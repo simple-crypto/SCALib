@@ -76,7 +76,7 @@ class SNR:
             elif len(X) != self._Np:
                 raise Exception("Input X array does not match: Expected {} given {}".format((self._Np,len(traces)),X.shape))
  
-            rust.update_snr(traces,X,self._sum,self._sum2,self._ns,self._means,self._vars,nchunks)
+            rust.update_snr(traces,X,self._sum,self._sum2,self._ns,self._means,self._vars,self._SNR,nchunks)
         else:
             n = len(traces[:,0])
             for v in range(self._Np):
@@ -90,8 +90,8 @@ class SNR:
                     self._means[v,c,:] = (self._sum[v,c,:].T / self._ns[v,c]).T
                     self._vars[v,c,:] = (self._sum2[v,c,:].T/self._ns[v,c]).T - (self._means[v,c,:]**2)
 
-        for v in range(self._Np):
-            self._SNR[v,:] = np.var(self._means[v,:],axis=0)/np.mean(self._vars[v,:],axis=0)
+            for v in range(self._Np):
+                self._SNR[v,:] = np.var(self._means[v,:],axis=0)/np.mean(self._vars[v,:],axis=0)
         return self._SNR
 
 
