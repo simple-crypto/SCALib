@@ -31,3 +31,6 @@ class Accumulator():
 
     def get(self):
         return self._array[:self._i]
+
+    def __del__(self):
+        del self._array

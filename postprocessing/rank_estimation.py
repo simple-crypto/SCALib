@@ -9,7 +9,7 @@ def wrap_function(lib, funcname, restype, argtypes):
     func.argtypes = argtypes
     return func
 
-def rank_estimation(logproba,init_key,nb_bins,merge_value=1,DIR=None):
+def rank_estimation(logproba,init_key,nb_bins,merge_value=2,DIR=None):
     """
         estimates the rank of the correct key using hel_lib
         https://eprint.iacr.org/2016/571.pdf published at CHES2016

@@ -73,9 +73,12 @@ class MultivariateGaussianClassifier():
         return (prs.T/np.sum(prs,axis=1)).T
 
 class LDAClassifier():
-    def __init__(self,traces,labels,solver="svd",dim_projection=4,priors=None):
+    def __init__(self,traces,labels,solver="svd",dim_projection=4,priors=None,Nc=None):
         Ns = traces[0,:]
-        Nk = Nc = len(np.unique(labels))
+        if Nc is None:
+            Nk = Nc = len(np.unique(labels))
+        else:
+            Nk = Nc
         C_i = labels
 
         dim_reduce = LDA(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors)
