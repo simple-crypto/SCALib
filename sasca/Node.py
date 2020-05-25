@@ -303,6 +303,8 @@ class VNode(ctypes.Structure):
         self._used_by.append(fnode)
 
     def __str__(self):
+        if "variable" in self._flag:
+            self._str = self._flag["variable"]
         return self._str
 
     def initialize(self,Nk=None,distri_orig=None,distri=None,copy=False):

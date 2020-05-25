@@ -22,6 +22,11 @@ void update_vnode_log(Vnode *vnode){
     Ni = vnode->Ni;
     Nf = vnode->Nf;
 
+    if(vnode->acc == 1){
+        for(int i = 0; i<(vnode->Ni+vnode->Nf);i++){
+            memcpy(&vnode->msg[index(i,0,Nk)],vnode->distri_orig,sizeof(proba_t)*Nk);
+        }
+    }
     proba_t tmp1[Nk]; // accumulate self distri + all messages
     apply_log10(tmp1,vnode->distri_orig,Nk);
 
@@ -31,7 +36,6 @@ void update_vnode_log(Vnode *vnode){
         apply_log10(fnodes[vnode->id_input].msg,fnodes[vnode->id_input].msg,Nk); 
         add_vec(tmp1,tmp1,fnodes[vnode->id_input].msg,Nk);
     }
-
     for(i=0;i<Nf;i++){
         fnode_id = vnode->id_output[i];
         r = vnode->relative[i];
@@ -39,54 +43,29 @@ void update_vnode_log(Vnode *vnode){
         add_vec(tmp1,tmp1,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
     }
 
-    // add msg to input node if exists, substracts its contribution to tmp1
-    if(Ni > 0){
-        sub_vec(vnode->msg,tmp1,fnodes[vnode->id_input].msg,0,Nk);
-        add_cst_dest(vnode->msg,vnode->msg,-get_max(vnode->msg,Nk),Nk);
-        apply_P10(vnode->msg,vnode->msg,Nk);
-        normalize_vec(vnode->msg,vnode->msg,Nk,1);
+    if(vnode->acc == 0){
+        // add msg to input node if exists, substracts its contribution to tmp1
+        if(Ni > 0){
+            sub_vec(vnode->msg,tmp1,fnodes[vnode->id_input].msg,0,Nk);
+            add_cst_dest(vnode->msg,vnode->msg,-get_max(vnode->msg,Nk),Nk);
+            apply_P10(vnode->msg,vnode->msg,Nk);
+            normalize_vec(vnode->msg,vnode->msg,Nk,1);
+        }
+
+        for(i=0;i<Nf;i++){
+            proba_t *curr_msg = &(vnode->msg[index((Ni+i),0,Nk)]);
+            fnode_id = vnode->id_output[i];
+            r = vnode->relative[i];
+
+            sub_vec(curr_msg,tmp1,&(fnodes[fnode_id].msg[index(r,0,Nk)]),0,Nk);
+            add_cst_dest(curr_msg,curr_msg,-(get_max(curr_msg,Nk)),Nk);
+            apply_P10(curr_msg,curr_msg,Nk);
+            normalize_vec(curr_msg,curr_msg,Nk,1);
+        }
     }
-
-    for(i=0;i<Nf;i++){
-        proba_t *curr_msg = &(vnode->msg[index((Ni+i),0,Nk)]);
-        fnode_id = vnode->id_output[i];
-        r = vnode->relative[i];
-
-        sub_vec(curr_msg,tmp1,&(fnodes[fnode_id].msg[index(r,0,Nk)]),0,Nk);
-        add_cst_dest(curr_msg,curr_msg,-(get_max(curr_msg,Nk)),Nk);
-        apply_P10(curr_msg,curr_msg,Nk);
-        normalize_vec(curr_msg,curr_msg,Nk,1);
-    }
-
     add_cst_dest(vnode->distri,tmp1,-get_max(tmp1,Nk),Nk);
     apply_P10(vnode->distri,vnode->distri,Nk);
-}
-
-void update_vnode_information(Vnode *vnode){
-    uint32_t i,j,fnode_id,r,Ni,Nf;
-    Ni = vnode->Ni;
-    Nf = vnode->Nf;
-
-    proba_t total_sum= vnode->distri_orig[0];
-    if(Ni > 0){
-        total_sum += fnodes[vnode->id_input].msg[0];
-    }
-    for(i=0;i<Nf;i++){
-        fnode_id = vnode->id_output[i];
-        r = vnode->relative[i];
-        total_sum += (fnodes[fnode_id].msg[r] * (vnode->acc ? fnodes[fnode_id].repeat : 1));
-    }
-
-    vnode->distri[0] = min(total_sum,1.0);
-
-    if(Ni > 0){
-        vnode->msg[0] = min(total_sum - fnodes[vnode->id_input].msg[0],1.0);
-    }
-    for(i=0;i<Nf;i++){
-        fnode_id = vnode->id_output[i];
-        r = vnode->relative[i];
-        vnode->msg[i+Ni] = min(total_sum - fnodes[fnode_id].msg[r],1.0);
-    }
+    normalize_vec(vnode->distri,vnode->distri,Nk,1);
 }
 
 void update_vnode(Vnode *vnode){
@@ -97,36 +76,42 @@ void update_vnode(Vnode *vnode){
     Ni = vnode->Ni;
     Nf = vnode->Nf;
 
-    for(i=0;i<((Nf+Ni)*Nk);i++)
-        vnode->msg[i] = vnode->distri_orig[i%Nk];
-    // init the distri with original distri
+    if(vnode->acc == 1){
+        for(int i = 0; i<(vnode->Ni+vnode->Nf);i++){
+            memcpy(&vnode->msg[index(i,0,Nk)],vnode->distri_orig,sizeof(proba_t)*Nk);
+        }
+    }
+    else{
+        // init the distri with original distri
+        for(i=0;i<((Nf+Ni)*Nk);i++)
+            vnode->msg[i] = vnode->distri_orig[i%Nk];
 
-    // compute to the function that outputed that variable
-    // add msg from input node if exists
-    if(Ni > 0){
-        // add all the functions that use this node
+        // compute to the function that outputed that variable
+        // add msg from input node if exists
+        if(Ni > 0){
+            // add all the functions that use this node
+            for(i=0;i<Nf;i++){
+                fnode_id = vnode->id_output[i];
+                r = vnode->relative[i];
+                mult_vec(vnode->msg,vnode->msg,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
+            }
+           normalize_vec(vnode->msg,vnode->msg,Nk,0);
+        }
+
         for(i=0;i<Nf;i++){
-            fnode_id = vnode->id_output[i];
-            r = vnode->relative[i];
-            mult_vec(vnode->msg,vnode->msg,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
+            proba_t *curr_msg = &(vnode->msg[index((Ni+i),0,Nk)]);
+            if(Ni>0)
+                mult_vec(curr_msg,curr_msg,fnodes[vnode->id_input].msg,Nk);
+            for(j=0;j<Nf;j++){
+                if(i==j)
+                    continue;
+                fnode_id = vnode->id_output[j];
+                r = vnode->relative[j];
+                mult_vec(curr_msg,curr_msg,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
+            }
+            normalize_vec(curr_msg,curr_msg,Nk,0);
         }
-        normalize_vec(vnode->msg,vnode->msg,Nk,1);
     }
-
-    for(i=0;i<Nf;i++){
-        proba_t *curr_msg = &(vnode->msg[index((Ni+i),0,Nk)]);
-        if(Ni>0)
-            mult_vec(curr_msg,curr_msg,fnodes[vnode->id_input].msg,Nk);
-        for(j=0;j<Nf;j++){
-            if(i==j)
-                continue;
-            fnode_id = vnode->id_output[j];
-            r = vnode->relative[j];
-            mult_vec(curr_msg,curr_msg,&(fnodes[fnode_id].msg[index(r,0,Nk)]),Nk);
-        }
-        normalize_vec(curr_msg,curr_msg,Nk,1);
-    }
-
     // compute all
     // add all the functions that use this node
     memcpy(vnode->distri,vnode->distri_orig,Nk*sizeof(proba_t));
@@ -141,28 +126,7 @@ void update_vnode(Vnode *vnode){
     normalize_vec(vnode->distri,vnode->distri,Nk,1);
 }
 
-void update_fnode_information(Fnode *fnode){
-    uint32_t i,j;
-    proba_t prod_all;
-    
-    // to the outputs nodes
-    prod_all = fnode->lf;
-    for(i=0;i<fnode->li;i++){
-        Vnode vnodei = vnodes[fnode->i[i]];
-        prod_all *= vnodei.msg[fnode->relative[i]];
-    }
-    fnode->msg[0] = min(prod_all,1.0);
 
-    // to each input nodes
-    for(i=0;i<fnode->li;i++){
-        prod_all = vnodes[fnode->o].msg[0]*(fnode->lf);
-        for(j = 0;j<fnode->li;j++){
-            if (i != j)
-                prod_all *= vnodes[fnode->i[j]].msg[fnode->relative[j]];
-        }
-        fnode->msg[i+1] = min(prod_all,1.0);
-    }
-}
 
 
 void update_fnode(Fnode *fnode){
@@ -217,7 +181,7 @@ void update_fnode(Fnode *fnode){
                 o = tab[index(*(fnode->offset),i0,Nk)];
             }else
                 exit(EXIT_FAILURE);
-            o= o%Nk;
+            o = o%Nk;
 
             // update message to the output
             fnode->msg[index(0,o,Nk)] += (distri0[i0]);
@@ -233,3 +197,55 @@ void update_fnode(Fnode *fnode){
     }
     return;
 }
+
+void update_fnode_information(Fnode *fnode){
+    uint32_t i,j;
+    proba_t prod_all;
+    
+    // to the outputs nodes
+    prod_all = fnode->lf;
+    for(i=0;i<fnode->li;i++){
+        Vnode vnodei = vnodes[fnode->i[i]];
+        prod_all *= vnodei.msg[fnode->relative[i]];
+    }
+    fnode->msg[0] = min(prod_all,1.0);
+
+    // to each input nodes
+    for(i=0;i<fnode->li;i++){
+        prod_all = vnodes[fnode->o].msg[0]*(fnode->lf);
+        for(j = 0;j<fnode->li;j++){
+            if (i != j)
+                prod_all *= vnodes[fnode->i[j]].msg[fnode->relative[j]];
+        }
+        fnode->msg[i+1] = min(prod_all,1.0);
+    }
+}
+
+void update_vnode_information(Vnode *vnode){
+    uint32_t i,j,fnode_id,r,Ni,Nf;
+    Ni = vnode->Ni;
+    Nf = vnode->Nf;
+
+    proba_t total_sum= vnode->distri_orig[0];
+    if(Ni > 0){
+        total_sum += fnodes[vnode->id_input].msg[0];
+    }
+    for(i=0;i<Nf;i++){
+        fnode_id = vnode->id_output[i];
+        r = vnode->relative[i];
+        total_sum += (fnodes[fnode_id].msg[r] * (vnode->acc ? fnodes[fnode_id].repeat : 1));
+    }
+
+    vnode->distri[0] = min(total_sum,1.0);
+
+    if(Ni > 0){
+        vnode->msg[0] = min(total_sum - fnodes[vnode->id_input].msg[0],1.0);
+    }
+    for(i=0;i<Nf;i++){
+        fnode_id = vnode->id_output[i];
+        r = vnode->relative[i];
+        vnode->msg[i+Ni] = min(total_sum - fnodes[fnode_id].msg[r],1.0);
+    }
+}
+
+

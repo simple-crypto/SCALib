@@ -16,8 +16,7 @@ proba_t sum(const proba_t *in,uint32_t len){
     uint32_t i;
     proba_t sum = 0;
     for(i=0;i<len;i++){
-        sum += *in;
-        in++;
+        sum = in[i];
     }
     return sum;
 }
@@ -29,8 +28,7 @@ proba_t sum(const proba_t *in,uint32_t len){
 void apply_log10(lproba_t * out,const proba_t *in,uint32_t len){
     uint32_t i;
     for(i=0;i<len;i++){
-        *out = log10(*in);
-        out++;in++;
+        out[i] = log10(in[i]);
     }
 }
 
@@ -55,8 +53,7 @@ void apply_P10(proba_t * out,const lproba_t *in,uint32_t len){
 void tile(proba_t *out, const proba_t *in, proba_t val, uint32_t len){
     uint32_t i;
     for(i=0;i<len;i++){
-        *out = ((*in)<(val)) ? val:*in;
-        out++;in++;
+        out[i] = ((in[i])<(val)) ? val:in[i];
     }
 }
 
@@ -66,23 +63,20 @@ void tile(proba_t *out, const proba_t *in, proba_t val, uint32_t len){
 void add_cst(proba_t * out,proba_t cst,uint32_t len){
     uint32_t i;
     for(i=0;i<len;i++){
-        *out = (*out) +cst;
-        out++;
+        out[i] = out[i] +cst;
     }
 }
 
 void add_cst_dest(proba_t *out, const proba_t *in, proba_t val, uint32_t len){
     uint32_t i;
     for(i=0;i<len;i++){
-        *out = (*in)+val;
-        out++;in++;
+        out[i] = in[i]+val;
     }
 }
 void abs_vec(proba_t *out, const proba_t *in, uint32_t len){
     uint32_t i;
     for(i=0;i<len;i++){
-        *out = abs((*in));
-        out++;in++;
+        out[i] = abs((in[i]));
     }
 }
 /*
@@ -91,8 +85,7 @@ void abs_vec(proba_t *out, const proba_t *in, uint32_t len){
 void div_cst(proba_t * out,const proba_t *in,proba_t cst,uint32_t len){
     uint32_t i;
     for(i=0;i<len;i++){
-        *out = (*in)/cst;
-        out++;in++;
+        out[i] = (in[i])/cst;
     }
 }
 
@@ -104,8 +97,7 @@ proba_t get_min(const proba_t *in,uint32_t len){
     uint32_t i;
     min = DBL_MAX;
     for(i=0;i<len;i++){
-        min = min<*in ? min:*in;
-        in++;
+        min = min<in[i] ? min:in[i];
     }
     return min;
 }
@@ -117,8 +109,7 @@ proba_t get_min(const proba_t *in,uint32_t len){
 void add_vec(proba_t *out, const proba_t *in1, const proba_t *in2, uint32_t len){
     uint32_t i;
     for(i=0;i<len;i++){
-        *out = *in1+ *in2;
-        out++;in1++;in2++;
+        out[i] = in1[i] + in2[i];
     }
 }
 /*
@@ -144,8 +135,7 @@ void div_vec(proba_t *out, const proba_t *in1, const proba_t *in2, uint32_t len)
 void sub_vec(proba_t *out, const proba_t *in1, const proba_t *in2, const proba_t cst,uint32_t len){
     uint32_t i;
     for(i=0;i<len;i++){
-        *out = (*in1) - (*in2) - (cst);
-        out++;in1++;in2++;
+        out[i] = in1[i] - in2[i] - (cst);
     }
 }
 
@@ -157,8 +147,7 @@ proba_t get_max(const proba_t *in,uint32_t len){
     uint32_t i;
     max = -DBL_MAX;
     for(i=0;i<len;i++){
-        max = max>*in ? max:*in;
-        in++;
+        max = max>in[i] ? max:in[i];
     }
     return max;
 }

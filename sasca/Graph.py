@@ -170,3 +170,7 @@ class Graph():
         G = self.build_nx_graph()
         return nx.algorithms.distance_measures.diameter(G)
 
+    def get_shortest_path(self):
+        G = self.build_nx_graph()
+        return nx.minimum_cycle_basis(G)
+
