@@ -57,7 +57,7 @@ class SNR:
         del self._ns,self._sum,self._sum2,self._means
         del self._SNR,self._vars
 
-    def fit_u(self,traces,X,use_rust=True,nchunks=10):
+    def fit_u(self,traces,X,use_rust=True,nchunks=1):
         """
             Updates the SNR status to take the fresh samples into account
 

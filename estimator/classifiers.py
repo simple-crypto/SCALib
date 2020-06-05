@@ -43,8 +43,9 @@ class MultivariateGaussianClassifier():
         self._Nc = Nc
         self._dim_reduce = dim_reduce
         self._Ns = my
+        self._n_components = cz
 
-    def predict_proba(self,X):
+    def predict_proba(self,X,n_components=None):
         """
             Returns the probability of each classes by applying 
             Bayes law.
@@ -53,20 +54,21 @@ class MultivariateGaussianClassifier():
 
             returns a (n_traces,Nc) array
         """
+        if n_components is None:
+            n_components = self._n_components
+
         if X.ndim != 2:
             raise Exception("Waiting a 2 dim array as X")
         if self._dim_reduce is not None:
-            X = self._dim_reduce.transform(X)
+            X = self._dim_reduce.transform(X,n_components=n_components)
 
         n_samples,Ns = X.shape
-        if Ns != self._Ns:
-            raise Exception("Traces do not have the expected lenght {} waiting {}".format(ny,self._Ns))
 
         prs = np.zeros((n_samples,self._Nc))
 
         for i in range(self._Nc):
             prs[:,i] = scipy.stats.multivariate_normal.pdf(X,
-                        mean=self._means[i],cov=self._covs[i])
+                    mean=self._means[i][:n_components],cov=self._covs[i][:n_components,:n_components])
 
         I = np.where(np.sum(prs,axis=1)==0)[0]
         prs[I] = 1
@@ -97,7 +99,7 @@ class LDAClassifier():
         self._trained_on = len(labels)
         self._mvGC = MultivariateGaussianClassifier(Nk,model,covs,dim_reduce=dim_reduce,priors=priors)
 
-    def predict_proba(self,X):
+    def predict_proba(self,X,n_components=None):
         """
             Returns the probability of each classes by applying 
             Bayes law.
@@ -106,4 +108,4 @@ class LDAClassifier():
 
             returns a (n_traces,Nc) array
         """
-        return self._mvGC.predict_proba(X)
+        return self._mvGC.predict_proba(X,n_components)
