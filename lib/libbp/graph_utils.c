@@ -12,6 +12,7 @@
 #include <assert.h>
 
 extern uint32_t Nk;
+extern proba_t ALPHA;
 void xor_ex(proba_t *msg,proba_t *distri0,proba_t *distri1,proba_t *distriO){
     uint32_t i0,i1,o;
     for(i0=0;i0<Nk;i0++){
@@ -107,5 +108,17 @@ proba_t normalize_vec(proba_t *out, const proba_t *in,uint32_t len,uint32_t tile
     }else{
         tile(out,out,TILE,len);
         return normalize_vec(out,out,len,0);
+    }
+}
+
+void update_msg(proba_t *old_msg,proba_t *new_msg,uint32_t len){
+    for(int i=0;i<len;i++){
+        old_msg[i] = old_msg[i]*ALPHA + (1.0-ALPHA) * new_msg[i];
+    }
+}
+
+void update_lmsg(proba_t *old_lmsg,proba_t *new_lmsg,uint32_t len){
+    for(int i=0;i<len;i++){
+        old_lmsg[i] = P10(old_lmsg[i])*ALPHA + (1-ALPHA) * P10(new_lmsg[i]);
     }
 }

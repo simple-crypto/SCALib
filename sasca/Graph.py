@@ -50,7 +50,8 @@ class Graph():
                 ctypes.c_uint32,
                 ctypes.c_uint32,
                 ctypes.c_uint32,
-                ctypes.POINTER(ctypes.c_uint32)])
+                ctypes.POINTER(ctypes.c_uint32),
+                ctypes.c_double])
 
     def initialize_nodes(self,data_in,
                         data_out):
@@ -96,7 +97,7 @@ class Graph():
         for i,node in enumerate(self._vnodes):
             self._vnodes_array[i] = node
 
-    def run_bp(self,it=1,mode=0):
+    def run_bp(self,it=1,mode=0,alpha=0.0):
         """
             run belief propagation algorithm on the fed graph
             it: number of iterations
@@ -117,7 +118,8 @@ class Graph():
             ctypes.c_uint32(it),
             ctypes.c_uint32(self._nthread),
             ctypes.c_uint32(mode),
-            FNode.tab.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)))
+            FNode.tab.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)),
+            ctypes.c_double(alpha))
 
     def eval(self,nodes):
         """

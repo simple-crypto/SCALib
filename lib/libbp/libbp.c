@@ -23,6 +23,7 @@ uint32_t mode;
 uint32_t *tab;
 uint32_t *index_vnodes;
 uint32_t *index_fnodes;
+proba_t ALPHA;
 void print_vnode(Vnode vnode_all[],uint32_t size){
         for(int j=0;j<size;j++){
         Vnode *vnode = &vnode_all[j];
@@ -117,6 +118,30 @@ void* thread_vnodes(void *in){
     pthread_exit(NULL);
     return NULL;
 }
+void* thread_fnodes_reset(void *in){
+    uint32_t *lim;
+    uint32_t nvnodes,nfnodes;
+    lim = (uint32_t *)in;
+    nvnodes = lim[0];
+    nfnodes = lim[1];
+
+    uint32_t id,init;
+    pthread_mutex_lock(&lock_fnodes);
+    while(cnt_fnodes<nfnodes){
+        init = cnt_fnodes;
+        cnt_fnodes += NPERTHREAD_F;
+        pthread_mutex_unlock(&lock_fnodes);
+        for(id=init;(id<(init+NPERTHREAD_F)) && (id<nfnodes);id++){
+            memset(fnodes[id].msg,0,sizeof(proba_t)*((fnodes[id].li)+1)*Nk);
+        }
+        pthread_mutex_lock(&lock_fnodes);
+    }
+    pthread_mutex_unlock(&lock_fnodes);
+
+    pthread_exit(NULL);
+    return NULL;
+}
+
 void* thread_fnodes(void *in){
     uint32_t *lim;
     uint32_t nvnodes,nfnodes;
@@ -152,11 +177,13 @@ void run_bp(Vnode * vnodes_i,
             uint32_t it_c,
             uint32_t nthread,
             uint32_t m,
-            uint32_t *t){
+            uint32_t *t,
+            proba_t alpha){
 
     int i,j;
     uint32_t it,lim[2];
     Nk = nk;
+    ALPHA=alpha;
     mode = m;
     tab = t;
     vnodes = vnodes_i;
@@ -185,6 +212,16 @@ void run_bp(Vnode * vnodes_i,
     cnt_vnodes = 0;
     for(j=0;j<nthread;j++){
         pthread_create(&threads[j],NULL,thread_vnodes_reset,(void*)lim);
+    }
+    for(j=0;j<nthread;j++){
+        pthread_join(threads[j],NULL);
+    }
+
+    // update fnodes
+    shuffle(index_fnodes,nfnodes);
+    cnt_fnodes = 0;
+    for(j=0;j<nthread;j++){
+        pthread_create(&threads[j],NULL,thread_fnodes_reset,(void*)lim);
     }
     for(j=0;j<nthread;j++){
         pthread_join(threads[j],NULL);

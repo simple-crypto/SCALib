@@ -14,3 +14,5 @@ void and_fast_partial(proba_t *msg,proba_t *distri0,proba_t *distri1,proba_t *di
         uint32_t *index0, uint32_t *index1, uint32_t *indexO);
 void delta_node(proba_t *msg,proba_t *distri0,proba_t *distri1, proba_t *distriO);
 void hard_thr(proba_t *distri,proba_t thr,uint32_t len);
+void update_msg(proba_t *old_msg,proba_t *new_msg,uint32_t len);
+void update_lmsg(proba_t *old_lmsg,proba_t *new_lmsg,uint32_t len);
