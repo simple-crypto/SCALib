@@ -27,12 +27,12 @@ struct Fnode{
     uint32_t    id;         // id
     uint32_t    li;         // number of inputs
     uint32_t    has_offset; // Does function requires cst
-    uint32_t    offset;     // constant
+    uint32_t    *offset;     // constant
     uint32_t    func_id;    // fct code (ie 0 = AND, 2 == XOR)
 
     uint32_t*   i;          // list of input nodes ids
     uint32_t    o;          // output node id
-    uint32_t*   relative;   // the position within each related nodes 
+    uint32_t*   relative;   // the position within each related nodes
     proba_t*    msg;        // msg send to the vnodes index(0) = output
     double      repeat;    // fct code (ie 0 = AND, 2 == XOR)
     proba_t     lf;        // msg send to the vnodes index(0) = output

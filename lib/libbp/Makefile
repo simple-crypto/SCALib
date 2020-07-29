@@ -3,7 +3,7 @@ SRCDIR = ./
 object:= $(BDIR)/utils.o $(BDIR)/libbp.o $(BDIR)/graph.o $(BDIR)/graph_utils.o
 
 .PHONY: lib 
-OPTFLAG:= -DZERO=1E-50
+OPTFLAG:= -DZERO=1E-100
 CFLAGS+= -std=gnu99 -g -O3 -lm -lpthread  $(OPTFLAG) 
 
 $(BDIR)/%.o:$(SRCDIR)/%.c

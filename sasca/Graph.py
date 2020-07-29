@@ -1,28 +1,13 @@
+from stella.sasca.Node import *
+import os
 import numpy as np
-from tqdm import tqdm
 import networkx as nx
 import ctypes
 
-############################
-#     Function for nodes
-############################ 
-bxor = np.bitwise_xor   #ID 2
-band = np.bitwise_and   #ID 0
-binv = np.invert        #ID 1
-def ROL16(a, offset):   #ID 3
-    Nk = 2**16
-    a = a
-    if offset == 0:
-        return a
-    rs = int(np.log2(Nk) - offset)
-    return  (((a) << offset) ^ (a >> (rs)))%Nk
-def tab_call(a,offset): #ID4
-    return FNode.tab[offset,a];
-##############################
-distribution_dtype = np.double
-all_functions = [band,binv,bxor,ROL16,tab_call]
-
 class Graph():
+    """
+        Graph allows to interface with the C Belief Progation Library.
+    """
     @staticmethod
     def wrap_function(lib, funcname, restype, argtypes):
         """Simplify wrapping ctypes functions"""
@@ -31,7 +16,14 @@ class Graph():
         func.argtypes = argtypes
         return func
 
-    def __init__(self,Nk,nthread=16,vnodes=None,fnodes=None,DIR=""):
+    def __init__(self,Nk,nthread=16,vnodes=None,fnodes=None,DIR=None):
+        """
+            Nk: number of possible value. i.e. if running on 8-bit value, Nk=256
+            nthread: number of CPU used for BP
+            vnodes: a list of vnodes. If None, VNode.buff is taken
+            fnodes: a list of fnodes. If None, FNode.buff is taken
+            DIR: directory of shared lib, is None, get the one from stella
+        """
         if vnodes is None:
             vnodes = VNode.buff
         self._vnodes = vnodes
@@ -46,11 +38,8 @@ class Graph():
         self._fnodes_array = (FNode*len(fnodes))()
         self._vnodes_array = (VNode*len(vnodes))()
 
-        for i,node in enumerate(fnodes):
-            self._fnodes_array[i] = node
-
-        for i,node in enumerate(vnodes):
-            self._vnodes_array[i] = node
+        if DIR == None:
+            DIR = os.path.dirname(__file__)+"/../lib/"
 
         self._lib = ctypes.CDLL(DIR+"./libbp.so")
         self._run_bp = self.wrap_function(self._lib,"run_bp",None,[ctypes.POINTER(VNode),
@@ -61,15 +50,66 @@ class Graph():
                 ctypes.c_uint32,
                 ctypes.c_uint32,
                 ctypes.c_uint32,
-                ctypes.POINTER(ctypes.c_uint32)])
-    def run_bp(self,it=1,mode=0):
+                ctypes.POINTER(ctypes.c_uint32),
+                ctypes.c_double])
+
+    def initialize_nodes(self,data_in,
+                        data_out):
+        """
+            initialize the fnodes and the vnodes
+
+            distri_in: zipped list of tags and distributions. 
+                Will set the input distribution of nodes with the same tag to distri
+            distri_out: zipped list of tags and distributions.
+                same as distri_in but for output distribution
+        """
+        Nk = self._Nk
+
+        self._vnodes = list(sorted(self._vnodes,key=lambda node: node._id))
+        data_in = list(sorted(data_in,key=lambda f: f[0]["id"]))
+        data_out = list(sorted(data_out,key=lambda f: f[0]["id"]))
+        from tqdm import tqdm
+        for node in tqdm(self._vnodes):
+            if len(data_in) > 0 and node._flag == data_in[0][0]:
+                distri_i = data_in[0][1]
+                data_in.pop(0)
+            else:
+                distri_i = None
+
+            if len(data_out) > 0 and node._flag == data_out[0][0]:
+                distri_o = data_out[0][1]
+                data_out.pop(0)
+            else:
+                distri_o = None
+
+            node.initialize(Nk=Nk,distri_orig=distri_i,
+                    distri=distri_o)
+
+        assert len(data_out) == 0
+        assert len(data_in) == 0
+
+        for node in self._fnodes:
+            node.initialize(Nk=Nk)
+
+
+        for i,node in enumerate(self._fnodes):
+            self._fnodes_array[i] = node
+        for i,node in enumerate(self._vnodes):
+            self._vnodes_array[i] = node
+
+    def run_bp(self,it=1,mode=0,alpha=0.0):
         """
             run belief propagation algorithm on the fed graph
             it: number of iterations
-            mode: 0 -> on distributions; 1 -> on information metrics
+            mode:   0 -> on distribution,for attack
+                    1 -> on information metrics for LRPM
         """
+        if mode == 1 and Nk != 1:
+            raise Exception("For LRPM, Nk should be equal to 1")
+
         if FNode.tab is None:
             FNode.tab = np.zeros((2,self._Nk),dtype=np.uint32)
+
         self._run_bp(self._vnodes_array,
             self._fnodes_array,
             ctypes.c_uint32(self._Nk),
@@ -78,363 +118,61 @@ class Graph():
             ctypes.c_uint32(it),
             ctypes.c_uint32(self._nthread),
             ctypes.c_uint32(mode),
-            FNode.tab.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)))
+            FNode.tab.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)),
+            ctypes.c_double(alpha))
 
-
-class VNode(ctypes.Structure):
-    """
-        This object contains the variable nodes of the factor graph
-
-        It contains multiple variables:
-            - value: is the value of the actual node. This can be a scallar of a
-            numpy array (do to // computationon the factor graph)
-            - id: is the id of then node. The ids are distributed in ordre
-            - result_of: is the function node that outputs this variable node
-            - used_by: is the function node that use this variable node
-
-    """
-    N = 0
-    buff = []
-    _fields_ = [('id', ctypes.c_uint32),
-            ('Ni', ctypes.c_uint32),
-            ('Nf', ctypes.c_uint32),
-            ('Ns', ctypes.c_uint32),
-            ('use_log', ctypes.c_uint32),
-            ('acc', ctypes.c_uint32),
-            ('relative', ctypes.POINTER(ctypes.c_uint32)),
-            ('id_input', ctypes.c_uint32),
-            ('id_output', ctypes.POINTER(ctypes.c_uint32)),
-            ('msg', ctypes.POINTER(ctypes.c_double)),
-            ('distri_orig', ctypes.POINTER(ctypes.c_double)),
-            ('distri', ctypes.POINTER(ctypes.c_double))] 
-    @staticmethod
-    def reset_all():
-        for b in VNode.buff:
-            del b
-        VNode.buff = []
-        VNode.N = 0
-    def __hash__(self):
-        return self._id
-    def __init__(self,value=None,result_of=None,str=None,use_log=0,acc=0,flag=0):
+    def eval(self,nodes):
         """
-            value: is the value of the node
-            result_of: is the function node that output this variable
-                (None if no function is involved)
+            this function returns an array with the same length as nodes.
+            This array contains the value of nodes
         """
-        self._value = value
-        self._result_of = result_of
-        self._id = VNode.N
-        VNode.N += 1
-        VNode.buff.append(self)
-        self._flag = flag
-        self._use_log = use_log
-        self._acc = acc
-        # say to the funciton node that this is its output. 
-        if result_of is not None: 
-            result_of.add_output(self)
+        for node in self._vnodes: node._evaluated = False
 
-        # all the function nodes taking self as input
-        self._used_by = []
+        ret = [None for _ in nodes]
+        for node in self._vnodes:
+            if node in nodes:
+                ret[nodes.index(node)] = node.eval()
 
-        if str is None:
-            str =  "v %d"%(self._id)
+        return ret
 
-        self._str = str
-        self._is_initialized = False
-    def eval(self):
+    def get_nodes(self,func):
         """
-            returns the value of this variable node. To do so, 
-            search of the output of the parent node
+            return the nodes of all the nodes maching with func
+
+            func should return a boolean function
         """
-        if self._value is None:
-            self._value = self._result_of.eval()
-        return self._value
+        return list(filter(func,self._vnodes))
 
-    def used_by(self,fnode):
-        """
-            add the fnode to the list of fnodes using this variable
-        """
-        self._used_by.append(fnode)
-    def __str__(self):
-        return self._str
+    ###############
+    # utils methods
+    ###############
+    def build_nx_graph(self):
+        fnodes = self._fnodes
+        G = nx.Graph()
+        off = 0
+        for F in fnodes:
+            for vnode in F._inputs:
+                G.add_edges_from([(vnode,F)])
+            G.add_edges_from([(F,F._output)])
+        return G
 
-    def initialize(self,Nk=None,distri=None,copy=True,distri_out=None):
-        """ Initialize the variable node. It goes in all its neighboors and
-            searchs for its relative position with their lists
+    def plot(self):
+        fnodes = self._fnodes
+        G = self.build_nx_graph()
 
-            args:
-                - distri: the initial distribution of the node
-                - Nk: the number of possible values that this node can take
-            the two cannot be None at the same time ...
-
-            created state:
-                - relative contains the position of this variable in its functions nodes
-                - distri extrinsic distribution of the node
-                - distri_orig intrinsic distriution of the node
-                - id_neighboor: if of the neighboors, starting with the result_of
-        """
-        if Nk is None and distri is None:
-            raise Exception("Nk and distri cannot be None at the same time")
-
-        if distri is None:
-            distri = np.ones(Nk,dtype=distribution_dtype)/Nk
-        elif copy:
-            distri = distri.astype(distribution_dtype).copy()
-        Nk = len(distri)
-
-        # header
-        self.id = np.uint32(self._id)
-        self.Ni = np.uint32(self._result_of is not None)
-        self.Nf = np.uint32(len(self._used_by))
-        self.Ns = np.uint32(Nk)
-        self.use_log = np.uint32(self._use_log)
-        self.acc = np.uint32(self._acc)
-
-        # relative positionning with other nodes
-        # function node that outputs this node
-        if self.Ni > 0:
-            self._id_input = np.uint32(self._result_of._id)
-        else:
-            self._id_input = np.uint32(0)
-
-        # function node that uses this node
-        if self.Nf > 0:
-            self._id_output = np.array([node._id for node in self._used_by],dtype=np.uint32)
-        else:
-            self._id_output = np.array([],dtype=np.uint32)
-
-        tmp = []
-        if self._result_of is not None:
-            tmp.append(self._result_of._id)
-        for node in self._used_by:
-            tmp.append(node._id)
-        self._id_neighboor = np.array(tmp,dtype=np.uint32)
-
-        # relative contains the position of this variable node
-        # at in input of each of the functions that use it. In fnodes, 
-        # the msg with index 0 is always the output. There comes the 1+. 
-        self._relative = np.array([1+fnode._inputs.index(self) for fnode in self._used_by]).astype(np.uint32)
-
-        # the distributions and messages to pass
-        if copy == True:
-            self._distri_orig = distri.astype(dtype=distribution_dtype).copy()
-            self._distri = self._distri_orig.copy()
-        else:
-            self._distri_orig = distri
-            if distri_out is None:
-                self._distri = distri.copy()
+        color_map=[]
+        for node in G.nodes:
+            if isinstance(node,VNode):
+                color_map.append('r')
             else:
-                self._distri = distri_out
+                color_map.append('g')
+        nx.draw(G,with_labels=True,node_color=color_map)
 
-        # one message to result_of and on to each function using this node
-        nmsg = self.Ni + self.Nf
-        self._msg = np.zeros((nmsg,Nk),dtype=distribution_dtype)
-        for i in range(nmsg):
-            self._msg[i,:] = distri
+    def get_diameter(self):
+        G = self.build_nx_graph()
+        return nx.algorithms.distance_measures.diameter(G)
 
-        self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
-        self.id_output = self._id_output.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
-        self.id_input = self._id_input
-        self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        self.distri_orig = self._distri_orig.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        self.distri = self._distri.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+    def get_shortest_path(self):
+        G = self.build_nx_graph()
+        return nx.minimum_cycle_basis(G)
 
-        self._is_initialized = True
-    def reset_distri(self,distri=None):
-        if distri is None:
-            distri = self._distri_orig
-
-        self._distri_orig[:]=distri
-        self._distri[:] = 0
-        nmsg = self.Ni + self.Nf
-        for i in range(nmsg):
-            self._msg[i,:] =  distri
-
-class FNode(ctypes.Structure):
-    """
-        This object contains the function nodes of the factor graph
-
-        It contains multiple variables:
-            - func: is the function that is applyed to the the node. All the
-              available function are above in this file
-            - id: is the id of then node. The ids are distributed in ordre
-            - inputs: are the variable nodes at the input of this function
-            - output: is the ouput of this function node.
-    """
-    _fields_ = [('id', ctypes.c_uint32),
-            ('li', ctypes.c_uint32),
-            ('has_offset', ctypes.c_uint32),
-            ('offset', ctypes.c_uint32),
-            ('func_id', ctypes.c_uint32),
-            ('i', ctypes.POINTER(ctypes.c_uint32)),
-            ('o', ctypes.c_uint32),
-            ('relative', ctypes.POINTER(ctypes.c_uint32)),
-            ('msg', ctypes.POINTER(ctypes.c_double)),
-            ('repeat', ctypes.c_double),
-            ('lf',ctypes.c_double)]
-
-    N = 0
-    buff = []
-    tab = None
-    @staticmethod
-    def reset_all():
-        for b in FNode.buff:
-            del b
-        FNode.buff = []
-        FNode.N = 0
-
-    def __init__(self,func,inputs=None,offset=None,str=None,lf=1,repeat=1):
-        """
-            func: the function implemented by the nodes
-            input: a list with the input variable nodes that are the 
-            inputs of this node
-            offset: is the constant second argument of func
-        """
-
-        #add this node the the list
-        self._id = FNode.N
-        FNode.N +=1
-        FNode.buff.append(self)
-
-        self._func = func
-        self._func_id = all_functions.index(func)
-        self._inputs = inputs
-        self._lf=lf
-        self._repeat = repeat
-        if offset is None:
-            self._has_offset = False
-            self._offset = np.uint32(0)
-        else:
-            self._has_offset = True
-            self._offset = np.uint32(offset)
-
-        # notify that all the inputs that they are used here
-        if inputs is not None:
-            for n in inputs:
-                n.used_by(self)
-        
-        if str is None:
-            if self._func_id == 0:
-                str = "AND"
-            elif self._func_id == 2:
-                str = "XOR"
-            else:
-                str = " f %d"%(self._func_id)# + " " + str(self._id) 
-        self._str = str
-        self._is_initialized=False
-
-
-    def __str__(self):
-        return self._str
-    def eval(self):
-        """
-            apply the function to its inputs and return 
-            the output
-        """
-        I = []
-        for v in self._inputs:
-            I.append(v.eval())
-
-        if len(I) == 1:
-            if self._has_offset:
-                return self._func(I[0],self._offset)
-            else:
-                return self._func(I[0])
-        else:
-            return self._func(I[0],I[1])
-
-    def add_output(self,vnode):
-        self._output = vnode
-    
-    def initialize(self,Nk):
-        """ initialize the message memory for this function node"""
-        nmsg = len(self._inputs) + 1
-
-        ## Position of the inputs in the variable nodes. 
-        # The output node is always first in the variable node
-        self._i = np.array([node._id for node in self._inputs]).astype(np.uint32)
-        self._o = np.uint32(self._output._id)
-        self._relative = np.array([np.where(vnode._id_neighboor==self._id)[0] for vnode in self._inputs]).astype(np.uint32)
-        self._msg = np.zeros((nmsg,Nk),dtype=distribution_dtype)
-        self._indexes = np.zeros((len(self._i)+1,Nk),dtype=np.uint32)
-        for i in range(len(self._i)+1):
-            self._indexes[i,:] = np.arange(Nk)
-
-        self.id = np.uint32(self._id)
-        self.li = np.uint32(len(self._i))
-        self.has_offset = np.uint32(self._has_offset)
-        self.offset = np.uint32(self._offset)
-        self.func_id = np.uint32(self._func_id)
-
-        self.i = self._i.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
-        self.o = np.uint32(self._o)
-        self.relative = self._relative.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32))
-        self.msg = self._msg.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-        self.lf = np.double(self._lf)
-        self.repeat = np.double(self._repeat)
-        self._is_initialized=True 
-    def __hash__(self):
-        return self._id  | 0xf00000
-
-
-def apply_func(func=bxor,inputs=[None],offset=None):
-    """ apply the functionc func to the inputs and 
-        returns the output node 
-    """
-    FTMP = FNode(func=func,inputs=inputs,offset=offset)
-    return VNode(result_of=FTMP)
-
-def initialize_graph(distri=None,Nk=None):
-    """
-        initialize the complete factor graph
-        distri: (#ofVnode,Nk) or None. The row of distri are assigned to 
-            the VNode with the row index
-        Nk: the number of possible values for the variable nodes
-    """
-    for p,node in enumerate(VNode.buff):
-        if distri is not None:
-            d = distri[p,:]
-            Nk = len(d)
-        else:
-            d = None
-        node.initialize(distri=d,Nk=Nk)
-    for node in FNode.buff:
-        node.initialize(Nk=Nk)
-def build_nx_graph(fnodes):
-    G = nx.Graph()
-    off = 0
-    for F in fnodes:
-        for vnode in F._inputs:
-            G.add_edges_from([(vnode,F)])
-        G.add_edges_from([(F,F._output)])
-    return G
-
-def plot_graph(fnodes=None,G=None,cycle=None,pos=None):
-    if fnodes is None:
-        fnodes = FNode.buff
-    if G is None:
-        G = build_nx_graph(fnodes)
-    color_map=[]
-    for node in G.nodes:
-        if isinstance(node,VNode):
-            color_map.append('r')
-        else:
-            color_map.append('g')
-    edge_map = []
-    for ed in G.edges:
-        if (cycle is not None) and (ed[0] in cycle) and (ed[1] in cycle):
-            edge_map.append('r')
-        else:
-            edge_map.append('k')
-
-    if pos is None:
-        pos = nx.spring_layout(G)
-    nx.draw(G,with_labels=True,pos=pos,node_color=color_map,edge_color=edge_map)
-
-def get_diameter(fnodes):
-    G = build_nx_graph(fnodes)
-    return nx.algorithms.distance_measures.diameter(G)
-
-def longest_path(fnodes):
-    G = build_nx_graph(fnodes)
-    return nx.algorithms.dag.dag_longest_path(G)
