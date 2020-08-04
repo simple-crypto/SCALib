@@ -6,6 +6,45 @@ use numpy::{PyArray1, PyArray2, PyArray3, PyArrayDyn};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 #[pymodule]
 fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
+    #[pyfn(m, "multivariate_pooled")]
+    fn multivariate_pooled(
+        _py: Python,
+        u: &PyArray2<f64>,      // U matrix (decomposition of Inv Cov (Npro x Npro)
+        m: &PyArray2<f64>,      // mean matrices (Nk x Npro)
+        traces: &PyArray2<f64>, // the actual traces (N x Npro)
+        prs: &PyArray2<f64>,    // the actual traces (N x Nk)
+    ) -> PyResult<()> {
+        let u = u.as_array();
+        let traces = traces.as_array();
+        let m = m.as_array();
+        let mut prs = prs.as_array_mut();
+        prs.axis_iter_mut(Axis(1)) // along Nk axis
+            .into_par_iter()
+            .zip(m.axis_iter(Axis(0)).into_par_iter())
+            .for_each(|(mut prs, m)| {
+                let dev = &traces - &m;
+                let tmp = dev
+                    .dot(&u)
+                    .mapv(|a| a.powi(2))
+                    .sum_axis(Axis(1))
+                    .mapv(|a| (-0.5 * a).exp());
+                prs.assign(&tmp);
+                // prs (N,) and m (Npro)
+                //traces // along N
+                //    .axis_iter(Axis(0))
+                //    .zip(prs.axis_iter_mut(Axis(0)))
+                //    .for_each(|(x, mut pr)| {
+                // x (Npro) ,prs (1)
+                //        let dev = &x - &m;
+                //        pr.fill((-0.5 * dev.dot(&u).mapv(|a| a.powi(2)).sum()).exp());
+                //    });
+                //prs.assign(&tmp);
+                //prs.assign(d.sum_axis(Axis(-1)));
+                //prs.fill();
+            });
+
+        Ok(())
+    }
     #[pyfn(m, "update_snrorder")]
     fn update_snrorder(
         _py: Python,
