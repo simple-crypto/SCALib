@@ -82,6 +82,7 @@ void* thread_vnodes_reset(void *in){
             for(int i = 0; i<(vnode->Ni+vnode->Nf);i++){
                 memcpy(&vnode->msg[index(i,0,Nk)],vnode->distri_orig,sizeof(proba_t)*Nk);
             }
+            memcpy(vnode->distri,vnode->distri_orig,sizeof(proba_t)*Nk);
         }
         pthread_mutex_lock(&lock_vnodes);
     }

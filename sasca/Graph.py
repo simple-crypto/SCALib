@@ -104,7 +104,7 @@ class Graph():
             mode:   0 -> on distribution,for attack
                     1 -> on information metrics for LRPM
         """
-        if mode == 1 and Nk != 1:
+        if mode == 1 and self._Nk != 1:
             raise Exception("For LRPM, Nk should be equal to 1")
 
         if FNode.tab is None:
