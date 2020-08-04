@@ -1,6 +1,7 @@
 import numpy as np
 import stella.lib.rust_stella as rust
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+#from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from stella.estimator.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 import scipy.stats 
 
 class MultivariateGaussianClassifier():
@@ -89,7 +90,7 @@ class MultivariateGaussianClassifier():
         return (prs.T/np.sum(prs,axis=1)).T
 
 class LDAClassifier():
-    def __init__(self,traces,labels,solver="svd",dim_projection=4,priors=None,Nc=None):
+    def __init__(self,traces,labels,solver="eigen",dim_projection=4,priors=None,Nc=None):
         Ns = traces[0,:]
         if Nc is None:
             Nk = Nc = len(np.unique(labels))
@@ -97,12 +98,14 @@ class LDAClassifier():
             Nk = Nc
         C_i = labels
 
+        print(solver)
+        print(dim_projection)
         dim_reduce = LDA(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors)
         traces_i = dim_reduce.fit_transform(traces,C_i)
         lx,ly = traces_i.shape
         model = np.zeros((Nk,ly))
 
-        noise = np.zeros((Nk,ly,ly))
+        #noise = np.zeros((Nk,ly,ly))
         for k in range(Nk):
             I = np.where(C_i==k)[0]
             model[k] = np.mean(traces_i[I,:],axis=0)
