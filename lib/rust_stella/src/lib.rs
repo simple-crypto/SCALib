@@ -1,4 +1,5 @@
 extern crate ndarray;
+
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Array, Axis};
 use num_integer::binomial;
@@ -29,22 +30,41 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                     .sum_axis(Axis(1))
                     .mapv(|a| (-0.5 * a).exp());
                 prs.assign(&tmp);
-                // prs (N,) and m (Npro)
-                //traces // along N
-                //    .axis_iter(Axis(0))
-                //    .zip(prs.axis_iter_mut(Axis(0)))
-                //    .for_each(|(x, mut pr)| {
-                // x (Npro) ,prs (1)
-                //        let dev = &x - &m;
-                //        pr.fill((-0.5 * dev.dot(&u).mapv(|a| a.powi(2)).sum()).exp());
-                //    });
-                //prs.assign(&tmp);
-                //prs.assign(d.sum_axis(Axis(-1)));
-                //prs.fill();
             });
-
         Ok(())
     }
+
+    #[pyfn(m, "class_means")]
+    fn class_means(
+        _py: Python,
+        u: &PyArray1<u16>,       // uniques labels
+        labels: &PyArray1<u16>, // labels (N,)
+        traces: &PyArray2<i16>, // the actual traces (N x Npro)
+        means: &mut PyArray2<f64>,    // the actual traces (N x Nk)
+    ) -> PyResult<()> {
+        let u = u.as_array();
+        let traces = traces.as_array();
+        let labels = labels.as_array();
+        let mut means = means.as_array_mut();
+        u.axis_iter(Axis(0)) // along Nk axis
+            .into_par_iter()
+            .zip(means.axis_iter_mut(Axis(0)).into_par_iter())
+            .for_each(|(u, mut mean)| {
+                let mut n = 0;
+                labels.axis_iter(Axis(0)).zip(traces.axis_iter(Axis(0)))
+                .for_each(|(lab,t)|{
+                    if lab == u {
+                        mean += &t.map(|x| (*x as f64));
+                        n+=1;
+                    }
+                });
+                mean /= n as f64;
+                    
+            });
+        Ok(())
+    }
+
+
     #[pyfn(m, "update_snrorder")]
     fn update_snrorder(
         _py: Python,
@@ -416,6 +436,13 @@ fn inner_loop_snr(m: &mut [i64], sq: &mut [i64], l: &[i16]) {
         .for_each(|((m, sq), tr)| {
             *m += *tr as i64;
             *sq += (*tr as i64) * (*tr as i64);
+        });
+}
+fn inner_loop_class_means(m: &mut [f64],l: &[i16]) {
+    m.iter_mut()
+        .zip(l.iter())
+        .for_each(|(m, tr)| {
+            *m += *tr as f64;
         });
 }
 fn inner_loop_mcp_dpa(
