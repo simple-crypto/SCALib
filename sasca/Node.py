@@ -19,12 +19,15 @@ def tab_call(a,offset): #ID4
 distribution_dtype = np.double
 all_functions = [band,binv,bxor,ROL16,tab_call]
 
-def apply_func(func=bxor,inputs=[None],offset=None):
+def apply_func(func=bxor,inputs=[None],offset=None,output=None):
     """ apply the functionc func to the inputs and 
         returns the output node 
     """
     FTMP = FNode(func=func,inputs=inputs,offset=offset)
-    return VNode(result_of=FTMP)
+    if output is not None:
+        return output.add_result_of(result_of=FTMP)
+    else:
+        return VNode(result_of=FTMP)
 
 
 class FNode(ctypes.Structure):
@@ -211,7 +214,7 @@ class VNode(ctypes.Structure):
     """
     N = 0
     buff = []
-    default_flag = {"profile":True,"method":"LDA","and_output":False}
+    default_flag = {}
 
     _fields_ = [('id', ctypes.c_uint32),
             ('Ni', ctypes.c_uint32),
@@ -267,9 +270,9 @@ class VNode(ctypes.Structure):
 
         self._use_log = use_log
 
-        # say to the funciton node that this is its output.
-        if result_of is not None: 
-            result_of.add_output(self)
+        # say to the function node that this is its output.
+        if result_of is not None:
+            self._add_result_of(result_of)
 
         # all the function nodes taking self as input
         self._used_by = []
@@ -279,6 +282,10 @@ class VNode(ctypes.Structure):
         self._str = str
         self._is_initialized = False
         self._evaluated = False
+
+    def add_result_of(self,result_of):
+        result_of.add_output(self)
+        self._result_of = result_of
 
     def eval(self):
         """
@@ -305,6 +312,8 @@ class VNode(ctypes.Structure):
     def __str__(self):
         if "variable" in self._flag:
             self._str = self._flag["variable"]
+        if "label" in self._flag:
+            self._str = self._flag["label"] #+ "_"+str(self._id)
         return self._str
 
     def initialize(self,Nk=None,distri_orig=None,distri=None,copy=False):
@@ -395,8 +404,6 @@ class VNode(ctypes.Structure):
     def __and__(self,other):
         if isinstance(other,VNode):
             ret = apply_func(band,inputs=[self,other])
-            ret._flag["method"]="LR"
-            ret._flag["and_output"]=True
             return ret
         else:
             return apply_func(band,inputs=[self],offset=other)
