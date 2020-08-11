@@ -4,7 +4,7 @@ from stella.sasca.Node import *
 from stella.sasca.Graph import *
 from tqdm import tqdm
 context = []
-flags =["secret","public","profiled"]
+flags =["secret","public","profile"]
 
 def process_flag(v,flags,it=0,public=None):
     flag = flags[0].replace('#','')
@@ -14,7 +14,7 @@ def process_flag(v,flags,it=0,public=None):
     else:
         cst = 0
 
-    if flag == "secret" or flag == "profiled":
+    if flag == "secret" or flag == "profile":
         v["node"] = VNode(0)
         v["node"]._flag["label"] = v["label"]
         v["node"]._flag["it"] = it
@@ -26,7 +26,7 @@ def process_flag(v,flags,it=0,public=None):
             i = list(map(lambda p:p["label"],public)).index(v["label"])
             v["node"] = public[i]["input"][it,:]
     else:
-        raise Exception("Unknown flag: ",l)
+        raise Exception("Unknown flag: ",flag)
     v["flags"] = flag
 
 def process_opt(v,opt,context,it=0):
@@ -81,7 +81,7 @@ def process_line(l,context,it=0,in_loop=False,public=None):
         raise Exception("Bad syntax: ",l)
 
 def extract_flags(file_name):
-    with open("language.txt") as fp:
+    with open(file_name) as fp:
         lines = list(filter(lambda l:len(l)>0,map(lambda l:l.rstrip('\n'),fp.readlines())))
     lines_loop = [None for _ in lines]
 
@@ -99,11 +99,11 @@ def extract_flags(file_name):
 
     return public,profile,secret
 
-def build_graph_from_file(file_name,public=None,it=1):
+def build_graph_from_file(file_name,Nk,public=None,it=1):
     context = []
     VNode.reset_all()
     FNode.reset_all()
-    with open("language.txt") as fp:
+    with open(file_name) as fp:
         lines = list(filter(lambda l:len(l)>0,map(lambda l:l.rstrip('\n'),fp.readlines())))
 
     # going through lines
@@ -122,7 +122,7 @@ def build_graph_from_file(file_name,public=None,it=1):
                     process_line(l,context_cp,in_loop=True,it=it,public=public)
         else:
             process_line(l,context,public=public)
-    return Graph(16,vnodes=VNode.buff,fnodes=FNode.buff)
+    return Graph(Nk,vnodes=VNode.buff,fnodes=FNode.buff)
 
 def initialize_graph_from_file(graph,file_name,verbose=False,
         Nk = 256,LOOP_IT=1):
@@ -157,10 +157,9 @@ if __name__ == "__main__":
     Nk = 16
     repeat = 1
 
-
     print("# Parsing the file to find variables")
     public,profile,secret = extract_flags("language.txt")
-    
+
     print("# public ",list(map(lambda x:x["label"],public)))
     print("# secret ",list(map(lambda x:x["label"],secret)))
     print("# profile ",list(map(lambda x:x["label"],profile)))

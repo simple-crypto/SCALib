@@ -1,0 +1,71 @@
+k0 #secret
+k1 #secret
+k2 #secret
+k3 #secret
+k4 #secret
+k5 #secret
+k6 #secret
+k7 #secret
+k8 #secret
+k9 #secret
+k10 #secret
+k11 #secret
+k12 #secret
+k13 #secret
+k14 #secret
+k15 #secret
+
+#indeploop
+
+p0 #public
+p1 #public
+p2 #public
+p3 #public
+p4 #public
+p5 #public
+p6 #public
+p7 #public
+p8 #public
+p9 #public
+p10 #public
+p11 #public
+p12 #public
+p13 #public
+p14 #public
+p15 #public
+
+x0 #profile
+x1 #profile
+x2 #profile
+x3 #profile
+x4 #profile
+x5 #profile
+x6 #profile
+x7 #profile
+x8 #profile
+x9 #profile
+x10 #profile
+x11 #profile
+x12 #profile
+x13 #profile
+x14 #profile
+x15 #profile
+
+x0 = k0 ^ p0
+x1 = k1 ^ p1
+x2 = k2 ^ p2
+x3 = k3 ^ p3
+x4 = k4 ^ p4
+x5 = k5 ^ p5
+x6 = k6 ^ p6
+x7 = k7 ^ p7
+x8 = k8 ^ p8
+x9 = k9 ^ p9
+x10 = k10 ^ p10
+x11 = k11 ^ p11
+x12 = k12 ^ p12
+x13 = k13 ^ p13
+x14 = k14 ^ p14
+x15 = k15 ^ p15
+
+#endindeploop
