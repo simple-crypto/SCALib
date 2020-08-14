@@ -8,7 +8,7 @@ methods are implemented with compiled languages (C, C++ or Rust) to enable multi
 When applicable, the library state can be updated with fresh samples. This allow to analyse large datasets or to evaluate
 metric on the fly without storing them (i.e. TVLA or SNR).
 
-Btw, stella is a belgian beer too
+Btw, stella is a belgian beer too.
 
 ## Functionalities
 The similar functionalities are grouped within the same directories. 

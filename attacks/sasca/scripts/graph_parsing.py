@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from stella.sasca.Node import *
-from stella.sasca.Graph import *
+from stella.attacks.sasca.Node import *
+from stella.attacks.sasca.Graph import *
 from tqdm import tqdm
 context = []
 flags =["secret","public","profile"]

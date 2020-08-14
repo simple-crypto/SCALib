@@ -1,4 +1,4 @@
-from stella.sasca.Node import *
+from stella.attacks.sasca.Node import *
 import os
 import numpy as np
 import networkx as nx
@@ -39,7 +39,7 @@ class Graph():
         self._vnodes_array = (VNode*len(vnodes))()
 
         if DIR == None:
-            DIR = os.path.dirname(__file__)+"/../lib/"
+            DIR = os.path.dirname(__file__)+"/../../lib/"
 
         self._lib = ctypes.CDLL(DIR+"./libbp.so")
         self._run_bp = self.wrap_function(self._lib,"run_bp",None,[ctypes.POINTER(VNode),
