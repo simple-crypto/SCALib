@@ -1,7 +1,7 @@
 import numpy as np
 import stella.lib.rust_stella as rust
-#from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
-from stella.estimator.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from stella.estimator.discriminant_analysis import LinearDiscriminantAnalysis as LDA_stella
 import scipy.stats 
 
 class MultivariateGaussianClassifier():
@@ -48,6 +48,7 @@ class MultivariateGaussianClassifier():
         self._Ns = my
         self._n_components = cz
         self._cov = covs
+
         self._psd = _PSD(covs[0], allow_singular=True)
 
     def predict_proba(self,X,use_rust=True,n_components=None):
@@ -90,17 +91,18 @@ class MultivariateGaussianClassifier():
         return (prs.T/np.sum(prs,axis=1)).T
 
 class LDAClassifier():
-    def __init__(self,traces,labels,solver="eigen",dim_projection=4,priors=None,Nc=None):
+    def __init__(self,traces,labels,solver="eigen",dim_projection=4,priors=None,Nc=None,duplicate=True,opt=True):
         Ns = traces[0,:]
         if Nc is None:
             Nk = Nc = len(np.unique(labels))
         else:
             Nk = Nc
         C_i = labels
-
-        print(solver)
-        print(dim_projection)
-        dim_reduce = LDA(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors)
+        
+        if opt:
+            dim_reduce = LDA_stella(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors,duplicate=duplicate)
+        else:
+            dim_reduce = LDA(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors)
         traces_i = dim_reduce.fit_transform(traces,C_i)
         lx,ly = traces_i.shape
         model = np.zeros((Nk,ly))
@@ -115,7 +117,7 @@ class LDAClassifier():
 
         self._trained_on = len(labels)
         self._mvGC = MultivariateGaussianClassifier(Nk,model,covs,dim_reduce=dim_reduce,priors=priors)
-
+        self._dim_reduce = dim_reduce
     def predict_proba_opt(self,X,n_components=None):
         """
             Returns the probability of each classes by applying 
