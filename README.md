@@ -1,5 +1,18 @@
 # Stella: Side-channel Tool-box for Embedded systems Lazy Leakage Analysis 
-(btw, stella is a belgian beer too ;))
+
+Stella contains multiple functionalities allowing to perform side-channel analysis. It implements
+various standard methodologies as well as advanced ones. 
+Overall, this project implements a high-level Python interface for easy interfacing. The computational intensive 
+methods are implemented with compiled languages (C, C++ or Rust) to enable multithreading and machine specific code. 
+
+Btw, stella is a belgian beer too
+
+## Functionalities
+The similar functionalities are grouped within the same directories. 
+* [evaluation/](evaluation) :
+* [estimator/](estimator) :
+* [sasca/](sasca):
+* [examples/](examples):
 
 ## Install
 
