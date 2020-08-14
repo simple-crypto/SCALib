@@ -6,6 +6,19 @@ from stella.utils.Accumulator import *
 def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
                 n_files,
                 labels,batch_size=-1,Nc=256,verbose=False):
+    """ 
+        Compute SNR by iterating over files
+        - TRACES_PREFIX: the prefix for the traces
+        - LABELS_PREFIX: the prefix for the corresponding labels
+        - FILE_SNR: file to write the SNR
+        - n_files: number of files to compute the SNR on
+        - labels: the labels of the variables to profile
+        - batch_size: maximum number of variables to store the SNR 
+            at the same time in memory. -1 means that all variables at computed 
+            in a single pass.
+        - Nc: number of classes
+        - Verbose: display SNR variable to the standard output
+    """
     labels = np.array_split(labels,len(labels)//batch_size) if batch_size != -1 else np.array([labels])
     
     snrs_labels = []

@@ -306,7 +306,7 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         self.intercept_ = (-0.5 * np.diag(np.dot(self.means_, self.coef_.T)) +
                            np.log(self.priors_))
 
-    @profile
+    #@profile
     def _solve_eigen(self, X, y, shrinkage):
         """Eigenvalue solver.
 
@@ -424,7 +424,7 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         self.coef_ = np.dot(coef, self.scalings_.T)
         self.intercept_ -= np.dot(self.xbar_, self.coef_.T)
 
-    @profile
+    #@profile
     def fit(self, X, y):
         """Fit LinearDiscriminantAnalysis model according to the given
            training data and parameters.
