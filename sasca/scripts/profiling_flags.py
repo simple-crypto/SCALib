@@ -5,7 +5,7 @@ from stella.utils.Accumulator import *
                 
 def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
                 n_files,
-                labels,batch_size=-1,Nc=256):
+                labels,batch_size=-1,Nc=256,verbose=False):
     labels = np.array_split(labels,len(labels)//batch_size) if batch_size != -1 else np.array([labels])
     snrs_labels = []
     for l in labels:
@@ -35,6 +35,8 @@ def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
             i += 1
         snrs_labels += [{"label":n,"snr":snr._SNR[i,:]} for i,n in enumerate(l)]
 
+    for x in snrs_labels:
+        print(x["label"] , str(np.max(x["snr"])))
     np.savez(FILE_SNR,snr=snrs_labels,allow_pickle=True)
 
 def write_poi(FILE_SNR,FILE_POI,
@@ -90,8 +92,7 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
             m = models[i_m]
             t = m.pop("acc_traces").get()
             l = m.pop("acc_val").get()[:,0]
-            m["model"] = func(m["label"])
-            m["model"].fit(t,l)
+            m["model"] = func(t,l,m["label"])
             del t,l
     
     np.savez(FILE_MODEL,model=models,allow_pickle=True)

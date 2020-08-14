@@ -167,4 +167,3 @@ if __name__ == "__main__":
         print("\n# Attack #%d"%(f))
         print("# correct key  :",' '.join(["%02x"%(x) for x in k]))
         print("# key found    :",' '.join(["%02x"%(np.argmax(s["distri"])) for s in secret]))
-        continue

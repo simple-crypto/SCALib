@@ -7,6 +7,9 @@ context = []
 flags =["secret","public","profile"]
 
 def process_flag(v,flags,it=0,public=None):
+    """
+        NOT TO BE USED OUTSIDE THIS FILE
+    """ 
     flag = flags[0].replace('#','')
 
     if len(flags) > 1:
@@ -26,10 +29,18 @@ def process_flag(v,flags,it=0,public=None):
             i = list(map(lambda p:p["label"],public)).index(v["label"])
             v["node"] = public[i]["input"][it,:]
     else:
-        raise Exception("Unknown flag: ",flag)
+        raise Exception("Unknown flag: ",flag, ". Should be in ", ' '.join(flags))
     v["flags"] = flag
 
 def process_opt(v,opt,context,it=0):
+    """
+        NOT TO BE USED OUTSIDE THIS FILE
+
+        Apply operations on a given line. v is the value to write,
+        opt is the right og the =
+        context is the list of variable within the onctext
+        it is the loop iteration index
+    """
     labels = list(map(lambda x:x["label"],context))
     i = labels.index(opt[0])
     v0 = context[i]["node"]
@@ -51,6 +62,11 @@ def process_opt(v,opt,context,it=0):
         v["node"] = apply_func(func,inputs=[v0,v1])
 
 def process_line(l,context,it=0,in_loop=False,public=None):
+    """
+        NOT TO BE USED OUTSIDE THIS FILE
+        
+        Parse a single line of the txt file
+    """
     args = l.split()
 
     assert len(args)>=1
@@ -81,6 +97,11 @@ def process_line(l,context,it=0,in_loop=False,public=None):
         raise Exception("Bad syntax: ",l)
 
 def extract_flags(file_name):
+    """
+        Parse file_name and returns the variables labels according to the order
+
+        public,profile,secret
+    """
     with open(file_name) as fp:
         lines = list(filter(lambda l:len(l)>0,map(lambda l:l.rstrip('\n'),fp.readlines())))
     lines_loop = [None for _ in lines]
@@ -100,6 +121,12 @@ def extract_flags(file_name):
     return public,profile,secret
 
 def build_graph_from_file(file_name,Nk,public=None,it=1):
+    """
+        Build the graph given in file_name
+        Nk: field size
+        public: public set of inputs
+        it: number of iterations within the loop
+    """
     context = []
     VNode.reset_all()
     FNode.reset_all()
@@ -127,6 +154,15 @@ def build_graph_from_file(file_name,Nk,public=None,it=1):
 def initialize_graph_from_file(graph,file_name,verbose=False,
         Nk = 256,LOOP_IT=1):
 
+    """
+        Initialize graph with description in file_name.
+        return the secrets and profile distributions.
+
+        secret: is the guessed distribution of the outputs
+        profile; the distribution of the profiled variables, should be manipulated by
+                the user before running BP.
+
+    """
     public,profile,secret = extract_flags(file_name)
 
     if verbose:
@@ -151,25 +187,3 @@ def initialize_graph_from_file(graph,file_name,verbose=False,
     if verbose:
         print("# Preparing the graph done")
     return secret,profile
-
-if __name__ == "__main__":
-    LOOP_IT = 10
-    Nk = 16
-    repeat = 1
-
-    print("# Parsing the file to find variables")
-    public,profile,secret = extract_flags("language.txt")
-
-    print("# public ",list(map(lambda x:x["label"],public)))
-    print("# secret ",list(map(lambda x:x["label"],secret)))
-    print("# profile ",list(map(lambda x:x["label"],profile)))
-
-    print("# Prepare public inputs")
-    for v in public: v["input"] = np.zeros((LOOP_IT,repeat),dtype=np.uint32) if v["loop"] else np.zeros((1,repeat),dtype=np.uint32)
-    print("# Building the graph ")
-    graph = build_graph_from_file("language.txt",it=LOOP_IT,public=public)
-
-    graph.plot()
-    plt.show(block=False)
-
-    secret,profile = initialize_graph_from_file(graph,"language.txt",verbose=False,Nk=Nk,LOOP_IT=LOOP_IT)
