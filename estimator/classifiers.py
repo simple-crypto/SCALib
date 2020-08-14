@@ -65,7 +65,7 @@ class MultivariateGaussianClassifier():
         if X.ndim != 2:
             raise Exception("Waiting a 2 dim array as X")
         if self._dim_reduce is not None:
-            X = self._dim_reduce.transform(X)#,n_components=n_components)
+            X = self._dim_reduce.transform(X)
 
         n_samples,Ns = X.shape
 

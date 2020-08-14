@@ -69,7 +69,7 @@ class Graph():
         data_in = list(sorted(data_in,key=lambda f: f[0]["id"]))
         data_out = list(sorted(data_out,key=lambda f: f[0]["id"]))
         from tqdm import tqdm
-        for node in tqdm(self._vnodes):
+        for node in tqdm(self._vnodes,desc="Init VNodes"):
             if len(data_in) > 0 and node._flag == data_in[0][0]:
                 distri_i = data_in[0][1]
                 data_in.pop(0)
@@ -88,7 +88,7 @@ class Graph():
         assert len(data_out) == 0
         assert len(data_in) == 0
 
-        for node in self._fnodes:
+        for node in tqdm(self._fnodes,desc="Init FNodes"):
             node.initialize(Nk=Nk)
 
 
