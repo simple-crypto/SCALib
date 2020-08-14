@@ -113,6 +113,7 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
         for m in models_l:
             t = m.pop("acc_traces").get()
             l = m.pop("acc_val").get()[:,0]
+            m.pop("val")
             m["model"] = func(t,l,m["label"])
             del t,l
 
