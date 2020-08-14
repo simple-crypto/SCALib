@@ -31,7 +31,6 @@ def information(prs,k,priors=None):
     """
         computes the information from the probabilities. depending on how
         these are built, this function can be used to compute
-            - HI: prs from samples used to build a model
             - PI: prs from fresh samples
             - MI: prs from the exact analytical expression of the leakage
 
