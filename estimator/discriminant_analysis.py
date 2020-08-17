@@ -9,6 +9,9 @@ Linear Discriminant Analysis and Quadratic Discriminant Analysis
 
 # License: BSD 3-Clause
 
+# This code has been modified by Olivier Bronchain
+# to fit Stella specific parameters.
+
 import warnings
 import numpy as np
 from scipy import linalg
@@ -26,7 +29,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.utils.validation import _deprecate_positional_args
 
 import stella.lib.rust_stella as rust
-__all__ = ['LinearDiscriminantAnalysis', 'QuadraticDiscriminantAnalysis']
+__all__ = ['LinearDiscriminantAnalysis']
 
 
 def _cov(X, shrinkage=None):
@@ -57,7 +60,7 @@ def _cov(X, shrinkage=None):
             # rescale
             s = sc.scale_[:, np.newaxis] * s * sc.scale_[np.newaxis, :]
         elif shrinkage == 'empirical':
-            s = empirical_covariance(X)
+            s = np.cov(X.T)
         else:
             raise ValueError('unknown shrinkage parameter')
     elif isinstance(shrinkage, float) or isinstance(shrinkage, int):
@@ -92,7 +95,6 @@ def _class_means(X, y):
     means /= cnt[:, None]
     return means
 
-#@profile
 def _class_cov(X, y, priors, shrinkage=None,duplicate=False,means=None):
     """Compute weighted within-class covariance matrix.
 
@@ -120,6 +122,7 @@ def _class_cov(X, y, priors, shrinkage=None,duplicate=False,means=None):
     cov : array-like of shape (n_features, n_features)
         Weighted within-class covariance matrix
     """
+    
     classes = np.unique(y)
     if not duplicate:
         cov = np.zeros(shape=(X.shape[1], X.shape[1]))
@@ -128,14 +131,14 @@ def _class_cov(X, y, priors, shrinkage=None,duplicate=False,means=None):
             cov += priors[idx] * np.atleast_2d(_cov(Xg, shrinkage))
     else:
         X_tmp = X.astype(np.float64)
-        for idx, group in enumerate(classes):
-            if means is None:
+        if means is None:
+            for idx, group in enumerate(classes):
                 tmp = X[y==group,:]
                 m = np.mean(tmp,axis=0)
-            else:
-                m = means[idx,:]
-            X_tmp[y==group,:] -= m
-    
+                X_tmp[y==group,:] -= m
+        else:
+            rust.class_means_subs(y,means,X_tmp)
+
         cov = _cov(X_tmp,shrinkage)
 
     return cov
@@ -162,12 +165,11 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
 
     Parameters
     ----------
-    solver : {'svd', 'lsqr', 'eigen'}, default='svd'
+    solver : {'svd', 'eigen'}, default='svd'
         Solver to use, possible values:
           - 'svd': Singular value decomposition (default).
             Does not compute the covariance matrix, therefore this solver is
             recommended for data with a large number of features.
-          - 'lsqr': Least squares solution, can be combined with shrinkage.
           - 'eigen': Eigenvalue decomposition, can be combined with shrinkage.
 
     shrinkage : 'auto' or float, default=None
@@ -258,8 +260,9 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
     [1]
     """
     @_deprecate_positional_args
-    def __init__(self, *, solver='svd', shrinkage=None, priors=None,
-                 n_components=None, store_covariance=False, tol=1e-4, duplicate=False):
+    def __init__(self, *, solver='eigen', shrinkage=None, priors=None,
+                 n_components=None, store_covariance=False, tol=1e-4,
+                 duplicate=True):
         self.solver = solver
         self.shrinkage = shrinkage
         self.priors = priors
@@ -267,46 +270,7 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         self.store_covariance = store_covariance  # used only in svd solver
         self.tol = tol  # used only in svd solver
         self.duplicate = duplicate
-    def _solve_lsqr(self, X, y, shrinkage):
-        """Least squares solver.
-
-        The least squares solver computes a straightforward solution of the
-        optimal decision rule based directly on the discriminant functions. It
-        can only be used for classification (with optional shrinkage), because
-        estimation of eigenvectors is not performed. Therefore, dimensionality
-        reduction with the transform is not supported.
-
-        Parameters
-        ----------
-        X : array-like of shape (n_samples, n_features)
-            Training data.
-
-        y : array-like of shape (n_samples,) or (n_samples, n_classes)
-            Target values.
-
-        shrinkage : 'auto', float or None
-            Shrinkage parameter, possible values:
-              - None: no shrinkage.
-              - 'auto': automatic shrinkage using the Ledoit-Wolf lemma.
-              - float between 0 and 1: fixed shrinkage parameter.
-
-        Notes
-        -----
-        This solver is based on [1]_, section 2.6.2, pp. 39-41.
-
-        References
-        ----------
-        .. [1] R. O. Duda, P. E. Hart, D. G. Stork. Pattern Classification
-           (Second Edition). John Wiley & Sons, Inc., New York, 2001. ISBN
-           0-471-05669-3.
-        """
-        self.means_ = _class_means(X, y)
-        self.covariance_ = _class_cov(X, y, self.priors_, shrinkage)
-        self.coef_ = linalg.lstsq(self.covariance_, self.means_.T)[0].T
-        self.intercept_ = (-0.5 * np.diag(np.dot(self.means_, self.coef_.T)) +
-                           np.log(self.priors_))
-
-    #@profile
+    
     def _solve_eigen(self, X, y, shrinkage):
         """Eigenvalue solver.
 
@@ -347,7 +311,7 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
             self.means_ = means
         else:
             self.means_ = _class_means(X, y)
-
+        
         self.covariance_ = _class_cov(X, y, self.priors_, shrinkage, self.duplicate,means=self.means_)
         Sw = self.covariance_  # within scatter
         St = _cov(X, shrinkage)  # total scatter
@@ -362,7 +326,7 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         self.coef_ = np.dot(self.means_, evecs).dot(evecs.T)
         self.intercept_ = (-0.5 * np.diag(np.dot(self.means_, self.coef_.T)) +
                            np.log(self.priors_))
-
+    
     def _solve_svd(self, X, y):
         """SVD solver.
 
@@ -374,6 +338,8 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         y : array-like of shape (n_samples,) or (n_samples, n_targets)
             Target values.
         """
+        print("Warning: _solver_svd is not optimized by Stella")
+
         n_samples, n_features = X.shape
         n_classes = len(self.classes_)
 
@@ -424,7 +390,6 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         self.coef_ = np.dot(coef, self.scalings_.T)
         self.intercept_ -= np.dot(self.xbar_, self.coef_.T)
 
-    #@profile
     def fit(self, X, y):
         """Fit LinearDiscriminantAnalysis model according to the given
            training data and parameters.
@@ -482,8 +447,6 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
             if self.shrinkage is not None:
                 raise NotImplementedError('shrinkage not supported')
             self._solve_svd(X, y)
-        elif self.solver == 'lsqr':
-            self._solve_lsqr(X, y, shrinkage=self.shrinkage)
         elif self.solver == 'eigen':
             self._solve_eigen(X, y, shrinkage=self.shrinkage)
         else:
@@ -582,3 +545,23 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         # Only override for the doc
         return super().decision_function(X)
 
+
+if __name__ == "__main__":
+    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
+    import time
+    traces = np.random.randint(0,256,(50000*5,3000),dtype=np.int16)
+    labels = np.random.randint(0,256,50000*5,dtype=np.uint16)
+    
+    start = time.time()
+    print("lda_sklearn")
+    lda_sklearn = LDA_sklearn(solver="eigen")
+    lda_sklearn.fit(traces,labels)
+    print("lda_sklearn execution ",time.time()-start)
+
+    start = time.time()
+    print("\nlda_stella")
+    lda = LinearDiscriminantAnalysis(solver="eigen",duplicate=True)
+    lda.fit(traces,labels)
+    print("lda_stella execution ",time.time()-start)
+
+    assert np.allclose(lda.coef_,lda_sklearn.coef_)

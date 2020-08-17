@@ -1,6 +1,5 @@
 import numpy as np
 import stella.lib.rust_stella as rust
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 from stella.estimator.discriminant_analysis import LinearDiscriminantAnalysis as LDA_stella
 import scipy.stats 
 
@@ -91,26 +90,21 @@ class MultivariateGaussianClassifier():
         return (prs.T/np.sum(prs,axis=1)).T
 
 class LDAClassifier():
-    def __init__(self,traces,labels,solver="eigen",dim_projection=4,priors=None,Nc=None,duplicate=True,opt=True):
+    def __init__(self,traces,labels,solver="eigen",dim_projection=4,priors=None,Nc=None,duplicate=True):
         Ns = traces[0,:]
         if Nc is None:
             Nk = Nc = len(np.unique(labels))
         else:
             Nk = Nc
         C_i = labels
-        
-        if opt:
-            dim_reduce = LDA_stella(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors,duplicate=duplicate)
-        else:
-            dim_reduce = LDA(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors)
+
+        dim_reduce = LDA_stella(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors,duplicate=duplicate)
         traces_i = dim_reduce.fit_transform(traces,C_i)
         lx,ly = traces_i.shape
         model = np.zeros((Nk,ly))
 
-        #noise = np.zeros((Nk,ly,ly))
-        for k in range(Nk):
-            I = np.where(C_i==k)[0]
-            model[k] = np.mean(traces_i[I,:],axis=0)
+        rust.class_means_f64(np.unique(labels),C_i,traces_i,model)
+        
         noise = traces_i-model[C_i]
         cov = np.cov(noise.T)
         covs = np.tile(cov,(Nc,1,1))

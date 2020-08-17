@@ -4,7 +4,7 @@ from sasca_flow_settings import *
 from stella.attacks.sasca.scripts.graph_parsing import * 
 from stella.attacks.sasca.scripts.profiling_flags import *
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
-
+from stella.estimator.classifiers import * 
 
 def gen_traces_attack_sim(nfile_attack,ntraces,DIR_TRACES,tag):
     """
@@ -92,8 +92,9 @@ if __name__ == "__main__":
 
     print("# 3. Building templates")
     def func_train_pdf(t,l,label):
-        m = QDA()
-        m.fit(t,l)
+        #m = QDA()
+        #m.fit(t,l)
+        m = LDAClassifier(t,l,dim_projection=1)
         return m
     build_model(PREFIX_PROFILE_TRACES,
                     PREFIX_PROFILE_LABELS,
@@ -101,7 +102,7 @@ if __name__ == "__main__":
                     FILE_MODEL,
                     nfile_profile,
                     profile,
-                    func=func_train_pdf,batch_size=10)
+                    func=func_train_pdf,batch_size=-1)
 
     print("\n# Attack Part")
     LOOP_IT = ntraces_attack; repeat = 1;

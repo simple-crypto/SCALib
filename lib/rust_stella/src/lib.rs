@@ -33,14 +33,36 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             });
         Ok(())
     }
-
-    #[pyfn(m, "class_means")]
-    fn class_means(
+    #[pyfn(m, "class_means_subs")]
+    fn class_means_subs(
         _py: Python,
-        u: &PyArray1<u16>,       // uniques labels
-        labels: &PyArray1<u16>, // labels (N,)
-        traces: &PyArray2<i16>, // the actual traces (N x Npro)
-        means: &mut PyArray2<f64>,    // the actual traces (N x Nk)
+        labels: &PyArray1<u16>,     // labels (N,)
+        means: &mut PyArray2<f64>,  // the actual traces (N x Nk)
+        traces_out: &PyArray2<f64>, // where to store the results
+    ) -> PyResult<()> {
+        let mut traces_out = traces_out.as_array_mut();
+        let labels = labels.as_array();
+        let means = means.as_array();
+        traces_out
+            .axis_iter_mut(Axis(0)) // along Nk axis
+            .into_par_iter()
+            .enumerate()
+            .for_each(|(i, mut traces_out)| {
+                let x = labels[[i]] as usize;
+                let m = means.slice(s![x, ..]);
+
+                traces_out -= &m;
+            });
+        Ok(())
+    }
+
+    #[pyfn(m, "class_means_f64")]
+    fn class_means_f64(
+        _py: Python,
+        u: &PyArray1<u16>,         // uniques labels
+        labels: &PyArray1<u16>,    // labels (N,)
+        traces: &PyArray2<f64>,    // the actual traces (N x Npro)
+        means: &mut PyArray2<f64>, // the actual traces (N x Nk)
     ) -> PyResult<()> {
         let u = u.as_array();
         let traces = traces.as_array();
@@ -51,19 +73,50 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             .zip(means.axis_iter_mut(Axis(0)).into_par_iter())
             .for_each(|(u, mut mean)| {
                 let mut n = 0;
-                labels.axis_iter(Axis(0)).zip(traces.axis_iter(Axis(0)))
-                .for_each(|(lab,t)|{
-                    if lab == u {
-                        mean += &t.map(|x| (*x as f64));
-                        n+=1;
-                    }
-                });
+                labels
+                    .axis_iter(Axis(0))
+                    .zip(traces.axis_iter(Axis(0)))
+                    .for_each(|(lab, t)| {
+                        if lab == u {
+                            mean += &t.map(|x| (*x as f64));
+                            n += 1;
+                        }
+                    });
                 mean /= n as f64;
-                    
             });
         Ok(())
     }
 
+    #[pyfn(m, "class_means")]
+    fn class_means(
+        _py: Python,
+        u: &PyArray1<u16>,         // uniques labels
+        labels: &PyArray1<u16>,    // labels (N,)
+        traces: &PyArray2<i16>,    // the actual traces (N x Npro)
+        means: &mut PyArray2<f64>, // the actual traces (N x Nk)
+    ) -> PyResult<()> {
+        let u = u.as_array();
+        let traces = traces.as_array();
+        let labels = labels.as_array();
+        let mut means = means.as_array_mut();
+        u.axis_iter(Axis(0)) // along Nk axis
+            .into_par_iter()
+            .zip(means.axis_iter_mut(Axis(0)).into_par_iter())
+            .for_each(|(u, mut mean)| {
+                let mut n = 0;
+                labels
+                    .axis_iter(Axis(0))
+                    .zip(traces.axis_iter(Axis(0)))
+                    .for_each(|(lab, t)| {
+                        if lab == u {
+                            mean += &t.map(|x| (*x as f64));
+                            n += 1;
+                        }
+                    });
+                mean /= n as f64;
+            });
+        Ok(())
+    }
 
     #[pyfn(m, "update_snrorder")]
     fn update_snrorder(
@@ -438,12 +491,10 @@ fn inner_loop_snr(m: &mut [i64], sq: &mut [i64], l: &[i16]) {
             *sq += (*tr as i64) * (*tr as i64);
         });
 }
-fn inner_loop_class_means(m: &mut [f64],l: &[i16]) {
-    m.iter_mut()
-        .zip(l.iter())
-        .for_each(|(m, tr)| {
-            *m += *tr as f64;
-        });
+fn inner_loop_class_means(m: &mut [f64], l: &[i16]) {
+    m.iter_mut().zip(l.iter()).for_each(|(m, tr)| {
+        *m += *tr as f64;
+    });
 }
 fn inner_loop_mcp_dpa(
     sumx: &mut [f64],

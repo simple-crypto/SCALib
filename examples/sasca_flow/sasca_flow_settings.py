@@ -1,11 +1,11 @@
 import os
 import numpy as np
-DIR_PROFILE_TRACES = "/tmp/stella_ex/profile/traces/"
-DIR_ATTACK_TRACES = "/tmp/stella_ex/attack/traces/"
-DIR_PROFILE_LABELS = "/tmp/stella_ex/profile/labels/"
-DIR_SNR = "/tmp/stella_ex/profile/snr/"
-DIR_POI = "/tmp/stella_ex/profile/poi/"
-DIR_MODEL = "/tmp/stella_ex/profile/model/"
+DIR_PROFILE_TRACES = "/home/obronchain/stella_ex/profile/traces/"
+DIR_ATTACK_TRACES = "/home/obronchain/stella_ex/attack/traces/"
+DIR_PROFILE_LABELS = "/home/obronchain/stella_ex/profile/labels/"
+DIR_SNR = "/home/obronchain/stella_ex/profile/snr/"
+DIR_POI = "/home/obronchain/stella_ex/profile/poi/"
+DIR_MODEL = "/home/obronchain/stella_ex/profile/model/"
 tag = "example"
 
 PREFIX_PROFILE_TRACES = DIR_PROFILE_TRACES+tag+"_traces"
@@ -15,9 +15,9 @@ FILE_SNR = DIR_SNR+tag+"_snr.npz"
 FILE_POI = DIR_POI+tag+"_poi.npz"
 FILE_MODEL = DIR_MODEL+tag+"_model.npz"
 
-nfile_profile = 10
+nfile_profile = 50
 nfile_attack = 10
-ntraces = 10000
+ntraces = 100000
 ntraces_attack = 2000
 
 os.system("mkdir -p "+DIR_PROFILE_TRACES)
