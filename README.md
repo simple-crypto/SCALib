@@ -64,6 +64,6 @@ sudo pacman -S ntl
 
 ## Contribute 
 
-To contribute, you can do pull requests or contact Olivier Bronchain by email ( olivier dot bronchain at uclouvain dot be).
+To contribute, you can do pull requests or contact Olivier Bronchain by email ( olivier dot bronchain at uclouvain dot be). We maintain the master with a stable version. develop branch aims at adding new featurs at an increased risk of bugs.
 
 
