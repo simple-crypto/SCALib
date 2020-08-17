@@ -61,6 +61,8 @@ def _cov(X, shrinkage=None):
             s = sc.scale_[:, np.newaxis] * s * sc.scale_[np.newaxis, :]
         elif shrinkage == 'empirical':
             s = np.cov(X.T)
+            if s.ndim == 0:
+                s = np.array([[s]])
         else:
             raise ValueError('unknown shrinkage parameter')
     elif isinstance(shrinkage, float) or isinstance(shrinkage, int):
