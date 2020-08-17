@@ -98,7 +98,7 @@ class LDAClassifier():
 
         self._trained_on = len(labels)
         self._mvGC = MultivariateGaussianClassifier(Nk,model,covs,dim_reduce=dim_reduce,priors=priors)
-
+        self._dim_reduce = dim_reduce
     def predict_proba(self,X,n_components=None):
         """
             Returns the probability of each classes by applying 

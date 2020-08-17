@@ -62,6 +62,8 @@ class Graph():
                 Will set the input distribution of nodes with the same tag to distri
             distri_out: zipped list of tags and distributions.
                 same as distri_in but for output distribution
+
+            the tags must contain the field "id" which is the id of the node
         """
         Nk = self._Nk
 
