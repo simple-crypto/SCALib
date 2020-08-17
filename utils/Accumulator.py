@@ -19,6 +19,8 @@ class Accumulator():
         """
             fill the owned array with this one
         """
+        if array.ndim == 1:
+            array = np.expand_dims(array,1)
         lx,ly = array.shape
         if ly != self._Ns:
             raise Exception("Does not have the correct shape")
