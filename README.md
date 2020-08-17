@@ -41,7 +41,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 Some features of the library are only available on the nightly versions. It is set as default by running
 ```
-rustup toolchain install nightl
+rustup toolchain install nightly
 rustup default nightly
 ```
 Now that Rust is installed, you can build the code with (this can take a few minutes for the first compilation (it compiles all the dependencies)).
@@ -58,7 +58,7 @@ make
 The second libraries is [Hel lib](https://perso.uclouvain.be/fstandae/PUBLIS/172.zip) that Stella uses for rank estimation (key enumeration is on feature to develop).
 You will need the NTL Library too that you can install with different package manager 
 ```
-sudo apt-get install ntl 
+sudo apt-get install libntl-dev
 sudo pacman -S ntl 
 ```
 
