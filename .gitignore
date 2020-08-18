@@ -3,4 +3,5 @@
 **/build/
 **/*.swp
 **/*.lock
+**/*.ipynb
 lib/rust_stella/target
