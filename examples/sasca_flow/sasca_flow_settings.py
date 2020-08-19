@@ -17,7 +17,7 @@ FILE_MODEL = DIR_MODEL+tag+"_model.npz"
 
 nfile_profile = 50
 nfile_attack = 10
-ntraces = 100000
+ntraces = 10000
 ntraces_attack = 2000
 
 os.system("mkdir -p "+DIR_PROFILE_TRACES)

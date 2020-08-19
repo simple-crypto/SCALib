@@ -81,11 +81,9 @@ def process_line(l,context,it=0,in_loop=False,public=None):
     # the variable to update
     labels = list(map(lambda x:x["label"],context))
     if x in labels:
-        insert = False
         i = labels.index(x)
         v = context[i]
     else:
-        insert = True
         v = {"label":x,
                 "node":None,
                 "flags":[],

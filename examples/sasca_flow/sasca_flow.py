@@ -57,8 +57,8 @@ def gen_labels(nfile_profile,DIR_TRACES,DIR_LABELS,tag):
         dic = np.load(DIR_TRACES+tag+"_meta_%d.npz"%(i))
         x = dic["p"] ^ dic["k"]
         labels = []
-        for j in range(16): labels.append({"label":"x%d"%(j),"val":x[:,j]})
-        for j in range(16): labels.append({"label":"p%d"%(j),"val":dic["p"][:,j]})
+        for j in range(16): labels.append({"label":"x_%d"%(j),"val":x[:,j]})
+        for j in range(16): labels.append({"label":"p_%d"%(j),"val":dic["p"][:,j]})
         np.savez(DIR_LABELS+tag+"_labels_%d.npz"%(i),
                         labels=labels,
                         allow_pickle=True)
@@ -130,9 +130,13 @@ if __name__ == "__main__":
         k = dic["k"]
 
         # set the public inputs
-        for i,_ in enumerate(public):
-            index = np.where(public_l == "p%d"%(i))[0][0]
-            public[index]["input"][:,0] = pt[:,i]
+        for p in public:
+            code = p["label"].split('_')[0]
+            i = int(p["label"].split('_')[1])
+            if code == "p":
+                p["input"][:,0] = pt[:,i]
+            else:
+                raise Exception("code not found")
       
         # compute proba on all the profiled variables
         for p in profile:

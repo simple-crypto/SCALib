@@ -10,17 +10,17 @@ def write_file(file_name,
 
         if not indepk:
             for b in range(nbytes):
-                print("k%d #"%(b)+keyflag,file=f)
+                print("k_%d #"%(b)+keyflag,file=f)
 
         print('\n#indeploop\n',file=f)
         for b in range(nbytes):
             if indepk:
-                print("k%d #"%(b)+keyflag,file=f)
-            print("p%d #"%(b)+ptflag,file=f)
-            print("x%d #profile"%(b),file=f)
-            print("x%d = k%d ^ p%d\n"%(b,b,b),file=f)
+                print("k_%d #"%(b)+keyflag,file=f)
+            print("p_%d #"%(b)+ptflag,file=f)
+            print("x_%d #profile"%(b),file=f)
+            print("x_%d = k_%d ^ p_%d\n"%(b,b,b),file=f)
         print('#endindeploop',file=f)
 
 if __name__ == "__main__":
-    write_file("example.txt",ptflag="public",
-            indepk=True)
+    write_file("example_graph.txt",ptflag="public",
+            indepk=False,nbytes=16)

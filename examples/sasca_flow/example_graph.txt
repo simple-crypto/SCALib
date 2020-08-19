@@ -1,84 +1,84 @@
+k_0 #secret
+k_1 #secret
+k_2 #secret
+k_3 #secret
+k_4 #secret
+k_5 #secret
+k_6 #secret
+k_7 #secret
+k_8 #secret
+k_9 #secret
+k_10 #secret
+k_11 #secret
+k_12 #secret
+k_13 #secret
+k_14 #secret
+k_15 #secret
 
 #indeploop
 
-k0 #secret
-p0 #profile
-x0 #profile
-x0 = k0 ^ p0
+p_0 #public
+x_0 #profile
+x_0 = k_0 ^ p_0
 
-k1 #secret
-p1 #profile
-x1 #profile
-x1 = k1 ^ p1
+p_1 #public
+x_1 #profile
+x_1 = k_1 ^ p_1
 
-k2 #secret
-p2 #profile
-x2 #profile
-x2 = k2 ^ p2
+p_2 #public
+x_2 #profile
+x_2 = k_2 ^ p_2
 
-k3 #secret
-p3 #profile
-x3 #profile
-x3 = k3 ^ p3
+p_3 #public
+x_3 #profile
+x_3 = k_3 ^ p_3
 
-k4 #secret
-p4 #profile
-x4 #profile
-x4 = k4 ^ p4
+p_4 #public
+x_4 #profile
+x_4 = k_4 ^ p_4
 
-k5 #secret
-p5 #profile
-x5 #profile
-x5 = k5 ^ p5
+p_5 #public
+x_5 #profile
+x_5 = k_5 ^ p_5
 
-k6 #secret
-p6 #profile
-x6 #profile
-x6 = k6 ^ p6
+p_6 #public
+x_6 #profile
+x_6 = k_6 ^ p_6
 
-k7 #secret
-p7 #profile
-x7 #profile
-x7 = k7 ^ p7
+p_7 #public
+x_7 #profile
+x_7 = k_7 ^ p_7
 
-k8 #secret
-p8 #profile
-x8 #profile
-x8 = k8 ^ p8
+p_8 #public
+x_8 #profile
+x_8 = k_8 ^ p_8
 
-k9 #secret
-p9 #profile
-x9 #profile
-x9 = k9 ^ p9
+p_9 #public
+x_9 #profile
+x_9 = k_9 ^ p_9
 
-k10 #secret
-p10 #profile
-x10 #profile
-x10 = k10 ^ p10
+p_10 #public
+x_10 #profile
+x_10 = k_10 ^ p_10
 
-k11 #secret
-p11 #profile
-x11 #profile
-x11 = k11 ^ p11
+p_11 #public
+x_11 #profile
+x_11 = k_11 ^ p_11
 
-k12 #secret
-p12 #profile
-x12 #profile
-x12 = k12 ^ p12
+p_12 #public
+x_12 #profile
+x_12 = k_12 ^ p_12
 
-k13 #secret
-p13 #profile
-x13 #profile
-x13 = k13 ^ p13
+p_13 #public
+x_13 #profile
+x_13 = k_13 ^ p_13
 
-k14 #secret
-p14 #profile
-x14 #profile
-x14 = k14 ^ p14
+p_14 #public
+x_14 #profile
+x_14 = k_14 ^ p_14
 
-k15 #secret
-p15 #profile
-x15 #profile
-x15 = k15 ^ p15
+p_15 #public
+x_15 #profile
+x_15 = k_15 ^ p_15
 
 #endindeploop
