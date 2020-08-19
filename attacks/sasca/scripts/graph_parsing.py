@@ -4,7 +4,7 @@ from stella.attacks.sasca.Node import *
 from stella.attacks.sasca.Graph import *
 from tqdm import tqdm
 context = []
-flags =["secret","public","profile"]
+flags =["secret","public","profile","nonprofile"]
 
 def process_flag(v,flags,it=0,public=None):
     """
@@ -17,7 +17,7 @@ def process_flag(v,flags,it=0,public=None):
     else:
         cst = 0
 
-    if flag == "secret" or flag == "profile":
+    if flag == "secret" or flag == "profile" or flag == "nonprofile":
         v["node"] = VNode(0)
         v["node"]._flag["label"] = v["label"]
         v["node"]._flag["it"] = it
@@ -42,22 +42,28 @@ def process_opt(v,opt,context,it=0):
         it is the loop iteration index
     """
     labels = list(map(lambda x:x["label"],context))
-    i = labels.index(opt[0])
-    v0 = context[i]["node"]
-    i = labels.index(opt[2])
-    v1 = context[i]["node"]
 
     if opt[1] == "^":
         func = bxor
     elif opt[1] == "&":
         func = band
+    elif opt[1] == "lookup":
+        func = tab_call
     else:
         raise Exception("Operation not known : ",opt)
 
-    if not isinstance(v0,VNode):
-        vtmp = v1
-        v1 = v0
-        v0 = vtmp
+    if func == bxor or func == band:
+        i = labels.index(opt[0])
+        v0 = context[i]["node"]
+        i = labels.index(opt[2])
+        v1 = context[i]["node"]
+        if not isinstance(v0,VNode):
+            vtmp = v1
+            v1 = v0
+            v0 = vtmp
+    elif func == tab_call:
+        v1 = int(opt[0])
+        v0 = context[labels.index(opt[2])]["node"]
 
     if isinstance(v["node"],VNode) and isinstance(v1,VNode):
         apply_func(func,inputs=[v0,v1],output=v["node"])
@@ -123,7 +129,7 @@ def extract_flags(file_name):
 
     return public,profile,secret
 
-def build_graph_from_file(file_name,Nk,public=None,it=1):
+def build_graph_from_file(file_name,Nk,public=None,it=1,lookup=None):
     """
         Build the graph given in file_name
         Nk: field size
@@ -152,7 +158,7 @@ def build_graph_from_file(file_name,Nk,public=None,it=1):
                     process_line(l,context_cp,in_loop=True,it=it,public=public)
         else:
             process_line(l,context,public=public)
-    return Graph(Nk,vnodes=VNode.buff,fnodes=FNode.buff)
+    return Graph(Nk,vnodes=VNode.buff,fnodes=FNode.buff,tab=lookup)
 
 def initialize_graph_from_file(graph,file_name,verbose=False,
         Nk = 256,LOOP_IT=1):

@@ -16,7 +16,7 @@ class Graph():
         func.argtypes = argtypes
         return func
 
-    def __init__(self,Nk,nthread=16,vnodes=None,fnodes=None,DIR=None):
+    def __init__(self,Nk,nthread=16,vnodes=None,fnodes=None,DIR=None,tab=None):
         """
             Nk: number of possible value. i.e. if running on 8-bit value, Nk=256
             nthread: number of CPU used for BP
@@ -53,6 +53,10 @@ class Graph():
                 ctypes.POINTER(ctypes.c_uint32),
                 ctypes.c_double])
 
+        if tab is None:
+            tab = np.zeros((1,Nk),dtype=np.uint32)
+
+        self._tab = tab
     def initialize_nodes(self,data_in,
                         data_out):
         """
@@ -109,9 +113,6 @@ class Graph():
         if mode == 1 and self._Nk != 1:
             raise Exception("For LRPM, Nk should be equal to 1")
 
-        if FNode.tab is None:
-            FNode.tab = np.zeros((2,self._Nk),dtype=np.uint32)
-
         self._run_bp(self._vnodes_array,
             self._fnodes_array,
             ctypes.c_uint32(self._Nk),
@@ -120,7 +121,7 @@ class Graph():
             ctypes.c_uint32(it),
             ctypes.c_uint32(self._nthread),
             ctypes.c_uint32(mode),
-            FNode.tab.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)),
+            self._tab.ctypes.data_as(ctypes.POINTER(ctypes.c_uint32)),
             ctypes.c_double(alpha))
 
     def eval(self,nodes):
