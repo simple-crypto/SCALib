@@ -20,7 +20,6 @@ def gen_traces_attack_sim(nfile_attack,ntraces,DIR_TRACES,tag):
         for j in range(15): transi[:,j] = x[:,j] ^ x[:,j+1]
 
         x = np.concatenate((x,p,transi),axis=1)
-        print(x.shape)
         hw = np.sum(np.unpackbits(np.expand_dims(x,2),axis=2),axis=2).astype(np.uint8)
         traces = hw + np.random.normal(0,noise,hw.shape)
         traces -= 4
@@ -123,7 +122,8 @@ if __name__ == "__main__":
 
     for v in public: v["input"] = np.zeros((LOOP_IT,repeat),dtype=np.uint32) if v["loop"] else np.zeros((1,repeat),dtype=np.uint32)
     print("# 1. Build Graph")
-    graph = build_graph_from_file("example_graph.txt",Nk=Nk,it=LOOP_IT,public=public)
+    lookup = sbox.astype(np.uint32).reshape((1,Nk))
+    graph = build_graph_from_file("example_graph.txt",Nk=Nk,it=LOOP_IT,public=public,lookup=lookup)
 
     print("# 2. Init Attack Graph")
     secret,profile = initialize_graph_from_file(graph,"example_graph.txt",verbose=False,Nk=Nk,LOOP_IT=LOOP_IT)
@@ -135,30 +135,31 @@ if __name__ == "__main__":
     print("# 4. Performing Attacks")
     public_l = np.array([x["label"] for x in public])
     model_l = np.array([x["label"] for x in model])
-
+    
     for f in range(nfile_attack):
         t = np.load(DIR_ATTACK_TRACES+tag+"_traces_%d.npy"%(f))
         dic = np.load(DIR_ATTACK_TRACES+tag+"_meta_%d.npz"%(f),allow_pickle=True)
         pt = dic["p"]
         k = dic["k"]
+        
+        # compute proba on all the profiled variables
+        for p in profile:
+            m = model[np.where(model_l == p["label"])[0][0]]
+            p["distri"][:,:] = m["model"].predict_proba(t[:ntraces_attack,m["poi"]])
+
 
         # set the public inputs
         for p in public:
             code = p["label"].split('_')[0]
             i = int(p["label"].split('_')[1])
             if code == "p":
-                p["input"][:,0] = pt[:,i]
+                p["input"][:,0] = pt[:ntraces_attack,i]
             else:
                 raise Exception("code not found")
-      
-        # compute proba on all the profiled variables
-        for p in profile:
-            m = model[np.where(model_l == p["label"])[0][0]]
-            p["distri"][:,:] = m["model"].predict_proba(t[:,m["poi"]])
-        
-        graph.run_bp(5)
-        
+            
+        graph.run_bp(it=5)
+
         print("\n# Attack #%d"%(f))
-        print("# correct key  :",' '.join([" %02x"%(x) for x in k]))
-        print("# key found    :",' '.join([" %02x"%(np.argmax(np.sum(np.log10(s["distri"]),axis=0))) for s in secret]))
-        print("# key rank     :",' '.join(["%03d"%(256 - np.where(np.argsort(np.cumsum(np.log10(s["distri"]),axis=0)[-1,:])==x)[0][0]) for s,x in zip(secret,k)]))
+        print("# correct key   :",' '.join([" %02x"%(x) for x in k[:len(secret)]]))
+        print("# key found     :",' '.join([" %02x"%(np.argmax(np.sum(np.log10(s["distri"]),axis=0))) for s in secret]))
+        print("# key byte rank :",' '.join(["%03d"%(256 - np.where(np.argsort(np.cumsum(np.log10(s["distri"]),axis=0)[-1,:])==x)[0][0]) for s,x in zip(secret,k)]))
