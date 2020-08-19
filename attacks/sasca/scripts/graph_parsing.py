@@ -30,7 +30,7 @@ def process_flag(v,flags,it=0,public=None):
             v["node"] = public[i]["input"][it,:]
     else:
         raise Exception("Unknown flag: ",flag, ". Should be in ", ' '.join(flags))
-    v["flags"] = flag
+    v["flags"] += flag
 
 def process_opt(v,opt,context,it=0):
     """
@@ -53,6 +53,11 @@ def process_opt(v,opt,context,it=0):
         func = band
     else:
         raise Exception("Operation not known : ",opt)
+
+    if not isinstance(v0,VNode):
+        vtmp = v1
+        v1 = v0
+        v0 = vtmp
 
     if isinstance(v["node"],VNode) and isinstance(v1,VNode):
         apply_func(func,inputs=[v0,v1],output=v["node"])
