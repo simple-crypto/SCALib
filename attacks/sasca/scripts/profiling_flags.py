@@ -190,6 +190,7 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
             kf = KFold(n_splits=kfold)
             start = time.time()
             if verbose: print("\nvariable",m["label"], "with tags",[s["method_tag"] for s in m["models"]])
+
             for fold,(train_index, test_index) in enumerate(kf.split(l)):
                 if verbose: print("fold ",fold+1,"/",kfold, "for variable" ,m["label"],"|   Elapsed time %.3f[s]"%(time.time()-start))
 
@@ -201,13 +202,14 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
                                         l[train_index[:s]],
                                         single_model["arg"])
                         prs = pdf_esti.predict_proba(t[test_index])
+                        prs[np.where(prs<1E-100)] = 1E-100
                         del pdf_esti
 
                         single_model["ntrain"][fold,n] = s
                         single_model["pi"][fold,n] = Nb + np.mean(np.log2(prs[np.arange(len(test_index)),l[test_index]]))
             del t,l
             for single_model in m["models"]: single_model.pop("func")
-            
+
             if verbose:
                 print("Max PI:")
                 for single_model in m["models"]: print("    ",single_model["method_tag"]," -> %.5f"%(np.mean(single_model["pi"][:,-1])))

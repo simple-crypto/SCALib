@@ -50,6 +50,7 @@ class MultivariateGaussianClassifier():
 
         self._psd = _PSD(covs[0], allow_singular=True)
 
+    #@profile
     def predict_proba(self,X,use_rust=True,n_components=None):
         """
             Returns the probability of each classes by applying 
@@ -113,7 +114,7 @@ class LDAClassifier():
         self._mvGC = MultivariateGaussianClassifier(Nk,model,covs,dim_reduce=dim_reduce,priors=priors)
         self._dim_reduce = dim_reduce
     
-    def predict_proba(self,X,n_components=None):
+    def predict_proba(self,X,use_rust=True,n_components=None):
         """
             Returns the probability of each classes by applying 
             Bayes law.
@@ -122,7 +123,7 @@ class LDAClassifier():
 
             returns a (n_traces,Nc) array
         """
-        return self._mvGC.predict_proba(X,n_components)
+        return self._mvGC.predict_proba(X,use_rust,n_components)
 
 
 #####################
@@ -244,3 +245,19 @@ class _PSD(object):
             self._pinv = np.dot(self.U, self.U.T)
         return self._pinv
 
+
+if __name__ == "__main__":
+    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
+    import time
+    traces = np.random.randint(0,256,(50000*5,30),dtype=np.int16)
+    labels = np.random.randint(0,256,50000*5,dtype=np.uint16)
+ 
+    traces_t = np.random.randint(0,256,(50000*5,30),dtype=np.int16)
+    labels_t = np.random.randint(0,256,50000*5,dtype=np.uint16)
+
+    print("Train LDA")
+    lda_c = LDAClassifier(traces,labels)
+
+    print("Predict with LDA")
+    lda_c.predict_proba(traces_t)
+   
