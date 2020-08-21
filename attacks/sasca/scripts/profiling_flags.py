@@ -7,7 +7,7 @@ from sklearn.model_selection import KFold
 
 def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
                 n_files,
-                labels,batch_size=-1,Nc=256,verbose=False):
+                labels,batch_size=-1,Nc=256,verbose=False,axis_chunks=1):
     """ 
         Compute SNR by iterating over files
         - TRACES_PREFIX: the prefix for the traces
@@ -50,7 +50,7 @@ def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
             for j,la in enumerate(labels_f):
                 classes[j,:] = la["val"]
 
-            snr.fit_u(traces,classes)
+            snr.fit_u(traces,classes,nchunks=axis_chunks)
 
             data = reader.queue.get()
             i += 1
@@ -123,6 +123,7 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
 
     np.savez(FILE_MODEL,model=models,allow_pickle=True)
 
+#@profile
 def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
                 PI_PREFIX,
                 n_files,
