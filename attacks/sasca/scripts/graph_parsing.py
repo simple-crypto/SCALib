@@ -113,6 +113,7 @@ def extract_flags(file_name):
     """
     with open(file_name) as fp:
         lines = list(filter(lambda l:len(l)>0,map(lambda l:l.rstrip('\n'),fp.readlines())))
+        lines = list(filter(lambda l:l[0]!="/",lines))
     lines_loop = [None for _ in lines]
 
     f = False
@@ -141,6 +142,7 @@ def build_graph_from_file(file_name,Nk,public=None,it=1,lookup=None):
     FNode.reset_all()
     with open(file_name) as fp:
         lines = list(filter(lambda l:len(l)>0,map(lambda l:l.rstrip('\n'),fp.readlines())))
+        lines = list(filter(lambda l:l[0]!="/",lines))
 
     # going through lines
     it_lines = iter(lines)
