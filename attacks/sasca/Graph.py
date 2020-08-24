@@ -75,24 +75,26 @@ class Graph():
         data_in = list(sorted(data_in,key=lambda f: f[0]["id"]))
         data_out = list(sorted(data_out,key=lambda f: f[0]["id"]))
         from tqdm import tqdm
+        i_in = 0
+        i_out = 0
         for node in tqdm(self._vnodes,desc="Init VNodes"):
-            if len(data_in) > 0 and node._flag == data_in[0][0]:
-                distri_i = data_in[0][1]
-                data_in.pop(0)
+            if len(data_in) > i_in and node._flag == data_in[i_in][0]:
+                distri_i = data_in[i_in][1]
+                i_in +=1
             else:
                 distri_i = None
 
-            if len(data_out) > 0 and node._flag == data_out[0][0]:
-                distri_o = data_out[0][1]
-                data_out.pop(0)
+            if len(data_out) > i_out and node._flag == data_out[i_out][0]:
+                distri_o = data_out[i_out][1]
+                i_out += 1
             else:
                 distri_o = None
 
             node.initialize(Nk=Nk,distri_orig=distri_i,
                     distri=distri_o)
 
-        assert len(data_out) == 0
-        assert len(data_in) == 0
+        assert len(data_out) == i_out
+        assert len(data_in) == i_in
 
         for node in tqdm(self._fnodes,desc="Init FNodes"):
             node.initialize(Nk=Nk)
@@ -103,7 +105,7 @@ class Graph():
         for i,node in enumerate(self._vnodes):
             self._vnodes_array[i] = node
 
-    def run_bp(self,it=1,mode=0,alpha=0.0):
+    def run_bp(self,it=1,mode=0,alpha=0.0,nthread=None):
         """
             run belief propagation algorithm on the fed graph
             it: number of iterations
@@ -112,7 +114,8 @@ class Graph():
         """
         if mode == 1 and self._Nk != 1:
             raise Exception("For LRPM, Nk should be equal to 1")
-
+        if nthread is not None:
+            self._nthread = nthread
         self._run_bp(self._vnodes_array,
             self._fnodes_array,
             ctypes.c_uint32(self._Nk),
