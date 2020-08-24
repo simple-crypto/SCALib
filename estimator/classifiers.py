@@ -50,7 +50,6 @@ class MultivariateGaussianClassifier():
 
         self._psd = _PSD(covs[0], allow_singular=True)
 
-    #@profile
     def predict_proba(self,X,use_rust=True,n_components=None):
         """
             Returns the probability of each classes by applying 
@@ -249,10 +248,10 @@ class _PSD(object):
 if __name__ == "__main__":
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
     import time
-    traces = np.random.randint(0,256,(50000*5,30),dtype=np.int16)
-    labels = np.random.randint(0,256,50000*5,dtype=np.uint16)
- 
-    traces_t = np.random.randint(0,256,(50000*5,30),dtype=np.int16)
+    traces = np.random.randint(0,256,(5000000,1000),dtype=np.int16)
+    labels = np.random.randint(0,256,5000000,dtype=np.uint16)
+
+    traces_t = np.random.randint(0,256,(50000*5,1000),dtype=np.int16)
     labels_t = np.random.randint(0,256,50000*5,dtype=np.uint16)
 
     print("Train LDA")
@@ -260,4 +259,4 @@ if __name__ == "__main__":
 
     print("Predict with LDA")
     lda_c.predict_proba(traces_t)
-   
+

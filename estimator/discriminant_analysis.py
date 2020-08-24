@@ -31,7 +31,6 @@ from sklearn.utils.validation import _deprecate_positional_args
 import stella.lib.rust_stella as rust
 __all__ = ['LinearDiscriminantAnalysis']
 
-
 def _cov(X, shrinkage=None):
     """Estimate covariance matrix (using optional shrinkage).
 
@@ -60,7 +59,9 @@ def _cov(X, shrinkage=None):
             # rescale
             s = sc.scale_[:, np.newaxis] * s * sc.scale_[np.newaxis, :]
         elif shrinkage == 'empirical':
-            s = np.cov(X.T)
+            nx,nl = X.shape
+            u = np.mean(X,axis=0).reshape((nl,1))
+            s = np.dot(X.T,X.astype(np.float64))/(nx-1) - np.dot(u,u.T)
             if s.ndim == 0:
                 s = np.array([[s]])
         else:
@@ -272,7 +273,7 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         self.store_covariance = store_covariance  # used only in svd solver
         self.tol = tol  # used only in svd solver
         self.duplicate = duplicate
-    
+
     def _solve_eigen(self, X, y, shrinkage):
         """Eigenvalue solver.
 
