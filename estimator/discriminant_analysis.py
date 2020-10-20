@@ -310,7 +310,10 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
             labels = y.astype(np.uint16)
             u = np.unique(labels)
             means = np.zeros((len(u),len(X[0,:])))
-            rust.class_means(u,labels,X.astype(np.int16),means)
+            if X.dtype == np.int16:
+                rust.class_means(u,labels,X,means)
+            else:
+                rust.class_means_f64(u,labels,X.astype(np.float64),means)
             self.means_ = means
         else:
             self.means_ = _class_means(X, y)
@@ -479,7 +482,6 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
             raise NotImplementedError("transform not implemented for 'lsqr' "
                                       "solver (use 'svd' or 'eigen').")
         check_is_fitted(self)
-
         X = check_array(X)
         if self.solver == 'svd':
             X_new = np.dot(X - self.xbar_, self.scalings_)

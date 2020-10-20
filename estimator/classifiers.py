@@ -66,11 +66,13 @@ class MultivariateGaussianClassifier():
             raise Exception("Waiting a 2 dim array as X")
         if self._dim_reduce is not None:
             X = self._dim_reduce.transform(X)
+        else:
+            X = X[:,:self._Ns].astype(np.float64)
 
         n_samples,Ns = X.shape
 
         prs = np.zeros((n_samples,self._Nc))
-        
+
         # This si inspired by the Scipy Implementation of multivariate Gaussian 
         # pdf
         if not use_rust:

@@ -7,7 +7,8 @@ from sklearn.model_selection import KFold
 
 def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
                 n_files,
-                labels,batch_size=-1,Nc=256,verbose=False,axis_chunks=1):
+                labels,batch_size=-1,Nc=256,verbose=False,axis_chunks=1,
+                traces_extension=".npy",traces_label=None):
     """ 
         Compute SNR by iterating over files
         - TRACES_PREFIX: the prefix for the traces
@@ -26,7 +27,7 @@ def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
     snrs_labels = []
     for l in labels:
         # prepare and start the DataReader
-        file_read = [[(TRACES_PREFIX+"_%d.npy"%(i),None),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
+        file_read = [[(TRACES_PREFIX+"_%d"%(i)+traces_extension,traces_label),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
         reader = DataReader(file_read,max_depth=2)
         reader.start()
 
@@ -34,7 +35,7 @@ def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
         data = reader.queue.get()
         while data is not None:
             # load the file
-            traces = data[0]
+            traces = data[0][0]
             labels_f = data[1][0]
 
             labels_f = list(filter(lambda x:x["label"] in l,labels_f))
@@ -49,6 +50,11 @@ def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
 
             for j,la in enumerate(labels_f):
                 classes[j,:] = la["val"]
+
+            if i == 0 and traces.dtype != np.int16:
+                print("# Caution: traces are casted from ",traces.dtype," to np.int16")
+            if traces.dtype != np.int16:
+                traces = traces.astype(np.int16)
 
             snr.fit_u(traces,classes,nchunks=axis_chunks)
 
@@ -71,7 +77,10 @@ def write_poi(FILE_SNR,FILE_POI,
 def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
                 n_files,
                 labels,
-                func,batch_size=-1):
+                func,
+                verbose=False,
+                batch_size=-1,
+                traces_extension=".npy",traces_label=None):
 
     pois = np.load(FILE_POI,allow_pickle=True)["poi"]
     pois_l = list(map(lambda x:x["label"],pois))
@@ -81,7 +90,7 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
     models = []
     for l in labels:
         # prepare and start the DataReader
-        file_read = [[(TRACES_PREFIX+"_%d.npy"%(i),None),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
+        file_read = [[(TRACES_PREFIX+"_%d"%(i)+traces_extension,traces_label),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
         reader = DataReader(file_read,max_depth=2)
         reader.start()
 
@@ -90,7 +99,7 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
         while data is not None:
 
             # load the file
-            traces = data[0]
+            traces = data[0][0]
             labels_f = data[1][0]
 
             labels_f = list(filter(lambda x:x["label"] in l,labels_f))
@@ -102,12 +111,12 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
                     index = pois_l.index(m_f["label"])
                     m_f["poi"] = pois[index]["poi"]
                     m_f["acc_val"] = Accumulator(len(traces[:,0])*n_files,1,dtype=np.uint16)
-                    m_f["acc_traces"] = Accumulator(len(traces[:,0])*n_files,len(m_f["poi"]),dtype=np.int16)
+                    m_f["acc_traces"] = Accumulator(len(traces[:,0])*n_files,len(m_f["poi"]),dtype=traces.dtype)
             else: # check that all the files as structed in the same way as the first one
                 for m,la_f in zip(models_l,labels_f): assert m["label"] == la_f["label"]
 
             for m,la_f in zip(models_l,labels_f): m["acc_val"].fit(la_f["val"].astype(np.uint16))
-            for m in models_l: m["acc_traces"].fit(traces[:,m["poi"]].astype(np.uint16))
+            for m in models_l: m["acc_traces"].fit(traces[:,m["poi"]])
 
             i+= 1
             data = reader.queue.get()
@@ -116,7 +125,10 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
             t = m.pop("acc_traces").get()
             l = m.pop("acc_val").get()[:,0]
             m.pop("val")
+            start = time.time()
             m["model"] = func(t,l,m["label"])
+            if verbose:
+                print("Done model ",m["label"]," Elapsed time %.3f"%(time.time()-start))
             del t,l
 
         models += models_l
@@ -131,7 +143,8 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
                 kfold=10,
                 npts=10,
                 Nb = 8,
-                batch_size=-1,verbose=False):
+                batch_size=-1,verbose=False,
+                traces_extension=".npy",traces_label=None):
 
     pois = np.load(FILE_POI,allow_pickle=True)["poi"]
     pois_l = list(map(lambda x:x["label"],pois))
@@ -142,7 +155,7 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
         l_ls = list(map(lambda x:x["label"],l))
 
         # prepare and start the DataReader
-        file_read = [[(TRACES_PREFIX+"_%d.npy"%(i),None),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
+        file_read = [[(TRACES_PREFIX+"_%d"%(i)+traces_extension,traces_label),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
         reader = DataReader(file_read,max_depth=2)
         reader.start()
 
@@ -151,7 +164,7 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
         while data is not None:
 
             # load the file
-            traces = data[0]
+            traces = data[0][0]
             labels_f = data[1][0]
 
             labels_f = list(filter(lambda x:x["label"] in l_ls,labels_f))
@@ -163,7 +176,7 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
                     index = pois_l.index(m_f["label"])
                     m_f["poi"] = pois[index]["poi"]
                     m_f["acc_val"] = Accumulator(len(traces[:,0])*n_files,1,dtype=np.uint16)
-                    m_f["acc_traces"] = Accumulator(len(traces[:,0])*n_files,len(m_f["poi"]),dtype=np.int16)
+                    m_f["acc_traces"] = Accumulator(len(traces[:,0])*n_files,len(m_f["poi"]),dtype=traces.dtype)
 
                     index = l_ls.index(m_f["label"])
                     m_f["models"] = l[index]["models"]
@@ -172,7 +185,7 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
                 for m,la_f in zip(models_l,labels_f): assert m["label"] == la_f["label"]
 
             for m,la_f in zip(models_l,labels_f): m["acc_val"].fit(la_f["val"].astype(np.uint16))
-            for m in models_l: m["acc_traces"].fit(traces[:,m["poi"]].astype(np.uint16))
+            for m in models_l: m["acc_traces"].fit(traces[:,m["poi"]])
 
             i+= 1
             data = reader.queue.get()
@@ -183,7 +196,7 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
             t = m.pop("acc_traces").get()
             l = m.pop("acc_val").get()[:,0]
             m.pop("val")
-           
+
             # init the storage for PI
             for single_model in m["models"]: single_model["pi"] = np.zeros((kfold,npts))
             for single_model in m["models"]: single_model["ntrain"] = np.zeros((kfold,npts))

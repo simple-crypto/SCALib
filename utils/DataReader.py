@@ -3,7 +3,6 @@ import queue
 import numpy as np
 
 class DataReader(threading.Thread):
-    
     def __init__(self,file_read,max_depth=1):
         super(DataReader,self).__init__()
         self.file_read = file_read
@@ -16,7 +15,7 @@ class DataReader(threading.Thread):
             for fname,labels in files:
                 read = np.load(fname,allow_pickle=True)
                 if labels is None:
-                    rets +=(read,)
+                    rets +=([read],)
                 else:
                     rets +=([read[l] for l in labels],)
             self.queue.put(rets)
