@@ -22,10 +22,11 @@ def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
         - Nc: number of classes
         - Verbose: display SNR variable to the standard output
     """
-    labels = np.array_split(labels,len(labels)//batch_size) if batch_size != -1 else np.array([labels])
+    labels = np.array_split(labels,(len(labels)//batch_size) +1) if batch_size != -1 else np.array([labels])
     
     snrs_labels = []
     for l in labels:
+        if verbose: print("# Batch with ",len(l),"labels")
         # prepare and start the DataReader
         file_read = [[(TRACES_PREFIX+"_%d"%(i)+traces_extension,traces_label),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
         reader = DataReader(file_read,max_depth=2)
@@ -60,10 +61,11 @@ def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
 
             data = reader.queue.get()
             i += 1
+        if verbose:
+            for i,n in enumerate(labels_f):
+                print("# ",n["label"], "max SNR",np.max(snr._SNR[i,:]))
         snrs_labels += [{"label":n["label"],"snr":snr._SNR[i,:]} for i,n in enumerate(labels_f)]
 
-    for x in snrs_labels:
-        print(x["label"] , "%.4f"%(np.max(x["snr"])))
     np.savez(FILE_SNR,snr=snrs_labels,allow_pickle=True)
 
 def write_poi(FILE_SNR,FILE_POI,
@@ -84,10 +86,12 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
 
     pois = np.load(FILE_POI,allow_pickle=True)["poi"]
     pois_l = list(map(lambda x:x["label"],pois))
+    nlabels = len(labels)
+    labels = np.array_split(labels,(len(labels)//batch_size)+1) if batch_size != -1 else np.array([labels])
 
-    labels = np.array_split(labels,len(labels)//batch_size) if batch_size != -1 else np.array([labels])
 
     models = []
+    done_models = 0
     for l in labels:
         # prepare and start the DataReader
         file_read = [[(TRACES_PREFIX+"_%d"%(i)+traces_extension,traces_label),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
@@ -127,15 +131,15 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
             m.pop("val")
             start = time.time()
             m["model"] = func(t,l,m["label"])
+            done_models +=1
             if verbose:
-                print("Done model ",m["label"]," Elapsed time %.3f"%(time.time()-start))
+                print("# Done model (%d/%d)"%(done_models,nlabels),m["label"]," Elapsed time %.3f"%(time.time()-start))
             del t,l
 
         models += models_l
 
     np.savez(FILE_MODEL,model=models,allow_pickle=True)
 
-#@profile
 def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
                 PI_PREFIX,
                 n_files,
@@ -149,7 +153,7 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
     pois = np.load(FILE_POI,allow_pickle=True)["poi"]
     pois_l = list(map(lambda x:x["label"],pois))
 
-    labels = np.array_split(labels,len(labels)//batch_size) if batch_size != -1 else np.array([labels])
+    labels = np.array_split(labels,(len(labels)//batch_size)+1) if batch_size != -1 else np.array([labels])
 
     for l in labels:
         l_ls = list(map(lambda x:x["label"],l))
@@ -208,7 +212,10 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
             for fold,(train_index, test_index) in enumerate(kf.split(l)):
                 if verbose: print("fold ",fold+1,"/",kfold, "for variable" ,m["label"],"|   Elapsed time %.3f[s]"%(time.time()-start))
 
-                steps = np.logspace(np.log10((2**Nb) * 20),np.log10(len(train_index)),npts,dtype=int)
+                if npts == 1:
+                    steps = [len(train_index)]
+                else:
+                    steps = np.logspace(np.log10((2**Nb) * 20),np.log10(len(train_index)),npts,dtype=int)
 
                 for j,single_model in enumerate(m["models"]):
                     for n,s in enumerate(steps):

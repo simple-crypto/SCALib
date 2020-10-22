@@ -10,25 +10,30 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "multivariate_pooled")]
     fn multivariate_pooled(
         _py: Python,
-        u: &PyArray2<f64>,      // U matrix (decomposition of Inv Cov (Npro x Npro)
+        u: &PyArray3<f64>,      // U matrix (decomposition of Inv Cov (Npro x Npro)
         m: &PyArray2<f64>,      // mean matrices (Nk x Npro)
         traces: &PyArray2<f64>, // the actual traces (N x Npro)
         prs: &PyArray2<f64>,    // the actual traces (N x Nk)
+        det: &PyArray2<f64>,    // (1,Nk)
     ) -> PyResult<()> {
         let u = u.as_array();
+        let det = det.as_array();
         let traces = traces.as_array();
         let m = m.as_array();
         let mut prs = prs.as_array_mut();
         prs.axis_iter_mut(Axis(1)) // along Nk axis
             .into_par_iter()
             .zip(m.axis_iter(Axis(0)).into_par_iter())
-            .for_each(|(mut prs, m)| {
+            .zip(u.axis_iter(Axis(0)).into_par_iter())
+            .zip(det.axis_iter(Axis(1)).into_par_iter())
+            .for_each(|(((mut prs, m), u), det)| {
                 let dev = &traces - &m;
                 let tmp = dev
                     .dot(&u)
                     .mapv(|a| a.powi(2))
                     .sum_axis(Axis(1))
-                    .mapv(|a| (-0.5 * a).exp());
+                    .mapv(|a| (-0.5 * a).exp())
+                    / det[0];
                 prs.assign(&tmp);
             });
         Ok(())
@@ -324,16 +329,16 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                                 .into_par_iter(),
                         )
                         .for_each(|((traces, mut sum), mut sum2)| {
-                            for i in 0..n_traces {
-                                let v = x[[p, i]] as usize;
-                                let m = sum.slice_mut(s![v, ..]);
-                                let sq = sum2.slice_mut(s![v, ..]);
-                                let l = traces.slice(s![i, ..]);
-                                inner_loop_snr(
-                                    m.into_slice().unwrap(),
-                                    sq.into_slice().unwrap(),
-                                    l.to_slice().unwrap(),
-                                );
+                            for v in 0..nc {
+                                let m = sum.slice_mut(s![v, ..]).into_slice().unwrap();
+                                let sq = sum2.slice_mut(s![v, ..]).into_slice().unwrap();
+
+                                for i in 0..n_traces {
+                                    if v == x[[p, i]] as usize {
+                                        let l = traces.slice(s![i, ..]);
+                                        inner_loop_snr(m, sq, l.to_slice().unwrap());
+                                    }
+                                }
                             }
                         });
                     for i in 0..n_traces {

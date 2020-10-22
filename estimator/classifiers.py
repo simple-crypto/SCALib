@@ -48,11 +48,13 @@ class MultivariateGaussianClassifier():
         self._n_components = cz
         self._cov = covs
 
-        self._psd = _PSD(covs[0], allow_singular=True)
+        self._psd = np.array([_PSD(covs[i], allow_singular=True).U for i in range(Nc)])
+        self._det = np.array([np.linalg.det(covs[i])**(cz/2) for i in
+            range(Nc)]).reshape((1,Nc))
 
     def predict_proba(self,X,use_rust=True,n_components=None):
         """
-            Returns the probability of each classes by applying 
+            Returns the probability of each classes by applying
             Bayes law.
 
             X (n_traces,Ns): n_traces traces to evaluate
@@ -79,20 +81,21 @@ class MultivariateGaussianClassifier():
             for i in range(self._Nc):
                 u = self._means[i][:n_components]
                 dev = u - X
-                prs[:,i] = np.exp(-0.5*np.sum(np.square(np.dot(dev, self._psd.U)), axis=-1))
+                prs[:,i] = np.exp(-0.5*np.sum(np.square(np.dot(dev,
+                    self._psd[i])), axis=-1))/self._det[i]
         else:
             means = np.array(self._means)
-            rust.multivariate_pooled(self._psd.U,
+            rust.multivariate_pooled(self._psd,
                means,
                X,
-               prs);
-
+               prs,self._det);
         I = np.where(np.sum(prs,axis=1)==0)[0]
         prs[I] = 1
         return (prs.T/np.sum(prs,axis=1)).T
 
 class LDAClassifier():
-    def __init__(self,traces,labels,solver="eigen",dim_projection=4,priors=None,Nc=None,duplicate=True):
+    def __init__(self,traces,labels,solver="eigen",dim_projection=4,priors=None,Nc=None,
+            duplicate=True,pooled_cov=True):
         Ns = traces[0,:]
         if Nc is None:
             Nk = Nc = len(np.unique(labels))
@@ -106,11 +109,17 @@ class LDAClassifier():
         model = np.zeros((Nk,ly))
 
         rust.class_means_f64(np.unique(labels),C_i,traces_i,model)
-        
-        noise = traces_i-model[C_i]
-        cov = np.cov(noise.T)
-        covs = np.tile(cov,(Nc,1,1))
-
+        if pooled_cov:
+            noise = traces_i-model[C_i]
+            cov = np.cov(noise.T)
+            covs = np.tile(cov,(Nc,1,1))
+        else:
+            covs = []
+            noise = traces_i-model[C_i]
+            for x in range(Nk):
+                I = np.where(C_i==x)[0]
+                covs.append(np.cov(noise[I,:].T))
+            covs = np.array(covs)
         self._trained_on = len(labels)
         self._mvGC = MultivariateGaussianClassifier(Nk,model,covs,dim_reduce=dim_reduce,priors=priors)
         self._dim_reduce = dim_reduce
