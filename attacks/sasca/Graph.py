@@ -1,4 +1,5 @@
 from stella.attacks.sasca.Node import *
+from tqdm import tqdm
 import os
 import numpy as np
 import networkx as nx
@@ -74,10 +75,9 @@ class Graph():
         self._vnodes = list(sorted(self._vnodes,key=lambda node: node._id))
         data_in = list(sorted(data_in,key=lambda f: f[0]["id"]))
         data_out = list(sorted(data_out,key=lambda f: f[0]["id"]))
-        from tqdm import tqdm
         i_in = 0
         i_out = 0
-        for node in tqdm(self._vnodes,desc="Init VNodes"):
+        for node in tqdm(self._vnodes,desc="# Init VNodes"):
             if len(data_in) > i_in and node._flag == data_in[i_in][0]:
                 distri_i = data_in[i_in][1]
                 i_in +=1
@@ -96,7 +96,7 @@ class Graph():
         assert len(data_out) == i_out
         assert len(data_in) == i_in
 
-        for node in tqdm(self._fnodes,desc="Init FNodes"):
+        for node in tqdm(self._fnodes,desc="# Init FNodes"):
             node.initialize(Nk=Nk)
 
 

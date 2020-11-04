@@ -72,12 +72,13 @@ def process_opt(v,opt,context,it=0):
     else:
         v["node"] = apply_func(func,inputs=[v0,v1])
 
-def process_line(l,context,it=0,in_loop=False,public=None):
+def process_line(l,context,it=0,in_loop=False,public=None,verbose=False):
     """
         NOT TO BE USED OUTSIDE THIS FILE
         
         Parse a single line of the txt file
     """
+    if verbose: print("process line",l)
     args = l.split()
 
     assert len(args)>=1
@@ -130,7 +131,7 @@ def extract_flags(file_name):
 
     return public,profile,secret
 
-def build_graph_from_file(file_name,Nk,public=None,it=1,lookup=None):
+def build_graph_from_file(file_name,Nk,public=None,it=1,lookup=None,verbose=False):
     """
         Build the graph given in file_name
         Nk: field size
@@ -154,10 +155,10 @@ def build_graph_from_file(file_name,Nk,public=None,it=1,lookup=None):
                     loop_code.append(l)
                 else:
                     break
-            for it in tqdm(range(it),desc="Loop generation"):
+            for it in tqdm(range(it),desc="# Loop generation"):
                 context_cp = [c for c in context]
                 for l in loop_code:
-                    process_line(l,context_cp,in_loop=True,it=it,public=public)
+                    process_line(l,context_cp,in_loop=True,it=it,public=public,verbose=verbose)
         else:
             process_line(l,context,public=public)
     return Graph(Nk,vnodes=VNode.buff,fnodes=FNode.buff,tab=lookup)

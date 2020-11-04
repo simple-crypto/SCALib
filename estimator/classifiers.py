@@ -66,10 +66,11 @@ class MultivariateGaussianClassifier():
 
         if X.ndim != 2:
             raise Exception("Waiting a 2 dim array as X")
+
         if self._dim_reduce is not None:
             X = self._dim_reduce.transform(X)
         else:
-            X = X[:,:self._Ns].astype(np.float64)
+            X = X.astype(np.float64)
 
         n_samples,Ns = X.shape
 
@@ -101,9 +102,12 @@ class LDAClassifier():
             Nk = Nc = len(np.unique(labels))
         else:
             Nk = Nc
+        
         C_i = labels
+        self._Ns = len(traces[0,:])
 
         dim_reduce = LDA_stella(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors,duplicate=duplicate)
+
         traces_i = dim_reduce.fit_transform(traces,C_i)
         lx,ly = traces_i.shape
         model = np.zeros((Nk,ly))
@@ -133,6 +137,9 @@ class LDAClassifier():
 
             returns a (n_traces,Nc) array
         """
+        if len(X[0,:]) > self._Ns:
+            print("Caution: truncate traces")
+            X = X[:,:self._Ns]
         return self._mvGC.predict_proba(X,use_rust,n_components)
 
 

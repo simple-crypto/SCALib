@@ -123,6 +123,7 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
             for m in models_l: m["acc_traces"].fit(traces[:,m["poi"]])
 
             i+= 1
+            del traces,labels_f
             data = reader.queue.get()
 
         for m in models_l:

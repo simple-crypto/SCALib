@@ -332,6 +332,13 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         self.coef_ = np.dot(self.means_, evecs).dot(evecs.T)
         self.intercept_ = (-0.5 * np.diag(np.dot(self.means_, self.coef_.T)) +
                            np.log(self.priors_))
+
+        self.scalings_ = self.scalings_[:,:self._max_components].copy()
+        del evecs
+        del self.intercept_
+        del self.means_
+        del self.covariance_
+        del self.explained_variance_ratio_
     
     def _solve_svd(self, X, y):
         """SVD solver.
