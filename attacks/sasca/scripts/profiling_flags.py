@@ -9,7 +9,7 @@ def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
                 n_files,
                 labels,batch_size=-1,Nc=256,verbose=False,axis_chunks=1,
                 traces_extension=".npy",traces_label=None):
-    """ 
+    """
         Compute SNR by iterating over files
         - TRACES_PREFIX: the prefix for the traces
         - LABELS_PREFIX: the prefix for the corresponding labels
@@ -23,7 +23,7 @@ def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
         - Verbose: display SNR variable to the standard output
     """
     labels = np.array_split(labels,(len(labels)//batch_size) +1) if batch_size != -1 else np.array([labels])
-    
+
     snrs_labels = []
     for l in labels:
         if verbose: print("# Batch with ",len(l),"labels")
@@ -93,6 +93,7 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
     models = []
     done_models = 0
     for l in labels:
+
         # prepare and start the DataReader
         file_read = [[(TRACES_PREFIX+"_%d"%(i)+traces_extension,traces_label),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
         reader = DataReader(file_read,max_depth=2)

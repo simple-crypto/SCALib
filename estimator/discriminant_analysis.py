@@ -339,6 +339,7 @@ class LinearDiscriminantAnalysis(BaseEstimator, LinearClassifierMixin,
         del self.means_
         del self.covariance_
         del self.explained_variance_ratio_
+        del self.coef_
     
     def _solve_svd(self, X, y):
         """SVD solver.
@@ -576,4 +577,4 @@ if __name__ == "__main__":
     lda.fit(traces,labels)
     print("lda_stella execution ",time.time()-start)
 
-    assert np.allclose(lda.coef_,lda_sklearn.coef_)
+    assert np.allclose(lda.scalings_,lda_sklearn.scalings_)
