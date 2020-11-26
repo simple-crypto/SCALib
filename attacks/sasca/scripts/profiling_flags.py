@@ -1,10 +1,11 @@
 import numpy as np
 import time
+from tqdm import tqdm
 from stella.evaluation.snr import SNR
 from stella.utils.DataReader import *
 from stella.utils.Accumulator import *
 from sklearn.model_selection import KFold
-
+import sklearn.preprocessing 
 def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
                 n_files,
                 labels,batch_size=-1,Nc=256,verbose=False,axis_chunks=1,
@@ -61,8 +62,14 @@ def write_snr(TRACES_PREFIX,LABELS_PREFIX,FILE_SNR,
 
             data = reader.queue.get()
             i += 1
-        if verbose:
-            for i,n in enumerate(labels_f):
+
+        for i,n in enumerate(labels_f):
+            at_inf = np.where(~np.isfinite(snr._SNR[i,:]))[0]
+ 
+            if len(at_inf)>0:
+                print("# !!!!!!!!! CAUTION, not finite SNR at index",at_inf,". SNR set to zero")
+                snr._SNR[i,at_inf] = 0
+            if verbose:
                 print("# ",n["label"], "max SNR",np.max(snr._SNR[i,:]))
         snrs_labels += [{"label":n["label"],"snr":snr._SNR[i,:]} for i,n in enumerate(labels_f)]
 
@@ -76,13 +83,66 @@ def write_poi(FILE_SNR,FILE_POI,
     pois_labels = list(map(lambda x: {"poi":selection_function(x["snr"]),"label":x["label"]},snrs_labels))
     np.savez(FILE_POI,poi=pois_labels,allow_pickle=True)
 
+def eval_model(TRACES_PREFIX,LABELS_PREFIX,FILE_EVAL,FILE_MODEL,
+                n_files,
+                verbose=False,
+                traces_extension=".npy",traces_label=None,normalize=False):
+
+    models = np.load(FILE_MODEL,allow_pickle=True)["model"]
+    for m in models: m["information"] = 0
+
+    # prepare and start the DataReader
+    file_read = [[(TRACES_PREFIX+"_%d"%(i)+traces_extension,traces_label),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
+    reader = DataReader(file_read,max_depth=2)
+    reader.start()
+
+    i = 0
+    data = reader.queue.get()
+
+    while data is not None:
+        # load the file
+        traces = data[0][0]
+        labels = data[1][0]
+
+        ns,_ = traces.shape
+
+        labels_f = list(map(lambda x:x["label"],labels))
+        assert len(labels_f) > len(models)
+
+        for m in tqdm(models,desc="# eval models"):
+            index = labels_f.index(m["label"])
+            t = traces[:,m["poi"]]
+            if normalize:
+                t = ((t - np.mean(t,axis=0))/np.std(t,axis=0))
+                #t = sklearn.preprocessing.normalize(t)
+            prs = m["model"].predict_proba(t)
+            prs[np.where(prs<1E-200)] = 1E-200
+            nb = len(prs[0,:])
+            m["nb"] = np.log2(nb)
+            m["information"] += m["nb"] + np.mean(np.log2(prs[np.arange(ns),labels[index]["val"]]))
+        i+= 1
+        del traces,labels
+        data = reader.queue.get()
+    for m in models:m["information"]/=i
+
+    out = []
+    for m in models: out.append({"label":m["label"],"information":m["information"]})
+
+    if verbose:
+        for o in out:
+            print("label", o["label"],"-> information %.3f"%(o["information"]))
+
+    np.savez(FILE_EVAL,information=out,allow_pickle=True)
+
+
+
 def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
                 n_files,
                 labels,
                 func,
                 verbose=False,
                 batch_size=-1,
-                traces_extension=".npy",traces_label=None):
+                traces_extension=".npy",traces_label=None,normalize=False):
 
     pois = np.load(FILE_POI,allow_pickle=True)["poi"]
     pois_l = list(map(lambda x:x["label"],pois))
@@ -129,6 +189,9 @@ def build_model(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,FILE_MODEL,
 
         for m in models_l:
             t = m.pop("acc_traces").get()
+            if normalize:
+                t = ((t - np.mean(t,axis=0))/np.std(t,axis=0))
+                #t = sklearn.preprocessing.normalize(t)
             l = m.pop("acc_val").get()[:,0]
             m.pop("val")
             start = time.time()
