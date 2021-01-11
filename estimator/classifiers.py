@@ -4,7 +4,7 @@ from stella.estimator.discriminant_analysis import LinearDiscriminantAnalysis as
 import scipy.stats 
 
 class MultivariateGaussianClassifier():
-    def __init__(self,Nc,means,covs,priors=None,dim_reduce=None):
+    def __init__(self,Nc,means,covs,priors="uniform",dim_reduce=None,pooled_cov=False):
         """
             Performs a Ns-multivariate classification on Nc classes.
             Each class is given with a mean and a covirance matrix. The function
@@ -32,12 +32,10 @@ class MultivariateGaussianClassifier():
             raise Exception("Missmatch cov and mean size {} vs {}".format(cy,my))
         if cx != Nc or mx != Nc:
             raise Exception("Number of class does not match the templates size")
-        if priors is not None:
-            if priors.ndim != 1:
-                raise Exception("Waiting 1 dim array for priors")
-        else:
-            priors = np.ones(Nc)
 
+        priors = np.ones(Nc)
+        if priors.ndim != 1:
+            raise Exception("Waiting 1 dim array for priors")
 
         self._priors = priors
         self._means = means
@@ -48,9 +46,17 @@ class MultivariateGaussianClassifier():
         self._n_components = cz
         self._cov = covs
 
-        self._psd = np.array([_PSD(covs[i], allow_singular=True).U for i in range(Nc)])
-        self._det = np.array([np.linalg.det(covs[i])**(cz/2) for i in
-            range(Nc)]).reshape((1,Nc))
+        
+
+        if not pooled_cov:
+            self._psd = np.array([_PSD(covs[i], allow_singular=True).U for i in range(Nc)])
+            self._det = np.array([np.linalg.det(covs[i])**(cz/2) for i in
+                range(Nc)]).reshape((1,Nc))
+        else:
+            tmp = _PSD(covs[0],allow_singular=True).U
+            self._psd = np.array([tmp for i in range(Nc)])
+            self._det = np.array([1.0**(cz/2) for i in
+                range(Nc)]).reshape((1,Nc))
 
     def predict_proba(self,X,use_rust=True,n_components=None):
         """
@@ -94,9 +100,8 @@ class MultivariateGaussianClassifier():
         prs[I] = 1
         return (prs.T/np.sum(prs,axis=1)).T
 
-class LDAClassifier():
-    def __init__(self,traces,labels,solver="eigen",dim_projection=4,priors=None,Nc=None,
-            duplicate=True,pooled_cov=True):
+class QDAClassifier():
+    def __init__(self,traces,labels,priors="uniform",Nc=None,pooled_cov=True):
         Ns = traces[0,:]
         if Nc is None:
             Nk = Nc = len(np.unique(labels))
@@ -105,6 +110,64 @@ class LDAClassifier():
         
         C_i = labels
         self._Ns = len(traces[0,:])
+
+        traces_i = traces
+        lx,ly = traces_i.shape
+        model = np.zeros((Nk,ly))
+
+        if traces.dtype == np.int16:
+            rust.class_means(np.unique(labels),C_i,traces_i,model)
+        else:
+            rust.class_means_f64(np.unique(labels),C_i,traces_i.astype(np.float64),model)
+
+        if pooled_cov:
+            noise = traces_i-model[C_i]
+            cov = np.cov(noise.T)
+            covs = np.tile(cov,(Nc,1,1))
+        else:
+            covs = []
+            noise = traces_i-model[C_i]
+            for x in range(Nk):
+                I = np.where(C_i==x)[0]
+                if len(noise[0,:]) == 1:
+                    covs.append([[np.cov(noise[I,:].T)]])
+                else:
+                    covs.append(np.cov(noise[I,:].T))
+            covs = np.array(covs)
+        
+        self._trained_on = len(labels)
+        self._mvGC = MultivariateGaussianClassifier(Nk,model,covs,dim_reduce=None,priors=priors,pooled_cov=pooled_cov)
+    
+    def predict_proba(self,X,use_rust=True):
+        """
+            Returns the probability of each classes by applying 
+            Bayes law.
+
+            X (n_traces,Ns): n_traces traces to evaluate
+
+            returns a (n_traces,Nc) array
+        """
+        if len(X[0,:]) > self._Ns:
+            #print("Caution: truncate traces")
+            X = X[:,:self._Ns]
+
+        return self._mvGC.predict_proba(X,use_rust)
+
+
+class LDAClassifier():
+    def __init__(self,traces,labels,solver="eigen",dim_projection=4,priors="uniform",Nc=None,
+            duplicate=True,pooled_cov=True):
+
+        Ns = traces[0,:]
+        if Nc is None:
+            Nk = Nc = len(np.unique(labels))
+        else:
+            Nk = Nc
+        
+        C_i = labels
+        self._Ns = len(traces[0,:])
+        if priors == "uniform":
+            priors = np.ones(Nc)/Nc
 
         dim_reduce = LDA_stella(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors,duplicate=duplicate)
 

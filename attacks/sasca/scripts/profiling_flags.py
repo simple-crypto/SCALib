@@ -212,7 +212,7 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
                 kfold=10,
                 npts=10,
                 Nb = 8,
-                batch_size=-1,verbose=False,
+                batch_size=-1,verbose=False,verbose_reader=False,
                 traces_extension=".npy",traces_label=None):
 
     pois = np.load(FILE_POI,allow_pickle=True)["poi"]
@@ -225,7 +225,7 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
 
         # prepare and start the DataReader
         file_read = [[(TRACES_PREFIX+"_%d"%(i)+traces_extension,traces_label),(LABELS_PREFIX+"_%d.npz"%(i),["labels"])]   for i in range(n_files)]
-        reader = DataReader(file_read,max_depth=2)
+        reader = DataReader(file_read,max_depth=2,verbose=verbose_reader)
         reader.start()
 
         i = 0
@@ -257,6 +257,7 @@ def estimate_pi(TRACES_PREFIX,LABELS_PREFIX,FILE_POI,
             for m in models_l: m["acc_traces"].fit(traces[:,m["poi"]])
 
             i+= 1
+            reader.queue.task_done()
             data = reader.queue.get()
 
         # all data have been loaded. Computing PI
