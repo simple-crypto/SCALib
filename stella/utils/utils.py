@@ -1,5 +1,4 @@
-from stella.sasca.Node import *
-
+from stella.attacks.sasca.Node import *
 import networkx as nx
 
 def initialize_graph(distri=None,Nk=None):

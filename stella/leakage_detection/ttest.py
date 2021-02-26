@@ -1,6 +1,7 @@
 import numpy as np
 import stella.lib.rust_stella as rust
 from scipy.special import comb
+
 class Ttest:
     """
         This Class computes a t-test on vectors (traces). 

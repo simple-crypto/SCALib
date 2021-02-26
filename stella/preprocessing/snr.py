@@ -1,18 +1,42 @@
+"""
+This module allows to compute SNR for multiple independent variables in
+parallel.
+"""
+
 import numpy as np
 import stella.lib.rust_stella as rust
 from tqdm import tqdm
 class SNR:
     def __init__(self,Nc,Ns,Np=1,use_rust=True):
-        """
-            This function computes the Signal-to-Noise ratio between the traces
-            and the intermediate values. It is ment to work on traces being 
-            int16.
+        r""" This function computes the Signal-to-Noise ratio between the traces
+        and the intermediate values. It is ment to work on traces being 
+        int16.
 
-            Nc: Possible values for the intermediate values X
-            Ns: Number of samples in a single traces
-            Np: Number of intermediates variable to comptue the SNR on. Default
-            to 1
+        Parameters
+        ----------
+        Nc : int
+            Number of possible classes (e.g., 256 for 8-bit target). We force
+            that the number of classes is smaller than 2**16.
+        Ns : int
+            Trace length to process.
+        Np : int
+            Number of indepent variables to process.
+        use_rust : bool
+            Flag to use rust library
+
+        See Also
+        --------
+
+        Examples
+        --------
+        >>> from stella.preprocessing import SNR
+        >>> import numpy as np
+        >>> traces = np.random.randint(0,1000,(100,200),dtype=np.int16)
+        >>> X = np.random.randint(0,256,(10,100),dtype=np.uint8)
+        >>> snr = SNR(256,200,10)
+        >>> snr.fit_u(traces,X)
         """
+
         if Nc >= (2**16):
             raise Exception("SNR can be computed on max 16 bit, {} given".format(Nc))
         self._Nc = Nc
@@ -50,21 +74,21 @@ class SNR:
         self._means[:,:] = np.nan
 
         self._i = 0
-    def __del__(self):
-        """
-            Delet all the numpy array in the object
-        """
-        del self._ns,self._sum,self._sum2,self._means
-        del self._SNR,self._vars
 
     def fit_u(self,traces,X,use_rust=True,nchunks=1):
-        """
-            Updates the SNR status to take the fresh samples into account
+        r""" This functions updates the SNR state to take into account fresh
+        traces. This is typically called serially for multiple pairs (traces,X)
 
-            traces: (?,Ns) int16 or int8 array containing the array.
-            X: (Np,?) uint16 array coutaining
-            use_rust: use low level rust
-            nchunks: in how many chunks to // the snr
+        Parameters
+        ----------
+        traces : array_like
+            Array containg the traces with data type uint16.
+        X : array_like
+            Trace length to process
+        use_rust : bool
+            Flag to use rust library
+        n_chunks : int
+            parall parameter
         """
         X = (X%self._Nc).astype(np.uint16)
         if self._Np == 1 and X.ndim == 1:
@@ -92,21 +116,15 @@ class SNR:
 
             for v in range(self._Np):
                 self._SNR[v,:] = np.var(self._means[v,:],axis=0)/np.mean(self._vars[v,:],axis=0)
+
         return self._SNR
 
+    def __del__(self):
+        del self._ns,self._sum,self._sum2,self._means
+        del self._SNR,self._vars
 
 class SNROrder:
     def __init__(self,Nc,Ns,Np=1,D=1):
-        """
-            This function computes the Signal-to-Noise ratio between the traces
-            and the intermediate values. It is ment to work on traces being 
-            int16.
-
-            Nc: Possible values for the intermediate values X
-            Ns: Number of samples in a single traces
-            Np: Number of intermediates variable to comptue the SNR on. Default
-            to 1
-        """
         if Nc >= (2**16):
             raise Exception("SNR can be computed on max 16 bit, {} given".format(Nc))
         self._Nc = Nc
@@ -124,14 +142,6 @@ class SNROrder:
         self._SNR = np.zeros((Np,D,Ns),dtype=np.float32)
 
     def fit_u(self,traces,X,use_rust=True,nchunks=1):
-        """
-            Updates the SNR status to take the fresh samples into account
-
-            traces: (?,Ns) int16 or int8 array containing the array.
-            X: (Np,?) uint16 array coutaining
-            use_rust: use low level rust
-            nchunks: in how many chunks to // the snr
-        """
         X = (X%self._Nc).astype(np.uint16)
         if self._Np == 1 and X.ndim == 1:
             X = X.reshape((1,len(X)))
@@ -165,15 +175,6 @@ class SNROrder:
                 self._SNR[i,d-1,:] = np.var(u,axis=0)/np.mean(v,axis=0)
 
     def get_sm(self,D):
-        """
-            returns the standardized moments to peform MCP-DPA
-
-            returns:
-            SM: standardized moments of order D
-            s: standard deviation
-            u: means
-
-        """
         SM = np.zeros((self._Np,self._Nc,self._Ns))
         CM_all = np.zeros((self._Np,self._Nc,self._Ns))
         s = np.zeros((self._Np,self._Nc,self._Ns))

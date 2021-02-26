@@ -1,7 +1,6 @@
 import numpy as np
 
 class Accumulator():
-
     def __init__(self,l,Ns,dtype=np.int16):
         """
             This object stores the fitted inputs withing and array
