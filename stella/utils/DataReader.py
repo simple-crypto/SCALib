@@ -25,4 +25,15 @@ class DataReader(threading.Thread):
         self.queue.put(None)
         return
 
+    def __iter__(self):
+        self._i = 0
+        print("start")
+        self.start()
+        return self
 
+    def __next__(self):
+        if self._i < len(self.file_read):
+            self._i += 1
+            return self.queue.get()
+        else:
+            raise StopIteration

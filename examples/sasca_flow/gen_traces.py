@@ -4,7 +4,6 @@ from sasca_flow_settings import *
 
 def gen_traces_attack_sim(nfile_attack,ntraces,DIR_TRACES,tag):
     """
-
     """
     for i in range(nfile_attack):
         p = np.random.randint(0,Nk,(ntraces,16),dtype=np.uint8)
@@ -28,6 +27,7 @@ def gen_traces_attack_sim(nfile_attack,ntraces,DIR_TRACES,tag):
                         k=k,
                         sbox=sbox,
                         allow_pickle=True)
+
 def gen_traces_sim(nfile_profile,ntraces,DIR_TRACES,tag):
     """
         

@@ -5,12 +5,15 @@
 
 Welcome to Stella's documentation!
 ==================================
+Stella is a toolbox to perform side-channel attacks. It provides various features such
+as Signal-to-Noise ratio, MC-CPA, template attacks and soft analytical software attacks. 
+The front-end is in Python while expensive computation is handled in Rust and C. 
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-   stella.preprocessing
+   preprocessing
 
 
 Indices and tables
