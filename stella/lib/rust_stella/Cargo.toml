@@ -10,20 +10,14 @@ name = "rust_stella"
 crate-type = ["cdylib"]
 
 [dependencies.pyo3]
-version = "0.8.5"
+version = "0.13.2"
 features = ["extension-module"]
 
 [dependencies]
-numpy = "0.7.0"
+numpy = "0.13.0"
 rayon = "1.3.0"
 num-integer = "0.1.42"
-ndarray = { version = "0.13.0", features = ["rayon"] }
-#blas-src = { version = "0.2.0", default-features = false, features = ["openblas"] }
-#openblas-src = { version = "0.6.0", default-features = false, features = ["cblas", "system"] }
-
-#[dependencies.ndarray]
-#version = "0.13"
-#features = ["rayon"]
+ndarray = { version = "0.14.0", features = ["rayon"] }
 
 [profile.release]
 debug = true

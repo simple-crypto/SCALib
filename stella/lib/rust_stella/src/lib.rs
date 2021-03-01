@@ -1,26 +1,28 @@
 extern crate ndarray;
-
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Array, Axis};
 use num_integer::binomial;
-use numpy::{PyArray1, PyArray2, PyArray3, PyArrayDyn};
+use numpy::{
+    PyArray1, PyArray2, PyArray3, PyArrayDyn, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
+};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
+
 #[pymodule]
 fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "multivariate_pooled")]
     fn multivariate_pooled(
         _py: Python,
-        u: &PyArray3<f64>,      // U matrix (decomposition of Inv Cov (Npro x Npro)
-        m: &PyArray2<f64>,      // mean matrices (Nk x Npro)
-        traces: &PyArray2<f64>, // the actual traces (N x Npro)
-        prs: &PyArray2<f64>,    // the actual traces (N x Nk)
-        det: &PyArray2<f64>,    // (1,Nk)
+        u: PyReadonlyArray3<f64>, // U matrix (decomposition of Inv Cov (Npro x Npro)
+        m: PyReadonlyArray2<f64>, // mean matrices (Nk x Npro)
+        traces: PyReadonlyArray2<f64>, // the actual traces (N x Npro)
+        prs: &PyArray2<f64>,      // the actual traces (N x Nk)
+        det: PyReadonlyArray2<f64>, // (1,Nk)
     ) -> PyResult<()> {
         let u = u.as_array();
         let det = det.as_array();
         let traces = traces.as_array();
         let m = m.as_array();
-        let mut prs = prs.as_array_mut();
+        let mut prs = unsafe { prs.as_array_mut() };
         prs.axis_iter_mut(Axis(1)) // along Nk axis
             .into_par_iter()
             .zip(m.axis_iter(Axis(0)).into_par_iter())
@@ -41,11 +43,11 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "class_means_subs")]
     fn class_means_subs(
         _py: Python,
-        labels: &PyArray1<u16>,     // labels (N,)
-        means: &mut PyArray2<f64>,  // the actual traces (N x Nk)
-        traces_out: &PyArray2<f64>, // where to store the results
+        labels: PyReadonlyArray1<u16>, // labels (N,)
+        means: PyReadonlyArray2<f64>,  // the actual traces (N x Nk)
+        traces_out: &PyArray2<f64>,    // where to store the results
     ) -> PyResult<()> {
-        let mut traces_out = traces_out.as_array_mut();
+        let mut traces_out = unsafe { traces_out.as_array_mut() };
         let labels = labels.as_array();
         let means = means.as_array();
         traces_out
@@ -64,15 +66,15 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "class_means_f64")]
     fn class_means_f64(
         _py: Python,
-        u: &PyArray1<u16>,         // uniques labels
-        labels: &PyArray1<u16>,    // labels (N,)
-        traces: &PyArray2<f64>,    // the actual traces (N x Npro)
-        means: &mut PyArray2<f64>, // the actual traces (N x Nk)
+        u: PyReadonlyArray1<u16>,      // uniques labels
+        labels: PyReadonlyArray1<u16>, // labels (N,)
+        traces: PyReadonlyArray2<f64>, // the actual traces (N x Npro)
+        means: &PyArray2<f64>,         // the actual traces (N x Nk)
     ) -> PyResult<()> {
         let u = u.as_array();
         let traces = traces.as_array();
         let labels = labels.as_array();
-        let mut means = means.as_array_mut();
+        let mut means = unsafe { means.as_array_mut() };
         u.axis_iter(Axis(0)) // along Nk axis
             .into_par_iter()
             .zip(means.axis_iter_mut(Axis(0)).into_par_iter())
@@ -95,15 +97,15 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "class_means")]
     fn class_means(
         _py: Python,
-        u: &PyArray1<u16>,         // uniques labels
-        labels: &PyArray1<u16>,    // labels (N,)
-        traces: &PyArray2<i16>,    // the actual traces (N x Npro)
-        means: &mut PyArray2<f64>, // the actual traces (N x Nk)
+        u: PyReadonlyArray1<u16>,      // uniques labels
+        labels: PyReadonlyArray1<u16>, // labels (N,)
+        traces: PyReadonlyArray2<i16>, // the actual traces (N x Npro)
+        means: &PyArray2<f64>,         // the actual traces (N x Nk)
     ) -> PyResult<()> {
         let u = u.as_array();
         let traces = traces.as_array();
         let labels = labels.as_array();
-        let mut means = means.as_array_mut();
+        let mut means = unsafe { means.as_array_mut() };
         u.axis_iter(Axis(0)) // along Nk axis
             .into_par_iter()
             .zip(means.axis_iter_mut(Axis(0)).into_par_iter())
@@ -126,19 +128,19 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "update_snrorder")]
     fn update_snrorder(
         _py: Python,
-        traces: &PyArray2<i16>,   // (len,N_sample)
-        c: &PyArray2<u16>,        // (Np,len)
-        n: &mut PyArray2<f64>,    // (Np,len)
-        cs: &mut PyArrayDyn<f64>, // (Np,Nc,D*2,N_sample)
-        m: &mut PyArray3<f64>,    // (Np,Nc,N_sample)
+        traces: PyReadonlyArray2<i16>, // (len,N_sample)
+        c: PyReadonlyArray2<u16>,      // (Np,len)
+        n: &PyArray2<f64>,             // (Np,len)
+        cs: &PyArrayDyn<f64>,          // (Np,Nc,D*2,N_sample)
+        m: &PyArray3<f64>,             // (Np,Nc,N_sample)
         d: i32,
         nchunks: i32, //
     ) -> PyResult<()> {
         let traces = traces.as_array();
         let c = c.as_array();
-        let mut n = n.as_array_mut();
-        let mut cs = cs.as_array_mut();
-        let mut m = m.as_array_mut();
+        let mut n = unsafe { n.as_array_mut() };
+        let mut cs = unsafe { cs.as_array_mut() };
+        let mut m = unsafe { m.as_array_mut() };
         let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
         c.axis_iter(Axis(0))
             .into_par_iter()
@@ -211,19 +213,19 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "update_ttest")]
     fn update_ttest(
         _py: Python,
-        traces: &PyArray2<i16>, // (len,N_sample)
-        c: &PyArray1<u8>,       // (len)
-        n: &mut PyArray1<f64>,  // (len)
-        cs: &mut PyArray3<f64>, // (2,D*2,N_sample)
-        m: &mut PyArray2<f64>,  // (2,N_sample)
+        traces: PyReadonlyArray2<i16>, // (len,N_sample)
+        c: PyReadonlyArray1<u8>,       // (len)
+        n: &PyArray1<f64>,             // (len)
+        cs: &PyArray3<f64>,            // (2,D*2,N_sample)
+        m: &PyArray2<f64>,             // (2,N_sample)
         d: i32,
         nchunks: i32, //
     ) -> PyResult<()> {
         let traces = traces.as_array();
         let c = c.as_array();
-        let mut n = n.as_array_mut();
-        let mut cs = cs.as_array_mut();
-        let mut m = m.as_array_mut();
+        let mut n = unsafe { n.as_array_mut() };
+        let mut cs = unsafe { cs.as_array_mut() };
+        let mut m = unsafe { m.as_array_mut() };
         let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
         traces
             .axis_chunks_iter(Axis(1), chunk_size)
@@ -286,24 +288,24 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "update_snr")]
     fn update_snr(
         _py: Python,
-        traces: &PyArray2<i16>,    // (len,N_sample)
-        x: &PyArray2<u16>,         // (Np,len)
-        sum: &mut PyArray3<i64>,   // (Np,Nc,N_sample)
-        sum2: &mut PyArray3<i64>,  // (Np,Nc,N_sample)
-        ns: &mut PyArray2<u32>,    // (Np,Nc)
-        means: &mut PyArray3<f32>, // (Np,Nc,N_sample)
-        vars: &mut PyArray3<f32>,  // (Np,Nc,N_sample)
-        snr: &mut PyArray2<f32>,   // (Np,N_sample)
+        traces: PyReadonlyArray2<i16>, // (len,N_sample)
+        x: PyReadonlyArray2<u16>,      // (Np,len)
+        sum: &PyArray3<i64>,           // (Np,Nc,N_sample)
+        sum2: &PyArray3<i64>,          // (Np,Nc,N_sample)
+        ns: &PyArray2<u32>,            // (Np,Nc)
+        means: &PyArray3<f32>,         // (Np,Nc,N_sample)
+        vars: &PyArray3<f32>,          // (Np,Nc,N_sample)
+        snr: &PyArray2<f32>,           // (Np,N_sample)
         nchunks: i32,
     ) -> PyResult<()> {
         let traces = traces.as_array();
         let x = x.as_array();
-        let mut sum = sum.as_array_mut();
-        let mut means = means.as_array_mut();
-        let mut vars = vars.as_array_mut();
-        let mut sum2 = sum2.as_array_mut();
-        let mut ns = ns.as_array_mut();
-        let mut snr = snr.as_array_mut();
+        let mut sum = unsafe { sum.as_array_mut() };
+        let mut means = unsafe { means.as_array_mut() };
+        let mut vars = unsafe { vars.as_array_mut() };
+        let mut sum2 = unsafe { sum2.as_array_mut() };
+        let mut ns = unsafe { ns.as_array_mut() };
+        let mut snr = unsafe { snr.as_array_mut() };
         let n_traces = traces.shape()[0];
         let nc = sum.shape()[1];
         let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
@@ -391,27 +393,27 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "update_mcp_dpa")]
     fn update_mcp_dpa(
         _py: Python,
-        traces: &PyArray2<i16>,    // (len,N_sample)
-        g: &PyArray2<u16>,         // (Ng,len)
-        sumx: &mut PyArray2<f64>,  // (Ng,N_sample)
-        sumx2: &mut PyArray2<f64>, // (Ng,N_sample)
-        sumxy: &mut PyArray2<f64>, // (Ng,N_sample)
-        sumy: &mut PyArray2<f64>,  // (Ng,N_sample)
-        sumy2: &mut PyArray2<f64>, // (Ng,N_sample)
+        traces: PyReadonlyArray2<i16>, // (len,N_sample)
+        g: PyReadonlyArray2<u16>,      // (Ng,len)
+        sumx: &PyArray2<f64>,          // (Ng,N_sample)
+        sumx2: &PyArray2<f64>,         // (Ng,N_sample)
+        sumxy: &PyArray2<f64>,         // (Ng,N_sample)
+        sumy: &PyArray2<f64>,          // (Ng,N_sample)
+        sumy2: &PyArray2<f64>,         // (Ng,N_sample)
 
-        sm: &PyArray2<f64>, // (Nk,len)
-        u: &PyArray2<f64>,  // (Nk,len)
-        s: &PyArray2<f64>,  // (Nk,len)
+        sm: PyReadonlyArray2<f64>, // (Nk,len)
+        u: PyReadonlyArray2<f64>,  // (Nk,len)
+        s: PyReadonlyArray2<f64>,  // (Nk,len)
         d: i32,
         nchunks: i32,
     ) -> PyResult<()> {
         let traces = traces.as_array();
         let g = g.as_array();
-        let mut sumx = sumx.as_array_mut();
-        let mut sumx2 = sumx2.as_array_mut();
-        let mut sumxy = sumxy.as_array_mut();
-        let mut sumy = sumy.as_array_mut();
-        let mut sumy2 = sumy2.as_array_mut();
+        let mut sumx = unsafe { sumx.as_array_mut() };
+        let mut sumx2 = unsafe { sumx2.as_array_mut() };
+        let mut sumxy = unsafe { sumxy.as_array_mut() };
+        let mut sumy = unsafe { sumy.as_array_mut() };
+        let mut sumy2 = unsafe { sumy2.as_array_mut() };
 
         let sm = sm.as_array();
         let u = u.as_array();

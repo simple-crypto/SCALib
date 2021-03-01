@@ -1,1 +1,2 @@
-__all__ = ["sasca"]
+__all__ = ["sasca","mcp_dpa"]
+from .mcp_dpa import *
