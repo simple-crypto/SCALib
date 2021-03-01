@@ -8,8 +8,8 @@ import stella.lib.rust_stella as rust
 from tqdm import tqdm
 class SNR:
     def __init__(self,Nc,Ns,Np=1,use_rust=True):
-        r""" This function computes the Signal-to-Noise ratio between the traces
-        and the intermediate values. It is ment to work on traces being 
+        r"""Computes the Signal-to-Noise ratio between the traces
+        and the intermediate values. It is meant to work on traces being 
         int16.
 
         Parameters
@@ -20,7 +20,7 @@ class SNR:
         Ns : int
             Trace length to process.
         Np : int
-            Number of indepent variables to process.
+            Number of independent variables to process.
         use_rust : bool
             Flag to use rust library
 
@@ -76,19 +76,27 @@ class SNR:
         self._i = 0
 
     def fit_u(self,traces,X,use_rust=True,nchunks=1):
-        r""" This functions updates the SNR state to take into account fresh
+        r""" Updates the SNR state to take into account fresh
         traces. This is typically called serially for multiple pairs (traces,X)
 
         Parameters
         ----------
         traces : array_like
-            Array containg the traces with data type uint16.
+            Array that contains the traces with data type uint16. The array must
+            be of dimension (ntraces,Ns).
         X : array_like
-            Trace length to process
+            Labels for each traces. Must be of shape (Np,ntraces).
         use_rust : bool
-            Flag to use rust library
+            Flag to use rust library.
         n_chunks : int
-            parall parameter
+            Parallel parameter. TODO: remove this argument
+
+        Returns
+        -------
+        SNR : array_like
+            Current estimation of the Signal-to-Noise ratio for each of the Np
+            classes. Array_like of shape (Np,Ns).
+
         """
         X = (X%self._Nc).astype(np.uint16)
         if self._Np == 1 and X.ndim == 1:
@@ -125,6 +133,35 @@ class SNR:
 
 class SNROrder:
     def __init__(self,Nc,Ns,Np=1,D=1):
+        r"""Computes the Signal-to-Noise ratio at arbitrary order between the
+        traces and the intermediate values. It is meant to work on traces being
+        int16.
+
+        Parameters
+        ----------
+        Nc : int
+            Number of possible classes (e.g., 256 for 8-bit target). We force
+            that the number of classes is smaller than 2**16.
+        Ns : int
+            Trace length to process.
+        Np : int
+            Number of independent variables to process.
+        D : int
+            Maximal statistical moment to compute
+
+        See Also
+        --------
+
+        Examples
+        --------
+        >>> from stella.preprocessing import SNR
+        >>> import numpy as np
+        >>> traces = np.random.randint(0,1000,(100,200),dtype=np.int16)
+        >>> X = np.random.randint(0,256,(10,100),dtype=np.uint8)
+        >>> snr = SNROrder(256,200,10,D=1)
+        >>> snr.fit_u(traces,X)
+        """
+
         if Nc >= (2**16):
             raise Exception("SNR can be computed on max 16 bit, {} given".format(Nc))
         self._Nc = Nc
@@ -142,7 +179,28 @@ class SNROrder:
         self._SNR = np.zeros((Np,D,Ns),dtype=np.float32)
 
     def fit_u(self,traces,X,use_rust=True,nchunks=1):
-        X = (X%self._Nc).astype(np.uint16)
+        r""" Updates the SNR state to take into account fresh
+        traces. This is typically called serially for multiple pairs (traces,X)
+
+        Parameters
+        ----------
+        traces : array_like
+            Array that contains the traces with data type uint16. The array must
+            be of dimension (ntraces,Ns).
+        X : array_like
+            Labels for each traces. Must be of shape (Np,ntraces).
+        use_rust : bool
+            Flag to use rust library.
+        n_chunks : int
+            Parallel parameter. TODO: remove this argument
+
+        Returns
+        -------
+        SNR : array_like
+            Current estimation of the Signal-to-Noise ratio at order <= D for
+            each of the Np classes. Array_like of shape (Np,D,Ns).
+        """
+        X = (X).astype(np.uint16)
         if self._Np == 1 and X.ndim == 1:
             X = X.reshape((1,len(X)))
 
@@ -173,10 +231,26 @@ class SNROrder:
                     u = CM[:,d-1,:]/np.power(CM[:,1,:],d/2);
                     v = (CM[:,(d*2)-1,:] - CM[:,(d)-1]**2)/(CM[:,1,:]**d)
                 self._SNR[i,d-1,:] = np.var(u,axis=0)/np.mean(v,axis=0)
+        return self._SNR
 
     def get_sm(self,D):
+        r"""Returns the standardized moments. 
+
+        Parameters
+        ----------
+        D : The statistical standardized moment.
+
+        Returns
+        -------
+        SM : array_like
+            Statistical standardized moment of the shape (Np,Ns)
+        u : array_like
+            Mean for each of the classes. Has shape (Np,Ns,Ns)
+        s: array_like
+            Standard deviation for each of the classes. Has shape (Np,Ns,Ns)
+        """
+
         SM = np.zeros((self._Np,self._Nc,self._Ns))
-        CM_all = np.zeros((self._Np,self._Nc,self._Ns))
         s = np.zeros((self._Np,self._Nc,self._Ns))
         u = self._M.copy()
 
@@ -191,8 +265,8 @@ class SNROrder:
 
             s[i,:] = np.sqrt(CM[:,1,:])
             SM[i,:,:] = m
-            CM_all[i,:,:] = CM[:,D-1,:]
-        return SM,u,s,CM_all
+
+        return SM,u,s
 
 
 if __name__ == "__main__":
