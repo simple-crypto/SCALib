@@ -9,6 +9,17 @@ Subpackages
 
    stella.attacks.sasca
 
+Submodules
+----------
+
+stella.attacks.mcp\_dpa module
+------------------------------
+
+.. automodule:: stella.attacks.mcp_dpa
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Module contents
 ---------------
 

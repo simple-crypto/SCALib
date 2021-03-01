@@ -18,15 +18,12 @@ stella.utils.DataHolder module
 .. automodule:: stella.utils.DataHolder
    :members:
    :undoc-members:
-   :show-inheritance:
 
 stella.utils.DataReader module
 ------------------------------
 
 .. automodule:: stella.utils.DataReader
    :members:
-   :undoc-members:
-   :show-inheritance:
 
 stella.utils.utils module
 -------------------------

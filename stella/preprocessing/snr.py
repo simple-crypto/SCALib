@@ -24,9 +24,6 @@ class SNR:
         use_rust : bool
             Flag to use rust library
 
-        See Also
-        --------
-
         Examples
         --------
         >>> from stella.preprocessing import SNR
