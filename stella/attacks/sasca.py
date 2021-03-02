@@ -40,12 +40,12 @@ def init_graph_memory(functions,variables,N,Nc):
             if var["flags"] & profile_flag_v != 0:
                 var["distri_orig"] = np.ones((n,Nc))
             var["distri"] = np.zeros((n,Nc))
-            var["msg"] = np.zeros((n,len(var["neighboors"]),Nc))
+            var["msg"] = np.zeros((N,len(var["neighboors"]),Nc))
 
     variables_list = list(map(lambda x:variables[x],variables))
     for func in functions:
         neighboors = func["neighboors"]
-        func["msg"] = np.zeros((n,len(neighboors),Nc))
+        func["msg"] = np.zeros((N,len(neighboors),Nc))
 
     return functions,variables_list,variables
  
@@ -89,6 +89,7 @@ def create_graph(fname):
         # add function
         op = list(set(split) & set(list(symbols)))
         if len(op) > 0:
+            assert in_loop
             i = len(functions)
             v = variables[split[0]] 
             a = variables[split[2]]
@@ -98,6 +99,7 @@ def create_graph(fname):
             v["neighboors"].append(i)
 
             func = new_function(i,symbols[op[0]]["val"])
+            func["in_loop"] = in_loop
             func["inputs"].append(a["id"])
             func["inputs"].append(b["id"])
             func["outputs"].append(v["id"])
@@ -141,16 +143,12 @@ def reset_graph_memory(variables_list,Nc):
 
 if __name__ == "__main__":
     functions,variables_list,variables = create_graph("example_graph.txt")
-    init_graph_memory(functions,variables,1,4)
+    init_graph_memory(functions,variables,2,4)
     variables["p_0"]["values"][:] = 2
-    variables["x_0"]["distri_orig"][:,:] = 0
-    variables["x_0"]["distri_orig"][:,0] = 1
-    reset_graph_memory(variables_list,4)
-    print(variables["x_0"]["distri_orig"])
-    rust.belief_propagation(functions,variables_list)
-    rust.belief_propagation(functions,variables_list)
-    rust.belief_propagation(functions,variables_list)
-    rust.belief_propagation(functions,variables_list)
-    print(variables["x_0"]["distri"])
+    variables["x_0"]["distri_orig"][:,:] = .2
+    variables["x_0"]["distri_orig"][:,0] = .4
+    reset_graph_memory(variables_list,256)
+    from tqdm import tqdm
+    for i in tqdm(range(1)):
+        rust.belief_propagation(functions,variables_list)
     print(variables["k_0"]["distri"])
-    print(functions[0]["msg"])

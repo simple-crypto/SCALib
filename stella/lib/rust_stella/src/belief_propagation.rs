@@ -6,12 +6,17 @@ use pyo3::types::{PyDict, PyList};
 pub fn update_variables(functions: &PyList, variables: &PyList) {
     variables.iter().for_each(|var| {
         let var = var.downcast::<PyDict>().unwrap();
+        let in_loop: bool = var.get_item("in_loop").unwrap().extract().unwrap();
         if var.contains("distri").unwrap() {
+            // get the current distri
             let distri: &PyArray2<f64> = var.get_item("distri").unwrap().extract().unwrap();
             let mut distri = unsafe { distri.as_array_mut() };
+
+            // get all the messages to sent (n,n_neighboors,nc)
             let msg: &PyArray3<f64> = var.get_item("msg").unwrap().extract().unwrap();
             let mut msg = unsafe { msg.as_array_mut() };
 
+            // get offset in all the neighboors and list all the neighboors
             let offset: Vec<isize> = var.get_item("offset").unwrap().extract().unwrap();
             let neighboors: Vec<isize> = var.get_item("neighboors").unwrap().extract().unwrap();
             let neighboors: Vec<&PyDict> = neighboors
@@ -23,13 +28,12 @@ pub fn update_variables(functions: &PyList, variables: &PyList) {
                 let distri_orig: PyReadonlyArray2<f64> =
                     var.get_item("distri_orig").unwrap().extract().unwrap();
                 let distri_orig = distri_orig.as_array();
-                println!("distri_orig {:?}", distri_orig);
                 distri.assign(&distri_orig);
                 distri.mapv_inplace(|x| f64::log2(x));
             } else {
                 distri.fill(0.0);
             }
-            println!("distri_log {:?}", distri);
+            println!("distr start {:?}", distri);
 
             offset
                 .iter()
@@ -37,41 +41,57 @@ pub fn update_variables(functions: &PyList, variables: &PyList) {
                 .for_each(|(offset, neighboor)| {
                     let msg_in: &PyArray3<f64> =
                         neighboor.get_item("msg").unwrap().extract().unwrap();
+
                     let mut msg_in = unsafe { msg_in.as_array_mut() };
                     let mut msg_in = msg_in.slice_mut(s![.., *offset, ..]);
                     msg_in.mapv_inplace(|x| f64::log2(x));
-                    distri += &msg_in;
+                    let in_loop_neighboor: bool =
+                        neighboor.get_item("in_loop").unwrap().extract().unwrap();
+
+                    if (in_loop == false) & (in_loop_neighboor == true) {
+                        distri += &msg_in.sum_axis(Axis(0));
+                    } else {
+                        distri += &msg_in;
+                    }
                 });
+
             offset.iter().zip(neighboors.iter()).enumerate().for_each(
                 |(i, (offset, neighboor))| {
-                    let msg_in: &PyArray3<f64> =
+                    let msg_in: PyReadonlyArray3<f64> =
                         neighboor.get_item("msg").unwrap().extract().unwrap();
-                    let mut msg_in = unsafe { msg_in.as_array_mut() };
-                    let mut msg_in = msg_in.slice_mut(s![.., *offset, ..]);
+                    let in_loop_neighboor: bool =
+                        neighboor.get_item("in_loop").unwrap().extract().unwrap();
+                    let msg_in = msg_in.as_array();
+                    let msg_in = msg_in.slice(s![.., *offset, ..]);
                     let mut msg_out = msg.slice_mut(s![.., i, ..]);
-                    msg_out.assign(&(&distri - &msg_in));
-                    println!("msg_out {:?}", msg_out);
+                    if (in_loop == false) & (in_loop_neighboor == true) {
+                        let distri = distri.broadcast(msg_in.shape()).unwrap();
+                        msg_out.assign(&(&distri - &msg_in));
+                    } else {
+                        msg_out.assign(&(&distri - &msg_in));
+                    }
                 },
             );
 
-            for mut row in msg.genrows_mut() {
-                row.mapv_inplace(|x| (2.0 as f64).powf(x));
-                row /= row.sum();
-                row.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
-            }
-            for mut row in distri.genrows_mut() {
-                println!("row distri log {:?}",row);
-                row.mapv_inplace(|x| (2.0 as f64).powf(x));
-                println!("row distri {:?}",row);
-                row /= row.sum();
-                row.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
-            }
+            msg.mapv_inplace(|x| (2.0 as f64).powf(x));
+            msg /= &msg
+                .sum_axis(Axis(2)).insert_axis(Axis(2))
+                .broadcast(msg.shape())
+                .unwrap();
+            msg.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
+
+            distri.mapv_inplace(|x| (2.0 as f64).powf(x));
+            distri /= &distri
+                .sum_axis(Axis(1)).insert_axis(Axis(1))
+                .broadcast(distri.shape())
+                .unwrap();
+            distri.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
         }
     });
 }
 
 pub fn update_functions(functions: &PyList, variables: &PyList) {
-    functions.iter().enumerate().for_each(|(it, function)| {
+    functions.iter().for_each(|function| {
         let inputs: Vec<isize> = function.get_item("inputs").unwrap().extract().unwrap();
         let outputs: Vec<isize> = function.get_item("outputs").unwrap().extract().unwrap();
         let func: usize = function.get_item("func").unwrap().extract().unwrap();
