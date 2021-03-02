@@ -1,4 +1,5 @@
 extern crate ndarray;
+mod belief_propagation;
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Array, Axis};
 use num_integer::binomial;
@@ -6,9 +7,16 @@ use numpy::{
     PyArray1, PyArray2, PyArray3, PyArrayDyn, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
 };
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
+use pyo3::types::PyList;
 
 #[pymodule]
 fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
+    #[pyfn(m, "belief_propagation")]
+    fn belief_propagation(_py: Python, functions: &PyList, variables: &PyList) -> PyResult<()> {
+        belief_propagation::update_functions(functions, variables);
+        belief_propagation::update_variables(functions, variables);
+        Ok(())
+    }
     #[pyfn(m, "multivariate_pooled")]
     fn multivariate_pooled(
         _py: Python,
@@ -168,7 +176,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                                 .iter_mut()
                                 .zip(traces.to_slice().unwrap().iter())
                                 .zip(m.slice(s![x, ..]).to_slice().unwrap().iter())
-                                .for_each({ |((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx });
+                                .for_each(|((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx);
                             for j in (2..((d * 2) + 1)).rev() {
                                 if nx > 1.0 {
                                     let r = cs.slice_mut(s![x, j - 1, ..]);
@@ -247,7 +255,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                         .iter_mut()
                         .zip(traces.to_slice().unwrap().iter())
                         .zip(m.slice(s![x, ..]).to_slice().unwrap().iter())
-                        .for_each({ |((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx });
+                        .for_each(|((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx);
                     for j in (2..((d * 2) + 1)).rev() {
                         if nx > 1.0 {
                             let r = cs.slice_mut(s![x, j - 1, ..]);

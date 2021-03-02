@@ -1,0 +1,8 @@
+#indeploop
+k_0 #secret
+
+p_0 #public
+x_0 #profile
+x_0 = k_0 + p_0
+
+#endindeploop
