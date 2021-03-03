@@ -45,9 +45,15 @@ pub fn update_variables(functions: &PyList, variables: &PyList) {
                     var.get_item("distri_orig").unwrap().extract().unwrap();
                 let distri_orig = distri_orig.as_array();
                 distri.assign(&distri_orig);
-                distri.mapv_inplace(|x| f64::log2(x));
+                if in_loop ==false{
+                    distri.mapv_inplace(|x| f64::log2(x));
+                }
             } else {
-                distri.fill(0.0);
+                if in_loop ==false{
+                    distri.fill(0.0);
+                }else{
+                    distri.fill(1.0);
+                }
             }
 
             offset
@@ -59,21 +65,25 @@ pub fn update_variables(functions: &PyList, variables: &PyList) {
 
                     let mut msg_in = unsafe { msg_in.as_array_mut() };
                     let mut msg_in = msg_in.slice_mut(s![.., *offset, ..]);
-                    msg_in.mapv_inplace(|x| f64::log2(x));
                     let in_loop_neighboor: bool =
                         neighboor.get_item("in_loop").unwrap().extract().unwrap();
 
                     if (in_loop == false) & (in_loop_neighboor == true) {
+                        msg_in.mapv_inplace(|x| f64::log2(x));
                         distri += &msg_in.sum_axis(Axis(0));
                     } else {
-                        distri += &msg_in;
+                        distri *= &msg_in;
                     }
                 });
 
             let max = distri
                 .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
                 .insert_axis(Axis(1));
-            distri -= &max;
+            if in_loop == false{
+                distri -= &max;
+            }else{
+                distri /= &max;
+            }
             offset.iter().zip(neighboors.iter()).enumerate().for_each(
                 |(i, (offset, neighboor))| {
                     let msg_in: PyReadonlyArray3<f64> =
@@ -88,19 +98,24 @@ pub fn update_variables(functions: &PyList, variables: &PyList) {
                         let distri = distri.broadcast(msg_in.shape()).unwrap();
                         msg_out.assign(&(&distri - &msg_in));
                     } else {
-                        msg_out.assign(&(&distri - &msg_in));
+                        msg_out.assign(&(&distri / &msg_in));
                     }
-                msg_out.mapv_inplace(|x| (2.0 as f64).powf(x));
-                msg_out /= &msg_out
-                    .sum_axis(Axis(1))
-                    .insert_axis(Axis(1))
-                    .broadcast(msg_out.shape())
-                    .unwrap();
-                msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
+
+                    if in_loop == false{
+                    msg_out.mapv_inplace(|x| (2.0 as f64).powf(x));
+                    }
+                    msg_out /= &msg_out
+                        .sum_axis(Axis(1))
+                        .insert_axis(Axis(1))
+                        .broadcast(msg_out.shape())
+                        .unwrap();
+                    msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
                 },
             );
 
-            distri.mapv_inplace(|x| (2.0 as f64).powf(x));
+            if in_loop == false{
+                distri.mapv_inplace(|x| (2.0 as f64).powf(x));
+            }
             distri /= &distri
                 .sum_axis(Axis(1))
                 .insert_axis(Axis(1))
@@ -151,7 +166,6 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
                 inputs_v[1].get_item("msg").unwrap().extract().unwrap();
             let mut input2_msg = unsafe { input2_msg.as_array_mut() };
             let mut input2_msg_s = input2_msg.slice_mut(s![.., offset[1], ..]);
-            msg.fill(0.0);
             msg.outer_iter_mut()
                 .zip(input1_msg_s.outer_iter_mut())
                 .zip(input2_msg_s.outer_iter_mut())
@@ -163,6 +177,7 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
                         let output_msg_s = output_msg.as_slice_mut().unwrap();
 
                         let mut msg = msg.slice_mut(s![0..3, ..]);
+                        msg.fill(0.0);
                         let msg_s = msg.as_slice_mut().unwrap();
                         for i1 in 0..nc {
                             for i2 in 0..nc {
@@ -175,6 +190,15 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
                                 msg_s[2 * nc + o] += input1_msg_s[i1] * input2_msg_s[i2];
                             }
                         }
+                        let mut tmp_s = msg.slice_mut(s![0, ..]);
+                        let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                        tmp_s.iter_mut().for_each(|x| *x /= s);
+                        let mut tmp_s = msg.slice_mut(s![1, ..]);
+                        let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                        tmp_s.iter_mut().for_each(|x| *x /= s);
+                        let mut tmp_s = msg.slice_mut(s![2, ..]);
+                        let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                        tmp_s.iter_mut().for_each(|x| *x /= s);
                     },
                 );
         } else if func == 1 {
@@ -193,6 +217,7 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
                         let input1_msg_s = input1_msg.as_slice_mut().unwrap();
                         let input2_msg_s = input2_msg.as_slice_mut().unwrap();
                         let output_msg_s = output_msg.as_slice_mut().unwrap();
+                        msg.fill(1.0);
                         fwht(input1_msg_s, nc);
                         fwht(input2_msg_s, nc);
                         fwht(output_msg_s, nc);
@@ -202,24 +227,24 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
                         tmp.assign(&(&input2_msg * &input1_msg));
                         let tmp_s = tmp.as_slice_mut().unwrap();
                         fwht(tmp_s, nc);
-                        let s = tmp_s.iter().fold(0.0,|acc,x| acc + *x);
-                        tmp_s.iter_mut().for_each(|x| *x/=s);
+                        let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                        tmp_s.iter_mut().for_each(|x| *x /= s);
 
                         // message to the input 1
                         let mut tmp = msg.slice_mut(s![0, ..]);
                         tmp.assign(&(&input2_msg * &output_msg));
                         let tmp_s = tmp.as_slice_mut().unwrap();
                         fwht(tmp_s, nc);
-                        let s = tmp_s.iter().fold(0.0,|acc,x| acc + *x);
-                        tmp_s.iter_mut().for_each(|x| *x/=s);
+                        let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                        tmp_s.iter_mut().for_each(|x| *x /= s);
 
                         // message to the input 2
                         let mut tmp = msg.slice_mut(s![1, ..]);
                         tmp.assign(&(&input1_msg * &output_msg));
                         let tmp_s = tmp.as_slice_mut().unwrap();
                         fwht(tmp_s, nc);
-                        let s = tmp_s.iter().fold(0.0,|acc,x| acc + *x);
-                        tmp_s.iter_mut().for_each(|x| *x/=s);
+                        let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                        tmp_s.iter_mut().for_each(|x| *x /= s);
                     },
                 );
         } else if func == 2 {
@@ -228,13 +253,13 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
                 inputs_v[1].get_item("values").unwrap().extract().unwrap();
             let fixed_inputs = fixed_inputs.as_array();
 
-            msg.fill(0.0);
             msg.outer_iter_mut()
                 .zip(fixed_inputs)
                 .zip(input1_msg_s.outer_iter())
                 .zip(output_msg_s.outer_iter())
                 .for_each(|(((mut msg, fixed_input), input_msg), output_msg)| {
                     let mut msg = msg.slice_mut(s![0..3, ..]);
+                    msg.fill(1.0);
                     let msg_s = msg.as_slice_mut().unwrap();
 
                     let input_msg = input_msg.as_slice().unwrap();
@@ -248,12 +273,12 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
                     }
 
                     let mut tmp_s = msg.slice_mut(s![0, ..]);
-                    let s = tmp_s.iter().fold(0.0,|acc,x| acc + *x);
-                    tmp_s.iter_mut().for_each(|x| *x/=s);
+                    let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                    tmp_s.iter_mut().for_each(|x| *x /= s);
 
                     let mut tmp_s = msg.slice_mut(s![2, ..]);
-                    let s = tmp_s.iter().fold(0.0,|acc,x| acc + *x);
-                    tmp_s.iter_mut().for_each(|x| *x/=s);
+                    let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                    tmp_s.iter_mut().for_each(|x| *x /= s);
                 });
         } else {
             panic!();
