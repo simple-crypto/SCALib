@@ -3,7 +3,7 @@ import stella.lib.rust_stella as rust
 AND = 0
 XOR = 1
 XOR_CST = 2
-symbols = {"&":{"val":AND,"inputs_dastri":2},
+symbols = {"&":{"val":AND,"inputs_distri":2},
         "^":{"val":XOR,"inputs_distri":2},
         "+":{"val":XOR_CST,"inputs_distri":1}}
 
@@ -17,7 +17,7 @@ secret_flag_v = 1
 public_flag_v = 2
 profile_flag_v = 4
 
-CLIP = 1E-10
+CLIP = 1E-50
 
 def new_variable(i):
     return {"id":i,"neighboors":[],"flags":0,"in_loop":False}
@@ -143,12 +143,23 @@ def reset_graph_memory(variables_list,Nc):
 
 if __name__ == "__main__":
     functions,variables_list,variables = create_graph("example_graph.txt")
-    init_graph_memory(functions,variables,2,4)
-    variables["p_0"]["values"][:] = 2
-    variables["x_0"]["distri_orig"][:,:] = .2
-    variables["x_0"]["distri_orig"][:,0] = .4
+    init_graph_memory(functions,variables,20000,256)
+    
+    variables["p_0"]["distri_orig"][:,:] = 0
+    variables["p_0"]["distri_orig"][:,0] = 1
+    variables["x_0"]["distri_orig"][:,:] = .02
+    variables["x_0"]["distri_orig"][:,2] = .4
+
+    variables["p_1"]["values"][:] = 0
+    variables["x_1"]["distri_orig"][:,:] = .02
+    variables["x_1"]["distri_orig"][:,2] = .4
+
+
     reset_graph_memory(variables_list,256)
+    
     from tqdm import tqdm
-    for i in tqdm(range(1)):
+    for i in tqdm(range(2)):
         rust.belief_propagation(functions,variables_list)
     print(variables["k_0"]["distri"])
+    print(variables["k_1"]["distri"])
+    print(variables["k_2"]["distri"])

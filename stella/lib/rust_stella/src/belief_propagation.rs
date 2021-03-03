@@ -1,8 +1,24 @@
 //use ndarray::parallel::prelude::*;
-use ndarray::{s, Array1, Axis};
+use ndarray::{s, Axis};
 use numpy::{PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::types::{PyDict, PyList};
 
+#[inline(always)]
+fn fwht(a: &mut [f64], len: usize) {
+    let mut h = 1;
+    while h < len {
+        for mut i in 0..(len / (2 * h) as usize) {
+            i *= 2 * h;
+            for j in i..(i + h) {
+                let x = a[j];
+                let y = a[j + h];
+                a[j] = x + y;
+                a[j + h] = x - y;
+            }
+        }
+        h *= 2;
+    }
+}
 pub fn update_variables(functions: &PyList, variables: &PyList) {
     variables.iter().for_each(|var| {
         let var = var.downcast::<PyDict>().unwrap();
@@ -33,7 +49,6 @@ pub fn update_variables(functions: &PyList, variables: &PyList) {
             } else {
                 distri.fill(0.0);
             }
-            println!("distr start {:?}", distri);
 
             offset
                 .iter()
@@ -73,16 +88,27 @@ pub fn update_variables(functions: &PyList, variables: &PyList) {
                 },
             );
 
+            let max = msg
+                .fold_axis(Axis(2), f64::MIN, |acc, x| acc.max(*x))
+                .insert_axis(Axis(2));
+            msg -= &max;
+
             msg.mapv_inplace(|x| (2.0 as f64).powf(x));
             msg /= &msg
-                .sum_axis(Axis(2)).insert_axis(Axis(2))
+                .sum_axis(Axis(2))
+                .insert_axis(Axis(2))
                 .broadcast(msg.shape())
                 .unwrap();
             msg.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
 
+            let max = distri
+                .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
+                .insert_axis(Axis(1));
+            distri -= &max;
             distri.mapv_inplace(|x| (2.0 as f64).powf(x));
             distri /= &distri
-                .sum_axis(Axis(1)).insert_axis(Axis(1))
+                .sum_axis(Axis(1))
+                .insert_axis(Axis(1))
                 .broadcast(distri.shape())
                 .unwrap();
             distri.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
@@ -106,29 +132,70 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
             .iter()
             .map(|x| variables.get_item(*x).extract().unwrap())
             .collect();
+        // message to send
         let msg: &PyArray3<f64> = function.get_item("msg").unwrap().extract().unwrap();
         let mut msg = unsafe { msg.as_array_mut() };
 
-        if func == 2 {
+        // first input msg
+        let input1_msg: &PyArray3<f64> = inputs_v[0].get_item("msg").unwrap().extract().unwrap();
+        let mut input1_msg = unsafe { input1_msg.as_array_mut() };
+        let mut input1_msg_s = input1_msg.slice_mut(s![.., offset[0], ..]);
+
+        // output msg
+        let output_msg: &PyArray3<f64> = outputs_v[0].get_item("msg").unwrap().extract().unwrap();
+        let mut output_msg = unsafe { output_msg.as_array_mut() };
+        let mut output_msg_s = output_msg.slice_mut(s![.., offset[2], ..]);
+        let nc = output_msg_s.shape()[1];
+
+        if func == 1 {
+            // XOR between two distri
+            // second input msg
+            let input2_msg: &PyArray3<f64> =
+                inputs_v[1].get_item("msg").unwrap().extract().unwrap();
+            let mut input2_msg = unsafe { input2_msg.as_array_mut() };
+            let mut input2_msg_s = input2_msg.slice_mut(s![.., offset[1], ..]);
+            msg.outer_iter_mut()
+                .zip(input1_msg_s.outer_iter_mut())
+                .zip(input2_msg_s.outer_iter_mut())
+                .zip(output_msg_s.outer_iter_mut())
+                .for_each(
+                    |(((mut msg, mut input1_msg), mut input2_msg), mut output_msg)| {
+                        let input1_msg_s = input1_msg.as_slice_mut().unwrap();
+                        let input2_msg_s = input2_msg.as_slice_mut().unwrap();
+                        let output_msg_s = output_msg.as_slice_mut().unwrap();
+                        fwht(input1_msg_s, nc);
+                        fwht(input2_msg_s, nc);
+                        fwht(output_msg_s, nc);
+
+                        // message to the output
+                        let mut tmp = msg.slice_mut(s![2, ..]);
+                        tmp.assign(&(&input2_msg * &input1_msg));
+                        let tmp_s = tmp.as_slice_mut().unwrap();
+                        fwht(tmp_s, nc);
+
+                        // message to the input 1
+                        let mut tmp = msg.slice_mut(s![0, ..]);
+                        tmp.assign(&(&input2_msg * &output_msg));
+                        let tmp_s = tmp.as_slice_mut().unwrap();
+                        fwht(tmp_s, nc);
+
+                        // message to the input 2
+                        let mut tmp = msg.slice_mut(s![1, ..]);
+                        tmp.assign(&(&input1_msg * &output_msg));
+                        let tmp_s = tmp.as_slice_mut().unwrap();
+                        fwht(tmp_s, nc);
+                    },
+                );
+        } else if func == 2 {
+            // XOR with array value
             let fixed_inputs: PyReadonlyArray1<u32> =
                 inputs_v[1].get_item("values").unwrap().extract().unwrap();
             let fixed_inputs = fixed_inputs.as_array();
 
-            let input_msg: PyReadonlyArray3<f64> =
-                inputs_v[0].get_item("msg").unwrap().extract().unwrap();
-            let input_msg = input_msg.as_array();
-            let input_msg_s = input_msg.slice(s![.., offset[0], ..]);
-
-            let output_msg: PyReadonlyArray3<f64> =
-                outputs_v[0].get_item("msg").unwrap().extract().unwrap();
-            let output_msg = output_msg.as_array();
-            let output_msg_s = output_msg.slice(s![.., offset[2], ..]);
-            let nc = output_msg_s.shape()[1];
-
             msg.fill(0.0);
             msg.outer_iter_mut()
                 .zip(fixed_inputs.iter())
-                .zip(input_msg_s.outer_iter())
+                .zip(input1_msg_s.outer_iter())
                 .zip(output_msg_s.outer_iter())
                 .for_each(|(((mut msg, fixed_input), input_msg), output_msg)| {
                     let mut msg = msg.slice_mut(s![0..3, ..]);
@@ -138,16 +205,18 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
                     let output_msg = output_msg.as_slice().unwrap();
                     for i in 0..nc {
                         let o = i as u32 ^ *fixed_input;
-                        msg_s[2 * nc + i as usize] += input_msg[o as usize];
-                        msg_s[o as usize] += output_msg[i as usize];
+                        // message to the output
+                        msg_s[2 * nc + o as usize] += input_msg[i as usize];
+                        // message to the input
+                        msg_s[i as usize] += output_msg[o as usize];
                     }
                 });
-            for mut msg in msg.genrows_mut() {
-                msg /= msg.sum();
-            }
-            msg.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
         } else {
             panic!();
         }
+        for mut msg in msg.genrows_mut() {
+            msg /= msg.sum();
+        }
+        msg.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
     });
 }

@@ -1,9 +1,17 @@
-
 k_0 #secret
-#indeploop
+k_2 #secret
 
-p_0 #public
+#indeploop
+k_1 #secret
+
+p_0 #profile
 x_0 #profile
-x_0 = k_0 + p_0
+x_0 = k_0 ^ p_0
+
+p_1 #public
+x_1 #profile
+x_1 = k_1 + p_1
+
+k_2 = k_1 ^ k_0
 
 #endindeploop

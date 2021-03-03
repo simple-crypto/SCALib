@@ -506,11 +506,11 @@ fn inner_loop_snr(m: &mut [i64], sq: &mut [i64], l: &[i16]) {
             *sq += (*tr as i64) * (*tr as i64);
         });
 }
-fn inner_loop_class_means(m: &mut [f64], l: &[i16]) {
+/*fn inner_loop_class_means(m: &mut [f64], l: &[i16]) {
     m.iter_mut().zip(l.iter()).for_each(|(m, tr)| {
         *m += *tr as f64;
     });
-}
+}*/
 fn inner_loop_mcp_dpa(
     sumx: &mut [f64],
     sumx2: &mut [f64],
