@@ -135,6 +135,7 @@ def reset_graph_memory(variables_list,Nc):
 
         if "distri_orig" in var:
             np.clip(var["distri_orig"],CLIP,1,out=var["distri_orig"])
+            var["distri_orig"][:,:]= (var["distri_orig"].T / np.sum(var["distri_orig"],axis=1)).T
             for i in range(len(var["msg"][0,:,0])):
                 var["msg"][:,i,:] = var["distri_orig"]
         else:
@@ -143,23 +144,65 @@ def reset_graph_memory(variables_list,Nc):
 
 if __name__ == "__main__":
     functions,variables_list,variables = create_graph("example_graph.txt")
-    init_graph_memory(functions,variables,20000,256)
-    
-    variables["p_0"]["distri_orig"][:,:] = 0
-    variables["p_0"]["distri_orig"][:,0] = 1
-    variables["x_0"]["distri_orig"][:,:] = .02
-    variables["x_0"]["distri_orig"][:,2] = .4
-
-    variables["p_1"]["values"][:] = 0
-    variables["x_1"]["distri_orig"][:,:] = .02
-    variables["x_1"]["distri_orig"][:,2] = .4
-
-
-    reset_graph_memory(variables_list,256)
-    
+    n = 2000
+   
     from tqdm import tqdm
-    for i in tqdm(range(2)):
-        rust.belief_propagation(functions,variables_list)
-    print(variables["k_0"]["distri"])
-    print(variables["k_1"]["distri"])
-    print(variables["k_2"]["distri"])
+    for nc in 2**np.arange(1,8):
+        init_graph_memory(functions,variables,n,nc)
+        for it in tqdm(range(100)):
+            print("\n\n######## test ",it,"nc",nc)
+            x_0 = np.random.randint(0,nc)
+            p_0 = np.random.randint(0,nc)
+            x_1 = np.random.randint(0,nc)
+            p_1 = np.random.randint(0,nc)
+
+            print("p_0 -> ",p_0)
+            print("x_0 -> ",x_0)
+            print("p_1 -> ",p_1)
+            print("x_1 -> ",x_1)
+
+            k_0_expected = p_0 ^ x_0
+            k_1_expected = p_1 ^ x_1
+            k_2_expected = k_1_expected ^ k_0_expected
+            k_3_expected = p_0 ^ x_0
+
+            print("k_0_expected ->",k_0_expected)
+            print("k_1_expected ->",k_1_expected)
+            print("k_2_expected ->",k_2_expected)
+            print("k_3_expected ->",k_3_expected)
+            
+            preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
+            variables["p_0"]["distri_orig"][:,:] = (1-preci)/(nc-1)
+            variables["p_0"]["distri_orig"][:,p_0] = preci[:,0]
+
+            preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
+            variables["x_0"]["distri_orig"][:,:] = (1-preci)/(nc-1)
+            variables["x_0"]["distri_orig"][:,x_0] = preci[:,0]
+
+            preci = (np.random.random(n)*( (1 - 1/nc) + 1/nc)).reshape(n,1)
+            preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
+            variables["p_1"]["values"][:] = p_1
+            variables["x_1"]["distri_orig"][:,:] = (1-preci)/(nc-1)
+            variables["x_1"]["distri_orig"][:,x_1] = preci[:,0]
+
+
+            reset_graph_memory(variables_list,nc)
+            for i in range(4):
+                rust.belief_propagation(functions,variables_list)
+
+            k_0 = np.argmax(variables["k_0"]["distri"],axis=1)[0]
+            print("k_0 -> ",k_0)
+            
+            k_1 = np.argmax(variables["k_1"]["distri"],axis=1)[0]
+            print("k_1 -> ",k_1)
+
+            k_2 = np.argmax(variables["k_2"]["distri"],axis=1)[0]
+            print("k_2 -> ",k_2)
+
+            k_3 = np.argmax(variables["k_3"]["distri"],axis=1)[0]
+            print("k_3 -> ",k_3)
+
+            assert k_0 == k_0_expected 
+            assert k_1 == k_1_expected 
+            assert k_2 == k_2_expected 
+            assert k_3 == k_3_expected 

@@ -76,6 +76,7 @@ pub fn update_variables(functions: &PyList, variables: &PyList) {
                         neighboor.get_item("msg").unwrap().extract().unwrap();
                     let in_loop_neighboor: bool =
                         neighboor.get_item("in_loop").unwrap().extract().unwrap();
+
                     let msg_in = msg_in.as_array();
                     let msg_in = msg_in.slice(s![.., *offset, ..]);
                     let mut msg_out = msg.slice_mut(s![.., i, ..]);
@@ -147,7 +148,40 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
         let mut output_msg_s = output_msg.slice_mut(s![.., offset[2], ..]);
         let nc = output_msg_s.shape()[1];
 
-        if func == 1 {
+        if func == 0 {
+            // AND between two distri
+            // second input msg
+            let input2_msg: &PyArray3<f64> =
+                inputs_v[1].get_item("msg").unwrap().extract().unwrap();
+            let mut input2_msg = unsafe { input2_msg.as_array_mut() };
+            let mut input2_msg_s = input2_msg.slice_mut(s![.., offset[1], ..]);
+            msg.fill(0.0);
+            msg.outer_iter_mut()
+                .zip(input1_msg_s.outer_iter_mut())
+                .zip(input2_msg_s.outer_iter_mut())
+                .zip(output_msg_s.outer_iter_mut())
+                .for_each(
+                    |(((mut msg, mut input1_msg), mut input2_msg), mut output_msg)| {
+                        let input1_msg_s = input1_msg.as_slice_mut().unwrap();
+                        let input2_msg_s = input2_msg.as_slice_mut().unwrap();
+                        let output_msg_s = output_msg.as_slice_mut().unwrap();
+
+                        let mut msg = msg.slice_mut(s![0..3, ..]);
+                        let msg_s = msg.as_slice_mut().unwrap();
+                        for i1 in 0..nc {
+                            for i2 in 0..nc {
+                                let o: usize = i1 & i2;
+                                // input 1
+                                msg_s[i1] += input2_msg_s[i2] * output_msg_s[o];
+                                // input 2
+                                msg_s[nc + i2] += input1_msg_s[i1] * output_msg_s[o];
+                                // out
+                                msg_s[2 * nc + o] += input1_msg_s[i1] * input2_msg_s[i2];
+                            }
+                        }
+                    },
+                );
+        } else if func == 1 {
             // XOR between two distri
             // second input msg
             let input2_msg: &PyArray3<f64> =
