@@ -15,6 +15,6 @@ x_1 #profile
 x_1 = k_1 + p_1
 
 k_2 = k_1 ^ k_0
-k_3 = p_0 & x_0
+k_3 = p_0 ^ x_0
 
 #endindeploop

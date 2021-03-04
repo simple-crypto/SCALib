@@ -3,19 +3,23 @@ import stella.lib.rust_stella as rust
 AND = 0
 XOR = 1
 XOR_CST = 2
+LOOKUP = 3
 symbols = {"&":{"val":AND,"inputs_distri":2},
         "^":{"val":XOR,"inputs_distri":2},
-        "+":{"val":XOR_CST,"inputs_distri":1}}
+        "+":{"val":XOR_CST,"inputs_distri":1},
+        "->":{"val":LOOKUP,"inputs_distri":1}}
 
 delimiter = "#indeploop"
 end_delimiter = "#endindeploop"
 secret_flag = "#secret"
 public_flag = "#public"
 profile_flag = "#profile"
+tab_flag = "#tab"
 
 secret_flag_v = 1
 public_flag_v = 2
 profile_flag_v = 4
+tab_flag_v = 8
 
 CLIP = 1E-50
 
@@ -85,6 +89,8 @@ def create_graph(fname):
             node["flags"] |= public_flag_v 
         if profile_flag in split:
             node["flags"] |= profile_flag_v
+        if tab_flag in split:
+            node["flags"] |= tab_flag_v
 
         # add function
         op = list(set(split) & set(list(symbols)))
@@ -95,7 +101,8 @@ def create_graph(fname):
             a = variables[split[2]]
             b = variables[split[4]]
             a["neighboors"].append(i)
-            b["neighboors"].append(i)
+            if symbols[op[0]]["val"] == XOR or symbols[op[0]]["val"] == AND: 
+                b["neighboors"].append(i)
             v["neighboors"].append(i)
 
             func = new_function(i,symbols[op[0]]["val"])
@@ -103,7 +110,8 @@ def create_graph(fname):
             func["inputs"].append(a["id"])
             func["inputs"].append(b["id"])
             func["outputs"].append(v["id"])
-            func["neighboors"] = func["inputs"] + func["outputs"]
+            
+            func["neighboors"] = func["outputs"] + func["inputs"][:symbols[op[0]]["inputs_distri"]]  
             functions.append(func)
 
     # init the distribution
@@ -147,7 +155,7 @@ if __name__ == "__main__":
     n = 20000
    
     from tqdm import tqdm
-    for nc in 2**np.arange(7,8):
+    for nc in 2**np.arange(8,9):
         init_graph_memory(functions,variables,n,nc)
         for it in tqdm(range(1),desc="nc %d"%(nc)):
             x_0 = np.random.randint(0,nc)
