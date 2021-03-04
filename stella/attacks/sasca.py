@@ -5,7 +5,7 @@ XOR = 1
 XOR_CST = 2
 LOOKUP = 3
 symbols = {"&":{"val":AND,"inputs_distri":2},
-        "^":{"val":XOR,"inputs_distri":2},
+        "^":{"val":XOR,"inputs_distri":-1},
         "+":{"val":XOR_CST,"inputs_distri":1},
         "->":{"val":LOOKUP,"inputs_distri":1}}
 
@@ -98,22 +98,35 @@ def create_graph(fname):
         op = list(set(split) & set(list(symbols)))
         if len(op) > 0:
             assert in_loop
+            f = symbols[op[0]]
+
             i = len(functions)
             v = variables[split[0]] 
-            a = variables[split[2]]
-            b = variables[split[4]]
-            a["neighboors"].append(i)
-            if symbols[op[0]]["val"] == XOR or symbols[op[0]]["val"] == AND: 
-                b["neighboors"].append(i)
-            v["neighboors"].append(i)
 
-            func = new_function(i,symbols[op[0]]["val"])
+            v["neighboors"].append(i)
+            func = new_function(i,f["val"])
             func["in_loop"] = in_loop
-            func["inputs"].append(a["id"])
-            func["inputs"].append(b["id"])
             func["outputs"].append(v["id"])
+          
+
+            if f["val"] == XOR or f["val"] == AND:
+                for labels in split[::2][1:]:
+                    v = variables[labels]
+                    v["neighboors"].append(i)
+                    func["inputs"].append(v["id"])
+            else:
+                a = variables[split[2]]
+                a["neighboors"].append(i)
+                b = variables[split[4]]
+                func["inputs"].append(a["id"])
+                func["inputs"].append(b["id"])
+
             
-            func["neighboors"] = func["outputs"] + func["inputs"][:symbols[op[0]]["inputs_distri"]]  
+            func["neighboors"] = func["outputs"]
+            if f["inputs_distri"] == -1:
+                func["neighboors"] += func["inputs"][:] 
+            else:
+                func["neighboors"] += func["inputs"][:f["inputs_distri"]] 
             functions.append(func)
 
     # init the distribution
@@ -156,10 +169,10 @@ def reset_graph_memory(variables_list,Nc):
 
 if __name__ == "__main__":
     functions,variables_list,variables = create_graph("example_graph.txt")
-    n = 2000
+    n = 1
    
     from tqdm import tqdm
-    for nc in 2**np.arange(7,8):
+    for nc in 2**np.arange(2,3):
         init_graph_memory(functions,variables,n,nc)
         for it in tqdm(range(100),desc="nc %d"%(nc)):
             x_0 = np.random.randint(0,nc)
@@ -172,6 +185,7 @@ if __name__ == "__main__":
             k_1_expected = p_1 ^ x_1
             k_2_expected = sbox[x_1] #k_1_expected ^ k_0_expected
             k_3_expected = p_0 ^ x_0
+            k_4_expected = p_0 ^ x_0 ^ x_1
 
             preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
             variables["p_0"]["distri_orig"][:,:] = (1-preci)/(nc-1)
@@ -188,7 +202,7 @@ if __name__ == "__main__":
             variables["x_1"]["distri_orig"][:,x_1] = preci[:,0]
 
             reset_graph_memory(variables_list,nc)
-            for i in range(2):
+            for i in range(3):
                 rust.belief_propagation(functions,variables_list)
             k_0 = np.argmax(variables["k_0"]["distri"],axis=1)[0]
             
@@ -197,8 +211,12 @@ if __name__ == "__main__":
             k_2 = np.argmax(variables["k_2"]["distri"],axis=1)[0]
 
             k_3 = np.argmax(variables["k_3"]["distri"],axis=1)[0]
+            k_4 = np.argmax(variables["k_4"]["distri"],axis=1)[0]
 
+            print(variables["x_0"])
+            print(variables["k_4"])
             assert k_0 == k_0_expected 
             assert k_1 == k_1_expected 
             assert k_2 == k_2_expected 
             #assert k_3 == k_3_expected 
+            assert k_4 == k_4_expected 
