@@ -255,7 +255,42 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
                     let s = tmp_s.iter().fold(0.0,|acc,x| acc + *x);
                     tmp_s.iter_mut().for_each(|x| *x/=s);
                 });
-        } else {
+        }else if func == 3 {
+            // XOR with array value
+            let table: PyReadonlyArray1<u32> =
+                inputs_v[1].get_item("table").unwrap().extract().unwrap();
+            let table = table.as_array();
+            let table = table.as_slice().unwrap();
+
+            msg.outer_iter_mut()
+                .zip(input1_msg_s.outer_iter())
+                .zip(output_msg_s.outer_iter())
+                .for_each(|((mut msg , input_msg), output_msg)| {
+                    msg.fill(0.0);
+                    let mut msg = msg.slice_mut(s![0..2, ..]);
+                    let msg_s = msg.as_slice_mut().unwrap();
+
+                    let input_msg = input_msg.as_slice().unwrap();
+                    let output_msg = output_msg.as_slice().unwrap();
+                    for i in 0..nc {
+                        let o = table[i as usize];
+                        // message to the output
+                        msg_s[o as usize] += input_msg[i as usize];
+                        // message to the input
+                        msg_s[nc + i as usize] += output_msg[o as usize];
+                    }
+
+                    let mut tmp_s = msg.slice_mut(s![0, ..]);
+                    let s = tmp_s.iter().fold(0.0,|acc,x| acc + *x);
+                    tmp_s.iter_mut().for_each(|x| *x/=s);
+
+                    let mut tmp_s = msg.slice_mut(s![1, ..]);
+                    let s = tmp_s.iter().fold(0.0,|acc,x| acc + *x);
+                    tmp_s.iter_mut().for_each(|x| *x/=s);
+                });
+        } 
+
+        else {
             panic!();
         }
         msg.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });

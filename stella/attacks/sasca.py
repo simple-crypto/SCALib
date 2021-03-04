@@ -14,7 +14,7 @@ end_delimiter = "#endindeploop"
 secret_flag = "#secret"
 public_flag = "#public"
 profile_flag = "#profile"
-tab_flag = "#tab"
+tab_flag = "#table"
 
 secret_flag_v = 1
 public_flag_v = 2
@@ -40,6 +40,8 @@ def init_graph_memory(functions,variables,N,Nc):
 
         if var["flags"] & public_flag_v != 0:
             var["values"] = np.zeros(n,dtype=np.uint32)
+        elif var["flags"] & tab_flag_v != 0:
+            var["table"] = np.zeros(Nc,dtype=np.uint32)
         else:
             if var["flags"] & profile_flag_v != 0:
                 var["distri_orig"] = np.ones((n,Nc))
@@ -140,6 +142,8 @@ def reset_graph_memory(variables_list,Nc):
     for var in variables_list:
         if var["flags"] & public_flag_v != 0:
             continue
+        if var["flags"] & tab_flag_v != 0:
+            continue
 
         if "distri_orig" in var:
             np.clip(var["distri_orig"],CLIP,1,out=var["distri_orig"])
@@ -152,26 +156,27 @@ def reset_graph_memory(variables_list,Nc):
 
 if __name__ == "__main__":
     functions,variables_list,variables = create_graph("example_graph.txt")
-    n = 20000
+    n = 2000
    
     from tqdm import tqdm
-    for nc in 2**np.arange(8,9):
+    for nc in 2**np.arange(7,8):
         init_graph_memory(functions,variables,n,nc)
-        for it in tqdm(range(1),desc="nc %d"%(nc)):
+        for it in tqdm(range(100),desc="nc %d"%(nc)):
             x_0 = np.random.randint(0,nc)
             p_0 = np.random.randint(0,nc)
             x_1 = np.random.randint(0,nc)
             p_1 = np.random.randint(0,nc)
+            sbox = np.random.permutation(nc)
 
             k_0_expected = p_0 ^ x_0
             k_1_expected = p_1 ^ x_1
-            k_2_expected = k_1_expected ^ k_0_expected
+            k_2_expected = sbox[x_1] #k_1_expected ^ k_0_expected
             k_3_expected = p_0 ^ x_0
 
             preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
             variables["p_0"]["distri_orig"][:,:] = (1-preci)/(nc-1)
             variables["p_0"]["distri_orig"][:,p_0] = preci[:,0]
-
+            variables["sbox"]["table"][:] = sbox
             preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
             variables["x_0"]["distri_orig"][:,:] = (1-preci)/(nc-1)
             variables["x_0"]["distri_orig"][:,x_0] = preci[:,0]
