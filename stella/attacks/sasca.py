@@ -38,9 +38,9 @@ def init_graph_memory(functions,variables,N,Nc):
         else: 
             n = 1
 
-        if var["flags"] & public_flag_v != 0:
+        if var["flags"] & (public_flag_v) != 0:
             var["values"] = np.zeros(n,dtype=np.uint32)
-        elif var["flags"] & tab_flag_v != 0:
+        elif var["flags"] & (tab_flag_v) != 0:
             var["table"] = np.zeros(Nc,dtype=np.uint32)
         else:
             if var["flags"] & profile_flag_v != 0:
@@ -74,6 +74,7 @@ def create_graph(fname):
             in_loop = False
             continue
 
+        # get current variable
         v = split[0]
 
         # create variable if not exists
@@ -94,34 +95,34 @@ def create_graph(fname):
         if tab_flag in split:
             node["flags"] |= tab_flag_v
 
-        # add function
+        # add function if line contains one symbol
         op = list(set(split) & set(list(symbols)))
         if len(op) > 0:
+            # operation are only allowed in the loop
             assert in_loop
-            f = symbols[op[0]]
 
+            # get the function sumbol and id and output
+            f = symbols[op[0]]
             i = len(functions)
             v = variables[split[0]] 
 
-            v["neighboors"].append(i)
+            # create new function
             func = new_function(i,f["val"])
             func["in_loop"] = in_loop
+
+            # add relation between fct and output
+            v["neighboors"].append(i)
             func["outputs"].append(v["id"])
-          
 
-            if f["val"] == XOR or f["val"] == AND:
-                for labels in split[::2][1:]:
-                    v = variables[labels]
+            # add relation between fct and inputs
+            for j,labels in enumerate(split[::2][1:]):
+                v = variables[labels]
+                func["inputs"].append(v["id"])
+                # add neighboors only if theinput has a distribution
+                if f["inputs_distri"] == -1 or j < f["inputs_distri"]:
                     v["neighboors"].append(i)
-                    func["inputs"].append(v["id"])
-            else:
-                a = variables[split[2]]
-                a["neighboors"].append(i)
-                b = variables[split[4]]
-                func["inputs"].append(a["id"])
-                func["inputs"].append(b["id"])
-
-            
+           
+            # set as neighboors all the inputs that have a distribution
             func["neighboors"] = func["outputs"]
             if f["inputs_distri"] == -1:
                 func["neighboors"] += func["inputs"][:] 
@@ -132,15 +133,23 @@ def create_graph(fname):
     # init the distribution
     for var in variables:
         var = variables[var]
-        if var["flags"] & public_flag_v != 0:
+
+        # tab and cst does not need to know who are their neighboors
+        if var["flags"] & (public_flag_v|tab_flag_v) != 0:
             continue
         else:
+            # get offset of the messages that will be send to that variable 
+            # within the neighboors 
             var["offset"] = [None for i in var["neighboors"]]
             for i,neighboor in enumerate(var["neighboors"]):
                 neighboor = functions[neighboor]
                 var["offset"][i] = neighboor["neighboors"].index(var["id"])
-    
+
+    # generate the list
     variables_list = list(map(lambda x:variables[x],variables))
+   
+    # for each function node, find the offset the messages that will be send to
+    # it within the neighboors variable nodes.
     for func in functions:
         neighboors = func["neighboors"]
         func["offset"] = [None for i in neighboors]
@@ -153,19 +162,21 @@ def create_graph(fname):
 def reset_graph_memory(variables_list,Nc):
 
     for var in variables_list:
-        if var["flags"] & public_flag_v != 0:
-            continue
-        if var["flags"] & tab_flag_v != 0:
+        if var["flags"] & (public_flag_v | tab_flag_v) != 0:
             continue
 
+        # if node has distribution
         if "distri_orig" in var:
-            np.clip(var["distri_orig"],CLIP,1,out=var["distri_orig"])
+            # normalize
             var["distri_orig"][:,:]= (var["distri_orig"].T / np.sum(var["distri_orig"],axis=1)).T
+            # clip the distribution
+            np.clip(var["distri_orig"],CLIP,1,out=var["distri_orig"])
+            # set distri_orig is a initial message
             for i in range(len(var["msg"][0,:,0])):
                 var["msg"][:,i,:] = var["distri_orig"]
         else:
+            # init msg to uniform 
             var["msg"][:] = 1/Nc
-        np.clip(var["msg"],CLIP,1,out=var["msg"])
 
 if __name__ == "__main__":
     functions,variables_list,variables = create_graph("example_graph.txt")
