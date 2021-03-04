@@ -169,10 +169,10 @@ def reset_graph_memory(variables_list,Nc):
 
 if __name__ == "__main__":
     functions,variables_list,variables = create_graph("example_graph.txt")
-    n = 1
+    n = 1000
    
     from tqdm import tqdm
-    for nc in 2**np.arange(2,3):
+    for nc in 2**np.arange(2,9):
         init_graph_memory(functions,variables,n,nc)
         for it in tqdm(range(100),desc="nc %d"%(nc)):
             x_0 = np.random.randint(0,nc)
@@ -213,8 +213,6 @@ if __name__ == "__main__":
             k_3 = np.argmax(variables["k_3"]["distri"],axis=1)[0]
             k_4 = np.argmax(variables["k_4"]["distri"],axis=1)[0]
 
-            print(variables["x_0"])
-            print(variables["k_4"])
             assert k_0 == k_0_expected 
             assert k_1 == k_1_expected 
             assert k_2 == k_2_expected 

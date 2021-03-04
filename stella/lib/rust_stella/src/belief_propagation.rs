@@ -1,4 +1,4 @@
-use ndarray::{s, ArrayViewMut2, ArrayViewMut3, Axis,Array1};
+use ndarray::{s, Array1, ArrayViewMut2, ArrayViewMut3, Axis};
 use numpy::{PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::types::{PyDict, PyList};
 
@@ -19,152 +19,6 @@ fn fwht(a: &mut [f64], len: usize) {
     }
 }
 
-fn xor_3(inputs_v: Vec<&PyDict>, offset: Vec<isize>, output_msg:&mut ArrayViewMut2<f64>,msg:&mut ArrayViewMut3<f64>,nc:usize){
-    // first input msg
-    let input_msg: &PyArray3<f64> =
-        inputs_v[0].get_item("msg").unwrap().extract().unwrap();
-    let mut input_msg = unsafe { input_msg.as_array_mut() };
-    let mut input1_msg_s = input_msg.slice_mut(s![.., offset[1], ..]);
-
-    // first input msg
-    let input_msg: &PyArray3<f64> =
-        inputs_v[1].get_item("msg").unwrap().extract().unwrap();
-    let mut input_msg = unsafe { input_msg.as_array_mut() };
-    let mut input2_msg_s = input_msg.slice_mut(s![.., offset[2], ..]);
-
-    // first input msg
-    let input_msg: &PyArray3<f64> =
-        inputs_v[2].get_item("msg").unwrap().extract().unwrap();
-    let mut input_msg = unsafe { input_msg.as_array_mut() };
-    let mut input3_msg_s = input_msg.slice_mut(s![.., offset[3], ..]);
-
-
-    let mut tmp_all = Array1::<f64>::ones(nc);
-    let tmp_all_s = tmp_all.as_slice_mut().unwrap();
-    msg.outer_iter_mut()
-        .zip(input1_msg_s.outer_iter_mut())
-        .zip(input2_msg_s.outer_iter_mut())
-        .zip(input3_msg_s.outer_iter_mut())
-        .zip(output_msg.outer_iter_mut())
-        .for_each(
-            |((((mut msg, mut input1_msg), mut input2_msg), mut input3_msg),mut output_msg)| {
-                let input1_msg_s = input1_msg.as_slice_mut().unwrap();
-                let input2_msg_s = input2_msg.as_slice_mut().unwrap();
-                let input3_msg_s = input3_msg.as_slice_mut().unwrap();
-                let output_msg_s = output_msg.as_slice_mut().unwrap();
-                println!("{:?}\n{:?}\n{:?}\n{:?}\n{:?}",input1_msg_s,input2_msg_s,input3_msg_s,output_msg_s,tmp_all_s);
-                fwht(input1_msg_s, nc);
-                fwht(input2_msg_s, nc);
-                fwht(input3_msg_s, nc);
-                fwht(output_msg_s, nc);
-                input1_msg_s.iter_mut().for_each(|x| *x = if f64::abs(*x) < 1E-10 {1E-10} else {*x});
-                input2_msg_s.iter_mut().for_each(|x| *x = if f64::abs(*x) < 1E-10 {1E-10} else {*x});
-                input3_msg_s.iter_mut().for_each(|x| *x = if f64::abs(*x) < 1E-10 {1E-10} else {*x});
-                output_msg_s.iter_mut().for_each(|x| *x = if f64::abs(*x) < 1E-10 {1E-10} else {*x});
-                
-                for i in 0..nc{
-                    tmp_all_s[i] = input1_msg_s[i] * input2_msg_s[i] * input3_msg_s[i] * output_msg_s[i];
-                }
-
-                // message to the output
-                let mut tmp = msg.slice_mut(s![0, ..]);
-                let tmp_s = tmp.as_slice_mut().unwrap();
-                for i in 0..nc{
-                    tmp_s[i] = tmp_all_s[i] / output_msg_s[i];
-                }
-                fwht(tmp_s, nc);
-                let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
-                tmp_s.iter_mut().for_each(|x| *x /= s);
-
-
-                // message to the input 1
-                let mut tmp = msg.slice_mut(s![1, ..]);
-                let tmp_s = tmp.as_slice_mut().unwrap();
-                for i in 0..nc{
-                    tmp_s[i] = tmp_all_s[i] / input1_msg_s[i];
-                }
-                fwht(tmp_s, nc);
-                let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
-                tmp_s.iter_mut().for_each(|x| *x /= s);
-
-                // message to the input 2
-                let mut tmp = msg.slice_mut(s![2, ..]);
-                let tmp_s = tmp.as_slice_mut().unwrap();
-                for i in 0..nc{
-                    tmp_s[i] = tmp_all_s[i] / input2_msg_s[i];
-                }
-                fwht(tmp_s, nc);
-                let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
-                tmp_s.iter_mut().for_each(|x| *x /= s);
-
-                // message to the input 3
-                let mut tmp = msg.slice_mut(s![3, ..]);
-                let tmp_s = tmp.as_slice_mut().unwrap();
-                for i in 0..nc{
-                    tmp_s[i] = tmp_all_s[i] / input3_msg_s[i];
-                }
-                fwht(tmp_s, nc);
-                let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
-                tmp_s.iter_mut().for_each(|x| *x /= s);
-
-            },
-        );
-
-}
-
-fn xor_2(inputs_v: Vec<&PyDict>, offset: Vec<isize>, output_msg:&mut ArrayViewMut2<f64>,msg:&mut ArrayViewMut3<f64>,nc:usize){
-    // first input msg
-    let input1_msg: &PyArray3<f64> =
-        inputs_v[0].get_item("msg").unwrap().extract().unwrap();
-    let mut input1_msg = unsafe { input1_msg.as_array_mut() };
-    let mut input1_msg_s = input1_msg.slice_mut(s![.., offset[1], ..]);
-
-    // first input msg
-    let input_msg: &PyArray3<f64> =
-        inputs_v[1].get_item("msg").unwrap().extract().unwrap();
-    let mut input_msg = unsafe { input_msg.as_array_mut() };
-    let mut input2_msg_s = input_msg.slice_mut(s![.., offset[2], ..]);
-
-    msg.outer_iter_mut()
-        .zip(input1_msg_s.outer_iter_mut())
-        .zip(input2_msg_s.outer_iter_mut())
-        .zip(output_msg.outer_iter_mut())
-        .for_each(
-            |(((mut msg, mut input1_msg), mut input2_msg), mut output_msg)| {
-                let input1_msg_s = input1_msg.as_slice_mut().unwrap();
-                let input2_msg_s = input2_msg.as_slice_mut().unwrap();
-                let output_msg_s = output_msg.as_slice_mut().unwrap();
-                fwht(input1_msg_s, nc);
-                fwht(input2_msg_s, nc);
-                fwht(output_msg_s, nc);
-
-                // message to the output
-                let mut tmp = msg.slice_mut(s![0, ..]);
-                tmp.assign(&(&input2_msg * &input1_msg));
-                let tmp_s = tmp.as_slice_mut().unwrap();
-                fwht(tmp_s, nc);
-                let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
-                tmp_s.iter_mut().for_each(|x| *x /= s);
-
-                // message to the input 1
-                let mut tmp = msg.slice_mut(s![1, ..]);
-                tmp.assign(&(&input2_msg * &output_msg));
-                let tmp_s = tmp.as_slice_mut().unwrap();
-                fwht(tmp_s, nc);
-                let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
-                tmp_s.iter_mut().for_each(|x| *x /= s);
-
-                // message to the input 2
-                let mut tmp = msg.slice_mut(s![2, ..]);
-                tmp.assign(&(&input1_msg * &output_msg));
-                let tmp_s = tmp.as_slice_mut().unwrap();
-                fwht(tmp_s, nc);
-                let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
-                tmp_s.iter_mut().for_each(|x| *x /= s);
-            },
-        );
-
-}
 pub fn update_variables(functions: &PyList, variables: &PyList) {
     variables.iter().for_each(|var| {
         let var = var.downcast::<PyDict>().unwrap();
@@ -326,14 +180,23 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
                 );
         } else if func == 1 {
             // XOR between two distri
-            if inputs_v.len() == 2{
-            xor_2(inputs_v,offset,&mut output_msg_s, &mut msg,nc);
-            }else if inputs_v.len() == 3{
-            xor_3(inputs_v,offset,&mut output_msg_s, &mut msg,nc);
-            }else{
+            if inputs_v.len() == 2 {
+                xor_2(inputs_v, offset, &mut output_msg_s, &mut msg, nc);
+            } else if inputs_v.len() == 3 {
+                xor_3(inputs_v, offset, &mut output_msg_s, &mut msg, nc);
+            } else if inputs_v.len() == 4 {
+                xor_4(inputs_v, offset, &mut output_msg_s, &mut msg, nc);
+            } else if inputs_v.len() == 5 {
+                xor_5(inputs_v, offset, &mut output_msg_s, &mut msg, nc);
+            } else if inputs_v.len() == 6 {
+                xor_6(inputs_v, offset, &mut output_msg_s, &mut msg, nc);
+            } else if inputs_v.len() == 7 {
+                xor_7(inputs_v, offset, &mut output_msg_s, &mut msg, nc);
+            } else if inputs_v.len() == 8 {
+                xor_8(inputs_v, offset, &mut output_msg_s, &mut msg, nc);
+            } else {
                 panic!();
             }
-
         } else if func == 2 {
             // XOR with array value
             let fixed_inputs: PyReadonlyArray1<u32> =
@@ -417,4 +280,781 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
         }
         msg.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
     });
+}
+
+fn xor_4(
+    inputs_v: Vec<&PyDict>,
+    offset: Vec<isize>,
+    output_msg: &mut ArrayViewMut2<f64>,
+    msg: &mut ArrayViewMut3<f64>,
+    nc: usize,
+) {
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[0].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input1_msg_s = input_msg.slice_mut(s![.., offset[1], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[1].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input2_msg_s = input_msg.slice_mut(s![.., offset[2], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[2].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input3_msg_s = input_msg.slice_mut(s![.., offset[3], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[3].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input4_msg_s = input_msg.slice_mut(s![.., offset[4], ..]);
+
+    let mut tmp_all = Array1::<f64>::ones(nc);
+    let tmp_all_s = tmp_all.as_slice_mut().unwrap();
+    msg.outer_iter_mut()
+        .zip(input1_msg_s.outer_iter_mut())
+        .zip(input2_msg_s.outer_iter_mut())
+        .zip(input3_msg_s.outer_iter_mut())
+        .zip(input4_msg_s.outer_iter_mut())
+        .zip(output_msg.outer_iter_mut())
+        .for_each(
+            |(
+                ((((mut msg, mut input1_msg), mut input2_msg), mut input3_msg), mut input4_msg),
+                mut output_msg,
+            )| {
+                let input1_msg_s = input1_msg.as_slice_mut().unwrap();
+                let input2_msg_s = input2_msg.as_slice_mut().unwrap();
+                let input3_msg_s = input3_msg.as_slice_mut().unwrap();
+                let input4_msg_s = input4_msg.as_slice_mut().unwrap();
+                let output_msg_s = output_msg.as_slice_mut().unwrap();
+                fwht(input1_msg_s, nc);
+                fwht(input2_msg_s, nc);
+                fwht(input3_msg_s, nc);
+                fwht(input4_msg_s, nc);
+                fwht(output_msg_s, nc);
+                input1_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input2_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input3_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input4_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                output_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+
+                for i in 0..nc {
+                    tmp_all_s[i] = input1_msg_s[i]
+                        * input2_msg_s[i]
+                        * input3_msg_s[i]
+                        * input4_msg_s[i]
+                        * output_msg_s[i];
+                }
+                let mut vecs = Vec::with_capacity(5);
+                vecs.push(output_msg_s);
+                vecs.push(input1_msg_s);
+                vecs.push(input2_msg_s);
+                vecs.push(input3_msg_s);
+                vecs.push(input4_msg_s);
+
+                for (i, msg_s) in vecs.iter().enumerate() {
+                    // message to the output
+                    let mut tmp = msg.slice_mut(s![i, ..]);
+                    let tmp_s = tmp.as_slice_mut().unwrap();
+                    for i in 0..nc {
+                        tmp_s[i] = tmp_all_s[i] / msg_s[i];
+                    }
+                    fwht(tmp_s, nc);
+                    let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                    tmp_s.iter_mut().for_each(|x| *x /= s);
+                }
+            },
+        );
+}
+
+fn xor_2(
+    inputs_v: Vec<&PyDict>,
+    offset: Vec<isize>,
+    output_msg: &mut ArrayViewMut2<f64>,
+    msg: &mut ArrayViewMut3<f64>,
+    nc: usize,
+) {
+    // first input msg
+    let input1_msg: &PyArray3<f64> = inputs_v[0].get_item("msg").unwrap().extract().unwrap();
+    let mut input1_msg = unsafe { input1_msg.as_array_mut() };
+    let mut input1_msg_s = input1_msg.slice_mut(s![.., offset[1], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[1].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input2_msg_s = input_msg.slice_mut(s![.., offset[2], ..]);
+
+    msg.outer_iter_mut()
+        .zip(input1_msg_s.outer_iter_mut())
+        .zip(input2_msg_s.outer_iter_mut())
+        .zip(output_msg.outer_iter_mut())
+        .for_each(
+            |(((mut msg, mut input1_msg), mut input2_msg), mut output_msg)| {
+                let input1_msg_s = input1_msg.as_slice_mut().unwrap();
+                let input2_msg_s = input2_msg.as_slice_mut().unwrap();
+                let output_msg_s = output_msg.as_slice_mut().unwrap();
+                fwht(input1_msg_s, nc);
+                fwht(input2_msg_s, nc);
+                fwht(output_msg_s, nc);
+
+                // message to the output
+                let mut tmp = msg.slice_mut(s![0, ..]);
+                tmp.assign(&(&input2_msg * &input1_msg));
+                let tmp_s = tmp.as_slice_mut().unwrap();
+                fwht(tmp_s, nc);
+                let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                tmp_s.iter_mut().for_each(|x| *x /= s);
+
+                // message to the input 1
+                let mut tmp = msg.slice_mut(s![1, ..]);
+                tmp.assign(&(&input2_msg * &output_msg));
+                let tmp_s = tmp.as_slice_mut().unwrap();
+                fwht(tmp_s, nc);
+                let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                tmp_s.iter_mut().for_each(|x| *x /= s);
+
+                // message to the input 2
+                let mut tmp = msg.slice_mut(s![2, ..]);
+                tmp.assign(&(&input1_msg * &output_msg));
+                let tmp_s = tmp.as_slice_mut().unwrap();
+                fwht(tmp_s, nc);
+                let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                tmp_s.iter_mut().for_each(|x| *x /= s);
+            },
+        );
+}
+
+fn xor_3(
+    inputs_v: Vec<&PyDict>,
+    offset: Vec<isize>,
+    output_msg: &mut ArrayViewMut2<f64>,
+    msg: &mut ArrayViewMut3<f64>,
+    nc: usize,
+) {
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[0].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input1_msg_s = input_msg.slice_mut(s![.., offset[1], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[1].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input2_msg_s = input_msg.slice_mut(s![.., offset[2], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[2].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input3_msg_s = input_msg.slice_mut(s![.., offset[3], ..]);
+
+    let mut tmp_all = Array1::<f64>::ones(nc);
+    let tmp_all_s = tmp_all.as_slice_mut().unwrap();
+    msg.outer_iter_mut()
+        .zip(input1_msg_s.outer_iter_mut())
+        .zip(input2_msg_s.outer_iter_mut())
+        .zip(input3_msg_s.outer_iter_mut())
+        .zip(output_msg.outer_iter_mut())
+        .for_each(
+            |((((mut msg, mut input1_msg), mut input2_msg), mut input3_msg), mut output_msg)| {
+                let input1_msg_s = input1_msg.as_slice_mut().unwrap();
+                let input2_msg_s = input2_msg.as_slice_mut().unwrap();
+                let input3_msg_s = input3_msg.as_slice_mut().unwrap();
+                let output_msg_s = output_msg.as_slice_mut().unwrap();
+                fwht(input1_msg_s, nc);
+                fwht(input2_msg_s, nc);
+                fwht(input3_msg_s, nc);
+                fwht(output_msg_s, nc);
+                input1_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input2_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input3_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                output_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+
+                for i in 0..nc {
+                    tmp_all_s[i] =
+                        input1_msg_s[i] * input2_msg_s[i] * input3_msg_s[i] * output_msg_s[i];
+                }
+                let mut vecs = Vec::with_capacity(4);
+                vecs.push(output_msg_s);
+                vecs.push(input1_msg_s);
+                vecs.push(input2_msg_s);
+                vecs.push(input3_msg_s);
+
+                for (i, msg_s) in vecs.iter().enumerate() {
+                    // message to the output
+                    let mut tmp = msg.slice_mut(s![i, ..]);
+                    let tmp_s = tmp.as_slice_mut().unwrap();
+                    for i in 0..nc {
+                        tmp_s[i] = tmp_all_s[i] / msg_s[i];
+                    }
+                    fwht(tmp_s, nc);
+                    let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                    tmp_s.iter_mut().for_each(|x| *x /= s);
+                }
+            },
+        );
+}
+fn xor_5(
+    inputs_v: Vec<&PyDict>,
+    offset: Vec<isize>,
+    output_msg: &mut ArrayViewMut2<f64>,
+    msg: &mut ArrayViewMut3<f64>,
+    nc: usize,
+) {
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[0].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input1_msg_s = input_msg.slice_mut(s![.., offset[1], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[1].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input2_msg_s = input_msg.slice_mut(s![.., offset[2], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[2].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input3_msg_s = input_msg.slice_mut(s![.., offset[3], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[3].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input4_msg_s = input_msg.slice_mut(s![.., offset[4], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[4].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input5_msg_s = input_msg.slice_mut(s![.., offset[5], ..]);
+
+    let mut tmp_all = Array1::<f64>::ones(nc);
+    let tmp_all_s = tmp_all.as_slice_mut().unwrap();
+    msg.outer_iter_mut()
+        .zip(input1_msg_s.outer_iter_mut())
+        .zip(input2_msg_s.outer_iter_mut())
+        .zip(input3_msg_s.outer_iter_mut())
+        .zip(input4_msg_s.outer_iter_mut())
+        .zip(input5_msg_s.outer_iter_mut())
+        .zip(output_msg.outer_iter_mut())
+        .for_each(
+            |(
+                (
+                    ((((mut msg, mut input1_msg), mut input2_msg), mut input3_msg), mut input4_msg),
+                    mut input5_msg,
+                ),
+                mut output_msg,
+            )| {
+                let input1_msg_s = input1_msg.as_slice_mut().unwrap();
+                let input2_msg_s = input2_msg.as_slice_mut().unwrap();
+                let input3_msg_s = input3_msg.as_slice_mut().unwrap();
+                let input4_msg_s = input4_msg.as_slice_mut().unwrap();
+                let input5_msg_s = input5_msg.as_slice_mut().unwrap();
+                let output_msg_s = output_msg.as_slice_mut().unwrap();
+                fwht(input1_msg_s, nc);
+                fwht(input2_msg_s, nc);
+                fwht(input3_msg_s, nc);
+                fwht(input4_msg_s, nc);
+                fwht(input5_msg_s, nc);
+                fwht(output_msg_s, nc);
+                input1_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input2_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input3_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input4_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input5_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                output_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+
+                for i in 0..nc {
+                    tmp_all_s[i] = input1_msg_s[i]
+                        * input2_msg_s[i]
+                        * input3_msg_s[i]
+                        * input4_msg_s[i]
+                        * input5_msg_s[i]
+                        * output_msg_s[i];
+                }
+                let mut vecs = Vec::with_capacity(6);
+                vecs.push(output_msg_s);
+                vecs.push(input1_msg_s);
+                vecs.push(input2_msg_s);
+                vecs.push(input3_msg_s);
+                vecs.push(input4_msg_s);
+                vecs.push(input5_msg_s);
+
+                for (i, msg_s) in vecs.iter().enumerate() {
+                    // message to the output
+                    let mut tmp = msg.slice_mut(s![i, ..]);
+                    let tmp_s = tmp.as_slice_mut().unwrap();
+                    for i in 0..nc {
+                        tmp_s[i] = tmp_all_s[i] / msg_s[i];
+                    }
+                    fwht(tmp_s, nc);
+                    let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                    tmp_s.iter_mut().for_each(|x| *x /= s);
+                }
+            },
+        );
+}
+
+fn xor_6(
+    inputs_v: Vec<&PyDict>,
+    offset: Vec<isize>,
+    output_msg: &mut ArrayViewMut2<f64>,
+    msg: &mut ArrayViewMut3<f64>,
+    nc: usize,
+) {
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[0].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input1_msg_s = input_msg.slice_mut(s![.., offset[1], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[1].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input2_msg_s = input_msg.slice_mut(s![.., offset[2], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[2].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input3_msg_s = input_msg.slice_mut(s![.., offset[3], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[3].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input4_msg_s = input_msg.slice_mut(s![.., offset[4], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[4].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input5_msg_s = input_msg.slice_mut(s![.., offset[5], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[5].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input6_msg_s = input_msg.slice_mut(s![.., offset[6], ..]);
+
+    let mut tmp_all = Array1::<f64>::ones(nc);
+    let tmp_all_s = tmp_all.as_slice_mut().unwrap();
+    msg.outer_iter_mut()
+        .zip(input1_msg_s.outer_iter_mut())
+        .zip(input2_msg_s.outer_iter_mut())
+        .zip(input3_msg_s.outer_iter_mut())
+        .zip(input4_msg_s.outer_iter_mut())
+        .zip(input5_msg_s.outer_iter_mut())
+        .zip(input6_msg_s.outer_iter_mut())
+        .zip(output_msg.outer_iter_mut())
+        .for_each(
+            |(
+                (
+                    (
+                        (
+                            (((mut msg, mut input1_msg), mut input2_msg), mut input3_msg),
+                            mut input4_msg,
+                        ),
+                        mut input5_msg,
+                    ),
+                    mut input6_msg,
+                ),
+                mut output_msg,
+            )| {
+                let input1_msg_s = input1_msg.as_slice_mut().unwrap();
+                let input2_msg_s = input2_msg.as_slice_mut().unwrap();
+                let input3_msg_s = input3_msg.as_slice_mut().unwrap();
+                let input4_msg_s = input4_msg.as_slice_mut().unwrap();
+                let input5_msg_s = input5_msg.as_slice_mut().unwrap();
+                let input6_msg_s = input6_msg.as_slice_mut().unwrap();
+                let output_msg_s = output_msg.as_slice_mut().unwrap();
+                fwht(input1_msg_s, nc);
+                fwht(input2_msg_s, nc);
+                fwht(input3_msg_s, nc);
+                fwht(input4_msg_s, nc);
+                fwht(input5_msg_s, nc);
+                fwht(input6_msg_s, nc);
+                fwht(output_msg_s, nc);
+                input1_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input2_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input3_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input4_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input5_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input6_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                output_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+
+                for i in 0..nc {
+                    tmp_all_s[i] = input1_msg_s[i]
+                        * input2_msg_s[i]
+                        * input3_msg_s[i]
+                        * input4_msg_s[i]
+                        * input5_msg_s[i]
+                        * input6_msg_s[i]
+                        * output_msg_s[i];
+                }
+                let mut vecs = Vec::with_capacity(7);
+                vecs.push(output_msg_s);
+                vecs.push(input1_msg_s);
+                vecs.push(input2_msg_s);
+                vecs.push(input3_msg_s);
+                vecs.push(input4_msg_s);
+                vecs.push(input5_msg_s);
+                vecs.push(input6_msg_s);
+
+                for (i, msg_s) in vecs.iter().enumerate() {
+                    // message to the output
+                    let mut tmp = msg.slice_mut(s![i, ..]);
+                    let tmp_s = tmp.as_slice_mut().unwrap();
+                    for i in 0..nc {
+                        tmp_s[i] = tmp_all_s[i] / msg_s[i];
+                    }
+                    fwht(tmp_s, nc);
+                    let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                    tmp_s.iter_mut().for_each(|x| *x /= s);
+                }
+            },
+        );
+}
+
+fn xor_7(
+    inputs_v: Vec<&PyDict>,
+    offset: Vec<isize>,
+    output_msg: &mut ArrayViewMut2<f64>,
+    msg: &mut ArrayViewMut3<f64>,
+    nc: usize,
+) {
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[0].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input1_msg_s = input_msg.slice_mut(s![.., offset[1], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[1].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input2_msg_s = input_msg.slice_mut(s![.., offset[2], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[2].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input3_msg_s = input_msg.slice_mut(s![.., offset[3], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[3].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input4_msg_s = input_msg.slice_mut(s![.., offset[4], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[4].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input5_msg_s = input_msg.slice_mut(s![.., offset[5], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[5].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input6_msg_s = input_msg.slice_mut(s![.., offset[6], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[6].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input7_msg_s = input_msg.slice_mut(s![.., offset[7], ..]);
+
+    let mut tmp_all = Array1::<f64>::ones(nc);
+    let tmp_all_s = tmp_all.as_slice_mut().unwrap();
+    msg.outer_iter_mut()
+        .zip(input1_msg_s.outer_iter_mut())
+        .zip(input2_msg_s.outer_iter_mut())
+        .zip(input3_msg_s.outer_iter_mut())
+        .zip(input4_msg_s.outer_iter_mut())
+        .zip(input5_msg_s.outer_iter_mut())
+        .zip(input6_msg_s.outer_iter_mut())
+        .zip(input7_msg_s.outer_iter_mut())
+        .zip(output_msg.outer_iter_mut())
+        .for_each(
+            |(
+                (
+                    (
+                        (
+                            (
+                                (((mut msg, mut input1_msg), mut input2_msg), mut input3_msg),
+                                mut input4_msg,
+                            ),
+                            mut input5_msg,
+                        ),
+                        mut input6_msg,
+                    ),
+                    mut input7_msg,
+                ),
+                mut output_msg,
+            )| {
+                let input1_msg_s = input1_msg.as_slice_mut().unwrap();
+                let input2_msg_s = input2_msg.as_slice_mut().unwrap();
+                let input3_msg_s = input3_msg.as_slice_mut().unwrap();
+                let input4_msg_s = input4_msg.as_slice_mut().unwrap();
+                let input5_msg_s = input5_msg.as_slice_mut().unwrap();
+                let input6_msg_s = input6_msg.as_slice_mut().unwrap();
+                let input7_msg_s = input7_msg.as_slice_mut().unwrap();
+                let output_msg_s = output_msg.as_slice_mut().unwrap();
+                fwht(input1_msg_s, nc);
+                fwht(input2_msg_s, nc);
+                fwht(input3_msg_s, nc);
+                fwht(input4_msg_s, nc);
+                fwht(input5_msg_s, nc);
+                fwht(input6_msg_s, nc);
+                fwht(input7_msg_s, nc);
+                fwht(output_msg_s, nc);
+                input1_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input2_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input3_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input4_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input5_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input6_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input7_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                output_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+
+                for i in 0..nc {
+                    tmp_all_s[i] = input1_msg_s[i]
+                        * input2_msg_s[i]
+                        * input3_msg_s[i]
+                        * input4_msg_s[i]
+                        * input5_msg_s[i]
+                        * input6_msg_s[i]
+                        * input7_msg_s[i]
+                        * output_msg_s[i];
+                }
+                let mut vecs = Vec::with_capacity(8);
+                vecs.push(output_msg_s);
+                vecs.push(input1_msg_s);
+                vecs.push(input2_msg_s);
+                vecs.push(input3_msg_s);
+                vecs.push(input4_msg_s);
+                vecs.push(input5_msg_s);
+                vecs.push(input6_msg_s);
+                vecs.push(input7_msg_s);
+
+                for (i, msg_s) in vecs.iter().enumerate() {
+                    // message to the output
+                    let mut tmp = msg.slice_mut(s![i, ..]);
+                    let tmp_s = tmp.as_slice_mut().unwrap();
+                    for i in 0..nc {
+                        tmp_s[i] = tmp_all_s[i] / msg_s[i];
+                    }
+                    fwht(tmp_s, nc);
+                    let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                    tmp_s.iter_mut().for_each(|x| *x /= s);
+                }
+            },
+        );
+}
+
+fn xor_8(
+    inputs_v: Vec<&PyDict>,
+    offset: Vec<isize>,
+    output_msg: &mut ArrayViewMut2<f64>,
+    msg: &mut ArrayViewMut3<f64>,
+    nc: usize,
+) {
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[0].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input1_msg_s = input_msg.slice_mut(s![.., offset[1], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[1].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input2_msg_s = input_msg.slice_mut(s![.., offset[2], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[2].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input3_msg_s = input_msg.slice_mut(s![.., offset[3], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[3].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input4_msg_s = input_msg.slice_mut(s![.., offset[4], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[4].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input5_msg_s = input_msg.slice_mut(s![.., offset[5], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[5].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input6_msg_s = input_msg.slice_mut(s![.., offset[6], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[6].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input7_msg_s = input_msg.slice_mut(s![.., offset[7], ..]);
+
+    // first input msg
+    let input_msg: &PyArray3<f64> = inputs_v[7].get_item("msg").unwrap().extract().unwrap();
+    let mut input_msg = unsafe { input_msg.as_array_mut() };
+    let mut input8_msg_s = input_msg.slice_mut(s![.., offset[8], ..]);
+
+    let mut tmp_all = Array1::<f64>::ones(nc);
+    let tmp_all_s = tmp_all.as_slice_mut().unwrap();
+    msg.outer_iter_mut()
+        .zip(input1_msg_s.outer_iter_mut())
+        .zip(input2_msg_s.outer_iter_mut())
+        .zip(input3_msg_s.outer_iter_mut())
+        .zip(input4_msg_s.outer_iter_mut())
+        .zip(input5_msg_s.outer_iter_mut())
+        .zip(input6_msg_s.outer_iter_mut())
+        .zip(input7_msg_s.outer_iter_mut())
+        .zip(input8_msg_s.outer_iter_mut())
+        .zip(output_msg.outer_iter_mut())
+        .for_each(
+            |(
+                (
+                    (
+                        (
+                            (
+                                (
+                                    (((mut msg, mut input1_msg), mut input2_msg), mut input3_msg),
+                                    mut input4_msg,
+                                ),
+                                mut input5_msg,
+                            ),
+                            mut input6_msg,
+                        ),
+                        mut input7_msg,
+                    ),
+                    mut input8_msg,
+                ),
+                mut output_msg,
+            )| {
+                let input1_msg_s = input1_msg.as_slice_mut().unwrap();
+                let input2_msg_s = input2_msg.as_slice_mut().unwrap();
+                let input3_msg_s = input3_msg.as_slice_mut().unwrap();
+                let input4_msg_s = input4_msg.as_slice_mut().unwrap();
+                let input5_msg_s = input5_msg.as_slice_mut().unwrap();
+                let input6_msg_s = input6_msg.as_slice_mut().unwrap();
+                let input7_msg_s = input7_msg.as_slice_mut().unwrap();
+                let input8_msg_s = input8_msg.as_slice_mut().unwrap();
+                let output_msg_s = output_msg.as_slice_mut().unwrap();
+                fwht(input1_msg_s, nc);
+                fwht(input2_msg_s, nc);
+                fwht(input3_msg_s, nc);
+                fwht(input4_msg_s, nc);
+                fwht(input5_msg_s, nc);
+                fwht(input6_msg_s, nc);
+                fwht(input7_msg_s, nc);
+                fwht(input8_msg_s, nc);
+                fwht(output_msg_s, nc);
+                input1_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input2_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input3_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input4_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input5_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input6_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input7_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                input8_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+                output_msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
+
+                for i in 0..nc {
+                    tmp_all_s[i] = input1_msg_s[i]
+                        * input2_msg_s[i]
+                        * input3_msg_s[i]
+                        * input4_msg_s[i]
+                        * input5_msg_s[i]
+                        * input6_msg_s[i]
+                        * input7_msg_s[i]
+                        * input8_msg_s[i]
+                        * output_msg_s[i];
+                }
+                let mut vecs = Vec::with_capacity(9);
+                vecs.push(output_msg_s);
+                vecs.push(input1_msg_s);
+                vecs.push(input2_msg_s);
+                vecs.push(input3_msg_s);
+                vecs.push(input4_msg_s);
+                vecs.push(input5_msg_s);
+                vecs.push(input6_msg_s);
+                vecs.push(input7_msg_s);
+                vecs.push(input8_msg_s);
+
+                for (i, msg_s) in vecs.iter().enumerate() {
+                    // message to the output
+                    let mut tmp = msg.slice_mut(s![i, ..]);
+                    let tmp_s = tmp.as_slice_mut().unwrap();
+                    for i in 0..nc {
+                        tmp_s[i] = tmp_all_s[i] / msg_s[i];
+                    }
+                    fwht(tmp_s, nc);
+                    let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
+                    tmp_s.iter_mut().for_each(|x| *x /= s);
+                }
+            },
+        );
 }
