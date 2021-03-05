@@ -3,7 +3,7 @@ import numpy as np
 from stella.preprocessing import SNR,SNROrder
 from stella.utils import DataReader
 from stella.attacks import MCP_DPA
-
+from tqdm import tqdm
 # Setup the simulation settings
 D=2
 tag = "sim"
@@ -29,7 +29,9 @@ files_labels = [DIR_PROFILE+"/labels/"+tag+"_labels_%d.npz"%(i) for i in range(n
 profile = ["x%d"%(i) for i in range(16)]
 
 #Go over all the profiling traces and update the SNROrder 
-for it,(traces,labels) in enumerate(zip(DataReader(files_traces,None),DataReader(files_labels,["labels"]))):
+for it,(traces,labels) in tqdm(enumerate(zip(DataReader(files_traces,None),
+                                    DataReader(files_labels,["labels"]))),
+                                    total=nfile_profile,desc="SNR"):
     labels = labels[0][0]
     if it == 0:
         ntraces,Ns = traces.shape
