@@ -254,14 +254,14 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
         } else if func == 2 {
             // XOR with array value
             let fixed_inputs: PyReadonlyArray1<u32> =
-                inputs_v[1].get_item("values").unwrap().extract().unwrap();
+                function.get_item("values").unwrap().extract().unwrap();
             let fixed_inputs = fixed_inputs.as_array();
 
             // first input msg
             let input1_msg: &PyArray3<f64> =
                 inputs_v[0].get_item("msg").unwrap().extract().unwrap();
             let mut input1_msg = unsafe { input1_msg.as_array_mut() };
-            let mut input1_msg_s = input1_msg.slice_mut(s![.., offset[1], ..]);
+            let input1_msg_s = input1_msg.slice_mut(s![.., offset[1], ..]);
 
             msg.outer_iter_mut()
                 .zip(fixed_inputs)
@@ -293,7 +293,7 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
         } else if func == 3 {
             // XOR with array value
             let table: PyReadonlyArray1<u32> =
-                inputs_v[1].get_item("table").unwrap().extract().unwrap();
+                function.get_item("table").unwrap().extract().unwrap();
             let table = table.as_array();
             let table = table.as_slice().unwrap();
 
@@ -301,7 +301,7 @@ pub fn update_functions(functions: &PyList, variables: &PyList) {
             let input1_msg: &PyArray3<f64> =
                 inputs_v[0].get_item("msg").unwrap().extract().unwrap();
             let mut input1_msg = unsafe { input1_msg.as_array_mut() };
-            let mut input1_msg_s = input1_msg.slice_mut(s![.., offset[1], ..]);
+            let input1_msg_s = input1_msg.slice_mut(s![.., offset[1], ..]);
 
             msg.outer_iter_mut()
                 .zip(input1_msg_s.outer_iter())

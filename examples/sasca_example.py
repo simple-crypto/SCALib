@@ -37,12 +37,12 @@ with open(fgraph, 'w') as fp:
     for i in range(16): fp.write("k%d #secret \n"%(i))
     fp.write("sbox #table \n")
     fp.write("\n\n#indeploop\n\n")
-    for i in range(16): fp.write("p%d #public \n"%(i))
-    for i in range(16): fp.write("y%d = k%d + p%d \n"%(i,i,i))
+    for i in range(16): fp.write("p%d #public\n"%(i))
+    for i in range(16): fp.write("y%d = k%d + p%d\n"%(i,i,i))
     for i in range(16): fp.write("x%d = y%d -> sbox \n"%(i,i))
     for i in range(16):
-        for d in range(D): fp.write("x%d_%d #profile \n"%(i,d))
-        for d in range(D): fp.write("y%d_%d #profile \n"%(i,d))
+        for d in range(D): fp.write("x%d_%d #profile\n"%(i,d))
+        for d in range(D): fp.write("y%d_%d #profile\n"%(i,d))
         add = ' ^ '.join(["x%d_%d"%(i,d) for d in range(D)])
         fp.write("x%d = "%(i)+add+"\n")
         add = ' ^ '.join(["y%d_%d"%(i,d) for d in range(D)])
@@ -123,10 +123,6 @@ print("####################")
 graph = pickle.load(open("graph.pkl","rb"))
 profile_var = pickle.load(open("profile_var.pkl","rb"))
 ntraces_attack = nfile_attack * ntraces
-public_var = []
-for var in graph["var"]:
-    if graph["var"][var]["flags"] & PUBLIC != 0:
-        public_var.append(var)
 
 print("-> Init graph memory")
 init_graph_memory(graph,ntraces_attack,256)
@@ -137,7 +133,7 @@ files_labels = [DIR_ATTACK+"/labels/"+tag+"_labels_%d.npz"%(i) for i in range(nf
 
 # For each attack file
 print("-> Load information in graph")
-graph["var"]["sbox"]["table"][:]=sbox
+graph["tables"]["sbox"][:]=sbox
 for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
                                 DataReader(files_labels,["labels"]),
                                 range(0,ntraces*nfile_attack,ntraces)),
@@ -147,8 +143,8 @@ for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
         var = profile_var[v]
         graph["var"][v]["distri_orig"][index:index+ntraces,:] = var["model"].predict_proba(traces[:,var["POI"]])
     
-    for v in public_var:
-        graph["var"][v]["values"][index:index+ntraces] = labels[v] 
+    for v in graph["publics"]:
+        graph["publics"][v][index:index+ntraces] = labels[v] 
 
 print("-> Set initial msg for BP")
 reset_graph_memory(graph,256)

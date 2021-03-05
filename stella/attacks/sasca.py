@@ -55,11 +55,17 @@ def init_graph_memory(graph,N,Nc):
         neighboors = func["neighboors"]
         func["msg"] = np.zeros((N,len(neighboors),Nc))
 
+    for p in graph["publics"]:
+        graph["publics"][p] = np.zeros(N,dtype=np.uint32)
+    for p in graph["tables"]:
+        graph["tables"][p] = np.zeros(Nc,dtype=np.uint32)
     return functions,variables_list,variables
  
 def create_graph(fname):
     functions = []
     variables = {}
+    publics = {}
+    tables = {}
     in_loop = False
     with open(fname) as fp:
         lines = map(lambda l:l.rstrip('\n'),fp.readlines())
@@ -67,7 +73,7 @@ def create_graph(fname):
 
     # for each line
     for line in lines:
-        split = line.split(" ")
+        split = line.split()
         # delimiter
         if delimiter in split:
             in_loop = True
@@ -85,17 +91,22 @@ def create_graph(fname):
         else:
             node = new_variable(len(variables))
             node["in_loop"] = in_loop
-            variables[v] = node
-    
+        
+        insert = True
         # add the flags
         if secret_flag in split:
-            node["flags"] |= SECRET
+            node["flags"] |= SECRET 
         if public_flag in split:
-            node["flags"] |= PUBLIC 
+            node["flags"] |= PUBLIC; 
+            insert = False; publics[v] = []
         if profile_flag in split:
             node["flags"] |= PROFILE
         if tab_flag in split:
-            node["flags"] |= TABLE
+            node["flags"] |= TABLE;
+            insert = False; tables[v] = []
+        
+        if insert:
+            variables[v] = node
 
         # add function if line contains one symbol
         op = list(set(split) & set(list(symbols)))
@@ -115,37 +126,34 @@ def create_graph(fname):
             # add relation between fct and output
             v["neighboors"].append(i)
             func["outputs"].append(v["id"])
-
             # add relation between fct and inputs
             for j,labels in enumerate(split[::2][1:]):
-                v = variables[labels]
-                func["inputs"].append(v["id"])
-                # add neighboors only if theinput has a distribution
+                # add neighboors only if the input has a distribution
                 if f["inputs_distri"] == -1 or j < f["inputs_distri"]:
+                    v = variables[labels]
+                    func["inputs"].append(v["id"])
                     v["neighboors"].append(i)
-           
+          
+            if f["val"] == LOOKUP:
+                print(split[-1])
+                func["table_label"] = split[-1]
+            elif f["val"] == XOR_CST:
+                func["value_label"] = split[-1]
+
             # set as neighboors all the inputs that have a distribution
-            func["neighboors"] = func["outputs"]
-            if f["inputs_distri"] == -1:
-                func["neighboors"] += func["inputs"][:] 
-            else:
-                func["neighboors"] += func["inputs"][:f["inputs_distri"]] 
+            func["neighboors"] = func["outputs"].copy()
+            func["neighboors"] += func["inputs"][:].copy() 
             functions.append(func)
 
     # init the distribution
     for var in variables:
         var = variables[var]
-
-        # tab and cst does not need to know who are their neighboors
-        if var["flags"] & (PUBLIC|TABLE) != 0:
-            continue
-        else:
-            # get offset of the messages that will be send to that variable 
-            # within the neighboors 
-            var["offset"] = [None for i in var["neighboors"]]
-            for i,neighboor in enumerate(var["neighboors"]):
-                neighboor = functions[neighboor]
-                var["offset"][i] = neighboor["neighboors"].index(var["id"])
+        # get offset of the messages that will be send to that variable 
+        # within the neighboors 
+        var["offset"] = [None for i in var["neighboors"]]
+        for i,neighboor in enumerate(var["neighboors"]):
+            neighboor = functions[neighboor]
+            var["offset"][i] = neighboor["neighboors"].index(var["id"])
 
     # generate the list
     variables_list = list(map(lambda x:variables[x],variables))
@@ -159,15 +167,13 @@ def create_graph(fname):
             neighboor = variables_list[neighboor]
             func["offset"][i] = neighboor["neighboors"].index(func["id"])
 
-    return {"functions":functions,"var_list":variables_list,"var":variables}
+    return {"functions":functions,"var_list":variables_list,
+                    "var":variables,"publics":publics,"tables":tables}
 
 
 def reset_graph_memory(graph,Nc):
     variables_list = graph["var_list"]
     for var in variables_list:
-        if var["flags"] & (PUBLIC | TABLE) != 0:
-            continue
-
         # if node has distribution
         if "distri_orig" in var:
             # normalize
@@ -181,6 +187,12 @@ def reset_graph_memory(graph,Nc):
             # init msg to uniform 
             var["msg"][:] = 1/Nc
 
+    for f in graph["functions"]:
+        if f["func"] == XOR_CST:
+            f["values"] = graph["publics"][f["value_label"]]
+        if f["func"] == LOOKUP:
+            f["table"] = graph["tables"][f["table_label"]]
+
 if __name__ == "__main__":
     graph = create_graph("example_graph.txt")
     n = 1000
@@ -189,12 +201,14 @@ if __name__ == "__main__":
     for nc in 2**np.arange(2,9):
         init_graph_memory(graph,n,nc)
         variables = graph["var"]
+        publics = graph["publics"]
+        tables = graph["tables"]
         for it in tqdm(range(100),desc="nc %d"%(nc)):
             x_0 = np.random.randint(0,nc)
             p_0 = np.random.randint(0,nc)
             x_1 = np.random.randint(0,nc)
             p_1 = np.random.randint(0,nc)
-            sbox = np.random.permutation(nc)
+            sbox = np.random.permutation(nc).astype(np.uint32)
 
             k_0_expected = p_0 ^ x_0
             k_1_expected = p_1 ^ x_1
@@ -205,14 +219,14 @@ if __name__ == "__main__":
             preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
             variables["p_0"]["distri_orig"][:,:] = (1-preci)/(nc-1)
             variables["p_0"]["distri_orig"][:,p_0] = preci[:,0]
-            variables["sbox"]["table"][:] = sbox
+            tables["sbox"][:] = sbox
             preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
             variables["x_0"]["distri_orig"][:,:] = (1-preci)/(nc-1)
             variables["x_0"]["distri_orig"][:,x_0] = preci[:,0]
 
             preci = (np.random.random(n)*( (1 - 1/nc) + 1/nc)).reshape(n,1)
             preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
-            variables["p_1"]["values"][:] = p_1
+            publics["p_1"][:] = p_1
             variables["x_1"]["distri_orig"][:,:] = (1-preci)/(nc-1)
             variables["x_1"]["distri_orig"][:,x_1] = preci[:,0]
 
