@@ -16,10 +16,10 @@ public_flag = "#public"
 profile_flag = "#profile"
 tab_flag = "#table"
 
-secret_flag_v = 1
-public_flag_v = 2
-profile_flag_v = 4
-tab_flag_v = 8
+SECRET = 1
+PUBLIC = 2
+PROFILE = 4
+TABLE = 8
 
 CLIP = 1E-50
 
@@ -28,7 +28,9 @@ def new_variable(i):
 def new_function(i,func):
     return {"id":i,"inputs":[],"outputs":[],"func":func}
 
-def init_graph_memory(functions,variables,N,Nc):
+def init_graph_memory(graph,N,Nc):
+    functions = graph["functions"]
+    variables = graph["var"]
     # init the distribution
     for var in variables:
         var = variables[var]
@@ -38,12 +40,12 @@ def init_graph_memory(functions,variables,N,Nc):
         else: 
             n = 1
 
-        if var["flags"] & (public_flag_v) != 0:
+        if var["flags"] & (PUBLIC) != 0:
             var["values"] = np.zeros(n,dtype=np.uint32)
-        elif var["flags"] & (tab_flag_v) != 0:
+        elif var["flags"] & (TABLE) != 0:
             var["table"] = np.zeros(Nc,dtype=np.uint32)
         else:
-            if var["flags"] & profile_flag_v != 0:
+            if var["flags"] & PROFILE != 0:
                 var["distri_orig"] = np.ones((n,Nc))
             var["distri"] = np.zeros((n,Nc))
             var["msg"] = np.zeros((N,len(var["neighboors"]),Nc))
@@ -87,13 +89,13 @@ def create_graph(fname):
     
         # add the flags
         if secret_flag in split:
-            node["flags"] |= secret_flag_v
+            node["flags"] |= SECRET
         if public_flag in split:
-            node["flags"] |= public_flag_v 
+            node["flags"] |= PUBLIC 
         if profile_flag in split:
-            node["flags"] |= profile_flag_v
+            node["flags"] |= PROFILE
         if tab_flag in split:
-            node["flags"] |= tab_flag_v
+            node["flags"] |= TABLE
 
         # add function if line contains one symbol
         op = list(set(split) & set(list(symbols)))
@@ -135,7 +137,7 @@ def create_graph(fname):
         var = variables[var]
 
         # tab and cst does not need to know who are their neighboors
-        if var["flags"] & (public_flag_v|tab_flag_v) != 0:
+        if var["flags"] & (PUBLIC|TABLE) != 0:
             continue
         else:
             # get offset of the messages that will be send to that variable 
@@ -157,12 +159,13 @@ def create_graph(fname):
             neighboor = variables_list[neighboor]
             func["offset"][i] = neighboor["neighboors"].index(func["id"])
 
-    return functions,variables_list,variables
+    return {"functions":functions,"var_list":variables_list,"var":variables}
 
-def reset_graph_memory(variables_list,Nc):
 
+def reset_graph_memory(graph,Nc):
+    variables_list = graph["var_list"]
     for var in variables_list:
-        if var["flags"] & (public_flag_v | tab_flag_v) != 0:
+        if var["flags"] & (PUBLIC | TABLE) != 0:
             continue
 
         # if node has distribution
@@ -179,12 +182,13 @@ def reset_graph_memory(variables_list,Nc):
             var["msg"][:] = 1/Nc
 
 if __name__ == "__main__":
-    functions,variables_list,variables = create_graph("example_graph.txt")
+    graph = create_graph("example_graph.txt")
     n = 1000
    
     from tqdm import tqdm
     for nc in 2**np.arange(2,9):
-        init_graph_memory(functions,variables,n,nc)
+        init_graph_memory(graph,n,nc)
+        variables = graph["var"]
         for it in tqdm(range(100),desc="nc %d"%(nc)):
             x_0 = np.random.randint(0,nc)
             p_0 = np.random.randint(0,nc)
@@ -212,9 +216,9 @@ if __name__ == "__main__":
             variables["x_1"]["distri_orig"][:,:] = (1-preci)/(nc-1)
             variables["x_1"]["distri_orig"][:,x_1] = preci[:,0]
 
-            reset_graph_memory(variables_list,nc)
+            reset_graph_memory(graph,nc)
             for i in range(3):
-                rust.belief_propagation(functions,variables_list)
+                rust.belief_propagation(graph["functions"],graph["var_list"])
             k_0 = np.argmax(variables["k_0"]["distri"],axis=1)[0]
             
             k_1 = np.argmax(variables["k_1"]["distri"],axis=1)[0]
