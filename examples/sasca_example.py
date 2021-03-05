@@ -1,8 +1,10 @@
 from common import gen_traces_serial,sbox
 import numpy as np
-from stella.preprocessing import SNR,SNROrder
+from stella.preprocessing import SNR
+from stella.estimator import LDAClassifier
 from stella.utils import DataReader
 from stella.attacks.sasca import create_graph,PROFILE
+from tqdm import tqdm
 import pickle
 
 # Setup the simulation settings
@@ -14,6 +16,7 @@ nfile_profile = 10
 nfile_attack = 1
 ntraces = 10000
 std = 1
+ndim = 3
 fgraph = "./graph.txt"
 ## Generate the profiling and attack sets
 gen_traces_serial(nfile_profile,
@@ -54,23 +57,49 @@ for var in graph["var"]:
     if graph["var"][var]["flags"] & PROFILE != 0:
         profile_var[var] = {}
 
-#Go over all the profiling traces and update the SNROrder 
+print("-> Computing SNR")
+#Go over all the profiling traces and update the SNR
 for it,(traces,labels) in enumerate(zip(DataReader(files_traces,None),DataReader(files_labels,["labels"]))):
-    labels = list(filter(lambda x: x["label"] in profile_var,labels[0]))
+    labels = labels[0][0]
     if it == 0:
         ntraces,Ns = traces.shape
         snr = SNR(Np=len(labels),Nc=256,Ns=Ns)
         data = np.zeros((len(labels),ntraces))
 
-    for i,l in enumerate(labels):
-        data[i,:] = l["value"]
-        profile_var[l["label"]]["offset"] = i
+    for i,v in enumerate(profile_var):
+        data[i,:] = labels[v]
     snr_val = snr.fit_u(traces,data)
 
-for v in profile_var:
-    profile_var[v]["SNR"] = snr_val[profile_var[v]["offset"],:]
-    print("#",v,"->",np.max(profile_var[v]["SNR"]))
+for i,v in enumerate(profile_var):
+    profile_var[v]["SNR"] = snr_val[i,:]
+    print("#",v,"-> SNR",np.nanmax(profile_var[v]["SNR"]))
 
+print("-> Computing POI with %d dims"%(ndim))
+for v in profile_var:
+    snr = profile_var[v]["SNR"].copy()
+    snr[np.where(np.isfinite(snr)==0)] = -1
+    profile_var[v]["POI"] = np.argsort(profile_var[v]["SNR"])[:-ndim];
+
+print("-> Computing the models")
+ntraces_profile = ntraces * nfile_profile
+# set data to store all the POIs and labels for profiling
+for v in profile_var:
+    profile_var[v]["samples"] = np.zeros((ntraces_profile,len(profile_var[v]["POI"])),dtype=np.int16)
+    profile_var[v]["data"] = np.zeros(ntraces_profile,dtype=np.uint16)
+
+# fill the traces and the labels
+for (traces,labels,index) in zip(DataReader(files_traces,None),DataReader(files_labels,["labels"]),range(0,ntraces,ntraces_profile)):
+    labels = labels[0][0]
+    for i,v in enumerate(profile_var):
+        var = profile_var[v]
+        var["data"][index:index+ntraces] = labels[v]
+        var["samples"][index:index+ntraces] = traces[:,var["POI"]]
+
+for v in tqdm(profile_var,desc="fit LDA"):
+    var = profile_var[v]
+    var["model"] = LDAClassifier(var["samples"],var["data"],dim_projection=1)
+    var.pop("samples")
+    var.pop("data")
 
 print("Start Attack")
 # Attack files
@@ -84,7 +113,6 @@ for it,(traces,labels) in enumerate(zip(DataReader(files_traces,None),DataReader
         mcp_dpas = [MCP_DPA(SM[i,:,:],
                             u[i,:,:],
                             s[i,:,:],256,D) for i in range(16)]
-        
         # Memory for every guess at the output of the Sbox
         guesses = np.zeros((256,ntraces)).astype(np.uint16)
         # generate all the key guess

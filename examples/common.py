@@ -35,9 +35,10 @@ def gen_traces(nfile,ntraces,std,tag,
         traces = traces.astype(np.int16)
 
         # generate all the labels
-        labels = [{"label":"k%d"%(i),"value":k[:,i]} for i in range(16)]
-        labels += [{"label":"x%d"%(i),"value":x[:,i]} for i in range(16)]
-        labels += [{"label":"p%d"%(i),"value":p[:,i]} for i in range(16)]
+        labels = {}
+        for j in range(16): labels["k%d"%(j)] = k[:,j]
+        for j in range(16): labels["x%d"%(j)] = x[:,j]
+        for j in range(16): labels["p%d"%(j)] = p[:,j]
 
         # save the data
         np.save(DIR_TRACES+"/traces/"+tag+"_traces_%d.npy"%(i),traces)
@@ -48,7 +49,7 @@ def gen_traces(nfile,ntraces,std,tag,
                         allow_pickle=True)
         
         np.savez(DIR_TRACES+"/labels/"+tag+"_labels_%d.npz"%(i),
-                        labels=labels,
+                        labels=[labels],
                         allow_pickle=True)
 
     return k
@@ -87,11 +88,13 @@ def gen_traces_serial(nfile,ntraces,std,tag,
         traces = traces.astype(np.int16)
 
         # generate all the labels
-        labels = [{"label":"k%d"%(i),"value":k[:,i]} for i in range(16)]
-        labels = [{"label":"p%d"%(i),"value":p[:,i]} for i in range(16)]
-        for d in range(D):
-            labels += [{"label":"x%d_%d"%(i,d),"value":x_s[:,d,i]} for i in range(16)]
-            labels += [{"label":"y%d_%d"%(i,d),"value":y_s[:,d,i]} for i in range(16)]
+        labels = {}
+        for j in range(16): labels["k%d"%(j)] = k[:,j]
+        for j in range(16): labels["p%d"%(j)] = p[:,j]
+        for j in range(16):
+            for d in range(D):
+                labels["x%d_%d"%(j,d)] = x_s[:,d,j]
+                labels["y%d_%d"%(j,d)] = y_s[:,d,j]
 
         # save the data
         np.save(DIR_TRACES+"/traces/"+tag+"_traces_%d.npy"%(i),traces)
@@ -104,7 +107,7 @@ def gen_traces_serial(nfile,ntraces,std,tag,
                         allow_pickle=True)
         
         np.savez(DIR_TRACES+"/labels/"+tag+"_labels_%d.npz"%(i),
-                        labels=labels,
+                        labels=[labels],
                         allow_pickle=True)
 
     return k

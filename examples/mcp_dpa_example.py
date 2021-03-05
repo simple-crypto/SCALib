@@ -26,14 +26,17 @@ print("Start Profiling")
 files_traces = [DIR_PROFILE+"/traces/"+tag+"_traces_%d.npy"%(i) for i in range(nfile_profile)]
 files_labels = [DIR_PROFILE+"/labels/"+tag+"_labels_%d.npz"%(i) for i in range(nfile_profile)]
 
+profile = ["x%d"%(i) for i in range(16)]
+
 #Go over all the profiling traces and update the SNROrder 
 for it,(traces,labels) in enumerate(zip(DataReader(files_traces,None),DataReader(files_labels,["labels"]))):
+    labels = labels[0][0]
     if it == 0:
         ntraces,Ns = traces.shape
         snr = SNROrder(Np=16,Nc=256,D=D,Ns=Ns)
         data = np.zeros((16,ntraces))
-    for i in range(16):
-        data[i,:] = next(filter(lambda x:x["label"]=="x%d"%(i),labels[0]))["value"]
+    for i,p in enumerate(profile):
+        data[i,:] = labels[p] 
     snr_val = snr.fit_u(traces,data)
 
 # Get standardized moments at D-th order
@@ -46,6 +49,7 @@ files_labels = [DIR_ATTACK+"/labels/"+tag+"_labels_%d.npz"%(i) for i in range(nf
 
 # For each attack file
 for it,(traces,labels) in enumerate(zip(DataReader(files_traces,None),DataReader(files_labels,["labels"]))):
+    labels = labels[0][0]
     if it == 0:
         ntraces,Ns = traces.shape
         mcp_dpas = [MCP_DPA(SM[i,:,:],
@@ -59,7 +63,7 @@ for it,(traces,labels) in enumerate(zip(DataReader(files_traces,None),DataReader
 
     for i,mcp_dpa in enumerate(mcp_dpas):
         # get a plaintext byte value
-        data = next(filter(lambda x:x["label"]=="p%d"%(i),labels[0]))["value"]
+        data = labels["p%d"%(i)]
         # derive the Sbox output
         guesses[:,:] = sbox[data^kg]
         # update correlation
