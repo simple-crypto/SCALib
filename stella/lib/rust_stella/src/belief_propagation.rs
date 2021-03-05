@@ -1,7 +1,61 @@
-use ndarray::{s, Array1, ArrayViewMut2, ArrayViewMut3, Axis};
+use ndarray::{s, Array1, Array2, Array3, ArrayViewMut2, ArrayViewMut3, Axis};
 use numpy::{PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::types::{PyDict, PyList};
 
+enum VarType {
+    Para(Array1<f64>),
+    Single(Array2<f64>),
+}
+
+struct Var {
+    neighboors: Vec<(usize, usize)>, // (id,offset)
+    base_distri: VarType,
+    msg: Array3<f64>,
+}
+
+enum FuncType {
+    AND,
+    XOR,
+    XOR_CST(Array1<u32>),
+    LOOKUP(Array1<u32>),
+}
+struct Func {
+    inputs: Vec<(usize, usize)>, // (id,offset)
+    output: (usize, usize),
+    neighboors: Vec<(usize, usize)>,
+}
+
+/*
+pub fn to_Func(function: &PyDict) -> Func {
+    let inputs: Vec<isize> = function.get_item("inputs").unwrap().extract().unwrap();
+    let outputs: Vec<isize> = function.get_item("outputs").unwrap().extract().unwrap();
+    let neighboors: Vec<isize> = function.get_item("neighboors").unwrap().extract().unwrap();
+    let func: usize = function.get_item("func").unwrap().extract().unwrap();
+
+    let mut f: FuncType;
+    if func == 0 {
+        f = FuncType::AND;
+    } else if func == 1 {
+        f = FuncType::XOR;
+    };
+
+
+    let offset: Vec<isize> = function.get_item("offset").unwrap().extract().unwrap();
+
+    let inputs_v: Vec<&PyDict> = inputs
+        .iter()
+        .map(|x| variables.get_item(*x).extract().unwrap())
+        .collect();
+
+    let outputs_v: Vec<&PyDict> = outputs
+        .iter()
+        .map(|x| variables.get_item(*x).extract().unwrap())
+        .collect();
+
+    // message to send
+    let msg: &PyArray3<f64> = function.get_item("msg").unwrap().extract().unwrap();
+    let mut msg = unsafe { msg.as_array_mut() };
+}*/
 #[inline(always)]
 fn fwht(a: &mut [f64], len: usize) {
     let mut h = 1;
