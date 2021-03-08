@@ -7,12 +7,17 @@ use numpy::{
     PyArray1, PyArray2, PyArray3, PyArrayDyn, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
 };
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
-use pyo3::types::PyList;
+use pyo3::types::{PyDict, PyList};
 
 #[pymodule]
 fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "belief_propagation")]
     fn belief_propagation(_py: Python, functions: &PyList, variables: &PyList) -> PyResult<()> {
+        let functions_rust : Vec<belief_propagation::Func> = functions.iter().map(|x| 
+            {
+                let dict = x.downcast::<PyDict>().unwrap();
+                belief_propagation::to_func(dict)
+            }).collect();
         belief_propagation::update_functions(functions, variables);
         belief_propagation::update_variables(functions, variables);
         Ok(())

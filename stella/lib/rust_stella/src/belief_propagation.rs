@@ -13,49 +13,60 @@ struct Var {
     msg: Array3<f64>,
 }
 
-enum FuncType {
+pub enum FuncType {
     AND,
     XOR,
-    XOR_CST(Array1<u32>),
+    XORCST(Array1<u32>),
     LOOKUP(Array1<u32>),
 }
-struct Func {
+pub struct Func {
     inputs: Vec<(usize, usize)>, // (id,offset)
     output: (usize, usize),
     neighboors: Vec<(usize, usize)>,
+    functype: FuncType,
+    msg: Array3<f64>,
 }
 
-/*
-pub fn to_Func(function: &PyDict) -> Func {
-    let inputs: Vec<isize> = function.get_item("inputs").unwrap().extract().unwrap();
-    let outputs: Vec<isize> = function.get_item("outputs").unwrap().extract().unwrap();
+pub fn to_func(function: &PyDict) -> Func {
     let neighboors: Vec<isize> = function.get_item("neighboors").unwrap().extract().unwrap();
     let func: usize = function.get_item("func").unwrap().extract().unwrap();
+    let offset: Vec<isize> = function.get_item("offset").unwrap().extract().unwrap();
 
-    let mut f: FuncType;
+    let neighboors: Vec<(usize, usize)> = neighboors
+        .iter()
+        .zip(offset.iter())
+        .map(|(x, y)| (*x as usize, *y as usize))
+        .collect();
+    let msg: PyReadonlyArray3<f64> = function.get_item("msg").unwrap().extract().unwrap();
+
+    let mut inputs = neighboors.clone();
+    let output = inputs.split_off(1)[0];
+
+    let f: FuncType;
     if func == 0 {
         f = FuncType::AND;
     } else if func == 1 {
         f = FuncType::XOR;
-    };
-
-
-    let offset: Vec<isize> = function.get_item("offset").unwrap().extract().unwrap();
-
-    let inputs_v: Vec<&PyDict> = inputs
-        .iter()
-        .map(|x| variables.get_item(*x).extract().unwrap())
-        .collect();
-
-    let outputs_v: Vec<&PyDict> = outputs
-        .iter()
-        .map(|x| variables.get_item(*x).extract().unwrap())
-        .collect();
+    } else if func == 2{
+        let values :  PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
+        f = FuncType::XORCST(values.as_array().to_owned());
+    }
+    else{
+        let table :  PyReadonlyArray1<u32> = function.get_item("table").unwrap().extract().unwrap();
+        f = FuncType::LOOKUP(table.as_array().to_owned());
+    }
 
     // message to send
-    let msg: &PyArray3<f64> = function.get_item("msg").unwrap().extract().unwrap();
-    let mut msg = unsafe { msg.as_array_mut() };
-}*/
+    let msg = msg.as_array();
+
+    Func {
+        inputs: inputs,
+        output: output,
+        neighboors: neighboors,
+        functype: f,
+        msg: msg.to_owned(),
+    }
+}
 #[inline(always)]
 fn fwht(a: &mut [f64], len: usize) {
     let mut h = 1;
