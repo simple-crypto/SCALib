@@ -18,10 +18,22 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                 let dict = x.downcast::<PyDict>().unwrap();
                 belief_propagation::to_func(dict)
             }).collect();
+        let vars_rust : Vec<belief_propagation::Var> = variables.iter().map(|x| 
+            {
+                let dict = x.downcast::<PyDict>().unwrap();
+                belief_propagation::to_var(dict)
+            }).collect();
         belief_propagation::update_functions(functions, variables);
         belief_propagation::update_variables(functions, variables);
         Ok(())
     }
+
+
+
+
+
+
+
     #[pyfn(m, "multivariate_pooled")]
     fn multivariate_pooled(
         _py: Python,

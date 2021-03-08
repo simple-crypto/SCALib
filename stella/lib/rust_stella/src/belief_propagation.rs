@@ -2,14 +2,15 @@ use ndarray::{s, Array1, Array2, Array3, ArrayViewMut2, ArrayViewMut3, Axis};
 use numpy::{PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::types::{PyDict, PyList};
 
-enum VarType {
-    Para(Array1<f64>),
-    Single(Array2<f64>),
+pub enum VarType {
+    ProfilePara{distri_orig:Array2<f64>,distri_current:Array2<f64>},
+    ProfileSingle{distri_orig:Array2<f64>,distri_current:Array2<f64>},
+    NotProfilePara{distri_current:Array2<f64>},
+    NotProfileSingle{distri_current:Array2<f64>}
 }
-
-struct Var {
+pub struct Var {
     neighboors: Vec<(usize, usize)>, // (id,offset)
-    base_distri: VarType,
+    vartype: VarType,
     msg: Array3<f64>,
 }
 
@@ -25,6 +26,43 @@ pub struct Func {
     neighboors: Vec<(usize, usize)>,
     functype: FuncType,
     msg: Array3<f64>,
+}
+
+
+pub fn to_var(function: &PyDict) -> Var {
+    let neighboors: Vec<isize> = function.get_item("neighboors").unwrap().extract().unwrap();
+    let inloop: bool = function.get_item("in_loop").unwrap().extract().unwrap();
+    let offset: Vec<isize> = function.get_item("offset").unwrap().extract().unwrap();
+    let is_profiled = function.contains("distri_orig").unwrap();
+    let distri_current :  PyReadonlyArray2<f64> = function.get_item("distri").unwrap().extract().unwrap();
+
+    let neighboors: Vec<(usize, usize)> = neighboors
+        .iter()
+        .zip(offset.iter())
+        .map(|(x, y)| (*x as usize, *y as usize))
+        .collect();
+    let msg: PyReadonlyArray3<f64> = function.get_item("msg").unwrap().extract().unwrap();
+
+    let f: VarType;
+    if inloop  & is_profiled {
+        let distri_orig :  PyReadonlyArray2<f64> = function.get_item("distri_orig").unwrap().extract().unwrap();
+        f = VarType::ProfilePara{distri_orig:distri_orig.as_array().to_owned(),distri_current:distri_current.as_array().to_owned()};
+    } else if inloop & !is_profiled{
+        f = VarType::NotProfilePara{distri_current:distri_current.as_array().to_owned()};
+    } else if !inloop & is_profiled{
+        let distri_orig :  PyReadonlyArray2<f64> = function.get_item("distri_orig").unwrap().extract().unwrap();
+        f = VarType::ProfilePara{distri_orig:distri_orig.as_array().to_owned(),distri_current:distri_current.as_array().to_owned()};
+    }else{
+        f = VarType::NotProfilePara{distri_current:distri_current.as_array().to_owned()};
+    }
+    // message to send
+    let msg = msg.as_array();
+
+    Var {
+        neighboors: neighboors,
+        vartype: f,
+        msg: msg.to_owned(),
+    }
 }
 
 pub fn to_func(function: &PyDict) -> Func {
