@@ -195,10 +195,10 @@ def reset_graph_memory(graph,Nc):
 
 if __name__ == "__main__":
     graph = create_graph("example_graph.txt")
-    n = 10000
+    n = 10
    
     from tqdm import tqdm
-    for nc in 2**np.arange(7,8):
+    for nc in 2**np.arange(2,4):
         init_graph_memory(graph,n,nc)
         variables = graph["var"]
         publics = graph["publics"]
@@ -214,7 +214,7 @@ if __name__ == "__main__":
             k_1_expected = p_1 ^ x_1
             k_2_expected = sbox[x_1] #k_1_expected ^ k_0_expected
             k_3_expected = p_0 ^ x_0
-            k_4_expected = p_0 ^ x_0 
+            k_4_expected = p_0 ^ x_0 ^ x_1 
 
             preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
             variables["p_0"]["distri_orig"][:,:] = (1-preci)/(nc-1)
@@ -233,7 +233,6 @@ if __name__ == "__main__":
             reset_graph_memory(graph,nc)
             
             rust.belief_propagation(graph["functions"],graph["var_list"],4)
-            
             k_0 = np.argmax(variables["k_0"]["distri"],axis=1)[0]
             k_1 = np.argmax(variables["k_1"]["distri"],axis=1)[0]
             k_2 = np.argmax(variables["k_2"]["distri"],axis=1)[0]

@@ -1,6 +1,7 @@
-use ndarray::{s, Array1, Array2, Array3, ArrayView2, ArrayViewMut3, Axis};
+use ndarray::{s, Array1, Array2, Array3, ArrayView2, ArrayView3, ArrayViewMut3, Axis};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::types::PyDict;
+use rayon::prelude::*;
 
 pub enum VarType {
     ProfilePara {
@@ -149,11 +150,11 @@ pub fn update_variables(functions: &Vec<Func>, variables: &mut Vec<Var>) {
                     let msg = &functions[*id].msg;
                     let msg = msg.slice(s![.., *offset, ..]);
                     *distri_current *= &msg;
-                    *distri_current/= &distri_current
-                            .sum_axis(Axis(1))
-                            .insert_axis(Axis(1))
-                            .broadcast(distri_current.shape())
-                            .unwrap();
+                    *distri_current /= &distri_current
+                        .sum_axis(Axis(1))
+                        .insert_axis(Axis(1))
+                        .broadcast(distri_current.shape())
+                        .unwrap();
                 });
             }
             VarType::ProfileSingle {
@@ -164,9 +165,9 @@ pub fn update_variables(functions: &Vec<Func>, variables: &mut Vec<Var>) {
                 var.neighboors.iter().for_each(|(id, offset)| {
                     let msg = &functions[*id].msg;
                     let msg = msg.slice(s![.., *offset, ..]);
-                    msg.outer_iter().for_each(|msg|{
+                    msg.outer_iter().for_each(|msg| {
                         *distri_current *= &msg;
-                        *distri_current /= distri_current.fold(0.0,|acc,x| acc + *x);
+                        *distri_current /= distri_current.fold(0.0, |acc, x| acc + *x);
                     });
                 });
             }
@@ -176,11 +177,11 @@ pub fn update_variables(functions: &Vec<Func>, variables: &mut Vec<Var>) {
                     let msg = &functions[*id].msg;
                     let msg = msg.slice(s![.., *offset, ..]);
                     *distri_current *= &msg;
-                    *distri_current/= &distri_current
-                            .sum_axis(Axis(1))
-                            .insert_axis(Axis(1))
-                            .broadcast(distri_current.shape())
-                            .unwrap();
+                    *distri_current /= &distri_current
+                        .sum_axis(Axis(1))
+                        .insert_axis(Axis(1))
+                        .broadcast(distri_current.shape())
+                        .unwrap();
                 });
             }
             VarType::NotProfileSingle { distri_current } => {
@@ -188,9 +189,9 @@ pub fn update_variables(functions: &Vec<Func>, variables: &mut Vec<Var>) {
                 var.neighboors.iter().for_each(|(id, offset)| {
                     let msg = &functions[*id].msg;
                     let msg = msg.slice(s![.., *offset, ..]);
-                    msg.outer_iter().for_each(|msg|{
+                    msg.outer_iter().for_each(|msg| {
                         *distri_current *= &msg;
-                        *distri_current /= distri_current.fold(0.0,|acc,x| acc + *x);
+                        *distri_current /= distri_current.fold(0.0, |acc, x| acc + *x);
                     });
                 });
             }
@@ -340,7 +341,7 @@ pub fn update_functions(functions: &mut Vec<Func>, variables: &Vec<Var>) {
                 if inputs_msg.len() == 2 {
                     xor_2(&inputs_msg, &output_msg, &mut function.msg.view_mut(), nc);
                 } else {
-                    panic!();
+                    xors(&inputs_msg, &output_msg, &mut function.msg.view_mut(), nc);
                 }
             }
             FuncType::XORCST(values) => {
@@ -437,7 +438,8 @@ fn xor_2(
             fwht(output_msg_s, nc);
             // message to the output
             let mut tmp = msg.slice_mut(s![0, ..]);
-            tmp.assign(&(&input2_msg * &input1_msg));
+            tmp.assign(&input2_msg);
+            tmp *= &input1_msg;
             let tmp_s = tmp.as_slice_mut().unwrap();
             fwht(tmp_s, nc);
             let s = tmp_s.iter().fold(0.0, |acc, x| acc + f64::abs(*x));
@@ -445,7 +447,8 @@ fn xor_2(
 
             // message to the input 1
             let mut tmp = msg.slice_mut(s![1, ..]);
-            tmp.assign(&(&input2_msg * &output_msg));
+            tmp.assign(&input2_msg);
+            tmp *= &output_msg;
             let tmp_s = tmp.as_slice_mut().unwrap();
             fwht(tmp_s, nc);
             let s = tmp_s.iter().fold(0.0, |acc, x| acc + f64::abs(*x));
@@ -453,75 +456,62 @@ fn xor_2(
 
             // message to the input 2
             let mut tmp = msg.slice_mut(s![2, ..]);
-            tmp.assign(&(&input1_msg * &output_msg));
+            tmp.assign(&input1_msg);
+            tmp *= &output_msg;
             let tmp_s = tmp.as_slice_mut().unwrap();
             fwht(tmp_s, nc);
             let s = tmp_s.iter().fold(0.0, |acc, x| acc + f64::abs(*x));
             tmp_s.iter_mut().for_each(|x| *x = (*x / s).max(1E-50));
         });
 }
-/*
-fn xor_3(
-    inputs_v: &mut Vec<ArrayView2<f64>>,
-    output_msg: &mut ArrayView2<f64>,
-    msg: &mut ArrayView3<f64>,
+
+fn xors(
+    inputs: &Vec<ArrayView2<f64>>,
+    output: &ArrayView2<f64>,
+    msg: &mut ArrayViewMut3<f64>,
     nc: usize,
 ) {
-    let input1_msg = inputs_v[0];
-    let input2_msg = inputs_v[1];
-    let input3_msg = inputs_v[2];
-
-    let mut tmp_all = Array1::<f64>::ones(nc);
-    let tmp_all_s = tmp_all.as_slice_mut().unwrap();
     msg.outer_iter_mut()
-        .zip(input1_msg.outer_iter_mut())
-        .zip(input2_msg.outer_iter_mut())
-        .zip(input3_msg.outer_iter_mut())
-        .zip(output_msg.outer_iter_mut())
-        .for_each(
-            |((((mut msg, mut input1_msg), mut input2_msg), mut input3_msg), mut output_msg)| {
-                let input1_msg_s = input1_msg.as_slice_mut().unwrap();
-                let input2_msg_s = input2_msg.as_slice_mut().unwrap();
-                let input3_msg_s = input3_msg.as_slice_mut().unwrap();
-                let output_msg_s = output_msg.as_slice_mut().unwrap();
-                fwht(input1_msg_s, nc);
-                fwht(input2_msg_s, nc);
-                fwht(input3_msg_s, nc);
-                fwht(output_msg_s, nc);
-                input1_msg_s
-                    .iter_mut()
-                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
-                input2_msg_s
-                    .iter_mut()
-                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
-                input3_msg_s
-                    .iter_mut()
-                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
-                output_msg_s
-                    .iter_mut()
-                    .for_each(|x| *x = if f64::abs(*x) < 1E-10 { 1E-10 } else { *x });
-
-                for i in 0..nc {
-                    tmp_all_s[i] =
-                        input1_msg_s[i] * input2_msg_s[i] * input3_msg_s[i] * output_msg_s[i];
+        .zip(output.outer_iter())
+        .enumerate()
+        .for_each(|(i, (mut msg, output))| {
+            let mut output = output.to_owned();
+            let mut inputs_fwt = Array2::<f64>::zeros((inputs.len(), nc));
+            let mut acc = Array1::<f64>::zeros(nc);
+            // set the output
+            let output_s = output.as_slice_mut().unwrap();
+            fwht(output_s, nc);
+            output_s
+                .iter_mut()
+                .for_each(|x| *x = if f64::abs(*x) == 0.0 { 1E-50 } else { *x });
+            acc.assign(&output);
+            inputs
+                .iter()
+                .zip(inputs_fwt.outer_iter_mut())
+                .for_each(|(input, mut input_fwt)| {
+                    let input = input.slice(s![i, ..]);
+                    input_fwt.assign(&input);
+                    let input_fwt_s = input_fwt.as_slice_mut().unwrap();
+                    fwht(input_fwt_s, nc);
+                    input_fwt_s
+                        .iter_mut()
+                        .for_each(|x| *x = if f64::abs(*x) == 0.0 { 1E-50 } else { *x });
+                    acc *= &input_fwt;
+                    acc /= acc.sum();
+                });
+            msg.outer_iter_mut().enumerate().for_each(|(i, mut msg)| {
+                msg.assign(&acc);
+                if i == 0 {
+                    msg /= &output;
+                } else {
+                    msg /= &inputs_fwt.slice(s![i - 1, ..]);
                 }
-                let mut vecs = Vec::with_capacity(4);
-                vecs.push(output_msg_s);
-                vecs.push(input1_msg_s);
-                vecs.push(input2_msg_s);
-                vecs.push(input3_msg_s);
-
-                for (i, msg_s) in vecs.iter().enumerate() {
-                    // message to the output
-                    let mut tmp = msg.slice_mut(s![i, ..]);
-                    let tmp_s = tmp.as_slice_mut().unwrap();
-                    for i in 0..nc {
-                        tmp_s[i] = tmp_all_s[i] / msg_s[i];
-                    }
-                    fwht(tmp_s, nc);
-                    let s = tmp_s.iter().fold(0.0, |acc, x| acc + *x);
-                    tmp_s.iter_mut().for_each(|x| *x /= s);
-                }
-            },
-        );
-}*/
+                let msg_s = msg.as_slice_mut().unwrap();
+                fwht(msg_s, nc);
+                let s = msg_s.iter().fold(0.0, |acc, x| acc + x.max(1E-50));
+                msg_s
+                    .iter_mut()
+                    .for_each(|x| *x = (x.max(1E-50) / s).max(1E-50));
+            });
+        });
+}

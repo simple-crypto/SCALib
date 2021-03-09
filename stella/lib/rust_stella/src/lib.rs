@@ -1,5 +1,6 @@
 extern crate ndarray;
 mod belief_propagation;
+use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Array, Axis};
 use num_integer::binomial;
@@ -18,26 +19,51 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         variables: &PyList,
         it: usize,
     ) -> PyResult<()> {
+        let pb = ProgressBar::new(functions.len() as u64);
+        pb.set_style(ProgressStyle::default_spinner().template(
+        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
+    ));
+        pb.set_message("Init functions...");
         let mut functions_rust: Vec<belief_propagation::Func> = functions
             .iter()
+            .progress_with(pb)
             .map(|x| {
                 let dict = x.downcast::<PyDict>().unwrap();
                 belief_propagation::to_func(dict)
             })
             .collect();
+
+        let pb = ProgressBar::new(variables.len() as u64);
+        pb.set_style(ProgressStyle::default_spinner().template(
+        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
+    ));
+        pb.set_message("Init variables...");
         let mut variables_rust: Vec<belief_propagation::Var> = variables
             .iter()
+            .progress_with(pb)
             .map(|x| {
                 let dict = x.downcast::<PyDict>().unwrap();
                 belief_propagation::to_var(dict)
             })
             .collect();
-        for _ in 0..it {
+
+        let pb = ProgressBar::new(it as u64);
+        pb.set_style(ProgressStyle::default_spinner().template(
+        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
+    ));
+        pb.set_message("Calculating BP...");
+        for _ in (0..it).progress_with(pb) {
             belief_propagation::update_functions(&mut functions_rust, &variables_rust);
             belief_propagation::update_variables(&functions_rust, &mut variables_rust);
         }
+        let pb = ProgressBar::new(variables.len() as u64);
+        pb.set_style(ProgressStyle::default_spinner().template(
+        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
+    ));
+        pb.set_message("dump variables...");
         variables_rust
             .iter()
+            .progress_with(pb)
             .zip(variables)
             .for_each(|(v_rust, v_python)| {
                 let distri_current: &PyArray2<f64> =
