@@ -2,7 +2,7 @@ extern crate ndarray;
 mod belief_propagation;
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use ndarray::parallel::prelude::*;
-use ndarray::{s, Array, Axis};
+use ndarray::{s, Array, Array2, Axis};
 use num_integer::binomial;
 use numpy::{
     PyArray1, PyArray2, PyArray3, PyArrayDyn, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
@@ -18,12 +18,18 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         functions: &PyList,
         variables: &PyList,
         it: usize,
+        vertex: usize,
+        nc: usize,
+        n: usize,
     ) -> PyResult<()> {
+        let mut vertex: Vec<Array2<f64>> =
+            (0..vertex).map(|_| Array2::<f64>::ones((n, nc))).collect();
+
         let pb = ProgressBar::new(functions.len() as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
-        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
-    ));
+        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"));
         pb.set_message("Init functions...");
+
         let mut functions_rust: Vec<belief_propagation::Func> = functions
             .iter()
             .progress_with(pb)
@@ -35,15 +41,35 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
 
         let pb = ProgressBar::new(variables.len() as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
-        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
-    ));
+        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"));
         pb.set_message("Init variables...");
+
         let mut variables_rust: Vec<belief_propagation::Var> = variables
             .iter()
             .progress_with(pb)
             .map(|x| {
                 let dict = x.downcast::<PyDict>().unwrap();
-                belief_propagation::to_var(dict)
+                let mut var = belief_propagation::to_var(dict);
+                match var.vartype {
+                    belief_propagation::VarType::ProfilePara {
+                        distri_orig,
+                        distri_current,
+                    } => var.neighboors.iter().for_each(|x| {
+                        let mut v = &mut vertex[*x];
+                        v.assign(&distri_orig);
+                    }),
+
+                    belief_propagation::VarType::ProfileSingle {
+                        distri_orig,
+                        distri_current,
+                    } => var.neighboors.iter().for_each(|x| {
+                        let mut v = &vertex[*x];
+                        let distri = distri_orig.broadcast(v.shape()).unwrap();
+                        v.assign(&distri);
+                    }),
+                    _ => (),
+                }
+                var
             })
             .collect();
 
@@ -53,8 +79,8 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     ));
         pb.set_message("Calculating BP...");
         for _ in (0..it).progress_with(pb) {
-            belief_propagation::update_functions(&mut functions_rust, &variables_rust);
-            belief_propagation::update_variables(&functions_rust, &mut variables_rust);
+            belief_propagation::update_functions(&mut functions_rust, &mut vertex);
+            belief_propagation::update_variables(&mut vertex, &mut variables_rust);
         }
         let pb = ProgressBar::new(variables.len() as u64);
         pb.set_style(ProgressStyle::default_spinner().template(

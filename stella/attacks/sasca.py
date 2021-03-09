@@ -48,12 +48,6 @@ def init_graph_memory(graph,N,Nc):
             if var["flags"] & PROFILE != 0:
                 var["distri_orig"] = np.ones((n,Nc))
             var["distri"] = np.zeros((n,Nc))
-            var["msg"] = np.zeros((N,len(var["neighboors"]),Nc))
-
-    variables_list = list(map(lambda x:variables[x],variables))
-    for func in functions:
-        neighboors = func["neighboors"]
-        func["msg"] = np.zeros((N,len(neighboors),Nc))
 
     for p in graph["publics"]:
         graph["publics"][p] = np.zeros(N,dtype=np.uint32)
@@ -66,6 +60,7 @@ def create_graph(fname):
     variables = {}
     publics = {}
     tables = {}
+    vertex = 0
     in_loop = False
     with open(fname) as fp:
         lines = map(lambda l:l.rstrip('\n'),fp.readlines())
@@ -124,15 +119,16 @@ def create_graph(fname):
             func["in_loop"] = in_loop
 
             # add relation between fct and output
-            v["neighboors"].append(i)
-            func["outputs"].append(v["id"])
+            v["neighboors"].append(vertex); 
+            func["outputs"].append(vertex); vertex+=1
+
             # add relation between fct and inputs
             for j,labels in enumerate(split[::2][1:]):
                 # add neighboors only if the input has a distribution
                 if f["inputs_distri"] == -1 or j < f["inputs_distri"]:
                     v = variables[labels]
-                    func["inputs"].append(v["id"])
-                    v["neighboors"].append(i)
+                    func["inputs"].append(vertex)
+                    v["neighboors"].append(vertex); vertex+=1
           
             if f["val"] == LOOKUP:
                 print(split[-1])
@@ -145,29 +141,10 @@ def create_graph(fname):
             func["neighboors"] += func["inputs"][:].copy() 
             functions.append(func)
 
-    # init the distribution
-    for var in variables:
-        var = variables[var]
-        # get offset of the messages that will be send to that variable 
-        # within the neighboors 
-        var["offset"] = [None for i in var["neighboors"]]
-        for i,neighboor in enumerate(var["neighboors"]):
-            neighboor = functions[neighboor]
-            var["offset"][i] = neighboor["neighboors"].index(var["id"])
-
     # generate the list
     variables_list = list(map(lambda x:variables[x],variables))
    
-    # for each function node, find the offset the messages that will be send to
-    # it within the neighboors variable nodes.
-    for func in functions:
-        neighboors = func["neighboors"]
-        func["offset"] = [None for i in neighboors]
-        for i,neighboor in enumerate(neighboors):
-            neighboor = variables_list[neighboor]
-            func["offset"][i] = neighboor["neighboors"].index(func["id"])
-
-    return {"functions":functions,"var_list":variables_list,
+    return {"functions":functions,"var_list":variables_list,"vertex":vertex,
                     "var":variables,"publics":publics,"tables":tables}
 
 
@@ -180,12 +157,6 @@ def reset_graph_memory(graph,Nc):
             var["distri_orig"][:,:]= (var["distri_orig"].T / np.sum(var["distri_orig"],axis=1)).T
             # clip the distribution
             np.clip(var["distri_orig"],CLIP,1,out=var["distri_orig"])
-            # set distri_orig is a initial message
-            for i in range(len(var["msg"][0,:,0])):
-                var["msg"][:,i,:] = var["distri_orig"]
-        else:
-            # init msg to uniform 
-            var["msg"][:] = 1/Nc
 
     for f in graph["functions"]:
         if f["func"] == XOR_CST:
