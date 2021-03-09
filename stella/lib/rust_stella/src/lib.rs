@@ -27,9 +27,12 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                 belief_propagation::to_var(dict)
             })
             .collect();
-        let mut functions_refs : Vec<&mut  belief_propagation::Func> = functions_rust.iter().map(|x| &mut x).collect(); 
+        let mut functions_refs: Vec<&mut belief_propagation::Func> =
+            functions_rust.iter_mut().map(|x| x).collect();
+        let mut variables_refs: Vec<&mut belief_propagation::Var> =
+            variables_rust.iter_mut().map(|x| x).collect();
         //belief_propagation::update_functions(&mut functions_rust,&mut variables_rust);
-        belief_propagation::update_variables(&mut functions_rust,&mut variables_rust);
+        belief_propagation::update_variables(&mut functions_refs, &mut variables_refs);
         Ok(())
     }
 

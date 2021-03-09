@@ -1,6 +1,6 @@
 use ndarray::{s, Array1, Array2, Array3, Axis};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
-use pyo3::types::{PyDict};
+use pyo3::types::PyDict;
 
 pub enum VarType {
     ProfilePara {
@@ -143,10 +143,10 @@ fn fwht(a: &mut [f64], len: usize) {
     }
 }
 
-pub fn update_variables(functions: Vec<&mut Func>, variables:Vec<&mut Var>) {
-    variables.iter_mut().for_each(|var| {
+pub fn update_variables(functions: &mut Vec<&mut Func>, variables: &mut Vec<&mut Var>) {
+    variables.into_iter().for_each(|var| {
         // update the current distri
-        match &mut var.vartype {
+        match var.vartype {
             VarType::ProfilePara {
                 distri_orig: distri_orig,
                 distri_current: mut distri_current,
@@ -155,7 +155,7 @@ pub fn update_variables(functions: Vec<&mut Func>, variables:Vec<&mut Var>) {
                 distri_current.mapv_inplace(|x| f64::log2(x));
 
                 var.neighboors.iter().for_each(|(id, offset)| {
-                    let msg = &mut functions[*id].msg;
+                    let mut msg = &mut functions[*id].msg;
                     let mut msg = msg.slice_mut(s![.., *offset, ..]);
                     msg.mapv_inplace(|x| f64::log2(x));
                     distri_current += &msg;
@@ -164,124 +164,142 @@ pub fn update_variables(functions: Vec<&mut Func>, variables:Vec<&mut Var>) {
                     .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
                     .insert_axis(Axis(1));
             }
-            VarType::ProfileSingle {
-                distri_orig: distri_orig,
-                distri_current: mut distri_current,
-            } => {
-                distri_current.assign(&distri_orig);
-                distri_current.mapv_inplace(|x| f64::log2(x));
-
-                var.neighboors.iter().for_each(|(id, offset)| {
-                    let msg = &mut functions[*id].msg;
-                    let mut msg = msg.slice_mut(s![.., *offset, ..]);
-                    msg.mapv_inplace(|x| f64::log2(x));
-                    distri_current += &msg.sum_axis(Axis(0));
-                });
-                distri_current -= &distri_current
-                    .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
-                    .insert_axis(Axis(1));
-            }
-            VarType::NotProfilePara {
-                distri_current: mut distri_current,
-            } => {
-                distri_current.fill(0.0);
-                var.neighboors.iter().for_each(|(id, offset)| {
-                    let msg = &mut functions[*id].msg;
-                    let mut msg = msg.slice_mut(s![.., *offset, ..]);
-                    msg.mapv_inplace(|x| f64::log2(x));
-                    distri_current += &msg;
-                });
-                distri_current -= &distri_current
-                    .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
-                    .insert_axis(Axis(1));
-            }
-            VarType::NotProfileSingle {
-                distri_current: mut distri_current,
-            } => {
-                distri_current.fill(0.0);
-                var.neighboors.iter().for_each(|(id, offset)| {
-                    let msg = &mut functions[*id].msg;
-                    let mut msg = msg.slice_mut(s![.., *offset, ..]);
-                    msg.mapv_inplace(|x| f64::log2(x));
-                    distri_current += &msg.sum_axis(Axis(0));
-                });
-
-                distri_current -= &distri_current
-                    .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
-                    .insert_axis(Axis(1));
-            }
+            _ => (),
         }
+        /*VarType::ProfileSingle {
+            distri_orig: distri_orig,
+            distri_current: mut distri_current,
+        } => {
+            distri_current.assign(&distri_orig);
+            distri_current.mapv_inplace(|x| f64::log2(x));
+
+            var.neighboors.iter().for_each(|(id, offset)| {
+                let msg = &mut functions[*id].msg;
+                let mut msg = msg.slice_mut(s![.., *offset, ..]);
+                msg.mapv_inplace(|x| f64::log2(x));
+                distri_current += &msg.sum_axis(Axis(0));
+            });
+            distri_current -= &distri_current
+                .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
+                .insert_axis(Axis(1));
+        }
+        VarType::NotProfilePara {
+            distri_current: mut distri_current,
+        } => {
+            distri_current.fill(0.0);
+            var.neighboors.iter().for_each(|(id, offset)| {
+                let msg = &mut functions[*id].msg;
+                let mut msg = msg.slice_mut(s![.., *offset, ..]);
+                msg.mapv_inplace(|x| f64::log2(x));
+                distri_current += &msg;
+            });
+            distri_current -= &distri_current
+                .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
+                .insert_axis(Axis(1));
+        }
+        VarType::NotProfileSingle {
+            distri_current: mut distri_current,
+        } => {
+            distri_current.fill(0.0);
+            var.neighboors.iter().for_each(|(id, offset)| {
+                let msg = &mut functions[*id].msg;
+                let mut msg = msg.slice_mut(s![.., *offset, ..]);
+                msg.mapv_inplace(|x| f64::log2(x));
+                distri_current += &msg.sum_axis(Axis(0));
+            });
+
+            distri_current -= &distri_current
+                .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
+                .insert_axis(Axis(1));
+        }*/
 
         // send back the messages
         match &var.vartype {
             VarType::ProfilePara {
-                distri_orig: _, 
+                distri_orig: _,
                 distri_current: distri_current,
             } => {
-                var.neighboors.iter().zip(var.msg.axis_iter_mut(Axis(1))).for_each(|((id, offset),mut msg_out)| {
-                    let msg_in = &functions[*id].msg;
-                    let msg_in = msg_in.slice(s![.., *offset, ..]);
-                    msg_out.assign(&(distri_current - &msg_in));
-                    msg_out.mapv_inplace(|x| (2.0 as f64).powf(x));
-                    msg_out /= &msg_out
-                        .sum_axis(Axis(1))
-                        .insert_axis(Axis(1))
-                        .broadcast(msg_out.shape())
-                        .unwrap();
-                    msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
-                });
+                var.neighboors
+                    .iter()
+                    .zip(var.msg.axis_iter_mut(Axis(1)))
+                    .for_each(|((id, offset), mut msg_out)| {
+                        let msg_in = &functions[*id].msg;
+                        let msg_in = msg_in.slice(s![.., *offset, ..]);
+                        msg_out.assign(&(distri_current - &msg_in));
+                        msg_out.mapv_inplace(|x| (2.0 as f64).powf(x));
+                        msg_out /= &msg_out
+                            .sum_axis(Axis(1))
+                            .insert_axis(Axis(1))
+                            .broadcast(msg_out.shape())
+                            .unwrap();
+                        msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
+                    });
             }
-            VarType::ProfileSingle {
-                distri_orig:_, 
-                distri_current: distri_current,
-            } => {
-                var.neighboors.iter().zip(var.msg.axis_iter_mut(Axis(1))).for_each(|((id, offset),mut msg_out)| {
-                    let msg_in = & functions[*id].msg;
-                    let msg_in = msg_in.slice(s![.., *offset, ..]);
-                    let distri_current = distri_current.broadcast(msg_in.shape()).unwrap();
-                    msg_out.assign(&(&distri_current - &msg_in));
-                    msg_out.mapv_inplace(|x| (2.0 as f64).powf(x));
-                    msg_out /= &msg_out
-                        .sum_axis(Axis(1))
-                        .insert_axis(Axis(1))
-                        .broadcast(msg_out.shape())
-                        .unwrap();
-                    msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
-                });
-            }
-            VarType::NotProfilePara {
-                distri_current: distri_current,
-            } => {
-                var.neighboors.iter().zip(var.msg.axis_iter_mut(Axis(1))).for_each(|((id, offset),mut msg_out)| {
-                    let msg_in = &functions[*id].msg;
-                    let msg_in = msg_in.slice(s![.., *offset, ..]);
-                    msg_out.assign(&(distri_current - &msg_in));
-                    msg_out.mapv_inplace(|x| (2.0 as f64).powf(x));
-                    msg_out /= &msg_out
-                        .sum_axis(Axis(1))
-                        .insert_axis(Axis(1))
-                        .broadcast(msg_out.shape())
-                        .unwrap();
-                    msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
-                });
-            }
-            VarType::NotProfileSingle {
-                distri_current: distri_current,
-            } => {
-                var.neighboors.iter().zip(var.msg.axis_iter_mut(Axis(1))).for_each(|((id, offset),mut msg_out)| {
-                    let msg_in = & functions[*id].msg;
-                    let msg_in = msg_in.slice(s![.., *offset, ..]);
-                    msg_out.assign(&(distri_current - &msg_in));
-                    msg_out.mapv_inplace(|x| (2.0 as f64).powf(x));
-                    msg_out /= &msg_out
-                        .sum_axis(Axis(1))
-                        .insert_axis(Axis(1))
-                        .broadcast(msg_out.shape())
-                        .unwrap();
-                    msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
-                });
-            }
+            _ => (),
         }
+
+        /*
+                    VarType::ProfileSingle {
+                        distri_orig: _,
+                        distri_current: distri_current,
+                    } => {
+                        var.neighboors
+                            .iter()
+                            .zip(var.msg.axis_iter_mut(Axis(1)))
+                            .for_each(|((id, offset), mut msg_out)| {
+                                let msg_in = &functions[*id].msg;
+                                let msg_in = msg_in.slice(s![.., *offset, ..]);
+                                let distri_current = distri_current.broadcast(msg_in.shape()).unwrap();
+                                msg_out.assign(&(&distri_current - &msg_in));
+                                msg_out.mapv_inplace(|x| (2.0 as f64).powf(x));
+                                msg_out /= &msg_out
+                                    .sum_axis(Axis(1))
+                                    .insert_axis(Axis(1))
+                                    .broadcast(msg_out.shape())
+                                    .unwrap();
+                                msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
+                            });
+                    }
+                    VarType::NotProfilePara {
+                        distri_current: distri_current,
+                    } => {
+                        var.neighboors
+                            .iter()
+                            .zip(var.msg.axis_iter_mut(Axis(1)))
+                            .for_each(|((id, offset), mut msg_out)| {
+                                let msg_in = &functions[*id].msg;
+                                let msg_in = msg_in.slice(s![.., *offset, ..]);
+                                msg_out.assign(&(distri_current - &msg_in));
+                                msg_out.mapv_inplace(|x| (2.0 as f64).powf(x));
+                                msg_out /= &msg_out
+                                    .sum_axis(Axis(1))
+                                    .insert_axis(Axis(1))
+                                    .broadcast(msg_out.shape())
+                                    .unwrap();
+                                msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
+                            });
+                    }
+                    VarType::NotProfileSingle {
+                        distri_current: distri_current,
+                    } => {
+                        var.neighboors
+                            .iter()
+                            .zip(var.msg.axis_iter_mut(Axis(1)))
+                            .for_each(|((id, offset), mut msg_out)| {
+                                let msg_in = &functions[*id].msg;
+                                let msg_in = msg_in.slice(s![.., *offset, ..]);
+                                msg_out.assign(&(distri_current - &msg_in));
+                                msg_out.mapv_inplace(|x| (2.0 as f64).powf(x));
+                                msg_out /= &msg_out
+                                    .sum_axis(Axis(1))
+                                    .insert_axis(Axis(1))
+                                    .broadcast(msg_out.shape())
+                                    .unwrap();
+                                msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
+                            });
+                    }
+                }
+        */
     });
 }
 
