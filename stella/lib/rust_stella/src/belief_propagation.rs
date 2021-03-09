@@ -136,7 +136,7 @@ fn fwht(a: &mut [f64], len: usize) {
     }
 }
 
-pub fn update_variables(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
+pub fn update_variables(functions: &Vec<Func>, variables: &mut Vec<Var>) {
     variables.iter_mut().for_each(|var| {
         // update the current distri
         match &mut var.vartype {
@@ -145,58 +145,54 @@ pub fn update_variables(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
                 distri_current,
             } => {
                 distri_current.assign(&distri_orig);
-                distri_current.mapv_inplace(|x| f64::log2(x));
-
                 var.neighboors.iter().for_each(|(id, offset)| {
-                    let msg = &mut functions[*id].msg;
-                    let mut msg = msg.slice_mut(s![.., *offset, ..]);
-                    msg.mapv_inplace(|x| f64::log2(x));
-                    *distri_current += &msg;
+                    let msg = &functions[*id].msg;
+                    let msg = msg.slice(s![.., *offset, ..]);
+                    *distri_current *= &msg;
+                    *distri_current/= &distri_current
+                            .sum_axis(Axis(1))
+                            .insert_axis(Axis(1))
+                            .broadcast(distri_current.shape())
+                            .unwrap();
                 });
-                *distri_current -= &distri_current
-                    .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
-                    .insert_axis(Axis(1));
             }
             VarType::ProfileSingle {
                 distri_orig,
                 distri_current,
             } => {
                 distri_current.assign(&distri_orig);
-                distri_current.mapv_inplace(|x| f64::log2(x));
-
                 var.neighboors.iter().for_each(|(id, offset)| {
-                    let msg = &mut functions[*id].msg;
-                    let mut msg = msg.slice_mut(s![.., *offset, ..]);
-                    msg.mapv_inplace(|x| f64::log2(x));
-                    *distri_current += &msg.sum_axis(Axis(0));
+                    let msg = &functions[*id].msg;
+                    let msg = msg.slice(s![.., *offset, ..]);
+                    msg.outer_iter().for_each(|msg|{
+                        *distri_current *= &msg;
+                        *distri_current /= distri_current.fold(0.0,|acc,x| acc + *x);
+                    });
                 });
-                *distri_current -= &distri_current
-                    .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
-                    .insert_axis(Axis(1));
             }
             VarType::NotProfilePara { distri_current } => {
-                distri_current.fill(0.0);
+                distri_current.fill(1.0);
                 var.neighboors.iter().for_each(|(id, offset)| {
-                    let msg = &mut functions[*id].msg;
-                    let mut msg = msg.slice_mut(s![.., *offset, ..]);
-                    msg.mapv_inplace(|x| f64::log2(x));
-                    *distri_current += &msg;
+                    let msg = &functions[*id].msg;
+                    let msg = msg.slice(s![.., *offset, ..]);
+                    *distri_current *= &msg;
+                    *distri_current/= &distri_current
+                            .sum_axis(Axis(1))
+                            .insert_axis(Axis(1))
+                            .broadcast(distri_current.shape())
+                            .unwrap();
                 });
-                *distri_current -= &distri_current
-                    .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
-                    .insert_axis(Axis(1));
             }
             VarType::NotProfileSingle { distri_current } => {
-                distri_current.fill(0.0);
+                distri_current.fill(1.0);
                 var.neighboors.iter().for_each(|(id, offset)| {
-                    let msg = &mut functions[*id].msg;
-                    let mut msg = msg.slice_mut(s![.., *offset, ..]);
-                    msg.mapv_inplace(|x| f64::log2(x));
-                    *distri_current += &msg.sum_axis(Axis(0));
+                    let msg = &functions[*id].msg;
+                    let msg = msg.slice(s![.., *offset, ..]);
+                    msg.outer_iter().for_each(|msg|{
+                        *distri_current *= &msg;
+                        *distri_current /= distri_current.fold(0.0,|acc,x| acc + *x);
+                    });
                 });
-                *distri_current -= &distri_current
-                    .fold_axis(Axis(1), f64::MIN, |acc, x| acc.max(*x))
-                    .insert_axis(Axis(1));
             }
         }
 
@@ -213,8 +209,7 @@ pub fn update_variables(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
                         let msg_in = &functions[*id].msg;
                         let msg_in = msg_in.slice(s![.., *offset, ..]);
                         msg_out.assign(distri_current);
-                        *msg_out -= &msg_in;
-                        msg_out.mapv_inplace(|x| x.exp2());
+                        *msg_out /= &msg_in;
                         *msg_out /= &msg_out
                             .sum_axis(Axis(1))
                             .insert_axis(Axis(1))
@@ -222,13 +217,6 @@ pub fn update_variables(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
                             .unwrap();
                         msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
                     });
-                distri_current.mapv_inplace(|x| x.exp2());
-                *distri_current /= &distri_current
-                    .sum_axis(Axis(1))
-                    .insert_axis(Axis(1))
-                    .broadcast(distri_current.shape())
-                    .unwrap();
-                distri_current.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
             }
             VarType::ProfileSingle {
                 distri_orig: _,
@@ -242,9 +230,7 @@ pub fn update_variables(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
                         let msg_in = msg_in.slice(s![.., *offset, ..]);
                         let distri_current = distri_current.broadcast(msg_in.shape()).unwrap();
                         msg_out.assign(&distri_current);
-                        *msg_out -= &msg_in;
-
-                        msg_out.mapv_inplace(|x| x.exp2());
+                        *msg_out /= &msg_in;
                         *msg_out /= &msg_out
                             .sum_axis(Axis(1))
                             .insert_axis(Axis(1))
@@ -252,13 +238,6 @@ pub fn update_variables(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
                             .unwrap();
                         msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
                     });
-                distri_current.mapv_inplace(|x| x.exp2());
-                *distri_current /= &distri_current
-                    .sum_axis(Axis(1))
-                    .insert_axis(Axis(1))
-                    .broadcast(distri_current.shape())
-                    .unwrap();
-                distri_current.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
             }
             VarType::NotProfilePara { distri_current } => {
                 var.neighboors
@@ -268,9 +247,7 @@ pub fn update_variables(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
                         let msg_in = &functions[*id].msg;
                         let msg_in = msg_in.slice(s![.., *offset, ..]);
                         msg_out.assign(distri_current);
-                        *msg_out -= &msg_in;
-                        msg_out.mapv_inplace(|x| x.exp2());
-
+                        *msg_out /= &msg_in;
                         *msg_out /= &msg_out
                             .sum_axis(Axis(1))
                             .insert_axis(Axis(1))
@@ -278,13 +255,6 @@ pub fn update_variables(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
                             .unwrap();
                         msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
                     });
-                distri_current.mapv_inplace(|x| x.exp2());
-                *distri_current /= &distri_current
-                    .sum_axis(Axis(1))
-                    .insert_axis(Axis(1))
-                    .broadcast(distri_current.shape())
-                    .unwrap();
-                distri_current.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
             }
             VarType::NotProfileSingle { distri_current } => {
                 let mut i = 0;
@@ -297,8 +267,7 @@ pub fn update_variables(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
                         let msg_in = msg_in.slice(s![.., *offset, ..]);
                         let distri_current = distri_current.broadcast(msg_in.shape()).unwrap();
                         msg_out.assign(&distri_current);
-                        *msg_out -= &msg_in;
-                        msg_out.mapv_inplace(|x| x.exp2());
+                        *msg_out /= &msg_in;
                         *msg_out /= &msg_out
                             .sum_axis(Axis(1))
                             .insert_axis(Axis(1))
@@ -306,19 +275,12 @@ pub fn update_variables(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
                             .unwrap();
                         msg_out.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
                     });
-                distri_current.mapv_inplace(|x| x.exp2());
-                *distri_current /= &distri_current
-                    .sum_axis(Axis(1))
-                    .insert_axis(Axis(1))
-                    .broadcast(distri_current.shape())
-                    .unwrap();
-                distri_current.mapv_inplace(|x| if x < 1E-50 { 1E-50 } else { x });
             }
         }
     });
 }
 
-pub fn update_functions(functions: &mut Vec<Func>, variables: &mut Vec<Var>) {
+pub fn update_functions(functions: &mut Vec<Func>, variables: &Vec<Var>) {
     functions.iter_mut().for_each(|function| {
         match &mut function.functype {
             FuncType::AND => {

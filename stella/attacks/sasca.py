@@ -195,15 +195,15 @@ def reset_graph_memory(graph,Nc):
 
 if __name__ == "__main__":
     graph = create_graph("example_graph.txt")
-    n = 1000
+    n = 10000
    
     from tqdm import tqdm
-    for nc in 2**np.arange(2,9):
+    for nc in 2**np.arange(7,8):
         init_graph_memory(graph,n,nc)
         variables = graph["var"]
         publics = graph["publics"]
         tables = graph["tables"]
-        for it in tqdm(range(100),desc="nc %d"%(nc)):
+        for it in tqdm(range(1),desc="nc %d"%(nc)):
             x_0 = np.random.randint(0,nc)
             p_0 = np.random.randint(0,nc)
             x_1 = np.random.randint(0,nc)

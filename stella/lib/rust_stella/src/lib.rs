@@ -33,8 +33,8 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             })
             .collect();
         for _ in 0..it {
-            belief_propagation::update_functions(&mut functions_rust, &mut variables_rust);
-            belief_propagation::update_variables(&mut functions_rust, &mut variables_rust);
+            belief_propagation::update_functions(&mut functions_rust, &variables_rust);
+            belief_propagation::update_variables(&functions_rust, &mut variables_rust);
         }
         variables_rust
             .iter()
