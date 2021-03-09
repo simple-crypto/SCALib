@@ -12,7 +12,12 @@ use pyo3::types::{PyDict, PyList};
 #[pymodule]
 fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "belief_propagation")]
-    fn belief_propagation(_py: Python, functions: &PyList, variables: &PyList) -> PyResult<()> {
+    fn belief_propagation(
+        _py: Python,
+        functions: &PyList,
+        variables: &PyList,
+        it: usize,
+    ) -> PyResult<()> {
         let mut functions_rust: Vec<belief_propagation::Func> = functions
             .iter()
             .map(|x| {
@@ -27,12 +32,42 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                 belief_propagation::to_var(dict)
             })
             .collect();
-        let mut functions_refs: Vec<&mut belief_propagation::Func> =
-            functions_rust.iter_mut().map(|x| x).collect();
-        let mut variables_refs: Vec<&mut belief_propagation::Var> =
-            variables_rust.iter_mut().map(|x| x).collect();
-        //belief_propagation::update_functions(&mut functions_rust,&mut variables_rust);
-        belief_propagation::update_variables(&mut functions_refs, &mut variables_refs);
+        for _ in 0..it {
+            belief_propagation::update_functions(&mut functions_rust, &mut variables_rust);
+            belief_propagation::update_variables(&mut functions_rust, &mut variables_rust);
+        }
+        variables_rust
+            .iter()
+            .zip(variables)
+            .for_each(|(v_rust, v_python)| {
+                let distri_current: &PyArray2<f64> =
+                    v_python.get_item("distri").unwrap().extract().unwrap();
+                let mut distri_current = unsafe { distri_current.as_array_mut() };
+                match &v_rust.vartype {
+                    belief_propagation::VarType::NotProfilePara {
+                        distri_current: distri,
+                    } => {
+                        distri_current.assign(&distri);
+                    }
+                    belief_propagation::VarType::NotProfileSingle {
+                        distri_current: distri,
+                    } => {
+                        distri_current.assign(&distri);
+                    }
+                    belief_propagation::VarType::ProfilePara {
+                        distri_orig: _,
+                        distri_current: distri,
+                    } => {
+                        distri_current.assign(&distri);
+                    }
+                    belief_propagation::VarType::ProfileSingle {
+                        distri_orig: _,
+                        distri_current: distri,
+                    } => {
+                        distri_current.assign(&distri);
+                    }
+                }
+            });
         Ok(())
     }
 

@@ -34,8 +34,8 @@ print("# Generate the graph")
 print("####################")
 print("-> Write ",fgraph)
 with open(fgraph, 'w') as fp:
-    for i in range(16): fp.write("k%d #secret \n"%(i))
     fp.write("sbox #table \n")
+    for i in range(16): fp.write("k%d #secret \n"%(i))
     fp.write("\n\n#indeploop\n\n")
     for i in range(16): fp.write("p%d #public\n"%(i))
     for i in range(16): fp.write("y%d = k%d + p%d\n"%(i,i,i))
@@ -149,14 +149,14 @@ for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
 print("-> Set initial msg for BP")
 reset_graph_memory(graph,256)
 print("-> Running BP")
-for i in tqdm(range(3),desc="BP iterations"):
-    rust.belief_propagation(graph["functions"],graph["var_list"])
+rust.belief_propagation(graph["functions"],graph["var_list"],5)
 
 # Display the obtained key
 guess = []
 rank = []
 for i,k in enumerate(secret_key):
     label = "k%d"%(i)
+#    print(graph["var"][label]["distri"])
     guess.append(np.argmax(graph["var"][label]["distri"],axis=1)[0])
     rank.append(256 - np.where(np.argsort(graph["var"][label]["distri"],axis=1)[0] == k)[0])
 

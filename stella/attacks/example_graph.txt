@@ -1,6 +1,6 @@
+sbox #table
 k_0 #secret
 k_1 #secret
-sbox #table
 
 #indeploop
 
@@ -17,6 +17,6 @@ x_1 = k_1 + p_1
 
 k_2 = x_1 -> sbox
 k_3 = p_0 & x_0
-k_4 = p_0 ^ x_0 ^ x_1 
+k_4 = p_0 ^ x_0  
 
 #endindeploop
