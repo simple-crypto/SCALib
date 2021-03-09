@@ -13,26 +13,25 @@ use pyo3::types::{PyDict, PyList};
 fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     #[pyfn(m, "belief_propagation")]
     fn belief_propagation(_py: Python, functions: &PyList, variables: &PyList) -> PyResult<()> {
-        let functions_rust : Vec<belief_propagation::Func> = functions.iter().map(|x| 
-            {
+        let mut functions_rust: Vec<belief_propagation::Func> = functions
+            .iter()
+            .map(|x| {
                 let dict = x.downcast::<PyDict>().unwrap();
                 belief_propagation::to_func(dict)
-            }).collect();
-        let vars_rust : Vec<belief_propagation::Var> = variables.iter().map(|x| 
-            {
+            })
+            .collect();
+        let mut variables_rust: Vec<belief_propagation::Var> = variables
+            .iter()
+            .map(|x| {
                 let dict = x.downcast::<PyDict>().unwrap();
                 belief_propagation::to_var(dict)
-            }).collect();
-        belief_propagation::update_functions(functions, variables);
-        belief_propagation::update_variables(functions, variables);
+            })
+            .collect();
+        let mut functions_refs : Vec<&mut  belief_propagation::Func> = functions_rust.iter().map(|x| &mut x).collect(); 
+        //belief_propagation::update_functions(&mut functions_rust,&mut variables_rust);
+        belief_propagation::update_variables(&mut functions_rust,&mut variables_rust);
         Ok(())
     }
-
-
-
-
-
-
 
     #[pyfn(m, "multivariate_pooled")]
     fn multivariate_pooled(
