@@ -53,7 +53,6 @@ def init_graph_memory(graph,N,Nc):
         graph["publics"][p] = np.zeros(N,dtype=np.uint32)
     for p in graph["tables"]:
         graph["tables"][p] = np.zeros(Nc,dtype=np.uint32)
-    return functions,variables_list,variables
  
 def create_graph(fname):
     functions = []
@@ -203,13 +202,15 @@ if __name__ == "__main__":
 
             reset_graph_memory(graph,nc)
             
-            rust.belief_propagation(graph["functions"],graph["var_list"],4)
+            rust.belief_propagation(graph["functions"],graph["var_list"],4,
+                    graph["vertex"],
+                    nc,n)
+
             k_0 = np.argmax(variables["k_0"]["distri"],axis=1)[0]
             k_1 = np.argmax(variables["k_1"]["distri"],axis=1)[0]
             k_2 = np.argmax(variables["k_2"]["distri"],axis=1)[0]
             k_3 = np.argmax(variables["k_3"]["distri"],axis=1)[0]
             k_4 = np.argmax(variables["k_4"]["distri"],axis=1)[0]
-
             assert k_0 == k_0_expected 
             assert k_1 == k_1_expected 
             assert k_2 == k_2_expected 

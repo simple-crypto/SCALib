@@ -149,7 +149,7 @@ for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
 print("-> Set initial msg for BP")
 reset_graph_memory(graph,256)
 print("-> Running BP")
-rust.belief_propagation(graph["functions"],graph["var_list"],5)
+rust.belief_propagation(graph["functions"],graph["var_list"],5,graph["vertex"],256,ntraces_attack)
 
 # Display the obtained key
 guess = []
