@@ -1,9 +1,8 @@
 use ndarray::{
-    s, Array1, Array2, Array3, ArrayView2, ArrayView3, ArrayViewMut2, ArrayViewMut3, Axis,
+    s, Array1, Array2, Axis 
 };
-use numpy::{PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
+use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::types::PyDict;
-use rayon::prelude::*;
 
 pub enum VarType {
     ProfilePara {
@@ -236,7 +235,7 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
     functions
         .iter_mut()
         .zip(vertex.iter_mut())
-        .for_each(|(function, mut vertex)| {
+        .for_each(|(function, vertex)| {
             match &mut function.functype {
                 FuncType::AND => {
                     let input2_msg = vertex.pop().unwrap();
@@ -277,7 +276,7 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
                 }
                 FuncType::XOR => {
                     let mut input_msg = vertex.split_off(1);
-                    let mut output_msg = vertex.pop().unwrap();
+                    let output_msg = vertex.pop().unwrap();
                     let nc = output_msg.shape()[1];
                     xors(&mut input_msg, output_msg, nc);
                 }

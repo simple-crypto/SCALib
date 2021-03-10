@@ -22,16 +22,21 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         nc: usize,
         n: usize,
     ) -> PyResult<()> {
-        println!("vertex {:?}", vertex);
+        // array to save all the vertex
         let mut vertex: Vec<Array2<f64>> =
             (0..vertex).map(|_| Array2::<f64>::ones((n, nc))).collect();
+        
+        // mapping of the vertex for functions and variables
+        let mut vec_funcs_id: Vec<(usize, usize)> = (0..vertex.len()).map(|_| (0, 0)).collect(); //(associated funct,position in fnc)
+        let mut vec_vars_id: Vec<(usize, usize)> = (0..vertex.len()).map(|_| (0, 0)).collect();
 
+        // loading bar
         let pb = ProgressBar::new(functions.len() as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
         "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"));
         pb.set_message("Init functions...");
-        let mut vec_funcs_id: Vec<(usize, usize)> = (0..vertex.len()).map(|_| (0, 0)).collect(); //(associated funct,position in fnc)
 
+        // map all python functions to rust ones + generate the mapping in vec_functs_id
         let mut functions_rust: Vec<belief_propagation::Func> = functions
             .iter()
             .enumerate()
@@ -46,12 +51,15 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             })
             .collect();
 
+        // loading bar
         let pb = ProgressBar::new(variables.len() as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
         "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"));
         pb.set_message("Init variables...");
 
-        let mut vec_vars_id: Vec<(usize, usize)> = (0..vertex.len()).map(|_| (0, 0)).collect();
+        // map all python var to rust ones
+        // generate the vertex mapping in vec_vars_id
+        // init the messages along the edges with initial distributions
         let mut variables_rust: Vec<belief_propagation::Var> = variables
             .iter()
             .progress_with(pb)
@@ -86,6 +94,8 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             })
             .collect();
 
+
+        // loading bar
         let pb = ProgressBar::new(it as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
         "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
@@ -94,6 +104,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
 
         for _ in (0..it).progress_with(pb) {
             unsafe{
+                // map vertex to vec<vec<>> based on vec_funcs_id
                 let mut vertex_for_func: Vec<Vec<&mut Array2<f64>>> = functions_rust.iter()
                     .map(|v| {let mut vec = Vec::<&mut Array2<f64>>::with_capacity(v.neighboors.len());
                                 vec.set_len(v.neighboors.len());
@@ -104,10 +115,12 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                     .zip(vec_funcs_id.iter())
                     .for_each(|(x, (id, posi))| vertex_for_func[*id][*posi] = x);
 
+                // unpdate function nodes
                 belief_propagation::update_functions(&mut functions_rust, &mut vertex_for_func);
             }
 
             unsafe{
+                // map vertex to vec<vec<>> based on vec_vars_id
                 let mut vertex_for_var: Vec<Vec<&mut Array2<f64>>> = variables_rust.iter()
                     .map(|v| {let mut vec = Vec::<&mut Array2<f64>>::with_capacity(v.neighboors.len());
                                 vec.set_len(v.neighboors.len());
@@ -117,6 +130,8 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                     .iter_mut()
                     .zip(vec_vars_id.iter())
                     .for_each(|(x, (id, posi))| vertex_for_var[*id][*posi] = x);
+
+                // variables function nodes
                 belief_propagation::update_variables(&mut vertex_for_var,&mut variables_rust);
             }
         }
