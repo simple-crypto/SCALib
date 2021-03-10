@@ -10,14 +10,14 @@ import pickle
 import stella.lib.rust_stella as rust
 
 # Setup the simulation settings
-D=2
+D=4
 tag = "sim"
 DIR_PROFILE = "./traces/profile/"
 DIR_ATTACK = "./traces/attack/"
 nfile_profile = 10
-nfile_attack = 3
+nfile_attack = 6
 ntraces = 1000
-std = 2
+std = .4
 ndim = 3
 fgraph = "./graph.txt"
 

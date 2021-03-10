@@ -3,6 +3,7 @@ use ndarray::{
 };
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::types::PyDict;
+use rayon::prelude::*;
 
 pub enum VarType {
     ProfilePara {
@@ -120,8 +121,8 @@ fn fwht(a: &mut [f64], len: usize) {
 
 pub fn update_variables(vertex: &mut Vec<Vec<&mut Array2<f64>>>, variables: &mut Vec<Var>) {
     variables
-        .iter_mut()
-        .zip(vertex.iter_mut())
+        .par_iter_mut()
+        .zip(vertex.par_iter_mut())
         .for_each(|(var, neighboors)| {
             // update the current distri
             match &mut var.vartype {
@@ -233,8 +234,8 @@ pub fn update_variables(vertex: &mut Vec<Vec<&mut Array2<f64>>>, variables: &mut
 
 pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Array2<f64>>>) {
     functions
-        .iter_mut()
-        .zip(vertex.iter_mut())
+        .par_iter_mut()
+        .zip(vertex.par_iter_mut())
         .for_each(|(function, vertex)| {
             match &mut function.functype {
                 FuncType::AND => {
@@ -243,9 +244,9 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
                     let output_msg = vertex.pop().unwrap();
                     let nc = input1_msg.shape()[1];
                     input1_msg
-                        .outer_iter_mut()
-                        .zip(input2_msg.outer_iter_mut())
-                        .zip(output_msg.outer_iter_mut())
+                        .outer_iter_mut().into_par_iter()
+                        .zip(input2_msg.outer_iter_mut().into_par_iter())
+                        .zip(output_msg.outer_iter_mut().into_par_iter())
                         .for_each(|((mut input1_msg, mut input2_msg), mut output_msg)| {
                             let input1_msg_o = input1_msg.to_owned();
                             let input2_msg_o = input2_msg.to_owned();
@@ -285,9 +286,9 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
                     let output_msg = vertex.pop().unwrap();
                     let nc = input1_msg.shape()[1];
                     input1_msg
-                        .outer_iter_mut()
-                        .zip(output_msg.outer_iter_mut())
-                        .zip(values.iter())
+                        .outer_iter_mut().into_par_iter()
+                        .zip(output_msg.outer_iter_mut().into_par_iter())
+                        .zip(values.outer_iter().into_par_iter())
                         .for_each(|((mut input1_msg, mut output_msg), value)| {
                             let input1_msg_o = input1_msg.to_owned();
                             let output_msg_o = output_msg.to_owned();
@@ -298,7 +299,7 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
                             output_msg.fill(0.0);
                             let input1_msg_s_mut = input1_msg.as_slice_mut().unwrap();
                             let output_msg_s_mut = output_msg.as_slice_mut().unwrap();
-
+                            let value = value.first().unwrap();
                             for i1 in 0..nc {
                                 let o: usize = ((i1 as u32) ^ value) as usize;
                                 input1_msg_s_mut[i1] += output_msg_s[o];
@@ -312,8 +313,8 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
                     let nc = input1_msg.shape()[1];
                     let table = table.as_slice().unwrap();
                     input1_msg
-                        .outer_iter_mut()
-                        .zip(output_msg.outer_iter_mut())
+                        .outer_iter_mut().into_par_iter()
+                        .zip(output_msg.outer_iter_mut().into_par_iter())
                         .for_each(|(mut input1_msg, mut output_msg)| {
                             let input1_msg_o = input1_msg.to_owned();
                             let output_msg_o = output_msg.to_owned();
