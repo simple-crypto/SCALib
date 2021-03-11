@@ -18,9 +18,11 @@ numpy = "0.13.0"
 rayon = "1.5.0"
 num-integer = "0.1.42"
 indicatif = "0.15.0"
-ndarray = { version = "0.14.0", features = ["rayon"] }
+ndarray = { version = "0.14.0", features = ["rayon","blas"] }
 itertools = "0.10.0"
 ndarray-stats = "0.4.0"
 #GSL = "2.0.0"
+blas-src = { version = "0.7.0", default-features = false, features = ["openblas"] }
+openblas-src = { version = "0.9", default-features = false, features = ["cblas", "system"] }
 [profile.release]
 debug = true

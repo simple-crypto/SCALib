@@ -329,15 +329,22 @@ class _PSD(object):
 if __name__ == "__main__":
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
     import time
-    traces = np.random.randint(0,256,(5000000,1000),dtype=np.int16)
-    labels = np.random.randint(0,256,5000000,dtype=np.uint16)
+    import scipy
+    np.random.seed(0)
+    ns = 200
+    traces = np.random.randint(0,256,(500000,ns),dtype=np.int16)
+    labels = np.random.randint(0,256,500000,dtype=np.uint16)
+    sw = np.zeros((ns,ns))
+    sb = np.zeros((ns,ns))
 
-    traces_t = np.random.randint(0,256,(50000*5,1000),dtype=np.int16)
-    labels_t = np.random.randint(0,256,50000*5,dtype=np.uint16)
+    start = time.time()
+    lda = LDA_sklearn(solver="eigen")
+    lda.fit(traces,labels)
+    print(time.time()-start)
 
-    print("Train LDA")
-    lda_c = LDAClassifier(traces,labels)
-
-    print("Predict with LDA")
-    lda_c.predict_proba(traces_t)
+    start = time.time()
+    rust.lda_matrix(traces,labels,sb,sw,256)
+    evals, evecs = scipy.linalg.eigh(sb, sw)
+    evecs = evecs[:, np.argsort(evals)[::-1]]
+    print(time.time()-start)
 
