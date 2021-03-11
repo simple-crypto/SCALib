@@ -20,5 +20,7 @@ num-integer = "0.1.42"
 indicatif = "0.15.0"
 ndarray = { version = "0.14.0", features = ["rayon"] }
 itertools = "0.10.0"
+ndarray-stats = "0.4.0"
+#GSL = "2.0.0"
 [profile.release]
 debug = true

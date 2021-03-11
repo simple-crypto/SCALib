@@ -1,6 +1,4 @@
-use ndarray::{
-    s, Array1, Array2, Axis 
-};
+use ndarray::{s, Array1, Array2, Axis};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::types::PyDict;
 use rayon::prelude::*;
@@ -244,7 +242,8 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
                     let output_msg = vertex.pop().unwrap();
                     let nc = input1_msg.shape()[1];
                     input1_msg
-                        .outer_iter_mut().into_par_iter()
+                        .outer_iter_mut()
+                        .into_par_iter()
                         .zip(input2_msg.outer_iter_mut().into_par_iter())
                         .zip(output_msg.outer_iter_mut().into_par_iter())
                         .for_each(|((mut input1_msg, mut input2_msg), mut output_msg)| {
@@ -286,7 +285,8 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
                     let output_msg = vertex.pop().unwrap();
                     let nc = input1_msg.shape()[1];
                     input1_msg
-                        .outer_iter_mut().into_par_iter()
+                        .outer_iter_mut()
+                        .into_par_iter()
                         .zip(output_msg.outer_iter_mut().into_par_iter())
                         .zip(values.outer_iter().into_par_iter())
                         .for_each(|((mut input1_msg, mut output_msg), value)| {
@@ -313,7 +313,8 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
                     let nc = input1_msg.shape()[1];
                     let table = table.as_slice().unwrap();
                     input1_msg
-                        .outer_iter_mut().into_par_iter()
+                        .outer_iter_mut()
+                        .into_par_iter()
                         .zip(output_msg.outer_iter_mut().into_par_iter())
                         .for_each(|(mut input1_msg, mut output_msg)| {
                             let input1_msg_o = input1_msg.to_owned();
@@ -350,7 +351,7 @@ fn xors(inputs: &mut Vec<&mut Array2<f64>>, output: &mut Array2<f64>, nc: usize)
                 .iter_mut()
                 .for_each(|x| *x = if f64::abs(*x) == 0.0 { 1E-50 } else { *x });
             acc.assign(&output);
-            
+
             inputs.iter_mut().for_each(|input| {
                 let mut input = input.slice_mut(s![i, ..]);
                 let input_fwt_s = input.as_slice_mut().unwrap();

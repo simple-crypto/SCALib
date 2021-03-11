@@ -1,5 +1,6 @@
 extern crate ndarray;
 mod belief_propagation;
+mod lda;
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Array, Array2, Axis};
@@ -25,7 +26,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         // array to save all the vertex
         let mut vertex: Vec<Array2<f64>> =
             (0..vertex).map(|_| Array2::<f64>::ones((n, nc))).collect();
-        
+
         // mapping of the vertex for functions and variables
         let mut vec_funcs_id: Vec<(usize, usize)> = (0..vertex.len()).map(|_| (0, 0)).collect(); //(associated funct,position in fnc)
         let mut vec_vars_id: Vec<(usize, usize)> = (0..vertex.len()).map(|_| (0, 0)).collect();
@@ -94,7 +95,6 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             })
             .collect();
 
-
         // loading bar
         let pb = ProgressBar::new(it as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
@@ -103,13 +103,16 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         pb.set_message("Calculating BP...");
 
         for _ in (0..it).progress_with(pb) {
-            unsafe{
+            unsafe {
                 // map vertex to vec<vec<>> based on vec_funcs_id
-                let mut vertex_for_func: Vec<Vec<&mut Array2<f64>>> = functions_rust.iter()
-                    .map(|v| {let mut vec = Vec::<&mut Array2<f64>>::with_capacity(v.neighboors.len());
-                                vec.set_len(v.neighboors.len());
-                                vec
-                    }).collect();
+                let mut vertex_for_func: Vec<Vec<&mut Array2<f64>>> = functions_rust
+                    .iter()
+                    .map(|v| {
+                        let mut vec = Vec::<&mut Array2<f64>>::with_capacity(v.neighboors.len());
+                        vec.set_len(v.neighboors.len());
+                        vec
+                    })
+                    .collect();
                 vertex
                     .iter_mut()
                     .zip(vec_funcs_id.iter())
@@ -119,20 +122,23 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                 belief_propagation::update_functions(&mut functions_rust, &mut vertex_for_func);
             }
 
-            unsafe{
+            unsafe {
                 // map vertex to vec<vec<>> based on vec_vars_id
-                let mut vertex_for_var: Vec<Vec<&mut Array2<f64>>> = variables_rust.iter()
-                    .map(|v| {let mut vec = Vec::<&mut Array2<f64>>::with_capacity(v.neighboors.len());
-                                vec.set_len(v.neighboors.len());
-                                vec
-                    }).collect();
+                let mut vertex_for_var: Vec<Vec<&mut Array2<f64>>> = variables_rust
+                    .iter()
+                    .map(|v| {
+                        let mut vec = Vec::<&mut Array2<f64>>::with_capacity(v.neighboors.len());
+                        vec.set_len(v.neighboors.len());
+                        vec
+                    })
+                    .collect();
                 vertex
                     .iter_mut()
                     .zip(vec_vars_id.iter())
                     .for_each(|(x, (id, posi))| vertex_for_var[*id][*posi] = x);
 
                 // variables function nodes
-                belief_propagation::update_variables(&mut vertex_for_var,&mut variables_rust);
+                belief_propagation::update_variables(&mut vertex_for_var, &mut variables_rust);
             }
         }
         let pb = ProgressBar::new(variables.len() as u64);
@@ -175,7 +181,21 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             });
         Ok(())
     }
-
+    #[pyfn(m, "lda_matrix")]
+    fn lda_matrix(
+        _py: Python,
+        x: PyReadonlyArray2<i16>, // U matrix (decomposition of Inv Cov (Npro x Npro)
+        y: PyReadonlyArray1<u16>, // mean matrices (Nk x Npro)
+        sb: &PyArray2<f64>,      // the actual traces (N x Nk)
+        st: &PyArray2<f64>,      // the actual traces (N x Nk)
+        nk: usize,
+    ) {
+        let x = x.as_array();
+        let y = y.as_array();
+        let mut sb = unsafe { sb.as_array_mut() };
+        let mut st = unsafe { st.as_array_mut() };
+        lda::get_projection_lda(x,y,&mut sb,&mut st,nk); 
+    }
     #[pyfn(m, "multivariate_pooled")]
     fn multivariate_pooled(
         _py: Python,
