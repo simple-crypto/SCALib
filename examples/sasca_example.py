@@ -10,7 +10,7 @@ import pickle
 import stella.lib.rust_stella as rust
 
 # Setup the simulation settings
-D=4
+D=2
 tag = "sim"
 DIR_PROFILE = "./traces/profile/"
 DIR_ATTACK = "./traces/attack/"
@@ -75,15 +75,14 @@ for it,(traces,labels) in tqdm(enumerate(zip(DataReader(files_traces,None),
     if it == 0:
         ntraces,Ns = traces.shape
         snr = SNR(Np=len(labels),Nc=256,Ns=Ns)
-        data = np.zeros((len(labels),ntraces))
+        data = np.zeros((len(labels),ntraces),dtype=np.uint16)
 
     for i,v in enumerate(profile_var):
         data[i,:] = labels[v]
-    snr_val = snr.fit_u(traces,data)
-
+    snr.fit_u(traces,data)
+snr_val = snr.get_snr()
 for i,v in enumerate(profile_var):
     profile_var[v]["SNR"] = snr_val[i,:]
-    #print("#",v,"-> SNR",np.nanmax(profile_var[v]["SNR"]))
 
 print("-> Computing POI with %d dims"%(ndim))
 for v in profile_var:
