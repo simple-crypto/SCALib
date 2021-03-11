@@ -1,9 +1,13 @@
-use ndarray::{s, ArrayView1, Array2,ArrayView2,ArrayViewMut2};
-use rayon::prelude::*;
+use ndarray::{s, Array2, ArrayView1, ArrayView2, ArrayViewMut2};
 use ndarray_stats::CorrelationExt;
-pub fn get_projection_lda(x: ArrayView2<i16>, y: ArrayView1<u16>, 
-    sb: &mut ArrayViewMut2<f64>, st : &mut ArrayViewMut2<f64>,
-    nk: usize) {
+use rayon::prelude::*;
+pub fn get_projection_lda(
+    x: ArrayView2<i16>,
+    y: ArrayView1<u16>,
+    sb: &mut ArrayViewMut2<f64>,
+    st: &mut ArrayViewMut2<f64>,
+    nk: usize,
+) {
     let n = x.shape()[1];
     let mut c_means = Array2::<f64>::ones((nk, n));
 
@@ -36,5 +40,5 @@ pub fn get_projection_lda(x: ArrayView2<i16>, y: ArrayView1<u16>,
     let sb = c_means.cov(0.0).unwrap();
     let sw = x_f64.cov(0.0).unwrap();
 
-    let st = sb-sw;
+    let st = sb - sw;
 }

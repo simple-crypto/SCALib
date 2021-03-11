@@ -1,6 +1,7 @@
 extern crate ndarray;
 mod belief_propagation;
 mod lda;
+mod snr;
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Array, Array2, Axis};
@@ -186,15 +187,15 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         _py: Python,
         x: PyReadonlyArray2<i16>, // U matrix (decomposition of Inv Cov (Npro x Npro)
         y: PyReadonlyArray1<u16>, // mean matrices (Nk x Npro)
-        sb: &PyArray2<f64>,      // the actual traces (N x Nk)
-        st: &PyArray2<f64>,      // the actual traces (N x Nk)
+        sb: &PyArray2<f64>,       // the actual traces (N x Nk)
+        st: &PyArray2<f64>,       // the actual traces (N x Nk)
         nk: usize,
     ) {
         let x = x.as_array();
         let y = y.as_array();
         let mut sb = unsafe { sb.as_array_mut() };
         let mut st = unsafe { st.as_array_mut() };
-        lda::get_projection_lda(x,y,&mut sb,&mut st,nk); 
+        lda::get_projection_lda(x, y, &mut sb, &mut st, nk);
     }
     #[pyfn(m, "multivariate_pooled")]
     fn multivariate_pooled(
@@ -312,421 +313,37 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         Ok(())
     }
 
-    #[pyfn(m, "update_snrorder")]
-    fn update_snrorder(
-        _py: Python,
-        traces: PyReadonlyArray2<i16>, // (len,N_sample)
-        c: PyReadonlyArray2<u16>,      // (Np,len)
-        n: &PyArray2<f64>,             // (Np,len)
-        cs: &PyArrayDyn<f64>,          // (Np,Nc,D*2,N_sample)
-        m: &PyArray3<f64>,             // (Np,Nc,N_sample)
-        d: i32,
-        nchunks: i32, //
-    ) -> PyResult<()> {
-        let traces = traces.as_array();
-        let c = c.as_array();
-        let mut n = unsafe { n.as_array_mut() };
-        let mut cs = unsafe { cs.as_array_mut() };
-        let mut m = unsafe { m.as_array_mut() };
-        let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
-        c.axis_iter(Axis(0))
-            .into_par_iter()
-            .zip(n.outer_iter_mut().into_par_iter())
-            .zip(cs.outer_iter_mut().into_par_iter())
-            .zip(m.outer_iter_mut().into_par_iter())
-            .for_each(|(((c, mut n), mut cs), mut m)| {
-                traces
-                    .axis_chunks_iter(Axis(1), chunk_size)
-                    .into_par_iter()
-                    .zip(cs.axis_chunks_iter_mut(Axis(2), chunk_size).into_par_iter())
-                    .zip(m.axis_chunks_iter_mut(Axis(1), chunk_size).into_par_iter())
-                    .for_each(|((traces, mut cs), mut m)| {
-                        let mut n = n.to_owned();
-                        let mut delta = Array::<f64, _>::zeros(traces.shape()[1]);
-                        traces.outer_iter().enumerate().for_each(|(i, traces)| {
-                            // iterates over all the traces
-                            let x = c[i] as usize;
-                            n[[x]] += 1.0;
-                            let nx = n[[x]];
-                            delta
-                                .view_mut()
-                                .into_slice()
-                                .unwrap()
-                                .iter_mut()
-                                .zip(traces.to_slice().unwrap().iter())
-                                .zip(m.slice(s![x, ..]).to_slice().unwrap().iter())
-                                .for_each(|((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx);
-                            for j in (2..((d * 2) + 1)).rev() {
-                                if nx > 1.0 {
-                                    let r = cs.slice_mut(s![x, j - 1, ..]);
-                                    let mult = (nx - 1.0).powi(j)
-                                        * (1.0 - (-1.0 / (nx - 1.0)).powi(j - 1));
-                                    r.into_slice()
-                                        .unwrap()
-                                        .iter_mut()
-                                        .zip(delta.view().to_slice().unwrap().iter())
-                                        .for_each(|(r, x)| {
-                                            *r += x.powi(j as i32) * mult;
-                                        });
-                                }
-                                for k in 1..((j - 2) + 1) {
-                                    let i = (j - k - 1)..(j);
-                                    let tab = cs.slice_mut(s![x, i;k, ..]);
-                                    let (a, b) = tab.split_at(Axis(0), 1);
-                                    let cb = binomial(j, k) as f64;
-                                    inner_loop_ttest(
-                                        b.into_slice().unwrap(),
-                                        a.into_slice().unwrap(),
-                                        delta.as_slice().unwrap(),
-                                        cb,
-                                        k,
-                                    );
-                                }
-                            }
-                            let mut ret = m.slice_mut(s![x, ..]);
-                            ret += &(delta);
-                            cs.slice_mut(s![x, 0, ..]).assign(&ret);
-                        });
-                    });
-
-                for i in 0..traces.shape()[0] {
-                    let x = c[i] as usize;
-                    n[[x]] += 1.0;
-                }
-            });
-        Ok(())
-    }
-
-    #[pyfn(m, "update_ttest")]
-    fn update_ttest(
-        _py: Python,
-        traces: PyReadonlyArray2<i16>, // (len,N_sample)
-        c: PyReadonlyArray1<u8>,       // (len)
-        n: &PyArray1<f64>,             // (len)
-        cs: &PyArray3<f64>,            // (2,D*2,N_sample)
-        m: &PyArray2<f64>,             // (2,N_sample)
-        d: i32,
-        nchunks: i32, //
-    ) -> PyResult<()> {
-        let traces = traces.as_array();
-        let c = c.as_array();
-        let mut n = unsafe { n.as_array_mut() };
-        let mut cs = unsafe { cs.as_array_mut() };
-        let mut m = unsafe { m.as_array_mut() };
-        let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
-        traces
-            .axis_chunks_iter(Axis(1), chunk_size)
-            .into_par_iter()
-            .zip(cs.axis_chunks_iter_mut(Axis(2), chunk_size).into_par_iter())
-            .zip(m.axis_chunks_iter_mut(Axis(1), chunk_size).into_par_iter())
-            .for_each(|((traces, mut cs), mut m)| {
-                let mut n = n.to_owned();
-                let mut delta = Array::<f64, _>::zeros(traces.shape()[1]);
-                traces.outer_iter().enumerate().for_each(|(i, traces)| {
-                    // iterates over all the traces
-                    let x = c[i] as usize;
-                    n[[x]] += 1.0;
-                    let nx = n[[x]];
-                    delta
-                        .view_mut()
-                        .into_slice()
-                        .unwrap()
-                        .iter_mut()
-                        .zip(traces.to_slice().unwrap().iter())
-                        .zip(m.slice(s![x, ..]).to_slice().unwrap().iter())
-                        .for_each(|((d, t), m)| *d = ((*t as f64) - (*m as f64)) / nx);
-                    for j in (2..((d * 2) + 1)).rev() {
-                        if nx > 1.0 {
-                            let r = cs.slice_mut(s![x, j - 1, ..]);
-                            let mult = (nx - 1.0).powi(j) * (1.0 - (-1.0 / (nx - 1.0)).powi(j - 1));
-                            r.into_slice()
-                                .unwrap()
-                                .iter_mut()
-                                .zip(delta.view().to_slice().unwrap().iter())
-                                .for_each(|(r, x)| {
-                                    *r += x.powi(j as i32) * mult;
-                                });
-                        }
-                        for k in 1..((j - 2) + 1) {
-                            let i = (j - k - 1)..(j);
-                            let tab = cs.slice_mut(s![x, i;k, ..]);
-                            let (a, b) = tab.split_at(Axis(0), 1);
-                            let cb = binomial(j, k) as f64;
-                            inner_loop_ttest(
-                                b.into_slice().unwrap(),
-                                a.into_slice().unwrap(),
-                                delta.as_slice().unwrap(),
-                                cb,
-                                k,
-                            );
-                        }
-                    }
-                    let mut ret = m.slice_mut(s![x, ..]);
-                    ret += &(delta);
-                    cs.slice_mut(s![x, 0, ..]).assign(&ret);
-                });
-            });
-        for i in 0..traces.shape()[0] {
-            let x = c[i] as usize;
-            n[[x]] += 1.0;
-        }
-        Ok(())
-    }
-    #[pyfn(m, "update_snr")]
-    fn update_snr(
+    #[pyfn(m, "update_snr_only")]
+    fn update_snr_only(
         _py: Python,
         traces: PyReadonlyArray2<i16>, // (len,N_sample)
         x: PyReadonlyArray2<u16>,      // (Np,len)
         sum: &PyArray3<i64>,           // (Np,Nc,N_sample)
         sum2: &PyArray3<i64>,          // (Np,Nc,N_sample)
-        ns: &PyArray2<u32>,            // (Np,Nc)
-        means: &PyArray3<f32>,         // (Np,Nc,N_sample)
-        vars: &PyArray3<f32>,          // (Np,Nc,N_sample)
-        snr: &PyArray2<f32>,           // (Np,N_sample)
-        nchunks: i32,
-    ) -> PyResult<()> {
+        ns: &PyArray2<u64>,            // (Np,Nc)
+    ) {
         let traces = traces.as_array();
         let x = x.as_array();
         let mut sum = unsafe { sum.as_array_mut() };
-        let mut means = unsafe { means.as_array_mut() };
-        let mut vars = unsafe { vars.as_array_mut() };
         let mut sum2 = unsafe { sum2.as_array_mut() };
         let mut ns = unsafe { ns.as_array_mut() };
-        let mut snr = unsafe { snr.as_array_mut() };
-        let n_traces = traces.shape()[0];
-        let nc = sum.shape()[1];
-        let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
-        sum.axis_iter_mut(Axis(0))
-            .into_par_iter()
-            .zip(sum2.outer_iter_mut().into_par_iter())
-            .zip(ns.outer_iter_mut().into_par_iter())
-            .zip(means.outer_iter_mut().into_par_iter())
-            .zip(vars.outer_iter_mut().into_par_iter())
-            .zip(snr.outer_iter_mut().into_par_iter())
-            .enumerate()
-            .for_each(
-                |(p, (((((mut sum, mut sum2), mut ns), mut means), mut vars), mut snr))| {
-                    traces
-                        .axis_chunks_iter(Axis(1), chunk_size)
-                        .into_par_iter()
-                        .zip(
-                            sum.axis_chunks_iter_mut(Axis(1), chunk_size)
-                                .into_par_iter(),
-                        )
-                        .zip(
-                            sum2.axis_chunks_iter_mut(Axis(1), chunk_size)
-                                .into_par_iter(),
-                        )
-                        .for_each(|((traces, mut sum), mut sum2)| {
-                            for v in 0..nc {
-                                let m = sum.slice_mut(s![v, ..]).into_slice().unwrap();
-                                let sq = sum2.slice_mut(s![v, ..]).into_slice().unwrap();
-
-                                for i in 0..n_traces {
-                                    if v == x[[p, i]] as usize {
-                                        let l = traces.slice(s![i, ..]);
-                                        inner_loop_snr(m, sq, l.to_slice().unwrap());
-                                    }
-                                }
-                            }
-                        });
-                    for i in 0..n_traces {
-                        let v = x[[p, i]] as usize;
-                        ns[v] += 1;
-                    }
-                    means
-                        .axis_chunks_iter_mut(Axis(1), chunk_size)
-                        .into_par_iter()
-                        .zip(
-                            vars.axis_chunks_iter_mut(Axis(1), chunk_size)
-                                .into_par_iter(),
-                        )
-                        .zip(sum.axis_chunks_iter(Axis(1), chunk_size).into_par_iter())
-                        .zip(sum2.axis_chunks_iter(Axis(1), chunk_size).into_par_iter())
-                        .zip(
-                            snr.axis_chunks_iter_mut(Axis(0), chunk_size)
-                                .into_par_iter(),
-                        )
-                        .for_each(|((((mut means, mut vars), sum), sum2), mut snr)| {
-                            for i in 0..nc {
-                                let m = means.slice_mut(s![i as usize, ..]).into_slice().unwrap();
-                                let v = vars.slice_mut(s![i, ..]).into_slice().unwrap();
-
-                                let s = sum.slice(s![i, ..]).to_slice().unwrap();
-                                let s2 = sum2.slice(s![i, ..]).to_slice().unwrap();
-                                let n = ns[i] as f32;
-                                m.iter_mut()
-                                    .zip(v.iter_mut())
-                                    .zip(s.iter())
-                                    .zip(s2.iter())
-                                    .for_each(|(((m, v), s), s2)| {
-                                        *m = (*s as f32) / n;
-                                        let tmp = *m;
-                                        *v = ((*s2 as f32) / n) - tmp.powi(2);
-                                    });
-                            }
-                            let num = means.var_axis(Axis(0), 1.0);
-                            let den = vars.mean_axis(Axis(0)).unwrap();
-                            //#let x = means + vars;
-                            let tmp = num / den;
-                            snr.assign(&tmp);
-                        });
-                },
-            );
-
-        Ok(())
+        snr::update_snr_only(&traces, &x, &mut sum, &mut sum2, &mut ns);
     }
 
-    #[pyfn(m, "update_mcp_dpa")]
-    fn update_mcp_dpa(
+    #[pyfn(m, "finalyze_snr_only")]
+    fn finalyze_snr_only(
         _py: Python,
-        traces: PyReadonlyArray2<i16>, // (len,N_sample)
-        g: PyReadonlyArray2<u16>,      // (Ng,len)
-        sumx: &PyArray2<f64>,          // (Ng,N_sample)
-        sumx2: &PyArray2<f64>,         // (Ng,N_sample)
-        sumxy: &PyArray2<f64>,         // (Ng,N_sample)
-        sumy: &PyArray2<f64>,          // (Ng,N_sample)
-        sumy2: &PyArray2<f64>,         // (Ng,N_sample)
-
-        sm: PyReadonlyArray2<f64>, // (Nk,len)
-        u: PyReadonlyArray2<f64>,  // (Nk,len)
-        s: PyReadonlyArray2<f64>,  // (Nk,len)
-        d: i32,
-        nchunks: i32,
-    ) -> PyResult<()> {
-        let traces = traces.as_array();
-        let g = g.as_array();
-        let mut sumx = unsafe { sumx.as_array_mut() };
-        let mut sumx2 = unsafe { sumx2.as_array_mut() };
-        let mut sumxy = unsafe { sumxy.as_array_mut() };
-        let mut sumy = unsafe { sumy.as_array_mut() };
-        let mut sumy2 = unsafe { sumy2.as_array_mut() };
-
-        let sm = sm.as_array();
-        let u = u.as_array();
-        let s = s.as_array();
-        let n_traces = traces.shape()[0];
-        let chunk_size = (traces.shape()[1] as i32 / nchunks) as usize;
-        g.axis_iter(Axis(0))
-            .into_par_iter()
-            .zip(sumx.outer_iter_mut().into_par_iter())
-            .zip(sumx2.outer_iter_mut().into_par_iter())
-            .zip(sumxy.outer_iter_mut().into_par_iter())
-            .zip(sumy.outer_iter_mut().into_par_iter())
-            .zip(sumy2.outer_iter_mut().into_par_iter())
-            .for_each(
-                |(((((g, mut sumx), mut sumx2), mut sumxy), mut sumy), mut sumy2)| {
-                    traces
-                        .axis_chunks_iter(Axis(1), chunk_size)
-                        .into_par_iter()
-                        .zip(
-                            sumx.axis_chunks_iter_mut(Axis(0), chunk_size)
-                                .into_par_iter(),
-                        )
-                        .zip(
-                            sumx2
-                                .axis_chunks_iter_mut(Axis(0), chunk_size)
-                                .into_par_iter(),
-                        )
-                        .zip(
-                            sumxy
-                                .axis_chunks_iter_mut(Axis(0), chunk_size)
-                                .into_par_iter(),
-                        )
-                        .zip(
-                            sumy.axis_chunks_iter_mut(Axis(0), chunk_size)
-                                .into_par_iter(),
-                        )
-                        .zip(
-                            sumy2
-                                .axis_chunks_iter_mut(Axis(0), chunk_size)
-                                .into_par_iter(),
-                        )
-                        .for_each(
-                            |(
-                                ((((traces, mut sumx), mut sumx2), mut sumxy), mut sumy),
-                                mut sumy2,
-                            )| {
-                                for i in 0..n_traces {
-                                    let v = g[[i]] as usize;
-                                    let sm_tmp = sm.slice(s![v, ..]);
-                                    let s_tmp = s.slice(s![v, ..]);
-                                    let u_tmp = u.slice(s![v, ..]);
-                                    let l = traces.slice(s![i, ..]);
-                                    inner_loop_mcp_dpa(
-                                        sumx.as_slice_mut().unwrap(),
-                                        sumx2.as_slice_mut().unwrap(),
-                                        sumy.as_slice_mut().unwrap(),
-                                        sumy2.as_slice_mut().unwrap(),
-                                        sumxy.as_slice_mut().unwrap(),
-                                        sm_tmp.to_slice().unwrap(),
-                                        s_tmp.to_slice().unwrap(),
-                                        u_tmp.to_slice().unwrap(),
-                                        l.to_slice().unwrap(),
-                                        d,
-                                    );
-                                }
-                            },
-                        );
-                },
-            );
-
-        Ok(())
+        sum: PyReadonlyArray3<i64>,  // (Np,Nc,N_sample)
+        sum2: PyReadonlyArray3<i64>, // (Np,Nc,N_sample)
+        ns: PyReadonlyArray2<u64>,   // (Np,Nc,N_sample)
+        snr: &PyArray2<f64>,         // (Np,Nc)
+    ) {
+        let sum = sum.as_array();
+        let sum2 = sum2.as_array();
+        let ns = ns.as_array();
+        let mut snr = unsafe { snr.as_array_mut() };
+        snr::finalize_snr_only(&sum, &sum2, &ns, &mut snr);
     }
 
     Ok(())
-}
-fn inner_loop_snr(m: &mut [i64], sq: &mut [i64], l: &[i16]) {
-    m.iter_mut()
-        .zip(sq.iter_mut())
-        .zip(l.iter())
-        .for_each(|((m, sq), tr)| {
-            *m += *tr as i64;
-            *sq += (*tr as i64) * (*tr as i64);
-        });
-}
-/*fn inner_loop_class_means(m: &mut [f64], l: &[i16]) {
-    m.iter_mut().zip(l.iter()).for_each(|(m, tr)| {
-        *m += *tr as f64;
-    });
-}*/
-fn inner_loop_mcp_dpa(
-    sumx: &mut [f64],
-    sumx2: &mut [f64],
-    sumy: &mut [f64],
-    sumy2: &mut [f64],
-    sumxy: &mut [f64],
-    sm: &[f64],
-    s: &[f64],
-    u: &[f64],
-    l: &[i16],
-    d: i32,
-) {
-    sumx.iter_mut()
-        .zip(sumx2.iter_mut())
-        .zip(sumy.iter_mut())
-        .zip(sumy2.iter_mut())
-        .zip(sumxy.iter_mut())
-        .zip(sm.iter())
-        .zip(s.iter())
-        .zip(u.iter())
-        .zip(l.iter())
-        .for_each(
-            |((((((((sumx, sumx2), sumy), sumy2), sumxy), sm), s), u), tr)| {
-                let x = (((*tr as f64) - u) / s).powi(d);
-                let y = sm;
-                *sumx += x;
-                *sumx2 += x * x;
-                *sumxy += x * y;
-                *sumy2 += y * y;
-                *sumy += y;
-            },
-        );
-}
-
-fn inner_loop_ttest(dest: &mut [f64], cs: &[f64], delta: &[f64], comb: f64, k: i32) {
-    dest.iter_mut()
-        .zip(delta.iter())
-        .zip(cs.iter())
-        .for_each(|((dest, delta), cs)| *dest += comb * (-delta).powi(k) * cs);
 }
