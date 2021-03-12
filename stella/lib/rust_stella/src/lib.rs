@@ -1,4 +1,5 @@
 extern crate ndarray;
+extern crate openblas_src;
 mod belief_propagation;
 mod lda;
 mod snr;

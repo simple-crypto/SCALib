@@ -331,7 +331,7 @@ if __name__ == "__main__":
     import time
     import scipy
     np.random.seed(0)
-    ns = 200
+    ns = 500
     traces = np.random.randint(0,256,(500000,ns),dtype=np.int16)
     labels = np.random.randint(0,256,500000,dtype=np.uint16)
     sw = np.zeros((ns,ns))
@@ -347,4 +347,4 @@ if __name__ == "__main__":
     evals, evecs = scipy.linalg.eigh(sb, sw)
     evecs = evecs[:, np.argsort(evals)[::-1]]
     print(time.time()-start)
-
+    assert(np.allclose(evecs[:,:30],lda.scalings_[:,:30]))
