@@ -190,13 +190,15 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         y: PyReadonlyArray1<u16>, // mean matrices (Nk x Npro)
         sb: &PyArray2<f64>,       // the actual traces (N x Nk)
         sw: &PyArray2<f64>,       // the actual traces (N x Nk)
+        c_means_bak: &PyArray2<f64>,       // the actual traces (N x Nk)
         nk: usize,
     ) {
         let x = x.as_array();
         let y = y.as_array();
         let mut sb = unsafe { sb.as_array_mut() };
         let mut sw = unsafe { sw.as_array_mut() };
-        lda::get_projection_lda(x, y, &mut sb, &mut sw, nk);
+        let mut c_means_bak = unsafe { c_means_bak.as_array_mut() };
+        lda::get_projection_lda(x, y, &mut sb, &mut sw, &mut c_means_bak, nk);
     }
     #[pyfn(m, "multivariate_pooled")]
     fn multivariate_pooled(

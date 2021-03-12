@@ -331,11 +331,15 @@ if __name__ == "__main__":
     import time
     import scipy
     np.random.seed(0)
-    ns = 500
-    traces = np.random.randint(0,256,(500000,ns),dtype=np.int16)
-    labels = np.random.randint(0,256,500000,dtype=np.uint16)
+    ns = 700
+    n_components = 4
+
+    traces = np.random.randint(0,256,(600000,ns),dtype=np.int16)
+    labels = np.random.randint(0,256,600000,dtype=np.uint16)
     sw = np.zeros((ns,ns))
     sb = np.zeros((ns,ns))
+    c_means = np.zeros((256,ns))
+
 
     start = time.time()
     lda = LDA_sklearn(solver="eigen")
@@ -343,8 +347,33 @@ if __name__ == "__main__":
     print(time.time()-start)
 
     start = time.time()
-    rust.lda_matrix(traces,labels,sb,sw,256)
+    rust.lda_matrix(traces,labels,sb,sw,c_means,256)
     evals, evecs = scipy.linalg.eigh(sb, sw)
     evecs = evecs[:, np.argsort(evals)[::-1]]
+    projection = evecs[:,:n_components]
+    means = (projection.T @ c_means.T).T 
+    print("cov computation")
+    traces_t = (projection.T @ traces.T).T
+    cov = np.cov((traces_t - means[labels,:]).T)
     print(time.time()-start)
-    assert(np.allclose(evecs[:,:30],lda.scalings_[:,:30]))
+
+    psd_check = _PSD(cov, allow_singular=True).U
+    
+    s,u = scipy.linalg.eigh(cov)
+    t = u.dtype.char.lower()
+    cond = np.max(np.abs(s)) * max(cov.shape) * np.finfo(t).eps
+    above_cutoff = (abs(s) > cond)
+    psigma_diag = 1.0 / s[above_cutoff]
+    u = u[:, above_cutoff]
+    U = np.multiply(u, np.sqrt(psigma_diag))
+    psd = U
+    print(psd_check)
+    print(psd)
+
+    means_check = np.zeros((256,n_components))
+    for i in range(256):
+        I = np.where(labels==i)[0]
+        means_check[i,:] = np.mean(traces_t[I,:],axis=0)
+    assert(np.allclose(means_check,means))
+    assert(np.allclose(psd_check,psd))
+    assert(np.allclose(projection,lda.scalings_[:,:n_components]))

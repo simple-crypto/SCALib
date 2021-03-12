@@ -1,11 +1,11 @@
-use ndarray::{s, Array2, Array1, ArrayView1, ArrayView2, ArrayViewMut2,Zip,Axis};
-use ndarray_stats::CorrelationExt;
+use ndarray::{s, Array2, ArrayView1, ArrayView2, ArrayViewMut2,Zip,Axis};
 use rayon::prelude::*;
 pub fn get_projection_lda(
     x: ArrayView2<i16>,
     y: ArrayView1<u16>,
     sb: &mut ArrayViewMut2<f64>,
     sw: &mut ArrayViewMut2<f64>,
+    c_means_bak: &mut ArrayViewMut2<f64>,
     nk: usize,
 ) {
     let n = x.shape()[1];
@@ -36,13 +36,12 @@ pub fn get_projection_lda(
     let s = s.mapv(|x| x as f64);
     let mean_total = c_means.sum_axis(Axis(0)).insert_axis(Axis(1))/ (ns as f64);
     let c_means = &c_means / &s.broadcast(c_means.shape()).unwrap();
-    
+    c_means_bak.assign(&c_means); 
     let mut x_f64 = x.mapv(|x| x as f64);
     let mut x_f64_t = Array2::<f64>::zeros(x_f64.t().raw_dim());
-    Zip::from(&mut x_f64_t).and(&x_f64.t()).par_apply(|mut x,y| *x = *y);
+    Zip::from(&mut x_f64_t).and(&x_f64.t()).par_apply(|x,y| *x = *y);
     
-    // #TODO copy of x_f64 to enable blas 
-    let mut st = x_f64_t.dot(&x_f64)/(ns as f64) - mean_total.dot(&mean_total.t());
+    let st = x_f64_t.dot(&x_f64)/(ns as f64) - mean_total.dot(&mean_total.t());
    
     x_f64
         .outer_iter_mut()
@@ -52,8 +51,7 @@ pub fn get_projection_lda(
             let y = y.first().unwrap();
             x -= &c_means.slice(s![*y as usize, ..]);
         });
-    Zip::from(&mut x_f64_t).and(&x_f64.t()).par_apply(|mut x,y| *x = *y);
+    Zip::from(&mut x_f64_t).and(&x_f64.t()).par_apply(|x,y| *x = *y);
     sw.assign(&(x_f64_t.dot(&x_f64)/(ns as f64)));
-    
     Zip::from(sb).and(&st).and(sw).par_apply(|sb,st,sw| *sb = *st - *sw);
 }
