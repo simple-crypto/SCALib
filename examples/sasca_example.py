@@ -3,11 +3,10 @@ import numpy as np
 from stella.preprocessing import SNR
 from stella.estimator import LDAClassifier
 from stella.utils import DataReader
-from stella.attacks.sasca import create_graph,init_graph_memory,reset_graph_memory
+from stella.attacks.sasca import create_graph,init_graph_memory,reset_graph_memory,run_bp
 from stella.attacks.sasca import PROFILE,PUBLIC
 from tqdm import tqdm
 import pickle
-import stella.lib.rust_stella as rust
 
 # Setup the simulation settings
 D=2
@@ -16,7 +15,7 @@ DIR_PROFILE = "./traces/profile/"
 DIR_ATTACK = "./traces/attack/"
 nfile_profile = 10
 nfile_attack = 6
-ntraces = 1000
+ntraces = 10000
 std = .4
 ndim = 3
 fgraph = "./graph.txt"
@@ -110,7 +109,8 @@ for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
 
 for v in tqdm(profile_var,desc="Fit LDA"):
     var = profile_var[v]
-    var["model"] = LDAClassifier(var["samples"],var["data"],dim_projection=1)
+    var["model"] = LDAClassifier(n_components=1,nc=256)
+    var["model"].fit(var["samples"],var["data"])
     var.pop("samples")
     var.pop("data")
 
@@ -148,7 +148,7 @@ for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
 print("-> Set initial msg for BP")
 reset_graph_memory(graph,256)
 print("-> Running BP")
-rust.belief_propagation(graph["functions"],graph["var_list"],5,graph["vertex"],256,ntraces_attack)
+run_bp(graph,5,ntraces_attack,256)
 
 # Display the obtained key
 guess = []

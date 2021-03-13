@@ -1,1 +1,1 @@
-from .classifiers import MultivariateGaussianClassifier,LDAClassifier,QDAClassifier
+from .classifiers import LDAClassifier

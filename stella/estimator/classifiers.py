@@ -1,5 +1,6 @@
 import numpy as np
 import stella.lib.rust_stella as rust
+import scipy.linalg
 
 class LDAClassifier():
     def __init__(self,nc, n_components):
@@ -20,20 +21,23 @@ class LDAClassifier():
         sw = np.zeros((ns,ns))
         sb = np.zeros((ns,ns))
         c_means = np.zeros((nc,ns))
-        x_f64 = np.zeros(traces.shape)
+        x_f64 = np.zeros(x.shape)
         
         # get sb,sw,c_means and x_f64
-        rust.lda_matrix(traces,labels,sb,sw,c_means,x_f64,nc)
+        rust.lda_matrix(x,y,sb,sw,c_means,x_f64,nc)
 
         # generate the projection 
         evals, evecs = scipy.linalg.eigh(sb, sw)
         evecs = evecs[:, np.argsort(evals)[::-1]]
-        projection = evecs[:,:n_components]
+        projection = evecs[:,:self._n_components]
 
         # get means and cov in subspace
         means = (projection.T @ c_means.T).T 
         traces_t = (projection.T @ x_f64.T).T
-        cov = np.cov(traces_t.T)
+        if self._n_components == 1:
+            cov = np.array([[np.cov(traces_t.T)]])
+        else:
+            cov = np.cov(traces_t.T)
 
         # generate psd for the covariance matrix 
         s,u = scipy.linalg.eigh(cov)
@@ -179,7 +183,6 @@ class _PSD(object):
 if __name__ == "__main__":
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
     import time
-    import scipy
     ns = 20
     n_components = 10
 

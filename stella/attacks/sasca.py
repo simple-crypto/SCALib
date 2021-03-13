@@ -130,7 +130,6 @@ def create_graph(fname):
                     v["neighboors"].append(vertex); vertex+=1
           
             if f["val"] == LOOKUP:
-                print(split[-1])
                 func["table_label"] = split[-1]
             elif f["val"] == XOR_CST:
                 func["value_label"] = split[-1]
@@ -146,6 +145,12 @@ def create_graph(fname):
     return {"functions":functions,"var_list":variables_list,"vertex":vertex,
                     "var":variables,"publics":publics,"tables":tables}
 
+def run_bp(graph,it,ntraces,nc):
+    rust.belief_propagation(graph["functions"],
+                        graph["var_list"],
+                        it,
+                        graph["vertex"],
+                        nc,ntraces)
 
 def reset_graph_memory(graph,Nc):
     variables_list = graph["var_list"]
