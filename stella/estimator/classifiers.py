@@ -1,211 +1,61 @@
 import numpy as np
 import stella.lib.rust_stella as rust
-from stella.estimator.discriminant_analysis import LinearDiscriminantAnalysis as LDA_stella
-import scipy.stats 
-
-class MultivariateGaussianClassifier():
-    def __init__(self,Nc,means,covs,priors="uniform",dim_reduce=None,pooled_cov=False):
-        """
-            Performs a Ns-multivariate classification on Nc classes.
-            Each class is given with a mean and a covirance matrix. The function
-            predict_proba is used to return the probality given leakage
-            samples and the fitted model.
-
-            Nc: number of classes
-            means: (Nc,Ns) the means of each class
-            covs: (Nc,Ns,Ns) the covariance of each class
-            priors: (Nc) priors of each of the classes
-            dim_reduce: an object that implements transform(). It is apply
-                to fresh traces to reduce their dimensions.
-        """
-        #input checks
-        if means.ndim != 2:
-            raise Exception("Waiting 2 dim array for means")
-        mx,my = means.shape
-
-        if covs.ndim != 3:
-            raise Exception("Waiting 3 dim array for covs")
-        cx,cy,cz = covs.shape
-        if cy != cz:
-            raise Exception("Covariance matrices are not square")
-        if cy != my:
-            raise Exception("Missmatch cov and mean size {} vs {}".format(cy,my))
-        if cx != Nc or mx != Nc:
-            raise Exception("Number of class does not match the templates size")
-
-        priors = np.ones(Nc)
-        if priors.ndim != 1:
-            raise Exception("Waiting 1 dim array for priors")
-
-        self._priors = priors
-        self._means = means
-        self._covs = covs
-        self._Nc = Nc
-        self._dim_reduce = dim_reduce
-        self._Ns = my
-        self._n_components = cz
-        self._cov = covs
-
-        
-
-        if not pooled_cov:
-            self._psd = np.array([_PSD(covs[i], allow_singular=True).U for i in range(Nc)])
-            self._det = np.array([np.linalg.det(covs[i])**(cz/2) for i in
-                range(Nc)]).reshape((1,Nc))
-        else:
-            tmp = _PSD(covs[0],allow_singular=True).U
-            self._psd = np.array([tmp for i in range(Nc)])
-            self._det = np.array([1.0**(cz/2) for i in
-                range(Nc)]).reshape((1,Nc))
-
-    def predict_proba(self,X,use_rust=True,n_components=None):
-        """
-            Returns the probability of each classes by applying
-            Bayes law.
-
-            X (n_traces,Ns): n_traces traces to evaluate
-
-            returns a (n_traces,Nc) array
-        """
-        if n_components is None:
-            n_components = self._n_components
-
-        if X.ndim != 2:
-            raise Exception("Waiting a 2 dim array as X")
-
-        if self._dim_reduce is not None:
-            X = self._dim_reduce.transform(X)
-        else:
-            X = X.astype(np.float64)
-
-        n_samples,Ns = X.shape
-
-        prs = np.zeros((n_samples,self._Nc))
-
-        # This si inspired by the Scipy Implementation of multivariate Gaussian 
-        # pdf
-        if not use_rust:
-            for i in range(self._Nc):
-                u = self._means[i][:n_components]
-                dev = u - X
-                prs[:,i] = np.exp(-0.5*np.sum(np.square(np.dot(dev,
-                    self._psd[i])), axis=-1))/self._det[i]
-        else:
-            means = np.array(self._means)
-            rust.multivariate_pooled(self._psd,
-               means,
-               X,
-               prs,self._det);
-        I = np.where(np.sum(prs,axis=1)==0)[0]
-        prs[I] = 1
-        return (prs.T/np.sum(prs,axis=1)).T
-
-class QDAClassifier():
-    def __init__(self,traces,labels,priors="uniform",Nc=None,pooled_cov=True):
-        Ns = traces[0,:]
-        if Nc is None:
-            Nk = Nc = len(np.unique(labels))
-        else:
-            Nk = Nc
-        
-        C_i = labels
-        self._Ns = len(traces[0,:])
-
-        traces_i = traces
-        lx,ly = traces_i.shape
-        model = np.zeros((Nk,ly))
-
-        if traces.dtype == np.int16:
-            rust.class_means(np.unique(labels),C_i,traces_i,model)
-        else:
-            rust.class_means_f64(np.unique(labels),C_i,traces_i.astype(np.float64),model)
-
-        if pooled_cov:
-            noise = traces_i-model[C_i]
-            cov = np.cov(noise.T)
-            covs = np.tile(cov,(Nc,1,1))
-        else:
-            covs = []
-            noise = traces_i-model[C_i]
-            for x in range(Nk):
-                I = np.where(C_i==x)[0]
-                if len(noise[0,:]) == 1:
-                    covs.append([[np.cov(noise[I,:].T)]])
-                else:
-                    covs.append(np.cov(noise[I,:].T))
-            covs = np.array(covs)
-        
-        self._trained_on = len(labels)
-        self._mvGC = MultivariateGaussianClassifier(Nk,model,covs,dim_reduce=None,priors=priors,pooled_cov=pooled_cov)
-    
-    def predict_proba(self,X,use_rust=True):
-        """
-            Returns the probability of each classes by applying 
-            Bayes law.
-
-            X (n_traces,Ns): n_traces traces to evaluate
-
-            returns a (n_traces,Nc) array
-        """
-        if len(X[0,:]) > self._Ns:
-            #print("Caution: truncate traces")
-            X = X[:,:self._Ns]
-
-        return self._mvGC.predict_proba(X,use_rust)
-
 
 class LDAClassifier():
-    def __init__(self,traces,labels,solver="eigen",dim_projection=4,priors="uniform",Nc=None,
-            duplicate=True,pooled_cov=True):
+    def __init__(self,nc, n_components):
 
-        Ns = traces[0,:]
-        if Nc is None:
-            Nk = Nc = len(np.unique(labels))
-        else:
-            Nk = Nc
-        
-        C_i = labels
-        self._Ns = len(traces[0,:])
-        if priors == "uniform":
-            priors = np.ones(Nc)/Nc
-
-        dim_reduce = LDA_stella(n_components=min(dim_projection,Nk-1),solver=solver,priors=priors,duplicate=duplicate)
-
-        traces_i = dim_reduce.fit_transform(traces,C_i)
-        lx,ly = traces_i.shape
-        model = np.zeros((Nk,ly))
-
-        rust.class_means_f64(np.unique(labels),C_i,traces_i,model)
-        if pooled_cov:
-            noise = traces_i-model[C_i]
-            cov = np.cov(noise.T)
-            covs = np.tile(cov,(Nc,1,1))
-        else:
-            covs = []
-            noise = traces_i-model[C_i]
-            for x in range(Nk):
-                I = np.where(C_i==x)[0]
-                covs.append(np.cov(noise[I,:].T))
-            covs = np.array(covs)
-        self._trained_on = len(labels)
-        self._mvGC = MultivariateGaussianClassifier(Nk,model,covs,dim_reduce=dim_reduce,priors=priors)
-        self._dim_reduce = dim_reduce
+        self._n_components = n_components;
+        self._nc = nc
+        assert n_components < nc
     
-    def predict_proba(self,X,use_rust=True,n_components=None):
-        """
-            Returns the probability of each classes by applying 
-            Bayes law.
+    def fit(self,x,y):
+        
+        # this method is inspired by the sklearn implementation of scikit-learn
+        # they are equivalent but enables rust acceleration
 
-            X (n_traces,Ns): n_traces traces to evaluate
+        nt,ns = x.shape
+        nc = self._nc
 
-            returns a (n_traces,Nc) array
-        """
-        if len(X[0,:]) > self._Ns:
-            print("Caution: truncate traces")
-            X = X[:,:self._Ns]
-        return self._mvGC.predict_proba(X,use_rust,n_components)
+        # pre allocate arrays
+        sw = np.zeros((ns,ns))
+        sb = np.zeros((ns,ns))
+        c_means = np.zeros((nc,ns))
+        x_f64 = np.zeros(traces.shape)
+        
+        # get sb,sw,c_means and x_f64
+        rust.lda_matrix(traces,labels,sb,sw,c_means,x_f64,nc)
 
+        # generate the projection 
+        evals, evecs = scipy.linalg.eigh(sb, sw)
+        evecs = evecs[:, np.argsort(evals)[::-1]]
+        projection = evecs[:,:n_components]
 
+        # get means and cov in subspace
+        means = (projection.T @ c_means.T).T 
+        traces_t = (projection.T @ x_f64.T).T
+        cov = np.cov(traces_t.T)
+
+        # generate psd for the covariance matrix 
+        s,u = scipy.linalg.eigh(cov)
+        t = u.dtype.char.lower()
+        cond = np.max(np.abs(s)) * max(cov.shape) * np.finfo(t).eps
+        above_cutoff = (abs(s) > cond)
+        psigma_diag = 1.0 / s[above_cutoff]
+        u = u[:, above_cutoff]
+        U = np.multiply(u, np.sqrt(psigma_diag))
+        psd = U
+        
+        self._projection = projection
+        self._cov = cov
+        self._means = means
+        self._psd = psd
+        del x_f64,c_means,sw,sb
+
+    def predict_proba(self,x):
+        nt,_ = x.shape
+        prs = np.zeros((nt,self._nc))
+        rust.predict_proba_lda(x,self._projection,self._means,self._psd,prs);
+        return prs;
 #####################
 #####################
 # This comes from SciPy
@@ -330,50 +180,44 @@ if __name__ == "__main__":
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
     import time
     import scipy
-    np.random.seed(0)
-    ns = 700
-    n_components = 4
+    ns = 20
+    n_components = 10
 
-    traces = np.random.randint(0,256,(600000,ns),dtype=np.int16)
-    labels = np.random.randint(0,256,600000,dtype=np.uint16)
-    sw = np.zeros((ns,ns))
-    sb = np.zeros((ns,ns))
-    c_means = np.zeros((256,ns))
-
+    traces = np.random.randint(0,256,(200000,ns),dtype=np.int16)
+    labels = np.random.randint(0,256,200000,dtype=np.uint16)
 
     start = time.time()
-    lda = LDA_sklearn(solver="eigen")
+    lda_ref = LDA_sklearn(solver="eigen")
+    lda_ref.fit(traces,labels)
+    print(time.time()-start)
+
+    start = time.time()
+    lda = LDAClassifier(256,n_components)
     lda.fit(traces,labels)
     print(time.time()-start)
 
-    start = time.time()
-    rust.lda_matrix(traces,labels,sb,sw,c_means,256)
-    evals, evecs = scipy.linalg.eigh(sb, sw)
-    evecs = evecs[:, np.argsort(evals)[::-1]]
-    projection = evecs[:,:n_components]
-    means = (projection.T @ c_means.T).T 
-    print("cov computation")
-    traces_t = (projection.T @ traces.T).T
-    cov = np.cov((traces_t - means[labels,:]).T)
-    print(time.time()-start)
-
-    psd_check = _PSD(cov, allow_singular=True).U
-    
-    s,u = scipy.linalg.eigh(cov)
-    t = u.dtype.char.lower()
-    cond = np.max(np.abs(s)) * max(cov.shape) * np.finfo(t).eps
-    above_cutoff = (abs(s) > cond)
-    psigma_diag = 1.0 / s[above_cutoff]
-    u = u[:, above_cutoff]
-    U = np.multiply(u, np.sqrt(psigma_diag))
-    psd = U
-    print(psd_check)
-    print(psd)
-
+    # check equivalence    
+    traces_t = (lda_ref.scalings_[:,:n_components].T @ traces.T).T
     means_check = np.zeros((256,n_components))
     for i in range(256):
         I = np.where(labels==i)[0]
         means_check[i,:] = np.mean(traces_t[I,:],axis=0)
-    assert(np.allclose(means_check,means))
-    assert(np.allclose(psd_check,psd))
-    assert(np.allclose(projection,lda.scalings_[:,:n_components]))
+    traces_t = traces_t - means_check[labels,:]
+    cov_check = np.cov(traces_t.T)
+   
+    traces = np.random.randint(0,256,(1000,ns),dtype=np.int16)
+    start = time.time()
+    prs = lda.predict_proba(traces)
+    print(time.time() - start)
+    
+    traces_t = (lda._projection[:,:n_components].T @ traces.T).T
+    prs_ref = np.zeros((len(traces),256))
+    for x in range(256):
+        prs_ref[:,x] = scipy.stats.multivariate_normal.pdf(traces_t,lda._means[x],lda._cov)
+    prs_ref = (prs_ref.T /  np.sum(prs_ref,axis=1)).T
+
+    assert(np.allclose(prs,prs_ref))
+    assert(np.allclose(lda._projection,lda_ref.scalings_[:,:n_components]))
+    assert(np.allclose(means_check,lda._means))
+    assert(np.allclose(cov_check,lda._cov))
+    # assert(np.allclose(psd_check,lda._psd))
