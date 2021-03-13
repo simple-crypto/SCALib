@@ -12,14 +12,6 @@ stella.estimator.classifiers module
    :undoc-members:
    :show-inheritance:
 
-stella.estimator.discriminant\_analysis module
-----------------------------------------------
-
-.. automodule:: stella.estimator.discriminant_analysis
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 Module contents
 ---------------
 

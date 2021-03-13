@@ -234,7 +234,7 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
     functions
         .par_iter_mut()
         .zip(vertex.par_iter_mut())
-        .for_each(|(function, vertex)| {
+        .for_each(|(function, mut vertex)| {
             match &mut function.functype {
                 FuncType::AND => {
                     let input2_msg = vertex.pop().unwrap();
@@ -275,10 +275,8 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
                         });
                 }
                 FuncType::XOR => {
-                    let mut input_msg = vertex.split_off(1);
-                    let output_msg = vertex.pop().unwrap();
-                    let nc = output_msg.shape()[1];
-                    xors(&mut input_msg, output_msg, nc);
+                    let nc = vertex[0].shape()[1];
+                    xors(&mut vertex, nc);
                 }
                 FuncType::XORCST(values) => {
                     let input1_msg = vertex.pop().unwrap();
@@ -338,47 +336,30 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
         });
 }
 
-fn xors(inputs: &mut Vec<&mut Array2<f64>>, output: &mut Array2<f64>, nc: usize) {
-    output
-        .outer_iter_mut()
-        .enumerate()
-        .for_each(|(i, mut output)| {
-            let mut acc = Array1::<f64>::zeros(nc);
-            // set the output
-            let output_s = output.as_slice_mut().unwrap();
-            fwht(output_s, nc);
-            output_s
+fn xors(inputs: &mut Vec<&mut Array2<f64>>, nc: usize) {
+    for i in 0..inputs[0].shape()[0] {
+        let mut acc = Array1::<f64>::ones(nc);
+
+        inputs.iter_mut().for_each(|input| {
+            let mut input = input.slice_mut(s![i, ..]);
+            let input_fwt_s = input.as_slice_mut().unwrap();
+            fwht(input_fwt_s, nc);
+            input_fwt_s
                 .iter_mut()
                 .for_each(|x| *x = if f64::abs(*x) == 0.0 { 1E-50 } else { *x });
-            acc.assign(&output);
+            acc.zip_mut_with(&input, |x, y| *x = *x * y);
+            acc /= acc.sum();
+        });
 
-            inputs.iter_mut().for_each(|input| {
-                let mut input = input.slice_mut(s![i, ..]);
-                let input_fwt_s = input.as_slice_mut().unwrap();
-                fwht(input_fwt_s, nc);
-                input_fwt_s
-                    .iter_mut()
-                    .for_each(|x| *x = if f64::abs(*x) == 0.0 { 1E-50 } else { *x });
-                acc.zip_mut_with(&input, |x, y| *x = *x * y);
-                acc /= acc.sum();
-            });
-
-            inputs.iter_mut().for_each(|input| {
-                let mut input = input.slice_mut(s![i, ..]);
-                input.zip_mut_with(&acc, |x, y| *x = *y / *x);
-                let input_fwt_s = input.as_slice_mut().unwrap();
-                fwht(input_fwt_s, nc);
-                let s = input.iter().fold(0.0, |acc, x| acc + x.max(1E-50));
-                input
-                    .iter_mut()
-                    .for_each(|x| *x = (x.max(1E-50) / s).max(1E-50));
-            });
-            output.zip_mut_with(&acc, |x, y| *x = *y / *x);
-            let output_fwt_s = output.as_slice_mut().unwrap();
-            fwht(output_fwt_s, nc);
-            let s = output.iter().fold(0.0, |acc, x| acc + x.max(1E-50));
-            output
+        inputs.iter_mut().for_each(|input| {
+            let mut input = input.slice_mut(s![i, ..]);
+            input.zip_mut_with(&acc, |x, y| *x = *y / *x);
+            let input_fwt_s = input.as_slice_mut().unwrap();
+            fwht(input_fwt_s, nc);
+            let s = input.iter().fold(0.0, |acc, x| acc + x.max(1E-50));
+            input
                 .iter_mut()
                 .for_each(|x| *x = (x.max(1E-50) / s).max(1E-50));
         });
+    }
 }

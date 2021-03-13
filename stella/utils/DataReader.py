@@ -1,10 +1,11 @@
-import threading
-import queue
 import numpy as np
+from multiprocessing import Process, Queue
 
-class DataReader(threading.Thread):
+
+class DataReader(Process):
     def __init__(self,files,labels,max_depth=1,verbose=False):
-        r"""Iterator reading a list of files (.npy or .npz) asynchronously.
+        r"""Iterator reading a list of files (.npy or .npz). It starts an
+        independent threads that loads the files.
 
         Parameters
         ----------
@@ -34,7 +35,7 @@ class DataReader(threading.Thread):
         super(DataReader,self).__init__()
         self.files = files
         self.max_depth = max_depth
-        self.queue = queue.Queue(maxsize=max_depth)
+        self.queue = Queue(maxsize=max_depth)
         self._verbose = verbose
         self.labels = labels
 
