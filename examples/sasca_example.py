@@ -15,7 +15,7 @@ DIR_PROFILE = "./traces/profile/"
 DIR_ATTACK = "./traces/attack/"
 nfile_profile = 10
 nfile_attack = 1
-ntraces = 1000
+ntraces = 10000
 std = .4
 ndim = 3
 fgraph = "./graph.txt"
@@ -145,8 +145,6 @@ for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
     for v in graph["publics"]:
         graph["publics"][v][index:index+ntraces] = labels[v] 
 
-print("-> Set initial msg for BP")
-reset_graph_memory(graph,256)
 print("-> Running BP")
 run_bp(graph,5,ntraces_attack,256)
 
@@ -155,7 +153,6 @@ guess = []
 rank = []
 for i,k in enumerate(secret_key):
     label = "k%d"%(i)
-#    print(graph["var"][label]["distri"])
     guess.append(np.argmax(graph["var"][label]["distri"],axis=1)[0])
     rank.append(256 - np.where(np.argsort(graph["var"][label]["distri"],axis=1)[0] == k)[0])
 

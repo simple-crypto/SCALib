@@ -41,12 +41,16 @@ def init_graph_memory(graph,N,Nc):
             n = 1
 
         if var["flags"] & (PUBLIC) != 0:
+            if "values" in var: del var["values"]
             var["values"] = np.zeros(n,dtype=np.uint32)
         elif var["flags"] & (TABLE) != 0:
+            if "table" in var: del var["table"]
             var["table"] = np.zeros(Nc,dtype=np.uint32)
         else:
             if var["flags"] & PROFILE != 0:
+                if "distri_orig" in var: del var["distri_orig"]
                 var["distri_orig"] = np.ones((n,Nc))
+            if "distri" in var: del var["distri"]
             var["distri"] = np.zeros((n,Nc))
 
     for p in graph["publics"]:
@@ -146,6 +150,7 @@ def create_graph(fname):
                     "var":variables,"publics":publics,"tables":tables}
 
 def run_bp(graph,it,ntraces,nc):
+    reset_graph_memory(graph,nc)
     rust.belief_propagation(graph["functions"],
                         graph["var_list"],
                         it,
