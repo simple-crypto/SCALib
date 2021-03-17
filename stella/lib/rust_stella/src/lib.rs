@@ -6,15 +6,16 @@ mod snr;
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Array2, Axis};
-use numpy::{PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
+use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 use pyo3::types::{PyDict, PyList};
 
 #[pymodule]
 fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<snr::SNR>()?;
     #[pyfn(m, "belief_propagation")]
     fn belief_propagation(
-        _py: Python,
+        py: Python,
         functions: &PyList,
         variables: &PyList,
         it: usize,
@@ -94,52 +95,57 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             })
             .collect();
 
-        // loading bar
-        let pb = ProgressBar::new(it as u64);
-        pb.set_style(ProgressStyle::default_spinner().template(
+        py.allow_threads(|| {
+            // loading bar
+            let pb = ProgressBar::new(it as u64);
+            pb.set_style(ProgressStyle::default_spinner().template(
         "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
     ));
-        pb.set_message("Calculating BP...");
+            pb.set_message("Calculating BP...");
 
-        for _ in (0..it).progress_with(pb) {
-            unsafe {
-                // map vertex to vec<vec<>> based on vec_funcs_id
-                let mut vertex_for_func: Vec<Vec<&mut Array2<f64>>> = functions_rust
-                    .iter()
-                    .map(|v| {
-                        let mut vec = Vec::<&mut Array2<f64>>::with_capacity(v.neighboors.len());
-                        vec.set_len(v.neighboors.len());
-                        vec
-                    })
-                    .collect();
-                vertex
-                    .iter_mut()
-                    .zip(vec_funcs_id.iter())
-                    .for_each(|(x, (id, posi))| vertex_for_func[*id][*posi] = x);
+            for _ in (0..it).progress_with(pb) {
+                unsafe {
+                    // map vertex to vec<vec<>> based on vec_funcs_id
+                    let mut vertex_for_func: Vec<Vec<&mut Array2<f64>>> = functions_rust
+                        .iter()
+                        .map(|v| {
+                            let mut vec =
+                                Vec::<&mut Array2<f64>>::with_capacity(v.neighboors.len());
+                            vec.set_len(v.neighboors.len());
+                            vec
+                        })
+                        .collect();
+                    vertex
+                        .iter_mut()
+                        .zip(vec_funcs_id.iter())
+                        .for_each(|(x, (id, posi))| vertex_for_func[*id][*posi] = x);
 
-                // unpdate function nodes
-                belief_propagation::update_functions(&mut functions_rust, &mut vertex_for_func);
+                    // unpdate function nodes
+                    belief_propagation::update_functions(&mut functions_rust, &mut vertex_for_func);
+                }
+
+                unsafe {
+                    // map vertex to vec<vec<>> based on vec_vars_id
+                    let mut vertex_for_var: Vec<Vec<&mut Array2<f64>>> = variables_rust
+                        .iter()
+                        .map(|v| {
+                            let mut vec =
+                                Vec::<&mut Array2<f64>>::with_capacity(v.neighboors.len());
+                            vec.set_len(v.neighboors.len());
+                            vec
+                        })
+                        .collect();
+                    vertex
+                        .iter_mut()
+                        .zip(vec_vars_id.iter())
+                        .for_each(|(x, (id, posi))| vertex_for_var[*id][*posi] = x);
+
+                    // variables function nodes
+                    belief_propagation::update_variables(&mut vertex_for_var, &mut variables_rust);
+                }
             }
+        });
 
-            unsafe {
-                // map vertex to vec<vec<>> based on vec_vars_id
-                let mut vertex_for_var: Vec<Vec<&mut Array2<f64>>> = variables_rust
-                    .iter()
-                    .map(|v| {
-                        let mut vec = Vec::<&mut Array2<f64>>::with_capacity(v.neighboors.len());
-                        vec.set_len(v.neighboors.len());
-                        vec
-                    })
-                    .collect();
-                vertex
-                    .iter_mut()
-                    .zip(vec_vars_id.iter())
-                    .for_each(|(x, (id, posi))| vertex_for_var[*id][*posi] = x);
-
-                // variables function nodes
-                belief_propagation::update_variables(&mut vertex_for_var, &mut variables_rust);
-            }
-        }
         let pb = ProgressBar::new(variables.len() as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
         "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
@@ -218,11 +224,11 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     }
 
     #[pyfn(m, "partial_cp")]
-    fn partial_cp<T>(
+    fn partial_cp(
         _py: Python,
-        traces: PyReadonlyArray2<T>, // (len,N_sample)
-        poi: PyReadonlyArray1<u32>,  // (Np,len)
-        store: &PyArray2<T>,
+        traces: PyReadonlyArray2<i16>, // (len,N_sample)
+        poi: PyReadonlyArray1<u32>,    // (Np,len)
+        store: &PyArray2<i16>,
     ) {
         let traces = traces.as_array();
         let poi = poi.as_array();
@@ -235,38 +241,6 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
                 let poi = poi.first().unwrap();
                 x.assign(&traces.slice(s![.., *poi as usize]));
             });
-    }
-
-    #[pyfn(m, "update_snr_only")]
-    fn update_snr_only(
-        _py: Python,
-        traces: PyReadonlyArray2<i16>, // (len,N_sample)
-        x: PyReadonlyArray2<u16>,      // (Np,len)
-        sum: &PyArray3<i64>,           // (Np,Nc,N_sample)
-        sum2: &PyArray3<i64>,          // (Np,Nc,N_sample)
-        ns: &PyArray2<u64>,            // (Np,Nc)
-    ) {
-        let traces = traces.as_array();
-        let x = x.as_array();
-        let mut sum = unsafe { sum.as_array_mut() };
-        let mut sum2 = unsafe { sum2.as_array_mut() };
-        let mut ns = unsafe { ns.as_array_mut() };
-        snr::update_snr_only(&traces, &x, &mut sum, &mut sum2, &mut ns);
-    }
-
-    #[pyfn(m, "finalyze_snr_only")]
-    fn finalyze_snr_only(
-        _py: Python,
-        sum: PyReadonlyArray3<i64>,  // (Np,Nc,N_sample)
-        sum2: PyReadonlyArray3<i64>, // (Np,Nc,N_sample)
-        ns: PyReadonlyArray2<u64>,   // (Np,Nc,N_sample)
-        snr: &PyArray2<f64>,         // (Np,Nc)
-    ) {
-        let sum = sum.as_array();
-        let sum2 = sum2.as_array();
-        let ns = ns.as_array();
-        let mut snr = unsafe { snr.as_array_mut() };
-        snr::finalize_snr_only(&sum, &sum2, &ns, &mut snr);
     }
 
     Ok(())

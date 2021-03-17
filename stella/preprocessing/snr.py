@@ -7,19 +7,19 @@ import numpy as np
 import stella.lib.rust_stella as rust
 from tqdm import tqdm
 class SNR:
-    def __init__(self,Nc,Ns,Np=1):
+    def __init__(self,nc,ns,np=1):
         r"""Computes the Signal-to-Noise ratio between the traces
         and the intermediate values. It is meant to work on traces being 
         int16.
 
         Parameters
         ----------
-        Nc : int
+        nc : int
             Number of possible classes (e.g., 256 for 8-bit target). We force
             that the number of classes is smaller than 2**16.
-        Ns : int
+        ns : int
             Trace length to process.
-        Np : int
+        np : int
             Number of independent variables to process.
 
         Examples
@@ -32,21 +32,10 @@ class SNR:
         >>> snr.fit_u(traces,X)
         """
 
-        if Nc >= (2**16):
+        if nc >= (2**16):
             raise Exception("SNR can be computed on max 16 bit, {} given".format(Nc))
-
-        self._Nc = Nc
-        self._Ns = Ns
-        self._Np = Np
-
-        # Number of observed traces with given intermediate variable
-        self._ns = np.zeros((Np,Nc),dtype=np.uint64)
-        # Sum for each class
-        self._sum = np.zeros((Np,Nc,Ns),dtype=np.int64)
-        # Sum of squared traces for each class
-        self._sum2 = np.zeros((Np,Nc,Ns),dtype=np.int64)
-        # SNR on each class
-        self._SNR = np.zeros((Np,Ns),dtype=np.float64)
+      
+        self.snr = rust.SNR(nc,ns,np)
 
     def fit_u(self,traces,X):
         r""" Updates the SNR state to take into account fresh
@@ -60,28 +49,26 @@ class SNR:
         X : array_like
             Labels for each traces. Must be of shape (Np,ntraces). must be uint16
         """
-        rust.update_snr_only(traces,X,self._sum,self._sum2,self._ns);
+        self.snr.update(traces,X)
 
     def get_snr(self):
-        rust.finalyze_snr_only(self._sum,self._sum2,self._ns,self._SNR);
-        return self._SNR
+        return self.snr.get_snr()
 
     def __del__(self):
-        del self._ns,self._sum,self._sum2
-        del self._SNR
+        del self.snr
 
 
 if __name__ == "__main__":
-    Nt = int(1E5)
-    Ns = 50000
-    Nc = 4
+    Nt = int(1E4)
+    Ns = 5000
+    Np = 4
     import time
     traces = np.random.randint(0,256,(Nt,Ns)).astype(np.int16)
-    labels = np.random.randint(0,256,(Nc,Nt)).astype(np.uint16)
+    labels = np.random.randint(0,256,(Np,Nt)).astype(np.uint16)
 
-    snr = SNR(256,Ns,Nc)
+    snr = SNR(256,Ns,Np)
     start = time.time()
     for i in range(10):
         snr.fit_u(traces,labels)
-    snr_val = snr._SNR
+    snr_val = snr.get_snr()
     print(start - time.time())

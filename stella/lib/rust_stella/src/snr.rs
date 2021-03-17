@@ -1,22 +1,52 @@
-use ndarray::{Array2, ArrayView2, ArrayView3, ArrayViewMut2, ArrayViewMut3, Axis, Zip};
+use ndarray::{Array2, Array3, Axis, Zip};
+use numpy::{PyArray2, PyReadonlyArray2, ToPyArray};
+use pyo3::prelude::*;
 use rayon::prelude::*;
 
-pub fn update_snr_only(
-    x: &ArrayView2<i16>,
-    y: &ArrayView2<u16>,
-    s: &mut ArrayViewMut3<i64>,
-    s2: &mut ArrayViewMut3<i64>,
-    nc: &mut ArrayViewMut2<u64>,
-) {
-    s.outer_iter_mut()
-        .into_par_iter()
-        .zip(s2.outer_iter_mut().into_par_iter())
-        .zip(nc.outer_iter_mut().into_par_iter())
-        .zip(y.outer_iter().into_par_iter())
-        .for_each(|(((mut s, mut s2), mut nc), y)| {
-            // for each variable
+#[pyclass]
+pub struct SNR {
+    s: Array3<i64>,
+    s2: Array3<i64>,
+    nc: Array2<u64>,
 
-            s.outer_iter_mut().into_par_iter(). // over classes
+    np: usize,
+    ns: usize,
+}
+#[pymethods]
+impl SNR {
+    #[new]
+    fn new(nc: usize, ns: usize, np: usize) -> Self {
+        SNR {
+            s: Array3::<i64>::zeros((np, nc, ns)),
+            s2: Array3::<i64>::zeros((np, nc, ns)),
+            nc: Array2::<u64>::zeros((np, nc)),
+
+            ns: ns,
+            np: np,
+        }
+    }
+
+    fn update(
+        &mut self,
+        py: Python,
+        traces: PyReadonlyArray2<i16>, // (len,N_sample)
+        y: PyReadonlyArray2<u16>,      // (Np,len)
+    ) {
+        let x = traces.as_array();
+        let y = y.as_array();
+        let s = &mut self.s;
+        let s2 = &mut self.s2;
+        let nc = &mut self.nc;
+        py.allow_threads(|| {
+            s.outer_iter_mut()
+                .into_par_iter()
+                .zip(s2.outer_iter_mut().into_par_iter())
+                .zip(nc.outer_iter_mut().into_par_iter())
+                .zip(y.outer_iter().into_par_iter())
+                .for_each(|(((mut s, mut s2), mut nc), y)| {
+                    // for each variable
+
+                    s.outer_iter_mut().into_par_iter(). // over classes
                 zip(s2.outer_iter_mut().into_par_iter()).
                 zip(nc.outer_iter_mut().into_par_iter()).
                 enumerate().
@@ -37,43 +67,44 @@ pub fn update_snr_only(
                     });
                     nc += n;
                 });
-        });
-}
-
-pub fn finalize_snr_only(
-    s: &ArrayView3<i64>,
-    s2: &ArrayView3<i64>,
-    nc: &ArrayView2<u64>,
-    snr: &mut ArrayViewMut2<f64>,
-) {
-    s.outer_iter()
-        .zip(s2.outer_iter())
-        .zip(nc.outer_iter())
-        .zip(snr.outer_iter_mut())
-        .for_each(|(((s, s2), nc), mut snr)| {
-            // for each variable
-            let mut means = Array2::<f64>::zeros(s2.raw_dim());
-            means
-                .outer_iter_mut()
-                .into_par_iter()
-                .zip(nc.outer_iter().into_par_iter())
-                .zip(s.outer_iter().into_par_iter())
-                .for_each(|((mut means, nc), s)| {
-                    let nc = *nc.first().unwrap() as f64;
-                    means.zip_mut_with(&s, |x, y| *x = (*y as f64) / nc);
                 });
-            let mean_var = means.var_axis(Axis(0), 0.0);
-
-            means
-                .outer_iter_mut()
-                .into_par_iter()
-                .zip(nc.outer_iter().into_par_iter())
-                .zip(s2.outer_iter().into_par_iter())
-                .for_each(|((mut means, nc), s2)| {
-                    let nc = *nc.first().unwrap() as f64;
-                    means.zip_mut_with(&s2, |x, y| *x = ((*y as f64) / nc) - x.powi(2));
-                });
-            let var_mean = means.mean_axis(Axis(0)).unwrap();
-            snr.assign(&(&mean_var / &var_mean));
         });
+    }
+    fn get_snr<'py>(&mut self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
+        let mut snr = Array2::<f64>::zeros((self.np, self.ns));
+        let s = &self.s;
+        let s2 = &self.s2;
+        let nc = &self.nc;
+        s.outer_iter()
+            .zip(s2.outer_iter())
+            .zip(nc.outer_iter())
+            .zip(snr.outer_iter_mut())
+            .for_each(|(((s, s2), nc), mut snr)| {
+                // for each variable
+                let mut means = Array2::<f64>::zeros(s2.raw_dim());
+                means
+                    .outer_iter_mut()
+                    .into_par_iter()
+                    .zip(nc.outer_iter().into_par_iter())
+                    .zip(s.outer_iter().into_par_iter())
+                    .for_each(|((mut means, nc), s)| {
+                        let nc = *nc.first().unwrap() as f64;
+                        means.zip_mut_with(&s, |x, y| *x = (*y as f64) / nc);
+                    });
+                let mean_var = means.var_axis(Axis(0), 0.0);
+
+                means
+                    .outer_iter_mut()
+                    .into_par_iter()
+                    .zip(nc.outer_iter().into_par_iter())
+                    .zip(s2.outer_iter().into_par_iter())
+                    .for_each(|((mut means, nc), s2)| {
+                        let nc = *nc.first().unwrap() as f64;
+                        means.zip_mut_with(&s2, |x, y| *x = ((*y as f64) / nc) - x.powi(2));
+                    });
+                let var_mean = means.mean_axis(Axis(0)).unwrap();
+                snr.assign(&(&mean_var / &var_mean));
+            });
+        Ok(&(snr.to_pyarray(py)))
+    }
 }

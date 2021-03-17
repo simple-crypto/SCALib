@@ -35,10 +35,9 @@ class DataReader(threading.Thread):
         super(DataReader,self).__init__()
         self._stop_event = threading.Event()
         self.files = files
-        self.queue = queue.Queue(maxsize=2)
+        self.queue = queue.Queue(maxsize=1)
         self._verbose = verbose
         self.labels = labels
-        self._thread_stop = False
 
     def run(self):
         for fname in self.files:
@@ -50,7 +49,7 @@ class DataReader(threading.Thread):
                 rets = read
             else:
                 for l in self.labels: rets +=(read[l],)
-            
+
             if self._verbose: print("# DataReader: done load ",fname)
 
             while self.queue.full() and not self._stop_event.is_set():
@@ -59,11 +58,11 @@ class DataReader(threading.Thread):
             if self._stop_event.is_set(): break
 
             self.queue.put(rets)
-        del self.queue
         return
 
     def stop(self):
-        self._stop_event.set() 
+        self._stop_event.set()
+
     def __iter__(self):
         self._i = 0
         self.start()
@@ -75,3 +74,5 @@ class DataReader(threading.Thread):
             return self.queue.get()
         else:
             raise StopIteration
+    def __del__(self):
+        del self.queue

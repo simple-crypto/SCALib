@@ -13,7 +13,6 @@ class LDAClassifier():
         
         # this method is inspired by the sklearn implementation of scikit-learn
         # they are equivalent but enables rust acceleration
-
         nt,ns = x.shape
         nc = self._nc
 
@@ -25,7 +24,7 @@ class LDAClassifier():
         
         # get sb,sw,c_means and x_f64
         rust.lda_matrix(x,y,sb,sw,c_means,x_f64,nc)
-
+        
         # generate the projection 
         evals, evecs = scipy.linalg.eigh(sb, sw)
         evecs = evecs[:, np.argsort(evals)[::-1]]
@@ -53,7 +52,8 @@ class LDAClassifier():
         self._cov = cov
         self._means = means
         self._psd = psd
-        del x_f64,c_means,sw,sb
+        del x_f64,c_means,sw,sb,s,u,traces_t
+        del evals,evecs,psigma_diag,above_cutoff
 
     def predict_proba(self,x):
         nt,_ = x.shape
@@ -104,4 +104,3 @@ if __name__ == "__main__":
     assert(np.allclose(lda._projection,lda_ref.scalings_[:,:n_components]))
     assert(np.allclose(means_check,lda._means))
     assert(np.allclose(cov_check,lda._cov))
-    # assert(np.allclose(psd_check,lda._psd))
