@@ -217,120 +217,24 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         lda::predict_proba_lda(x, projection, c_means, psd, &mut prs);
     }
 
-    #[pyfn(m, "multivariate_pooled")]
-    fn multivariate_pooled(
+    #[pyfn(m, "partial_cp")]
+    fn partial_cp<T>(
         _py: Python,
-        u: PyReadonlyArray3<f64>, // U matrix (decomposition of Inv Cov (Npro x Npro)
-        m: PyReadonlyArray2<f64>, // mean matrices (Nk x Npro)
-        traces: PyReadonlyArray2<f64>, // the actual traces (N x Npro)
-        prs: &PyArray2<f64>,      // the actual traces (N x Nk)
-        det: PyReadonlyArray2<f64>, // (1,Nk)
-    ) -> PyResult<()> {
-        let u = u.as_array();
-        let det = det.as_array();
+        traces: PyReadonlyArray2<T>, // (len,N_sample)
+        poi: PyReadonlyArray1<u32>,  // (Np,len)
+        store: &PyArray2<T>,
+    ) {
         let traces = traces.as_array();
-        let m = m.as_array();
-        let mut prs = unsafe { prs.as_array_mut() };
-        prs.axis_iter_mut(Axis(1)) // along Nk axis
+        let poi = poi.as_array();
+        let mut store = unsafe { store.as_array_mut() };
+        store
+            .axis_iter_mut(Axis(1))
             .into_par_iter()
-            .zip(m.axis_iter(Axis(0)).into_par_iter())
-            .zip(u.axis_iter(Axis(0)).into_par_iter())
-            .zip(det.axis_iter(Axis(1)).into_par_iter())
-            .for_each(|(((mut prs, m), u), det)| {
-                let dev = &traces - &m;
-                let tmp = dev
-                    .dot(&u)
-                    .mapv(|a| a.powi(2))
-                    .sum_axis(Axis(1))
-                    .mapv(|a| (-0.5 * a).exp())
-                    / det[0];
-                prs.assign(&tmp);
+            .zip(poi.outer_iter().into_par_iter())
+            .for_each(|(mut x, poi)| {
+                let poi = poi.first().unwrap();
+                x.assign(&traces.slice(s![.., *poi as usize]));
             });
-        Ok(())
-    }
-    #[pyfn(m, "class_means_subs")]
-    fn class_means_subs(
-        _py: Python,
-        labels: PyReadonlyArray1<u16>, // labels (N,)
-        means: PyReadonlyArray2<f64>,  // the actual traces (N x Nk)
-        traces_out: &PyArray2<f64>,    // where to store the results
-    ) -> PyResult<()> {
-        let mut traces_out = unsafe { traces_out.as_array_mut() };
-        let labels = labels.as_array();
-        let means = means.as_array();
-        traces_out
-            .axis_iter_mut(Axis(0)) // along Nk axis
-            .into_par_iter()
-            .enumerate()
-            .for_each(|(i, mut traces_out)| {
-                let x = labels[[i]] as usize;
-                let m = means.slice(s![x, ..]);
-
-                traces_out -= &m;
-            });
-        Ok(())
-    }
-
-    #[pyfn(m, "class_means_f64")]
-    fn class_means_f64(
-        _py: Python,
-        u: PyReadonlyArray1<u16>,      // uniques labels
-        labels: PyReadonlyArray1<u16>, // labels (N,)
-        traces: PyReadonlyArray2<f64>, // the actual traces (N x Npro)
-        means: &PyArray2<f64>,         // the actual traces (N x Nk)
-    ) -> PyResult<()> {
-        let u = u.as_array();
-        let traces = traces.as_array();
-        let labels = labels.as_array();
-        let mut means = unsafe { means.as_array_mut() };
-        u.axis_iter(Axis(0)) // along Nk axis
-            .into_par_iter()
-            .zip(means.axis_iter_mut(Axis(0)).into_par_iter())
-            .for_each(|(u, mut mean)| {
-                let mut n = 0;
-                labels
-                    .axis_iter(Axis(0))
-                    .zip(traces.axis_iter(Axis(0)))
-                    .for_each(|(lab, t)| {
-                        if lab == u {
-                            mean += &t.map(|x| (*x as f64));
-                            n += 1;
-                        }
-                    });
-                mean /= n as f64;
-            });
-        Ok(())
-    }
-
-    #[pyfn(m, "class_means")]
-    fn class_means(
-        _py: Python,
-        u: PyReadonlyArray1<u16>,      // uniques labels
-        labels: PyReadonlyArray1<u16>, // labels (N,)
-        traces: PyReadonlyArray2<i16>, // the actual traces (N x Npro)
-        means: &PyArray2<f64>,         // the actual traces (N x Nk)
-    ) -> PyResult<()> {
-        let u = u.as_array();
-        let traces = traces.as_array();
-        let labels = labels.as_array();
-        let mut means = unsafe { means.as_array_mut() };
-        u.axis_iter(Axis(0)) // along Nk axis
-            .into_par_iter()
-            .zip(means.axis_iter_mut(Axis(0)).into_par_iter())
-            .for_each(|(u, mut mean)| {
-                let mut n = 0;
-                labels
-                    .axis_iter(Axis(0))
-                    .zip(traces.axis_iter(Axis(0)))
-                    .for_each(|(lab, t)| {
-                        if lab == u {
-                            mean += &t.map(|x| (*x as f64));
-                            n += 1;
-                        }
-                    });
-                mean /= n as f64;
-            });
-        Ok(())
     }
 
     #[pyfn(m, "update_snr_only")]

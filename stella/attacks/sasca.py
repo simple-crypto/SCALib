@@ -1,5 +1,51 @@
 import numpy as np
 import stella.lib.rust_stella as rust
+class SASCAGraph:
+    def __init__(self,fname,nc):
+        self._fname = fname
+        self._nc = nc
+
+        self._graph = _create_graph(fname)
+        self._n = 0
+        self._initialized = False
+
+    def init_graph_memory(self,n):
+        self._n = n
+        self._initialized = True
+        _init_graph_memory(self._graph,n,self._nc)
+
+    def get_var(self):
+        return self._graph["var"]
+
+    def get_publics(self):
+        return self._graph["publics"]
+
+    def get_tables(self):
+        return self._graph["tables"]
+    
+    def get_secret_labels(self):
+        """
+            return list of labels of secrets
+        """
+        var = self.get_var()
+        return list(filter(lambda x: var[x]["flags"] & SECRET != 0,var))
+
+    def get_profile_labels(self):
+        """
+            return list of labels of secrets
+        """
+        var = self.get_var()
+        return list(filter(lambda x: var[x]["flags"] & PROFILE != 0,var))
+        
+    def run_bp(self,it):
+        graph = self._graph
+        _reset_graph_memory(graph,self._nc)
+        rust.belief_propagation(graph["functions"],
+                            graph["var_list"],
+                            it,
+                            graph["vertex"],
+                            self._nc,self._n)
+
 AND = 0
 XOR = 1
 XOR_CST = 2
@@ -23,12 +69,12 @@ TABLE = 8
 
 CLIP = 1E-50
 
-def new_variable(i):
+def _new_variable(i):
     return {"id":i,"neighboors":[],"flags":0,"in_loop":False}
-def new_function(i,func):
+def _new_function(i,func):
     return {"id":i,"inputs":[],"outputs":[],"func":func}
 
-def init_graph_memory(graph,N,Nc):
+def _init_graph_memory(graph,N,Nc):
     functions = graph["functions"]
     variables = graph["var"]
     # init the distribution
@@ -41,12 +87,16 @@ def init_graph_memory(graph,N,Nc):
             n = 1
 
         if var["flags"] & (PUBLIC) != 0:
+            if "values" in var: del var["values"]
             var["values"] = np.zeros(n,dtype=np.uint32)
         elif var["flags"] & (TABLE) != 0:
+            if "table" in var: del var["table"]
             var["table"] = np.zeros(Nc,dtype=np.uint32)
         else:
             if var["flags"] & PROFILE != 0:
+                if "distri_orig" in var: del var["distri_orig"]
                 var["distri_orig"] = np.ones((n,Nc))
+            if "distri" in var: del var["distri"]
             var["distri"] = np.zeros((n,Nc))
 
     for p in graph["publics"]:
@@ -54,7 +104,7 @@ def init_graph_memory(graph,N,Nc):
     for p in graph["tables"]:
         graph["tables"][p] = np.zeros(Nc,dtype=np.uint32)
  
-def create_graph(fname):
+def _create_graph(fname):
     functions = []
     variables = {}
     publics = {}
@@ -83,7 +133,7 @@ def create_graph(fname):
         if v in variables:
             node = variables[v]
         else:
-            node = new_variable(len(variables))
+            node = _new_variable(len(variables))
             node["in_loop"] = in_loop
         
         insert = True
@@ -114,7 +164,7 @@ def create_graph(fname):
             v = variables[split[0]] 
 
             # create new function
-            func = new_function(i,f["val"])
+            func = _new_function(i,f["val"])
             func["in_loop"] = in_loop
 
             # add relation between fct and output
@@ -145,14 +195,7 @@ def create_graph(fname):
     return {"functions":functions,"var_list":variables_list,"vertex":vertex,
                     "var":variables,"publics":publics,"tables":tables}
 
-def run_bp(graph,it,ntraces,nc):
-    rust.belief_propagation(graph["functions"],
-                        graph["var_list"],
-                        it,
-                        graph["vertex"],
-                        nc,ntraces)
-
-def reset_graph_memory(graph,Nc):
+def _reset_graph_memory(graph,Nc):
     variables_list = graph["var_list"]
     for var in variables_list:
         # if node has distribution
@@ -167,6 +210,7 @@ def reset_graph_memory(graph,Nc):
             f["values"] = graph["publics"][f["value_label"]]
         if f["func"] == LOOKUP:
             f["table"] = graph["tables"][f["table_label"]]
+
 
 if __name__ == "__main__":
     graph = create_graph("example_graph.txt")
