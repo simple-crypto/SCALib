@@ -336,7 +336,7 @@ pub fn update_functions(functions: &mut Vec<Func>, vertex: &mut Vec<Vec<&mut Arr
         });
 }
 
-fn xors(inputs: &mut Vec<&mut Array2<f64>>, nc: usize) {
+pub fn xors(inputs: &mut Vec<&mut Array2<f64>>, nc: usize) {
     for i in 0..inputs[0].shape()[0] {
         let mut acc = Array1::<f64>::ones(nc);
 

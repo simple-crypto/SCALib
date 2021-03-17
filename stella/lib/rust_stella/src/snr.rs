@@ -1,7 +1,4 @@
-use ndarray::{
-    s, Array2, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut2, ArrayViewMut3, Axis, Zip,
-};
-use ndarray_stats::CorrelationExt;
+use ndarray::{Array2, ArrayView2, ArrayView3, ArrayViewMut2, ArrayViewMut3, Axis, Zip};
 use rayon::prelude::*;
 
 pub fn update_snr_only(

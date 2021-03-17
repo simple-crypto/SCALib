@@ -5,11 +5,8 @@ mod lda;
 mod snr;
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use ndarray::parallel::prelude::*;
-use ndarray::{s, Array, Array2, Axis};
-use num_integer::binomial;
-use numpy::{
-    PyArray1, PyArray2, PyArray3, PyArrayDyn, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
-};
+use ndarray::{s, Array2, Axis};
+use numpy::{PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 use pyo3::types::{PyDict, PyList};
 

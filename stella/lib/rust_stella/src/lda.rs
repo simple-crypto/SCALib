@@ -74,15 +74,13 @@ pub fn predict_proba_lda(
 ) {
     let ns_in = x.shape()[1];
     let ns_proj = projection.shape()[1];
-    let nc = c_means.shape()[0];
     x.axis_chunks_iter(Axis(0), 100)
         .into_par_iter()
         .zip(prs.axis_chunks_iter_mut(Axis(0), 100).into_par_iter())
         .for_each(|(x, mut prs)| {
             let mut x_i = Array1::<f64>::zeros(ns_in);
             let mut x_proj = Array1::<f64>::zeros(ns_proj);
-            let mut mu = Array1::<f64>::zeros((ns_proj));
-            let mut tmp = Array2::<f64>::zeros((nc, ns_proj));
+            let mut mu = Array1::<f64>::zeros(ns_proj);
 
             x.outer_iter()
                 .zip(prs.outer_iter_mut())
