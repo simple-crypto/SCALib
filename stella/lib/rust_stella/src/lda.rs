@@ -11,19 +11,27 @@ pub struct LDA {
     psd: Array2<f64>,
     means: Array2<f64>,
     projection: Array2<f64>,
+    n_components: usize,
+    nc: usize,
 }
 #[pymethods]
 impl LDA {
     #[new]
-    fn new(
-        py: Python,
-        x: PyReadonlyArray2<i16>,
-        y: PyReadonlyArray1<u16>,
-        nc: usize,
-        n_components: usize,
-    ) -> Self {
+    fn new(py: Python, nc: usize, n_components: usize) -> Self {
+        LDA {
+            cov: Array2::<f64>::zeros((1, 1)),
+            psd: Array2::<f64>::zeros((1, 1)),
+            means: Array2::<f64>::zeros((1, 1)),
+            projection: Array2::<f64>::zeros((1, 1)),
+            nc: nc,
+            n_components: n_components,
+        }
+    }
+    fn fit(&mut self, py: Python, x: PyReadonlyArray2<i16>, y: PyReadonlyArray2<u16>) {
         let x = x.as_array();
         let y = y.as_array();
+        let nc = self.nc;
+        let n_components = self.n_components;
         py.allow_threads(|| {
             let nk = nc;
             let n = x.shape()[1];
@@ -119,29 +127,29 @@ impl LDA {
                 pack.into_iter().map(|(_, x)| 1.0 / f64::sqrt(*x)).collect();
             let psd = &u_s * &psigma_diag.broadcast(u_s.shape()).unwrap();
 
-            LDA {
-                cov: cov.to_owned(),
-                psd: psd,
-                means: means,
-                projection: projection,
-            }
+            self.cov = cov.to_owned();
+            self.psd = psd.to_owned();
+            self.means = means.to_owned();
+            self.projection = projection.to_owned();
         })
     }
 
-    #[new]
-    fn new2<'py>(
+    fn set_state<'py>(
+        &mut self,
         _py: Python<'py>,
         cov: PyReadonlyArray2<f64>,
         psd: PyReadonlyArray2<f64>,
         means: PyReadonlyArray2<f64>,
         projection: PyReadonlyArray2<f64>,
-    ) -> Self {
-        LDA {
-            cov: cov.as_array().to_owned(),
-            psd: psd.as_array().to_owned(),
-            means: means.as_array().to_owned(),
-            projection: projection.as_array().to_owned(),
-        }
+        nc: usize,
+        n_components: usize,
+    ) {
+        self.cov = cov.as_array().to_owned();
+        self.psd = psd.as_array().to_owned();
+        self.means = means.as_array().to_owned();
+        self.projection = projection.as_array().to_owned();
+        self.nc = nc;
+        self.n_components = n_components;
     }
 
     fn predict_proba<'py>(
