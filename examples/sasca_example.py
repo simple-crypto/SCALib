@@ -3,8 +3,7 @@ import numpy as np
 from stella.preprocessing import SNR
 from stella.estimator import LDAClassifier
 from stella.utils import DataReader
-from stella.attacks.sasca import create_graph,init_graph_memory,reset_graph_memory,run_bp
-from stella.attacks.sasca import PROFILE,PUBLIC
+from stella.attacks.sasca import SASCAGraph
 from tqdm import tqdm
 import pickle
 
@@ -49,7 +48,7 @@ with open(fgraph, 'w') as fp:
     fp.write("\n\n#endindeploop\n\n")
 
 print("-> parsing",fgraph,"to generate graph structur")
-graph = create_graph(fgraph)
+graph = SASCAGraph(fgraph,256)
 pickle.dump(graph,open("graph.pkl",'wb'))
 
 print("####################")
@@ -60,10 +59,10 @@ files_traces = [DIR_PROFILE+"/traces/"+tag+"_traces_%d.npy"%(i) for i in range(n
 files_labels = [DIR_PROFILE+"/labels/"+tag+"_labels_%d.npz"%(i) for i in range(nfile_profile)]
 
 graph = pickle.load(open("graph.pkl","rb"))
-profile_var = {}
-for var in graph["var"]:
-    if graph["var"][var]["flags"] & PROFILE != 0:
-        profile_var[var] = {}
+profile_var  = {}
+for v in graph.get_profile_labels():
+    profile_var[v] = {}
+
 
 print("-> Computing SNR")
 #Go over all the profiling traces and update the SNR
@@ -72,8 +71,8 @@ for it,(traces,labels) in tqdm(enumerate(zip(DataReader(files_traces,None),
                                 total=nfile_profile,desc="Files"):
     labels = labels[0][0]
     if it == 0:
-        ntraces,Ns = traces.shape
-        snr = SNR(Np=len(labels),Nc=256,Ns=Ns)
+        ntraces,ns = traces.shape
+        snr = SNR(np=len(labels),nc=256,ns=ns)
         data = np.zeros((len(labels),ntraces),dtype=np.uint16)
 
     for i,v in enumerate(profile_var):
@@ -109,8 +108,7 @@ for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
 
 for v in tqdm(profile_var,desc="Fit LDA"):
     var = profile_var[v]
-    var["model"] = LDAClassifier(n_components=1,nc=256)
-    var["model"].fit(var["samples"],var["data"])
+    var["model"] = LDAClassifier(var["samples"],var["data"],n_components=1,nc=256)
     var.pop("samples")
     var.pop("data")
 

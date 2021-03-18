@@ -13,6 +13,7 @@ use pyo3::types::{PyDict, PyList};
 #[pymodule]
 fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
+    m.add_class::<lda::LDA>()?;
     #[pyfn(m, "belief_propagation")]
     fn belief_propagation(
         py: Python,
@@ -186,43 +187,6 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             });
         Ok(())
     }
-    #[pyfn(m, "lda_matrix")]
-    fn lda_matrix(
-        _py: Python,
-        x: PyReadonlyArray2<i16>, // U matrix (decomposition of Inv Cov (Npro x Npro)
-        y: PyReadonlyArray1<u16>, // mean matrices (Nk x Npro)
-        sb: &PyArray2<f64>,       // the actual traces (N x Nk)
-        sw: &PyArray2<f64>,       // the actual traces (N x Nk)
-        c_means_bak: &PyArray2<f64>, // the actual traces (N x Nk)
-        x_f64: &PyArray2<f64>,
-        nk: usize,
-    ) {
-        let x = x.as_array();
-        let y = y.as_array();
-        let mut sb = unsafe { sb.as_array_mut() };
-        let mut sw = unsafe { sw.as_array_mut() };
-        let mut c_means_bak = unsafe { c_means_bak.as_array_mut() };
-        let mut x_f64 = unsafe { x_f64.as_array_mut() };
-        lda::get_projection_lda(x, y, &mut sb, &mut sw, &mut c_means_bak, &mut x_f64, nk);
-    }
-
-    #[pyfn(m, "predict_proba_lda")]
-    fn predict_proba_lda(
-        _py: Python,
-        x: PyReadonlyArray2<i16>, // U matrix (decomposition of Inv Cov (Npro x Npro)
-        projection: PyReadonlyArray2<f64>,
-        c_means: PyReadonlyArray2<f64>,
-        psd: PyReadonlyArray2<f64>,
-        prs: &PyArray2<f64>,
-    ) {
-        let x = x.as_array();
-        let projection = projection.as_array();
-        let c_means = c_means.as_array();
-        let psd = psd.as_array();
-        let mut prs = unsafe { prs.as_array_mut() };
-        lda::predict_proba_lda(x, projection, c_means, psd, &mut prs);
-    }
-
     #[pyfn(m, "partial_cp")]
     fn partial_cp(
         _py: Python,
