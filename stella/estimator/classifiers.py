@@ -7,7 +7,8 @@ class LDAClassifier():
 
         self._n_components = n_components;
         self._nc = nc
-        self.lda = rust.LDA(x,y,nc,n_components)
+        self.lda = rust.LDA(nc,n_components)
+        self.lda.fit(x,y)
         assert n_components < nc
 
     def predict_proba(self,x):
@@ -17,33 +18,43 @@ class LDAClassifier():
     def __getstate__(self):
         lda = self.lda
         dic = {"means":lda.get_means(),"cov":lda.get_cov(),
-                "projection":lda.get_projection(),"psd":lda.get_psd()}
+                "projection":lda.get_projection(),
+                "psd":lda.get_psd(),"nc":self._nc,
+                "n_components":self._n_components}
         return dic
     def __setstate__(self,state):
-        self.lda = rust.LDA.new_state(state["cov"],state["psd"],
-                    state["means"],state["projection"])
+        self.lda = rust.LDA(state["nc"],state["n_components"])
+        self.lda.set_state(state["cov"],state["psd"],
+                    state["means"],state["projection"],
+                    state["nc"],state["n_components"])
 
 if __name__ == "__main__":
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
     import time
-    ns = 10
-    n_components = 2
-
+    ns = 2000
+    n_components = 20
+    sb = np.random.random((ns,ns))
+    sw = np.random.random((ns,ns))
+    sb = sb @ sb.T
+    sw = sw @ sw.T
+    print("start")
+    scipy.linalg.eigh(sw,sb)
+    print("done")
     m = np.random.randint(0,4,(256,ns))
     traces = np.random.randint(0,10,(200000,ns),dtype=np.int16)
     labels = np.random.randint(0,256,200000,dtype=np.uint16)
     traces += m[labels] 
 
     start = time.time()
+    lda = LDAClassifier(traces,labels,256,n_components)
+    print(time.time()-start)
+    
+    start = time.time()
     lda_ref = LDA_sklearn(solver="eigen")
     lda_ref.fit(traces,labels)
     print(time.time()-start)
 
-    start = time.time()
-    lda = LDAClassifier(traces,labels,256,n_components)
-    
-    print(time.time()-start)
-    
+
     # check equivalence    
     traces_t = (lda_ref.scalings_[:,:n_components].T @ traces.T).T
     means_check = np.zeros((256,n_components))

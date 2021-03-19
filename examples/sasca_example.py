@@ -122,7 +122,7 @@ profile_var = pickle.load(open("profile_var.pkl","rb"))
 ntraces_attack = nfile_attack * ntraces
 
 print("-> Init graph memory")
-init_graph_memory(graph,ntraces_attack,256)
+graph.init_graph_memory(ntraces_attack)
 
 # Attack files
 files_traces = [DIR_ATTACK+"/traces/"+tag+"_traces_%d.npy"%(i) for i in range(nfile_attack)]
@@ -130,7 +130,7 @@ files_labels = [DIR_ATTACK+"/labels/"+tag+"_labels_%d.npz"%(i) for i in range(nf
 
 # For each attack file
 print("-> Load information in graph")
-graph["tables"]["sbox"][:]=sbox
+graph.get_tables()["sbox"][:]=sbox
 for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
                                 DataReader(files_labels,["labels"]),
                                 range(0,ntraces*nfile_attack,ntraces)),
@@ -138,21 +138,21 @@ for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
     labels = labels[0][0]
     for v in profile_var:
         var = profile_var[v]
-        graph["var"][v]["distri_orig"][index:index+ntraces,:] = var["model"].predict_proba(traces[:,var["POI"]])
+        graph.get_var()[v]["distri_orig"][index:index+ntraces,:] = var["model"].predict_proba(traces[:,var["POI"]])
     
-    for v in graph["publics"]:
-        graph["publics"][v][index:index+ntraces] = labels[v] 
+    for v in graph.get_publics():
+        graph.get_publics()[v][index:index+ntraces] = labels[v] 
 
 print("-> Running BP")
-run_bp(graph,5,ntraces_attack,256)
+graph.run_bp(5)
 
 # Display the obtained key
 guess = []
 rank = []
 for i,k in enumerate(secret_key):
     label = "k%d"%(i)
-    guess.append(np.argmax(graph["var"][label]["distri"],axis=1)[0])
-    rank.append(256 - np.where(np.argsort(graph["var"][label]["distri"],axis=1)[0] == k)[0])
+    guess.append(np.argmax(graph.get_var()[label]["distri"],axis=1)[0])
+    rank.append(256 - np.where(np.argsort(graph.get_var()[label]["distri"],axis=1)[0] == k)[0])
 
 print("\nguess :", " ".join(["%3x"%(x)for x in guess]))
 print("key   :", " ".join(["%3x"%(x)for x in secret_key]))

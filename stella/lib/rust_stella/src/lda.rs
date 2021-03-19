@@ -1,4 +1,6 @@
+use lapack::*;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut2, Axis, Zip};
+use ndarray_linalg::layout::MatrixLayout;
 use ndarray_linalg::*;
 use ndarray_stats::CorrelationExt;
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
@@ -17,7 +19,7 @@ pub struct LDA {
 #[pymethods]
 impl LDA {
     #[new]
-    fn new(py: Python, nc: usize, n_components: usize) -> Self {
+    fn new(_py: Python, nc: usize, n_components: usize) -> Self {
         LDA {
             cov: Array2::<f64>::zeros((1, 1)),
             psd: Array2::<f64>::zeros((1, 1)),
@@ -27,7 +29,7 @@ impl LDA {
             n_components: n_components,
         }
     }
-    fn fit(&mut self, py: Python, x: PyReadonlyArray2<i16>, y: PyReadonlyArray2<u16>) {
+    fn fit(&mut self, py: Python, x: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
         let x = x.as_array();
         let y = y.as_array();
         let nc = self.nc;
@@ -39,8 +41,8 @@ impl LDA {
 
             let mut c_means = Array2::<i64>::zeros((nk, n));
             let mut s = Array2::<i64>::zeros((nk, 1));
-            let mut sb_o = Array2::<f64>::zeros((n, n));
-            let mut sw_o = Array2::<f64>::zeros((n, n));
+            let mut sb_o = Array2::<f64>::zeros((n, n)).reversed_axes();
+            let mut sw_o = Array2::<f64>::zeros((n, n)).reversed_axes();
 
             // compute class means
             c_means
@@ -90,24 +92,55 @@ impl LDA {
                 .and(&sw_o)
                 .par_apply(|sb, st, sw| *sb = st - sw);
 
-            // compute the projection
-            let (evals, (evecs, _)) = (sb_o, sw_o).eigh(UPLO::Lower).unwrap();
-            let evals = evals.to_vec();
+            let mut evals = vec![0.0; n as usize];
+            unsafe {
+                let mut i: i32 = 0;
+                let itype = vec![1];
+                let nwork = 1 + 6 * n + 2 * n * n;
+                let niwork = 3 + 5 * n;
+                let mut work = vec![0.0; nwork];
+                let mut iwork = vec![0; niwork];
+                dsygvd(
+                    &itype,
+                    b'V',
+                    b'L',
+                    n as i32,
+                    sb_o.as_allocated_mut().unwrap(),
+                    n as i32,
+                    sw_o.as_allocated_mut().unwrap(),
+                    n as i32,
+                    &mut evals,
+                    &mut work,
+                    nwork as i32,
+                    &mut iwork,
+                    niwork as i32,
+                    &mut i,
+                );
+            }
             let mut index: Vec<(usize, f64)> = (0..evals.len()).zip(evals).collect();
+            let evecs = sb_o;
             index.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
             index.reverse();
-            let mut projection = Array2::<f64>::zeros((index.len(), n_components));
+            let mut projection = Array2::<f64>::zeros((n_components, index.len()));
             index
                 .iter()
-                .zip(projection.axis_iter_mut(Axis(1)))
+                .zip(projection.axis_iter_mut(Axis(0)))
                 .for_each(|((i, _), mut proj)| {
                     proj.assign(&evecs.slice(s![.., *i]));
                 });
 
             // compute mean and cov
-            let means = projection.t().dot(&c_means.t());
-            let traces_t = projection.t().dot(&x_f64.t()); // (n,n_components)
-            let cov = traces_t.cov(0.0).unwrap(); //traces_t.dot(&traces_t.t()) / (traces_t.shape()[0] as f64);
+            println!("before small proj");
+            let means = projection.dot(&c_means.t());
+            println!("before big proj");
+            let traces_t = projection.dot(&x_f64_t); // (n,n_components)
+            let m = traces_t.mean_axis(Axis(1)).unwrap().insert_axis(Axis(1));
+            let mut traces_t_t = Array2::zeros(traces_t.t().raw_dim());
+            Zip::from(&mut traces_t_t)
+                .and(&traces_t.t())
+                .par_apply(|x, y| *x = *y);
+
+            let cov = traces_t.dot(&traces_t_t) / (traces_t.shape()[1] as f64);
 
             let (s, u) = cov.eigh(UPLO::Lower).unwrap();
             let cond =
@@ -130,7 +163,7 @@ impl LDA {
             self.cov = cov.to_owned();
             self.psd = psd.to_owned();
             self.means = means.to_owned();
-            self.projection = projection.to_owned();
+            self.projection = projection.t().to_owned();
         })
     }
 
@@ -162,7 +195,6 @@ impl LDA {
         let psd = &self.psd;
         let projection = &self.projection;
 
-        println!("projection shape {:?}", projection.shape());
         let ns_in = x.shape()[1];
         let ns_proj = projection.shape()[1];
         let mut prs = Array2::<f64>::zeros((x.shape()[0], c_means.shape()[0]));
