@@ -1,0 +1,21 @@
+[package]
+name = "ranklib-py"
+version = "0.1.0"
+authors = ["Gaëtan Cassiers <gaetan.cassiers@uclouvain.be>"]
+edition = "2018"
+
+[lib]
+name = "ranklib"
+crate-type = ["cdylib"]
+
+[features]
+
+ntl = ["ranklib/ntl"]
+hellib = ["ranklib/hellib"]
+
+[dependencies.pyo3]
+version = "0.13"
+features = ["extension-module"]
+
+[dependencies.ranklib]
+path = "../ranklib"

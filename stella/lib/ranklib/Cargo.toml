@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "ranklib",
+    "ranklib-py"
+]

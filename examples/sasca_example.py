@@ -4,6 +4,7 @@ from stella.preprocessing import SNR
 from stella.estimator import LDAClassifier
 from stella.utils import DataReader
 from stella.attacks.sasca import SASCAGraph
+from stella.post_processing import rank_accuracy
 from tqdm import tqdm
 import pickle
 
@@ -14,8 +15,8 @@ DIR_PROFILE = "./traces/profile/"
 DIR_ATTACK = "./traces/attack/"
 nfile_profile = 10
 nfile_attack = 1
-ntraces = 10000
-std = .4
+ntraces = 1000
+std = 2
 ndim = 3
 fgraph = "./graph.txt"
 
@@ -149,11 +150,16 @@ graph.run_bp(5)
 # Display the obtained key
 guess = []
 rank = []
+nlpr = np.zeros((16,256))
 for i,k in enumerate(secret_key):
     label = "k%d"%(i)
-    guess.append(np.argmax(graph.get_var()[label]["distri"],axis=1)[0])
-    rank.append(256 - np.where(np.argsort(graph.get_var()[label]["distri"],axis=1)[0] == k)[0])
-
-print("\nguess :", " ".join(["%3x"%(x)for x in guess]))
-print("key   :", " ".join(["%3x"%(x)for x in secret_key]))
-print("rank  :", " ".join(["%3d"%(x)for x in rank]))
+    key_distri = graph.get_var()[label]["distri"];
+    key_distri[np.where(key_distri<1E-100)] = 1E-100
+    nlpr[i,:] = -np.log10(key_distri)
+    guess.append(np.argmax(key_distri,axis=1)[0])
+    rank.append(256 - np.where(np.argsort(key_distri,axis=1)[0] == k)[0])
+rmin,r,rmax = rank_accuracy(nlpr,secret_key,2**1.0)
+print("\nguess    :", " ".join(["%3x"%(x)for x in guess]))
+print("key      :", " ".join(["%3x"%(x)for x in secret_key]))
+print("byterank :", " ".join(["%3d"%(x)for x in rank]))
+print("key rank : %f < %f < %f"%(np.log2(rmin),np.log2(r),np.log2(rmax)))
