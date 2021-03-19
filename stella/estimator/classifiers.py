@@ -32,7 +32,7 @@ if __name__ == "__main__":
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
     import time
     ns = 2000
-    n_components = 20
+    n_components = 2
     sb = np.random.random((ns,ns))
     sw = np.random.random((ns,ns))
     sb = sb @ sb.T

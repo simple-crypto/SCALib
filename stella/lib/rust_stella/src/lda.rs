@@ -1,8 +1,6 @@
 use lapack::*;
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, ArrayViewMut2, Axis, Zip};
-use ndarray_linalg::layout::MatrixLayout;
+use ndarray::{s, Array1, Array2, Axis, Zip};
 use ndarray_linalg::*;
-use ndarray_stats::CorrelationExt;
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 use rayon::prelude::*;
@@ -36,13 +34,13 @@ impl LDA {
         let n_components = self.n_components;
         py.allow_threads(|| {
             let nk = nc;
-            let n = x.shape()[1];
-            let ns = x.shape()[0];
+            let ns = x.shape()[1];
+            let n = x.shape()[0];
 
-            let mut c_means = Array2::<i64>::zeros((nk, n));
+            let mut c_means = Array2::<i64>::zeros((nk, ns));
             let mut s = Array2::<i64>::zeros((nk, 1));
-            let mut sb_o = Array2::<f64>::zeros((n, n)).reversed_axes();
-            let mut sw_o = Array2::<f64>::zeros((n, n)).reversed_axes();
+            let mut sb_o = Array2::<f64>::zeros((ns, ns)).reversed_axes();
+            let mut sw_o = Array2::<f64>::zeros((ns, ns)).reversed_axes();
 
             // compute class means
             c_means
@@ -64,7 +62,7 @@ impl LDA {
 
             let c_means = c_means.mapv(|x| x as f64);
             let s = s.mapv(|x| x as f64);
-            let mean_total = c_means.sum_axis(Axis(0)).insert_axis(Axis(1)) / (ns as f64);
+            let mean_total = c_means.sum_axis(Axis(0)).insert_axis(Axis(1)) / (n as f64);
             let c_means = &c_means / &s.broadcast(c_means.shape()).unwrap();
 
             let mut x_f64 = x.mapv(|x| x as f64);
@@ -73,7 +71,7 @@ impl LDA {
                 .and(&x_f64.t())
                 .par_apply(|x, y| *x = *y);
 
-            let st = x_f64_t.dot(&x_f64) / (ns as f64) - mean_total.dot(&mean_total.t());
+            let st = x_f64_t.dot(&x_f64) / (n as f64) - mean_total.dot(&mean_total.t());
             x_f64
                 .outer_iter_mut()
                 .into_par_iter()
@@ -85,30 +83,32 @@ impl LDA {
             Zip::from(&mut x_f64_t)
                 .and(&x_f64.t())
                 .par_apply(|x, y| *x = *y);
-            sw_o.assign(&(x_f64_t.dot(&x_f64) / (ns as f64)));
+            sw_o.assign(&(x_f64_t.dot(&x_f64) / (n as f64)));
 
             Zip::from(&mut sb_o)
                 .and(&st)
                 .and(&sw_o)
                 .par_apply(|sb, st, sw| *sb = st - sw);
 
-            let mut evals = vec![0.0; n as usize];
+            let mut evals = vec![0.0; ns as usize];
+
+            // link to lapack sysgvd
             unsafe {
                 let mut i: i32 = 0;
                 let itype = vec![1];
-                let nwork = 1 + 6 * n + 2 * n * n;
-                let niwork = 3 + 5 * n;
+                let nwork = 1 + 6 * ns + 2 * ns * ns;
+                let niwork = 3 + 5 * ns;
                 let mut work = vec![0.0; nwork];
                 let mut iwork = vec![0; niwork];
                 dsygvd(
                     &itype,
                     b'V',
                     b'L',
-                    n as i32,
+                    ns as i32,
                     sb_o.as_allocated_mut().unwrap(),
-                    n as i32,
+                    ns as i32,
                     sw_o.as_allocated_mut().unwrap(),
-                    n as i32,
+                    ns as i32,
                     &mut evals,
                     &mut work,
                     nwork as i32,
@@ -130,11 +130,9 @@ impl LDA {
                 });
 
             // compute mean and cov
-            println!("before small proj");
             let means = projection.dot(&c_means.t());
-            println!("before big proj");
             let traces_t = projection.dot(&x_f64_t); // (n,n_components)
-            let m = traces_t.mean_axis(Axis(1)).unwrap().insert_axis(Axis(1));
+
             let mut traces_t_t = Array2::zeros(traces_t.t().raw_dim());
             Zip::from(&mut traces_t_t)
                 .and(&traces_t.t())
