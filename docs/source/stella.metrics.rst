@@ -1,13 +1,13 @@
-stella.attacks package
+stella.metrics package
 ======================
 
 Submodules
 ----------
 
-stella.attacks.sascagraph module
---------------------------------
+stella.metrics.snr module
+-------------------------
 
-.. automodule:: stella.attacks.sascagraph
+.. automodule:: stella.metrics.snr
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ stella.attacks.sascagraph module
 Module contents
 ---------------
 
-.. automodule:: stella.attacks
+.. automodule:: stella.metrics
    :members:
    :undoc-members:
    :show-inheritance:

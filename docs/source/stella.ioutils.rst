@@ -1,13 +1,13 @@
-stella.attacks package
+stella.ioutils package
 ======================
 
 Submodules
 ----------
 
-stella.attacks.sascagraph module
+stella.ioutils.datareader module
 --------------------------------
 
-.. automodule:: stella.attacks.sascagraph
+.. automodule:: stella.ioutils.datareader
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ stella.attacks.sascagraph module
 Module contents
 ---------------
 
-.. automodule:: stella.attacks
+.. automodule:: stella.ioutils
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,2 +1,1 @@
-from .mcp_dpa import *
-from .sasca import *
+from .sascagraph import SASCAGraph
