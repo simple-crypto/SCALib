@@ -4,4 +4,4 @@ stella
 .. toctree::
    :maxdepth: 4
 
-   stella
+   stella.attacks

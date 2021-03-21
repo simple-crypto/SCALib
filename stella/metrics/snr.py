@@ -4,7 +4,7 @@ from tqdm import tqdm
 class SNR:
     r"""Computes the Signal-to-Noise Ratio (SNR) between the traces
     and the intermediate values. The SNR can be updated with its `fit()`
-    method to increase the SNR estimation. 
+    method. 
 
     Parameters
     ----------

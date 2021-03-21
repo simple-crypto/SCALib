@@ -1,21 +1,10 @@
 stella.attacks package
 ======================
+This modules contains utils to extract keys from an implementation.
 
-Submodules
+SASCAGraph 
 ----------
-
-stella.attacks.sascagraph module
---------------------------------
 
 .. automodule:: stella.attacks.sascagraph
    :members:
    :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: stella.attacks
-   :members:
-   :undoc-members:
-   :show-inheritance:

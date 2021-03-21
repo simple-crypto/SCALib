@@ -5,12 +5,7 @@ Subpackages
 -----------
 
 .. toctree::
-   :maxdepth: 4
-
-   stella.attacks
-   stella.estimator
-   stella.leakage_detection
-   stella.utils
+   :maxdepth: 2
 
 Module contents
 ---------------

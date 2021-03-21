@@ -39,6 +39,10 @@ class LDAClassifier():
 
     Notes
     ----- 
+    This implementation uses custom implementation of.
+    `sklearn.LDA(solver="eigen")` to compute the projection matrix and a custom
+    implementation of `scipy.stats.multivariate_normal.pdf()`.
+
     [1] François-Xavier Standaert and Cédric Archambeau, "Using
     Subspace-Based Template Attacks to Compare and Combine Power and
     Electromagnetic Information Leakages", CHES 2008: 411-425

@@ -3,31 +3,30 @@ import threading
 import queue
 import time
 class DataReader(threading.Thread):
-    def __init__(self,files,labels,verbose=False):
-        r"""Iterator reading a list of files (.npy or .npz). It starts an
-        independent threads that loads the files.
+    def __init__(self,files,keys,maxsize,verbose=False):
+        r"""Iterator reading a list of files (.npy or .npz) with an independent
+        thread.
 
         Parameters
         ----------
         files : list
             The list of files to read with np.load().
-        labels : list
-            The list of labels to return in the loaded file. If not specified,
-            the output of np.load() is returned.
-        max_depth : int
+        keys : list
+            The list of keys to be loaded from the files. If None, all the
+            loaded data are returned. 
+        maxsize : int
             The size of internal queue.
         verbose : bool
             Verbose flag. 
         
         Returns
         --------
-        ret
-            If labels is None, return the output of np.load(). Else, it returns 
-            a tuple with all the labels that have been loaded.
+        ret : tuple
+            A tuple containing the data for the requested keys. 
             
         Examples
         --------
-        >>> files = ["traces_%d.npy"%(i) for i in range(10)]
+        >>> files = ["data_%d.npy"%(i) for i in range(10)]
         >>> for traces in DataReader(files,None):
                 print(np.mean(traces,axis=0))
         """
@@ -35,7 +34,7 @@ class DataReader(threading.Thread):
         super(DataReader,self).__init__()
         self._stop_event = threading.Event()
         self.files = files
-        self.queue = queue.Queue(maxsize=1)
+        self.queue = queue.Queue(maxsize=maxsize)
         self._verbose = verbose
         self.labels = labels
 
@@ -61,6 +60,9 @@ class DataReader(threading.Thread):
         return
 
     def stop(self):
+        r"""Stops the reading thread. This has to be called if the iterator is
+        not totally consumed.
+        """
         self._stop_event.set()
 
     def __iter__(self):
