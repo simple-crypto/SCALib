@@ -1,8 +1,8 @@
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
-use stella::belief_propagation;
-use stella::lda;
-use stella::snr;
+use scale::belief_propagation;
+use scale::lda;
+use scale::snr;
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Array2, Axis};
@@ -28,7 +28,7 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
 }
 
 #[pymodule]
-fn stella(_py: Python, m: &PyModule) -> PyResult<()> {
+fn scale(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
     m.add_class::<lda::LDA>()?;
     #[pyfn(m, "belief_propagation")]

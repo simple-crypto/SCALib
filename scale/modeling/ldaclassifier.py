@@ -1,5 +1,5 @@
 import numpy as np
-import stella.lib.stella as rust
+import scale.lib.scale as rust
 import scipy.linalg
 
 class LDAClassifier():
@@ -28,7 +28,7 @@ class LDAClassifier():
     
     Examples
     --------
-    >>> from stella.modeling import LDAClassifier
+    >>> from scale.modeling import LDAClassifier
     >>> import numpy as np
     >>> x = np.random.randint(0,256,(50000,200),dtype=np.int16)
     >>> y = np.random.randint(0,256,50000,dtype=np.uint16)

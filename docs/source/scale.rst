@@ -1,4 +1,4 @@
-stella package
+scale package
 ==============
 
 Subpackages
@@ -10,7 +10,7 @@ Subpackages
 Module contents
 ---------------
 
-.. automodule:: stella
+.. automodule:: scale
    :members:
    :undoc-members:
    :show-inheritance:

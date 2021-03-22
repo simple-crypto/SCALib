@@ -1,9 +1,9 @@
-stella.postprocessing package
+scale.postprocessing package
 =============================
 
 RankEstimation
 --------------
 
-.. automodule:: stella.postprocessing.rankestimation
+.. automodule:: scale.postprocessing.rankestimation
    :members:
    :undoc-members:

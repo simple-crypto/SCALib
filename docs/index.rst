@@ -1,22 +1,22 @@
-.. Stella documentation master file, created by
+.. scale documentation master file, created by
    sphinx-quickstart on Fri Feb 26 15:50:43 2021.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to SSCALE's documentation!
+Welcome to SCALE's documentation!
 ==================================
-Simple Side-Channel Attack Leakage Evaluation (SSCALE) is a tool-box that
+Side-Channel Attack & Leakage Evaluation (SCALE) is a tool-box that
 contains state-of-the-art tools for side-channel evaluation. Its focus is on
 providing efficient implementations of analysis methods widely used by the
 side-channel community.
 
-For efficiency, Stella uses a custom Rust library which enables efficient
+For efficiency, SCALE uses a custom Rust library which enables efficient
 serialization and machine specific code while providing a userfriendly Python3
 package. When applicable, it uses one-pass algorithms (e.g., `SNR`) which
 allows to estimate metric / models directly when the data is collected without
 requiring to store the traces.
 
-The `SASCAGraph` is a central component of SSCALE. It allows to express in a
+The `SASCAGraph` is a central component of SCALE. It allows to express in a
 `.txt` what is the implementation to evaluate. It details what are the secrets
 to recover (e.g., keys), what variables must be profiled and how they interact
 with each other. 
@@ -27,34 +27,34 @@ Functionalities
 .. toctree::
    :maxdepth: 2
    
-   source/stella.metrics.rst
-   source/stella.modeling.rst
-   source/stella.attacks.rst
-   source/stella.ioutils.rst
-   source/stella.postprocessing.rst
+   source/scale.metrics.rst
+   source/scale.modeling.rst
+   source/scale.attacks.rst
+   source/scale.ioutils.rst
+   source/scale.postprocessing.rst
 
 About us
 ========
-Stella has been initiated by Olivier Bronchain during his PhD at Crypto Group,
+SCALE has been initiated by Olivier Bronchain during his PhD at Crypto Group,
 UCLouvain, Belgium. It has already been used by many other researcher at
 UCLouvain which contributed either directly or by constructive feedbacks. 
 
 Contributions and Issues
 ========================
-We are happy to take any suggestion for features that Stella should be useful
+We are happy to take any suggestion for features that SCALE should be useful
 for side-channel evaluators. For such suggestion, contributions or issues,
 please contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 <olivier.bronchain@uclouvain.be>`_.
 
 Publications
 ============
-In order to cite SSCALE, please use the following bibtex.
+In order to cite SCALE, please use the following bibtex.
 
 .. code-block:: latex
 
     @misc{SSCALE,
       author = {Olivier Bronchain}
-      title  = {{SSCALE: Simple Side-Channel Attacks Leakage Evaluation}},
+      title  = {{SCALE: Side-Channel Attacks & Leakage Evaluation}},
       note   = {\url{github.com}},
       year   = {2021}
     }

@@ -1,7 +1,7 @@
-stella
+scale
 ======
 
 .. toctree::
    :maxdepth: 4
 
-   stella.attacks
+   scale.attacks

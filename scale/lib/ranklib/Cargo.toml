@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "stella",
+    "scale",
     "ranklib",
-    "stella-py"
+    "scale-py"
 ]

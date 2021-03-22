@@ -12,13 +12,13 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../stella/'))
+sys.path.insert(0, os.path.abspath('../scale/'))
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'Stella'
-copyright = '2021, Olivier Bronchain'
+project = 'Scale'
+copyright = '2021, UCLouvain, Olivier Bronchain'
 author = 'Olivier Bronchain'
 
 # The full version, including alpha/beta/rc tags

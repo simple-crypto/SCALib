@@ -1,5 +1,5 @@
 import numpy as np
-import stella.lib.stella as rust
+import scale.lib.scale as rust
 class SASCAGraph:
     r"""SASCAGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
     It takes as input a .txt file that represent the implementation to evaluate.
