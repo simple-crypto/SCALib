@@ -1,44 +1,222 @@
 import numpy as np
 import stella.lib.rust_stella as rust
 class SASCAGraph:
-    def __init__(self,fname,nc):
-        self._fname = fname
-        self._nc = nc
+    r"""SASCAGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
+    It takes as input a .txt file that represent the implementation to evaluate.
+    Namely, it contains the intermediate variables within the implementations
+    and explicits the operations that links them.
 
-        self._graph = _create_graph(fname)
-        self._n = 0
-        self._initialized = False
+    The variables `x` can be tagged with various flags such that `x [#TAG]`. If
+    a variable has multiple tags, it must be declare on multiple lines. 
+    Variables uniquely and `SASCAGraph` does not support shadowing.
+
+    +------------+----------------------------------------------+-------------+
+    | Tag        | Meaning                                      | Has distri. |
+    +============+==============================================+=============+
+    |`#secret`   | Secret variable (e.g. key). After the attack,|    Yes      |  
+    |            | the secret distribution is stored at the key |             |
+    |            | `distri`.                                    |             |
+    +------------+----------------------------------------------+-------------+
+    |`#profile`  | Variable that is profiled by the adversary.  |    Yes      |
+    |            | Initial variable distribution must then be   |             |
+    |            | set in the key `distri_orig` which has a     |             |
+    |            | shape `(n,nc)`. This can be set to the output|             |
+    |            | of a predict_proba()` call.                  |             |
+    +------------+----------------------------------------------+-------------+
+    |`#public`   | The variable is a public input               |     No      |
+    |            | (e.g., plaintext). Must be set to an array   |             |
+    |            | of shape `(n,)`.                             |             |
+    +------------+----------------------------------------------+-------------+
+    |`#table`    | Represents a public table (e.g., Sbox). Must |     No      |
+    |            | be set to an array of shape `(nc,)`.         |             |
+    +------------+----------------------------------------------+-------------+
+    |  /         | A variable can also be implicitly declared as|    Yes      | 
+    |            | the output of a function (see next table).   |             |
+    |            | If no flag specified, then it also has an    |             |
+    |            | internal distribution                        |             |
+    +------------+----------------------------------------------+-------------+
+    
+    Multiple operations can be performed on variables, they are described in the
+    following table.
+
+    +------------+-------------+----------------------------------------------+
+    |Operation   | Syntax      | Description                                  |
+    +============+=============+==============================================+
+    |Bitwise XOR | `x = y ^ z` | `x,y,z` must be either `#secret` or          |
+    |            |             | `#profile`. Describes bitwise XOR. Can       |
+    |            |             | represent XOR between arbitrary number of    |
+    |            |             | variables in a single line.                  |
+    +------------+-------------+----------------------------------------------+
+    |Bitwise AND | `x = y & z` | `x,y,z` must be either `#secret` or          |
+    |            |             | `#profile`. Describes bitwise AND.           |
+    +------------+-------------+----------------------------------------------+
+    |Table lookup| `x = y -> t`| `x` and `y` must be `#secret` or `#profile`  |
+    |            |             | variable. `t` must be a table. Represents the|
+    |            |             | table lookup such that `x=t[y]`.             |
+    +------------+-------------+----------------------------------------------+
+    |Public XOR  | `x = y + p` | `x` and `y` must be `#secret` or `#profile`  |
+    |            |             | variable. `p` must be `#public`. Performs XOR|
+    |            |             | between the `p` and `y`.                     |
+    +------------+-------------+----------------------------------------------+
+   
+    The flag `#indeploop` means that the following block is repeated
+    `n` times. This block must the ended with `#endindeploop`. 
+    
+    Notes
+    -----
+
+    An attack attempting to recover the secret key byte `k` can then be
+    expressed with the following code. `sbox` is the Sbox of the blockcipher,
+    `p` the plaintext, `x` the Sbox input and `y` the Sbox output.
+
+    .. code-block::
+        
+        k #secret
+        sbox #table
+
+        #indeploop
+
+        p #public
+        y #profile
+        x = k + p
+        y = x -> sbox
+
+        #endindeploop
+    
+    By running a belief propagation algorithm (see [1]), the distribution on all
+    the variables are updated based on their initial distributions. For
+    `SASCAGraph`, this is done with `run_bp()`.
+
+    [1] "Soft Analytical Side-Channel Attacks". N. Veyrat-Charvillon, B. Gérard,
+    F.-X. Standaert, ASIACRYPT2014.
+
+    Parameters
+    ----------
+    fname : string
+        The file that contains the graph description.
+    nc : int
+        The size distributions. e.g., 256 when 8-bit variables are manipulated.
+
+    """
+    def __init__(self,fname,nc):
+        self.fname_ = fname
+        self.nc_ = nc
+
+        self.graph_ = _create_graph(fname)
+        self.n_ = 0
+        self.initialized_ = False
 
     def init_graph_memory(self,n):
-        self._n = n
-        self._initialized = True
+        r"""Initialize the internal arrays for tables, publics and variables.
+        They then can be accessed / modified through `get_variable()`,
+        `get_public()` and `get_table()`.
+
+        Parameters
+        ----------
+        n : int
+            Number of iterations in the #indeploop.
+        """
+        self.n_ = n
+        self.initialized_ = True
         _init_graph_memory(self._graph,n,self._nc)
 
-    def get_var(self):
-        return self._graph["var"]
+    def get_distribution(self,var,key):
+        r"""Returns distribution of a variables. 
 
-    def get_publics(self):
-        return self._graph["publics"]
+        Parameters
+        ----------
+        var : string
+            Label of an variable with a distribution (nor public nor table).
+        key : string
+            Internal array to return. `distri` for the current estimated
+            internal distribution. `distri_orig` for the initial distribution of
+            profiled variable.
 
-    def get_tables(self):
-        return self._graph["tables"]
+        Returns
+        -------
+        distribution : array_like, f64
+            Requested distribution of `var`. Has shape `(n,nc)` if variable
+            declared in the loop, `(1,nc)` otherwise.
+        """
+        
+        if not self.initialized_:
+            raise Exception("SASCAGraph not initialized")
+
+        return self.graph_["var"][var][key]
+
+    def get_public(self,p):
+        r"""Returns the array representing public data.
+
+        Parameters
+        ----------
+        p : string
+            Label of public variable to return.
+
+        Returns
+        -------
+        data : array_like, uint32
+            Internal array for the public data `p`. Array is of shape `(n,)`.
+        """
+        
+        if not self.initialized_:
+            raise Exception("SASCAGraph not initialized")
+
+        return self.graph_["publics"][p]
+
+    def get_table(self,t):
+        r"""Returns the array representing a table lookup.
+
+        Parameters
+        ----------
+        p : string
+            Label of the table to return.
+
+        Returns
+        -------
+        data : array_like, uint32
+            Internal array for the table `t`. Array is of shape `(nc,)`.
+        """
+
+        if not self.initialized_:
+            raise Exception("SASCAGraph not initialized")
+
+        return self.graph_["tables"][t]
     
     def get_secret_labels(self):
+        r"""Return a label for all the secret variables
+
+        Returns
+        -------
+        labels : array_like, string
+            All the labels that are flagged as `#secret`
         """
-            return list of labels of secrets
-        """
-        var = self.get_var()
+        var = self.graph_["var"]
         return list(filter(lambda x: var[x]["flags"] & SECRET != 0,var))
 
     def get_profile_labels(self):
+        r"""Return a label for all the profile variables
+
+        Returns
+        -------
+        labels : array_like, string
+            All the labels that are flagged as `#profile`
         """
-            return list of labels of secrets
-        """
-        var = self.get_var()
+        var = self.graph_["var"]
         return list(filter(lambda x: var[x]["flags"] & PROFILE != 0,var))
         
     def run_bp(self,it):
-        graph = self._graph
+        r"""Runs belief propagation algorithm on the current state of the graph.
+        Updates the `distri` for all the variables with a distribution.
+
+        Parameters
+        ----------
+        it : int
+            Number of iterations of belief propagation.
+        """
+        if not self.initialized_:
+            raise Exception("SASCAGraph not initialized")
+
+        graph = self.graph_
         _reset_graph_memory(graph,self._nc)
         rust.belief_propagation(graph["functions"],
                             graph["var_list"],
@@ -46,6 +224,9 @@ class SASCAGraph:
                             graph["vertex"],
                             self._nc,self._n)
 
+###########################
+# PRIVATE Helper Methods 
+###########################
 AND = 0
 XOR = 1
 XOR_CST = 2
@@ -62,10 +243,10 @@ public_flag = "#public"
 profile_flag = "#profile"
 tab_flag = "#table"
 
-SECRET = 1
-PUBLIC = 2
-PROFILE = 4
-TABLE = 8
+SECRET = 1 << 0
+PUBLIC = 1 << 1
+PROFILE = 1 << 2
+TABLE = 1 << 3
 
 CLIP = 1E-50
 

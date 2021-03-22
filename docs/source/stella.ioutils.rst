@@ -4,5 +4,5 @@ stella.ioutils package
 DataReader
 ----------
 
-.. automodule:: stella.ioutils.datareader
+.. autoclass:: stella.ioutils.datareader.DataReader
    :members:
