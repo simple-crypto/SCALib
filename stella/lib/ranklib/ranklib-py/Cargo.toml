@@ -13,9 +13,17 @@ crate-type = ["cdylib"]
 ntl = ["ranklib/ntl"]
 hellib = ["ranklib/hellib"]
 
+[dependencies]
+ndarray = { version = "0.14.0", features = ["rayon","blas"] }
+numpy = "0.13.0"
+indicatif = "0.15.0"
+
 [dependencies.pyo3]
 version = "0.13"
 features = ["extension-module"]
 
 [dependencies.ranklib]
 path = "../ranklib"
+
+[dependencies.rust_stella]
+path = "../rust_stella"

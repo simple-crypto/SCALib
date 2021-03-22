@@ -5,10 +5,10 @@ authors = ["obronchain <olivier.bronchain@uclouvain.be>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[lib]
-name = "rust_stella"
-crate-type = ["cdylib"]
-bench = false
+# [lib]
+# name = "rust_stella"
+# crate-type = ["cdylib"]
+# bench = false
 
 [dependencies.pyo3]
 version = "0.13.2"
@@ -22,7 +22,6 @@ indicatif = "0.15.0"
 ndarray = { version = "0.14.0", features = ["rayon","blas"] }
 itertools = "0.10.0"
 ndarray-stats = "0.4.0"
-#GSL = "2.0.0"
 blas-src = { version = "0.6.1", default-features = false, features = ["openblas"] }
 openblas-src = { version = "0.9", default-features = false, features = ["cblas","system"] }
 ndarray-linalg = "0.13.1"
@@ -30,9 +29,6 @@ lapack = "0.17.0"
 
 [dev-dependencies]
 criterion = "0.3"
-
-[profile.release]
-debug = true
 
 [[bench]]
 name = "belief_propagation"
