@@ -1,8 +1,8 @@
 import numpy as np
 from common import sbox
-from stella.postprocessing import rank_accuracy
-from stella.ioutils import DataReader
-from stella.attacks import SASCAGraph
+from scale.postprocessing import rank_accuracy
+from scale.ioutils import DataReader
+from scale.attacks import SASCAGraph
 from tqdm import tqdm
 import pickle
 from settings import * 

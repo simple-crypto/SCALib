@@ -1,10 +1,10 @@
 from common import gen_traces_serial,sbox
 import numpy as np
-from stella.metrics import SNR
-from stella.modeling import LDAClassifier
-from stella.ioutils import DataReader
-from stella.attacks import SASCAGraph
-from stella.postprocessing import rank_accuracy
+from scale.metrics import SNR
+from scale.modeling import LDAClassifier
+from scale.ioutils import DataReader
+from scale.attacks import SASCAGraph
+from scale.postprocessing import rank_accuracy
 from tqdm import tqdm
 import pickle
 from settings import * 

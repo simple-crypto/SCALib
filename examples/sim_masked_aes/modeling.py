@@ -1,7 +1,7 @@
 import numpy as np
-from stella.modeling import LDAClassifier
-from stella.ioutils import DataReader
-from stella.attacks import SASCAGraph
+from scale.modeling import LDAClassifier
+from scale.ioutils import DataReader
+from scale.attacks import SASCAGraph
 from tqdm import tqdm
 import pickle
 from settings import * 
