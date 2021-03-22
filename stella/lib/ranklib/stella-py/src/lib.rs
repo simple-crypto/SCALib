@@ -1,8 +1,8 @@
 use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
-use rust_stella::belief_propagation;
-use rust_stella::lda;
-use rust_stella::snr;
+use stella::belief_propagation;
+use stella::lda;
+use stella::snr;
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Array2, Axis};
@@ -28,7 +28,7 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
 }
 
 #[pymodule]
-fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
+fn stella(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
     m.add_class::<lda::LDA>()?;
     #[pyfn(m, "belief_propagation")]
@@ -52,7 +52,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         // loading bar
         let pb = ProgressBar::new(functions.len() as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
-        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"));
+        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"));
         pb.set_message("Init functions...");
 
         // map all python functions to rust ones + generate the mapping in vec_functs_id
@@ -73,7 +73,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
         // loading bar
         let pb = ProgressBar::new(variables.len() as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
-        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"));
+        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"));
         pb.set_message("Init variables...");
 
         // map all python var to rust ones
@@ -117,7 +117,7 @@ fn rust_stella(_py: Python, m: &PyModule) -> PyResult<()> {
             // loading bar
             let pb = ProgressBar::new(it as u64);
             pb.set_style(ProgressStyle::default_spinner().template(
-        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
+        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"
     ));
             pb.set_message("Calculating BP...");
 

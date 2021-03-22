@@ -1,14 +1,8 @@
 [package]
-name = "rust_stella"
+name = "stella"
 version = "0.1.0"
 authors = ["obronchain <olivier.bronchain@uclouvain.be>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-# [lib]
-# name = "rust_stella"
-# crate-type = ["cdylib"]
-# bench = false
 
 [dependencies.pyo3]
 version = "0.13.2"

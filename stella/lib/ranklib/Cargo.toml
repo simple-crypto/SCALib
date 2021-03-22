@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "rust_stella",
+    "stella",
     "ranklib",
-    "ranklib-py"
+    "stella-py"
 ]
