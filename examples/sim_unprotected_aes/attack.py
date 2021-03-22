@@ -40,8 +40,7 @@ guess = []
 rank = []
 nlpr = np.zeros((16,256))
 for i,k in enumerate(secret_key):
-    label = "k%d"%(i)
-    key_distri = np.clip(graph.get_distribution(label,"current"),1E-50,1)
+    key_distri = np.clip(graph.get_distribution("k%d"%(i),"current"),1E-50,1)
     nlpr[i,:] = -np.log10(key_distri)
     guess.append(np.argmax(key_distri,axis=1)[0])
     rank.append(256 - np.where(np.argsort(key_distri,axis=1)[0] == k)[0])
