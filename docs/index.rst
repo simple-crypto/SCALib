@@ -52,7 +52,7 @@ In order to cite SCALE, please use the following bibtex.
 
 .. code-block:: latex
 
-    @misc{SSCALE,
+    @misc{SCALE,
       author = {Olivier Bronchain}
       title  = {{SCALE: Side-Channel Attacks & Leakage Evaluation}},
       note   = {\url{github.com}},
@@ -60,15 +60,18 @@ In order to cite SCALE, please use the following bibtex.
     }
 
 
-SSCALE has been used in various publications, let us know if you used it:
+SCALE has been used in various publications, let us know if you used it:
 
 1. "Mode-Level vs. Implementation-Level Physical Security in Symmetric
    Cryptography: A Practical Guide Through the Leakage-Resistance Jungle", D.
    Bellizia, O. Bronchain, G. Cassiers, V. Grosso, Chun Guo, C. Momin, O.
-   Pereira, T. Peters, F.-X. Standaert at CRYPTO2020
-2. "Breaking Masked Implementations with Many Shares on 32-bit Software
+   Pereira, T. Peters, F.-X. Standaert at CRYPTO2020.
+2. "Exploring Crypto-Physical Dark Matter and Learning with Physical Rounding
+   Towards Secure and Efficient Fresh Re-Keying", S. Duval, P. Méaux, C. Momin,
+   F.-X. Standaert in TCHES2021 - Issue 1.
+3. "Breaking Masked Implementations with Many Shares on 32-bit Software
    Platforms or When the Security Order Does Not Matter". O. Bronchain, F.-X.
-   Standaert in TCHES2021 - Issue 3
-3. "Improved Leakage-Resistant Authenticated Encryption based on Hardware AES
+   Standaert in TCHES2021 - Issue 3.
+4. "Improved Leakage-Resistant Authenticated Encryption based on Hardware AES
    Coprocessors". O. Bronchain, C. Momin, T. Peters, F.-X. Standaert in
-   TCHES2021 - Issue 3
+   TCHES2021 - Issue 3.

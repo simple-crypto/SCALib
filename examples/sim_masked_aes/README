@@ -1,6 +1,7 @@
 This is an example of usage of SCALE in ordre to attack a masked
 implementation. It simulates a simple masked implementation leaking with an HW
-model, arbitrary number of shares and noise standard deviation.
+model, arbitrary number of shares and noise standard deviation. See the file
+"settings.py" to modify the number of files, traces, shares and noise. 
 
 
 USAGE:
