@@ -7,21 +7,31 @@ Welcome to SSCALE's documentation!
 ==================================
 Simple Side-Channel Attack Leakage Evaluation (SSCALE) is a tool-box that
 contains state-of-the-art tools for side-channel evaluation. Its focus is on
-providing efficient implementations of widely used functionalities by the
-side-channel community. 
+providing efficient implementations of analysis methods widely used by the
+side-channel community.
+
+For efficiency, Stella uses a custom Rust library which enables efficient
+serialization and machine specific code while providing a userfriendly Python3
+package. When applicable, it uses one-pass algorithms (e.g., `SNR`) which
+allows to estimate metric / models directly when the data is collected without
+requiring to store the traces.
+
+The `SASCAGraph` is a central component of SSCALE. It allows to express in a
+`.txt` what is the implementation to evaluate. It details what are the secrets
+to recover (e.g., keys), what variables must be profiled and how they interact
+with each other. 
+
+Functionalities
+===============
 
 .. toctree::
    :maxdepth: 2
-   :caption: Functionalities
    
    source/stella.metrics.rst
    source/stella.modeling.rst
    source/stella.attacks.rst
    source/stella.ioutils.rst
    source/stella.postprocessing.rst
-
-
-
 
 About us
 ========
@@ -38,7 +48,19 @@ please contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 
 Publications
 ============
-SSCALE has been used in various publications:
+In order to cite SSCALE, please use the following bibtex.
+
+.. code-block:: latex
+
+    @misc{SSCALE,
+      author = {Olivier Bronchain}
+      title  = {{SSCALE: Simple Side-Channel Attacks Leakage Evaluation}},
+      note   = {\url{github.com}},
+      year   = {2021}
+    }
+
+
+SSCALE has been used in various publications, let us know if you used it:
 
 1. "Mode-Level vs. Implementation-Level Physical Security in Symmetric
    Cryptography: A Practical Guide Through the Leakage-Resistance Jungle", D.
