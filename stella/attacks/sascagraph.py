@@ -1,5 +1,5 @@
 import numpy as np
-import stella.lib.rust_stella as rust
+import stella.lib.stella as rust
 class SASCAGraph:
     r"""SASCAGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
     It takes as input a .txt file that represent the implementation to evaluate.
@@ -15,11 +15,11 @@ class SASCAGraph:
     +============+==============================================+=============+
     |`#secret`   | Secret variable (e.g. key). After the attack,|    Yes      |  
     |            | the secret distribution is stored at the key |             |
-    |            | `distri`.                                    |             |
+    |            | `current`.                                   |             |
     +------------+----------------------------------------------+-------------+
     |`#profile`  | Variable that is profiled by the adversary.  |    Yes      |
     |            | Initial variable distribution must then be   |             |
-    |            | set in the key `distri_orig` which has a     |             |
+    |            | set in the key `initial` which has a         |             |
     |            | shape `(n,nc)`. This can be set to the output|             |
     |            | of a predict_proba()` call.                  |             |
     +------------+----------------------------------------------+-------------+
@@ -118,7 +118,7 @@ class SASCAGraph:
         """
         self.n_ = n
         self.initialized_ = True
-        _init_graph_memory(self._graph,n,self._nc)
+        _init_graph_memory(self.graph_,n,self.nc_)
 
     def get_distribution(self,var,key):
         r"""Returns distribution of a variables. 
@@ -128,8 +128,8 @@ class SASCAGraph:
         var : string
             Label of an variable with a distribution (nor public nor table).
         key : string
-            Internal array to return. `distri` for the current estimated
-            internal distribution. `distri_orig` for the initial distribution of
+            Internal array to return. `current` for the current estimated
+            internal distribution. `initial` for the initial distribution of
             profiled variable.
 
         Returns
@@ -203,10 +203,22 @@ class SASCAGraph:
         """
         var = self.graph_["var"]
         return list(filter(lambda x: var[x]["flags"] & PROFILE != 0,var))
+
+    def get_public_labels(self):
+        r"""Return a label for all the public variables
+
+        Returns
+        -------
+        labels : array_like, string
+            All the labels that are flagged as `#public`
+        """
+        var = self.graph_["var"]
+        return list(self.graph_["publics"])
         
+
     def run_bp(self,it):
         r"""Runs belief propagation algorithm on the current state of the graph.
-        Updates the `distri` for all the variables with a distribution.
+        Updates the `current` distribution for all the variables.
 
         Parameters
         ----------
@@ -217,12 +229,12 @@ class SASCAGraph:
             raise Exception("SASCAGraph not initialized")
 
         graph = self.graph_
-        _reset_graph_memory(graph,self._nc)
+        _reset_graph_memory(graph,self.nc_)
         rust.belief_propagation(graph["functions"],
                             graph["var_list"],
                             it,
                             graph["vertex"],
-                            self._nc,self._n)
+                            self.nc_,self.n_)
 
 ###########################
 # PRIVATE Helper Methods 
@@ -275,10 +287,10 @@ def _init_graph_memory(graph,N,Nc):
             var["table"] = np.zeros(Nc,dtype=np.uint32)
         else:
             if var["flags"] & PROFILE != 0:
-                if "distri_orig" in var: del var["distri_orig"]
-                var["distri_orig"] = np.ones((n,Nc))
-            if "distri" in var: del var["distri"]
-            var["distri"] = np.zeros((n,Nc))
+                if "initial" in var: del var["initial"]
+                var["initial"] = np.ones((n,Nc))
+            if "current" in var: del var["current"]
+            var["current"] = np.zeros((n,Nc))
 
     for p in graph["publics"]:
         graph["publics"][p] = np.zeros(N,dtype=np.uint32)
@@ -380,11 +392,11 @@ def _reset_graph_memory(graph,Nc):
     variables_list = graph["var_list"]
     for var in variables_list:
         # if node has distribution
-        if "distri_orig" in var:
+        if "initial" in var:
             # normalize
-            var["distri_orig"][:,:]= (var["distri_orig"].T / np.sum(var["distri_orig"],axis=1)).T
+            var["initial"][:,:]= (var["initial"].T / np.sum(var["initial"],axis=1)).T
             # clip the distribution
-            np.clip(var["distri_orig"],CLIP,1,out=var["distri_orig"])
+            np.clip(var["initial"],CLIP,1,out=var["initial"])
 
     for f in graph["functions"]:
         if f["func"] == XOR_CST:
@@ -392,57 +404,3 @@ def _reset_graph_memory(graph,Nc):
         if f["func"] == LOOKUP:
             f["table"] = graph["tables"][f["table_label"]]
 
-
-if __name__ == "__main__":
-    graph = create_graph("example_graph.txt")
-    n = 10
-   
-    from tqdm import tqdm
-    for nc in 2**np.arange(2,4):
-        init_graph_memory(graph,n,nc)
-        variables = graph["var"]
-        publics = graph["publics"]
-        tables = graph["tables"]
-        for it in tqdm(range(1),desc="nc %d"%(nc)):
-            x_0 = np.random.randint(0,nc)
-            p_0 = np.random.randint(0,nc)
-            x_1 = np.random.randint(0,nc)
-            p_1 = np.random.randint(0,nc)
-            sbox = np.random.permutation(nc).astype(np.uint32)
-
-            k_0_expected = p_0 ^ x_0
-            k_1_expected = p_1 ^ x_1
-            k_2_expected = sbox[x_1] #k_1_expected ^ k_0_expected
-            k_3_expected = p_0 ^ x_0
-            k_4_expected = p_0 ^ x_0 ^ x_1 
-
-            preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
-            variables["p_0"]["distri_orig"][:,:] = (1-preci)/(nc-1)
-            variables["p_0"]["distri_orig"][:,p_0] = preci[:,0]
-            tables["sbox"][:] = sbox
-            preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
-            variables["x_0"]["distri_orig"][:,:] = (1-preci)/(nc-1)
-            variables["x_0"]["distri_orig"][:,x_0] = preci[:,0]
-
-            preci = (np.random.random(n)*( (1 - 1/nc) + 1/nc)).reshape(n,1)
-            preci = (np.random.random(n)*(1 - 1/nc)).reshape(n,1) + 1/nc
-            publics["p_1"][:] = p_1
-            variables["x_1"]["distri_orig"][:,:] = (1-preci)/(nc-1)
-            variables["x_1"]["distri_orig"][:,x_1] = preci[:,0]
-
-            reset_graph_memory(graph,nc)
-            
-            rust.belief_propagation(graph["functions"],graph["var_list"],4,
-                    graph["vertex"],
-                    nc,n)
-
-            k_0 = np.argmax(variables["k_0"]["distri"],axis=1)[0]
-            k_1 = np.argmax(variables["k_1"]["distri"],axis=1)[0]
-            k_2 = np.argmax(variables["k_2"]["distri"],axis=1)[0]
-            k_3 = np.argmax(variables["k_3"]["distri"],axis=1)[0]
-            k_4 = np.argmax(variables["k_4"]["distri"],axis=1)[0]
-            assert k_0 == k_0_expected 
-            assert k_1 == k_1_expected 
-            assert k_2 == k_2_expected 
-            #assert k_3 == k_3_expected 
-            assert k_4 == k_4_expected 

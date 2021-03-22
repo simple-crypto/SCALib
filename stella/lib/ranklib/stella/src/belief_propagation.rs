@@ -39,15 +39,15 @@ pub struct Func {
 pub fn to_var(function: &PyDict) -> Var {
     let neighboors: Vec<isize> = function.get_item("neighboors").unwrap().extract().unwrap();
     let inloop: bool = function.get_item("in_loop").unwrap().extract().unwrap();
-    let is_profiled = function.contains("distri_orig").unwrap();
+    let is_profiled = function.contains("initial").unwrap();
     let distri_current: PyReadonlyArray2<f64> =
-        function.get_item("distri").unwrap().extract().unwrap();
+        function.get_item("current").unwrap().extract().unwrap();
 
     let neighboors: Vec<usize> = neighboors.iter().map(|x| *x as usize).collect();
     let f: VarType;
     if inloop & is_profiled {
         let distri_orig: PyReadonlyArray2<f64> =
-            function.get_item("distri_orig").unwrap().extract().unwrap();
+            function.get_item("initial").unwrap().extract().unwrap();
         f = VarType::ProfilePara {
             distri_orig: distri_orig.as_array().to_owned(),
             distri_current: distri_orig.as_array().to_owned(),
@@ -58,7 +58,7 @@ pub fn to_var(function: &PyDict) -> Var {
         };
     } else if !inloop & is_profiled {
         let distri_orig: PyReadonlyArray2<f64> =
-            function.get_item("distri_orig").unwrap().extract().unwrap();
+            function.get_item("initial").unwrap().extract().unwrap();
         f = VarType::ProfileSingle {
             distri_orig: distri_orig.as_array().to_owned(),
             distri_current: distri_orig.as_array().to_owned(),

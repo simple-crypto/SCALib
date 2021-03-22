@@ -3,7 +3,7 @@ import threading
 import queue
 import time
 class DataReader(threading.Thread):
-    def __init__(self,files,keys,maxsize,verbose=False):
+    def __init__(self,files,keys,maxsize=1,verbose=False):
         r"""Iterator reading a list of files (.npy or .npz) with an independent
         thread.
 
@@ -32,49 +32,49 @@ class DataReader(threading.Thread):
         """
 
         super(DataReader,self).__init__()
-        self._stop_event = threading.Event()
-        self.files = files
-        self.queue = queue.Queue(maxsize=maxsize)
-        self._verbose = verbose
-        self.labels = labels
+        self.stop_event_ = threading.Event()
+        self.files_ = files
+        self.queue_ = queue.Queue(maxsize=maxsize)
+        self.verbose_ = verbose
+        self.keys_ = keys
 
     def run(self):
-        for fname in self.files:
+        for fname in self.files_:
             rets = ()
-            if self._verbose: print("# DataReader: start load ",fname)
+            if self.verbose_: print("# DataReader: start load ",fname)
             
             read = np.load(fname,allow_pickle=True)
-            if self.labels is None:
+            if self.keys_ is None:
                 rets = read
             else:
-                for l in self.labels: rets +=(read[l],)
+                for l in self.keys_: rets +=(read[l],)
 
-            if self._verbose: print("# DataReader: done load ",fname)
+            if self.verbose_: print("# DataReader: done load ",fname)
 
-            while self.queue.full() and not self._stop_event.is_set():
+            while self.queue_.full() and not self.stop_event_.is_set():
                 time.sleep(.2)
 
-            if self._stop_event.is_set(): break
+            if self.stop_event_.is_set(): break
 
-            self.queue.put(rets)
+            self.queue_.put(rets)
         return
 
     def stop(self):
         r"""Stops the reading thread. This has to be called if the iterator is
         not totally consumed.
         """
-        self._stop_event.set()
+        self.stop_event_.set()
 
     def __iter__(self):
-        self._i = 0
+        self.i_ = 0
         self.start()
         return self
 
     def __next__(self):
-        if self._i < len(self.files):
-            self._i += 1
-            return self.queue.get()
+        if self.i_ < len(self.files_):
+            self.i_ += 1
+            return self.queue_.get()
         else:
             raise StopIteration
     def __del__(self):
-        del self.queue
+        del self.queue_

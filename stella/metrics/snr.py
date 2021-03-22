@@ -1,5 +1,5 @@
 import numpy as np
-import stella.lib.rust_stella as rust
+import stella.lib.stella as rust
 from tqdm import tqdm
 class SNR:
     r"""Computes the Signal-to-Noise Ratio (SNR) between the traces

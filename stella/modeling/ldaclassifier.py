@@ -1,5 +1,5 @@
 import numpy as np
-import stella.lib.rust_stella as rust
+import stella.lib.stella as rust
 import scipy.linalg
 
 class LDAClassifier():
@@ -101,14 +101,14 @@ class LDAClassifier():
         dic = {"means":lda.get_means(),"cov":lda.get_cov(),
                 "projection":lda.get_projection(),
                 "psd":lda.get_psd(),"nc":self.nc_,
-                "n_components":self.n_components_}
+                "p":self.p_}
         return dic
     
     def __setstate__(self,state):
-        self.lda = rust.LDA(state["nc"],state["n_components"])
+        self.lda = rust.LDA(state["nc"],state["p"])
         self.lda.set_state(state["cov"],state["psd"],
                     state["means"],state["projection"],
-                    state["nc"],state["n_components"])
+                    state["nc"],state["p"])
 
 if __name__ == "__main__":
     from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn

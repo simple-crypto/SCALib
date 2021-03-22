@@ -1,4 +1,4 @@
-import stella.lib.ranklib as ranklib
+import stella.lib.stella as ranklib
 
 def rank_nbin(costs,key,nbins,method="hist"):
     return ranklib.rank_nbin(costs,key,nbins,2,method)

@@ -166,16 +166,16 @@ fn stella(_py: Python, m: &PyModule) -> PyResult<()> {
 
         let pb = ProgressBar::new(variables.len() as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
-        "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
+        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
     ));
-        pb.set_message("dump variables...");
+        pb.set_message("Dump variables...");
         variables_rust
             .iter()
             .progress_with(pb)
             .zip(variables)
             .for_each(|(v_rust, v_python)| {
                 let distri_current: &PyArray2<f64> =
-                    v_python.get_item("distri").unwrap().extract().unwrap();
+                    v_python.get_item("current").unwrap().extract().unwrap();
                 let mut distri_current = unsafe { distri_current.as_array_mut() };
                 match &v_rust.vartype {
                     belief_propagation::VarType::NotProfilePara {
