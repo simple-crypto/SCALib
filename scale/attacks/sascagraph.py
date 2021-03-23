@@ -238,7 +238,7 @@ class SASCAGraph:
 
         graph = self.graph_
         _reset_graph_memory(graph,self.nc_)
-        rust.belief_propagation(graph["functions"],
+        rust.run_bp(graph["functions"],
                             graph["var_list"],
                             it,
                             graph["vertex"],

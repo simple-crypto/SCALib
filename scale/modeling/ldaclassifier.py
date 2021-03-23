@@ -93,7 +93,7 @@ class LDAClassifier():
             Array to contains probabilities on each of its rows. `prs` is of
             shapre `(n,ns)`.
         """
-        prs = self.lda.predict_proba(x)
+        prs = self.lda.predict_proba(l)
         return prs
 
     def __getstate__(self):
