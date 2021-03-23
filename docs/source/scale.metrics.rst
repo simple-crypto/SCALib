@@ -1,5 +1,5 @@
-scale.metrics package
-======================
+Metrics
+=======
 
 SNR
 ---

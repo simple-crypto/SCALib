@@ -1,5 +1,5 @@
-scale.postprocessing package
-=============================
+Postprocessing
+==============
 
 RankEstimation
 --------------

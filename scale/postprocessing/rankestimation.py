@@ -54,7 +54,7 @@ def rank_accuracy(costs,key,acc_bit=1.0,method="hist"):
         Correct full key split in sub-keys. Array must be of shape `(ns,)`.
     acc_bit : f64
         Expected log2 accuracy for the key rank estimation. `acc_bit` must so be
-        set as `log2(rmax/rmin)`.
+        set to `log2(rmax/rmin)`.
     method : string
         Method used to estimate the rank. Can be the following:
 

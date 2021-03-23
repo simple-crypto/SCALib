@@ -1,5 +1,5 @@
-scale.ioutils package
-======================
+IOutils
+=======
 
 DataReader
 ----------

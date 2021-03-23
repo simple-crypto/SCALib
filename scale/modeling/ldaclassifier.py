@@ -39,7 +39,7 @@ class LDAClassifier():
 
     Notes
     ----- 
-    This implementation uses custom implementation of.
+    This implementation uses custom implementation of
     `sklearn.LDA(solver="eigen")` to compute the projection matrix and a custom
     implementation of `scipy.stats.multivariate_normal.pdf()`.
 
@@ -61,29 +61,29 @@ class LDAClassifier():
         self.lda = rust.LDA(nc,p)
         assert p < nc
 
-    def fit(self,x,y):
+    def fit(self,l,x):
         r"""Estimates the PDF parameters that is the projection matrix
         :math:`\bm{W}`, the means :math:`\bm{\mu}_x` and the covariance
         :math:`\bm{\Sigma}`.
 
         Parameters
         ----------
-        x : array_like, int16
+        l : array_like, int16
             Array that contains the traces. The array must
             be of dimension `(n,ns)` and its type must be `int16`.
-        y : array_like, uint16
+        x : array_like, uint16
             Labels for each trace. Must be of shape `(n)` and
             must be `uint16`.
         """
-        self.lda.fit(x,y)
+        self.lda.fit(l,x)
 
-    def predict_proba(self,x):
+    def predict_proba(self,l):
         r"""Computes the probability for each of the classes for the traces
         contained in `x`.
 
         Parameters
         ----------
-        x : array_like, int16
+        l : array_like, int16
             Array that contains the traces. The array must
             be of dimension `(n,ns)` and its type must be `int16`.
 

@@ -1,8 +1,3 @@
-.. scale documentation master file, created by
-   sphinx-quickstart on Fri Feb 26 15:50:43 2021.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Welcome to SCALE's documentation!
 ==================================
 Side-Channel Attack & Leakage Evaluation (SCALE) is a tool-box that
@@ -20,19 +15,6 @@ serialization and machine specific code while providing a userfriendly Python3
 package. When applicable, it uses one-pass algorithms (e.g., `SNR`) which
 allows to estimate metric / models directly when the data is collected without
 requiring to store the traces.
-
-
-Functionalities
-===============
-
-.. toctree::
-   :maxdepth: 2
-   
-   source/scale.metrics.rst
-   source/scale.modeling.rst
-   source/scale.attacks.rst
-   source/scale.ioutils.rst
-   source/scale.postprocessing.rst
 
 About us
 ========

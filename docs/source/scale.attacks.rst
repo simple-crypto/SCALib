@@ -1,5 +1,5 @@
-scale.attacks package
-======================
+Attacks
+=======
 
 SASCAGraph 
 ----------

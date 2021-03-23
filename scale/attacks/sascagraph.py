@@ -2,72 +2,74 @@ import numpy as np
 import scale.lib.scale as rust
 class SASCAGraph:
     r"""SASCAGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
-    It takes as input a .txt file that represent the implementation to evaluate.
-    Namely, it contains the intermediate variables within the implementations
-    and explicits the operations that links them.
+    It takes as input a .txt file that represent the implementation (or graph)
+    to evaluate.  Namely, it contains the intermediate variables within the
+    implementations and explicits the operations that links them.
 
-    The variables `x` can be tagged with various flags such that `x [#TAG]`. If
-    a variable has multiple tags, it must be declare on multiple lines. 
-    Variables uniquely and `SASCAGraph` does not support shadowing.
+    In the description files, the variable `x` can be tagged with various flags
+    such that `x [#TAG]`. If a variable has multiple tags, they must be declared
+    on multiple lines.  Variables must be uniquely identified since `SASCAGraph`
+    does not support shadowing.
 
-    +------------+----------------------------------------------+-------------+
-    | Tag        | Meaning                                      | Has distri. |
-    +============+==============================================+=============+
-    |`#secret`   | Secret variable (e.g. key). After the attack,|    Yes      |  
-    |            | the secret distribution is stored at the key |             |
-    |            | `current`.                                   |             |
-    +------------+----------------------------------------------+-------------+
-    |`#profile`  | Variable that is profiled by the adversary.  |    Yes      |
-    |            | Initial variable distribution must then be   |             |
-    |            | set in the key `initial` which has a         |             |
-    |            | shape `(n,nc)`. This can be set to the output|             |
-    |            | of a predict_proba()` call.                  |             |
-    +------------+----------------------------------------------+-------------+
-    |`#public`   | The variable is a public input               |     No      |
-    |            | (e.g., plaintext). Must be set to an array   |             |
-    |            | of shape `(n,)`.                             |             |
-    +------------+----------------------------------------------+-------------+
-    |`#table`    | Represents a public table (e.g., Sbox). Must |     No      |
-    |            | be set to an array of shape `(nc,)`.         |             |
-    +------------+----------------------------------------------+-------------+
-    |  /         | A variable can also be implicitly declared as|    Yes      | 
-    |            | the output of a function (see next table).   |             |
-    |            | If no flag specified, then it also has an    |             |
-    |            | internal distribution                        |             |
-    +------------+----------------------------------------------+-------------+
+    +------------+----------------------------------------------+--------------+
+    | Tag        | Meaning                                      | Has distri.  |
+    +============+==============================================+==============+
+    |`#secret`   | Secret variable (e.g. key). After the attack,|    Yes       |  
+    |            | the secret distribution is stored in the     |              |
+    |            | `current` distribution.                      |              |
+    +------------+----------------------------------------------+--------------+
+    |`#profile`  | Variable that is profiled by the adversary.  |    Yes       |
+    |            | Initial variable distribution must then be   |              |
+    |            | set in `initial` distribution which has a    |              |
+    |            | shape `(n,nc)`. This can be set to the output|              |
+    |            | of a `predict_proba()` call.                 |              |
+    +------------+----------------------------------------------+--------------+
+    |`#public`   | The variable is a public input               |     No       |
+    |            | (e.g., plaintext). Must be set to an array   |              |
+    |            | of shape `(n,)`.                             |              |
+    +------------+----------------------------------------------+--------------+
+    |`#table`    | Represents a public table (e.g., Sbox). Must |     No       |
+    |            | be set to an array of shape `(nc,)`.         |              |
+    +------------+----------------------------------------------+--------------+
+    |  /         | A variable can also be implicitly declared as|    Yes       | 
+    |            | the output of a function (see next table).   |              |
+    |            | If no flag specified, then it also has a     |              |
+    |            | `current` distribution.                      |              |
+    +------------+----------------------------------------------+--------------+
     
     Multiple operations can be performed on variables, they are described in the
     following table.
 
-    +------------+-------------+----------------------------------------------+
-    |Operation   | Syntax      | Description                                  |
-    +============+=============+==============================================+
-    |Bitwise XOR | `x = y ^ z` | `x,y,z` must be either `#secret` or          |
-    |            |             | `#profile`. Describes bitwise XOR. Can       |
-    |            |             | represent XOR between arbitrary number of    |
-    |            |             | variables in a single line.                  |
-    +------------+-------------+----------------------------------------------+
-    |Bitwise AND | `x = y & z` | `x,y,z` must be either `#secret` or          |
-    |            |             | `#profile`. Describes bitwise AND.           |
-    +------------+-------------+----------------------------------------------+
-    |Table lookup| `x = y -> t`| `x` and `y` must be `#secret` or `#profile`  |
-    |            |             | variable. `t` must be a table. Represents the|
-    |            |             | table lookup such that `x=t[y]`.             |
-    +------------+-------------+----------------------------------------------+
-    |Public XOR  | `x = y + p` | `x` and `y` must be `#secret` or `#profile`  |
-    |            |             | variable. `p` must be `#public`. Performs XOR|
-    |            |             | between the `p` and `y`.                     |
-    +------------+-------------+----------------------------------------------+
+    +------------+-------------+-----------------------------------------------+
+    |Operation   | Syntax      | Description                                   |
+    +============+=============+===============================================+
+    |Bitwise XOR | `x = y ^ z` | `x,y,z` must have a distribution.             |
+    |            |             | Describes bitwise XOR between all variables.  |
+    |            |             | Can represent XOR between arbitrary number of |
+    |            |             | variables in a single line.                   |
+    +------------+-------------+-----------------------------------------------+ 
+    |Bitwise AND | `x = y & z` | `x,y,z` must have distributions.              |
+    |            |             | Describes bitwise AND.                        |
+    +------------+-------------+-----------------------------------------------+
+    |Table lookup| `x = y -> t`| `x` and `y` must have a distribution.         |
+    |            |             | `t` must be a table. Represents the           |
+    |            |             | table lookup such that `x=t[y]`.              |
+    +------------+-------------+-----------------------------------------------+
+    |Public XOR  | `x = y + p` | `x` and `y` must have a distribution.         |
+    |            |             | `p` must be `#public`. Performs XOR           |
+    |            |             | between the `p` and `y`.                      |
+    +------------+-------------+-----------------------------------------------+
    
-    The flag `#indeploop` means that the following block is repeated
-    `n` times. This block must the ended with `#endindeploop`. 
+    The flag `#indeploop` means that the following block is repeated `n` times.
+    This block must the ended with `#endindeploop`. Tables must be declared
+    outside of the loop. Publics must be declared inside of the loops. Profile
+    must be declared inside of the loop. Secret can be declared either outside
+    or inside of the loop. In the second case, its `current` distribution is of
+    shape `(1,nc)`.
     
-    Notes
-    -----
-
-    An attack attempting to recover the secret key byte `k` can then be
-    expressed with the following code. `sbox` is the Sbox of the blockcipher,
-    `p` the plaintext, `x` the Sbox input and `y` the Sbox output.
+    An attack attempting to recover the secret key byte `k` can be expressed
+    with the following code. `sbox` is the Sbox of the blockcipher, `p` the
+    plaintext, `x` the Sbox input and `y` the Sbox output.
 
     .. code-block::
         
@@ -87,6 +89,8 @@ class SASCAGraph:
     the variables are updated based on their initial distributions. For
     `SASCAGraph`, this is done with `run_bp()`.
 
+    Notes
+    -----
     [1] "Soft Analytical Side-Channel Attacks". N. Veyrat-Charvillon, B. Gérard,
     F.-X. Standaert, ASIACRYPT2014.
 
@@ -121,7 +125,8 @@ class SASCAGraph:
         _init_graph_memory(self.graph_,n,self.nc_)
 
     def get_distribution(self,var,key):
-        r"""Returns distribution of a variables. 
+        r"""Returns distribution of a variables. To modify a distribution, the
+        returned array must be modified. 
 
         Parameters
         ----------
@@ -129,8 +134,8 @@ class SASCAGraph:
             Label of an variable with a distribution (nor public nor table).
         key : string
             Internal array to return. `current` for the current estimated
-            internal distribution. `initial` for the initial distribution of
-            profiled variable.
+            distribution. `initial` for the initial distribution of profiled
+            variable.
 
         Returns
         -------
@@ -145,7 +150,8 @@ class SASCAGraph:
         return self.graph_["var"][var][key]
 
     def get_public(self,p):
-        r"""Returns the array representing public data.
+        r"""Returns the array representing public data. To modify public data,
+        the returned array must be modified.
 
         Parameters
         ----------
@@ -164,7 +170,8 @@ class SASCAGraph:
         return self.graph_["publics"][p]
 
     def get_table(self,t):
-        r"""Returns the array representing a table lookup.
+        r"""Returns the array representing a table lookup. To modify a table, 
+        the returned array must be modified.
 
         Parameters
         ----------
@@ -183,7 +190,7 @@ class SASCAGraph:
         return self.graph_["tables"][t]
     
     def get_secret_labels(self):
-        r"""Return a label for all the secret variables
+        r"""Return a label for all the secret variables.
 
         Returns
         -------
@@ -194,7 +201,7 @@ class SASCAGraph:
         return list(filter(lambda x: var[x]["flags"] & SECRET != 0,var))
 
     def get_profile_labels(self):
-        r"""Return a label for all the profile variables
+        r"""Return a label for all the profile variables.
 
         Returns
         -------
@@ -205,7 +212,7 @@ class SASCAGraph:
         return list(filter(lambda x: var[x]["flags"] & PROFILE != 0,var))
 
     def get_public_labels(self):
-        r"""Return a label for all the public variables
+        r"""Return a label for all the public variables.
 
         Returns
         -------
@@ -218,7 +225,8 @@ class SASCAGraph:
 
     def run_bp(self,it):
         r"""Runs belief propagation algorithm on the current state of the graph.
-        Updates the `current` distribution for all the variables.
+        Updates the `current` distribution for all the variables. Note that only
+        the `initial` distributions are taken as input for belief propagation.
 
         Parameters
         ----------

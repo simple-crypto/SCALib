@@ -1,5 +1,5 @@
-scale.modeling package
-=======================
+Modeling
+========
 
 LDAClassifier
 -------------

@@ -2,19 +2,30 @@ import numpy as np
 import scale.lib.scale as rust
 from tqdm import tqdm
 class SNR:
-    r"""Computes the Signal-to-Noise Ratio (SNR) between the traces
-    and the intermediate values. The SNR can be updated with its `fit()`
-    method. 
+    r"""Computes the Signal-to-Noise Ratio (SNR) between the traces and the
+    intermediate values. Informally, it allows to quantified information about a
+    random variable contained in the mean of the leakage  a variable. High SNR
+    means more information contained in the means. The SNR metric is defined
+    with the following equation.
+
+    .. math::
+        \mathrm{SNR} = \frac{\mathrm{var}_x(E[L_x])}
+                {E_x(\mathrm{var}[L_x])}
+
+    where :math:`x` is a possible value for the random variable `X`. :math:`L_x`
+    is the leakage associate to the value `x` for the random variable. The
+    estimation of SNR is done by providing the leakages `L` and the value `x` of
+    the random variable.
 
     Parameters
     ----------
     nc : int
-        Number of possible classes (e.g., 256 for 8-bit target). `nc` must
-        be smaller than `65536`.
+        Number of possible values for random variable `X` (e.g., 256 for 8-bit
+        target). `nc` must be smaller than `65536`.
     ns : int
         Number of samples in a single trace.
     np : int
-        Number of independent variables for which SNR must be estimated.
+        Number of independent variables `X` for which SNR must be estimated.
 
     Examples
     --------
@@ -27,8 +38,9 @@ class SNR:
 
     Notes
     -----
-    [1] Stefan Mangard, "Hardware Countermeasures against DPA ? A
-    Statistical Analysis of Their Effectiveness", CT-RSA 2004: 222-235
+    [1] "Hardware Countermeasures against DPA ? A
+    Statistical Analysis of Their Effectiveness", Stefan Mangard, CT-RSA 2004: 222-235
+
     """
     def __init__(self,nc,ns,np=1):
 
@@ -40,26 +52,26 @@ class SNR:
         self.np_ = np
         self.snr = rust.SNR(nc,ns,np)
 
-    def fit_u(self,x,y):
-        r""" Updates the SNR estimation with samples of `x` for the classes `y` 
+    def fit_u(self,l,x):
+        r""" Updates the SNR estimation with samples of `l` for the classes `x` 
         traces.
 
         Parameters
         ----------
-        x : array_like, int16
+        l : array_like, int16
             Array that contains the signal. The array must
             be of dimension `(n,ns)` and its type must be `int16`.
-        y : array_like, uint16
+        x : array_like, uint16
             Labels for each trace. Must be of shape `(np,n)` and
             must be `uint16`.
         """
-        nx,nsx = x.shape
-        npy,ny = y.shape
-        if not (npy == self.np_ and ny==nx):
-            raise Exception("Expected y with shape (%d,%d)"%(self.np_,nx))
-        if not (nsx == self.ns_):
+        nl,nsl = l.shape
+        npx,nx = x.shape
+        if not (npx == self.np_ and nx==nl):
+            raise Exception("Expected y with shape (%d,%d)"%(self.np_,nl))
+        if not (nsl == self.ns_):
             raise Exception("x is too long. Expected second dim of size %d"%(self.ns_))
-        self.snr.update(x,y)
+        self.snr.update(l,x)
 
     def get_snr(self):
         r"""Return the current SNR estimation with an array of shape `(np,ns)`. 
