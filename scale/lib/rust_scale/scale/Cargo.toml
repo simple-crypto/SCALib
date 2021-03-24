@@ -17,7 +17,7 @@ ndarray = { version = "0.14.0", features = ["rayon","blas"] }
 itertools = "0.10.0"
 ndarray-stats = "0.4.0"
 blas-src = { version = "0.6.1", default-features = false, features = ["openblas"] }
-openblas-src = { version = "0.9", default-features = false, features = ["cblas","system"] }
+openblas-src = { version = "0.9", default-features = true }
 ndarray-linalg = "0.13.1"
 lapack = "0.17.0"
 
