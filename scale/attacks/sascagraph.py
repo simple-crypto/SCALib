@@ -314,7 +314,7 @@ def _create_graph(fname):
     in_loop = False
     with open(fname) as fp:
         lines = map(lambda l:l.rstrip('\n'),fp.readlines())
-        lines = filter(lambda l : len(l)>0 and l[0] != '%',lines)
+        lines = filter(lambda l : len(l) > 0 and not l.isspace()  and l[0] != '%',lines)
 
     # for each line
     for line in lines:
