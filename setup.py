@@ -26,7 +26,6 @@ setup(
             binding=Binding.PyO3,
             features=["pyo3/abi3"],
             py_limited_api=True,
-            debug=False,
         )
     ],
     packages=["scale"],

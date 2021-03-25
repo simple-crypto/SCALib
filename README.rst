@@ -16,6 +16,18 @@ package. When applicable, it uses one-pass algorithms (e.g., `SNR`) which
 allows to estimate metric / models directly when the data is collected without
 requiring to store the traces.
 
+Develop
+=======
+
+Install the `pipenv` tool from PyPI, then run `pipenv install` to initialize
+the development environment.
+Running `pipenv run python setup.py develop` builds the native code and makes
+SCALE importable in the environment.
+
+Warning: this builds the native code in debug mode, which makes it very slow.
+For production usage, build and install the wheel using `pipenv run setup.py bdist_wheel`,
+then `pip install [path/to/the/wheel`.
+
 About us
 ========
 SCALE has been initiated by Olivier Bronchain during his PhD at Crypto Group,
