@@ -1,14 +1,25 @@
 mod histogram;
 mod rank;
 
-#[derive(Debug, snafu::Snafu)]
-#[snafu(display("{}", s))]
+#[derive(Debug)]
 pub struct RankError {
     s: String,
 }
 impl<'a> From<&'a str> for RankError {
     fn from(s: &'a str) -> Self {
         Self { s: s.into() }
+    }
+}
+
+impl std::fmt::Display for RankError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Ranking error: {}", self.s)
+    }
+}
+
+impl std::error::Error for RankError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
     }
 }
 

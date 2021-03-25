@@ -15,6 +15,7 @@ arbitrary = { version = "0.4", features = ["derive"] }
 
 [dependencies.test_hel_lib]
 path = ".."
+features = ["arbitrary", "ntl", "hellib"]
 
 
 # Prevent this from interfering with workspaces

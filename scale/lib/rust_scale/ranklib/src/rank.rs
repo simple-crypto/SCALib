@@ -21,7 +21,8 @@ fn cost2bin(cost: f64, bin_size: f64) -> usize {
 /// sum_i costs[i][x[i]] <= sum_i costs[i][real_key[i]].
 ///
 /// The real_key has thus rank 1 if it has the minimum cost.
-#[derive(Debug, Clone, arbitrary::Arbitrary)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub(crate) struct RankProblem {
     /// For each sub-key, the cost (e.g. negative log-likelihood) of each possible value for that
     /// sub-key.
