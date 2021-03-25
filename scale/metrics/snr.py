@@ -1,5 +1,5 @@
 import numpy as np
-import scale.lib.scale as rust
+from scale import _scale_ext
 from tqdm import tqdm
 class SNR:
     r"""Computes the Signal-to-Noise Ratio (SNR) between the traces and the
@@ -50,7 +50,7 @@ class SNR:
         self.nc_ = nc
         self.ns_ = ns
         self.np_ = np
-        self.snr = rust.SNR(nc,ns,np)
+        self.snr = _scale_ext.SNR(nc,ns,np)
 
     def fit_u(self,l,x):
         r""" Updates the SNR estimation with samples of `l` for the classes `x` 

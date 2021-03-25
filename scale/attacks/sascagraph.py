@@ -1,5 +1,5 @@
 import numpy as np
-import scale.lib.scale as rust
+from scale import _scale_ext
 class SASCAGraph:
     r"""SASCAGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
     It takes as input a .txt file that represent the implementation (or graph)
@@ -238,7 +238,7 @@ class SASCAGraph:
 
         graph = self.graph_
         _reset_graph_memory(graph,self.nc_)
-        rust.run_bp(graph["functions"],
+        _scale_ext.run_bp(graph["functions"],
                             graph["var_list"],
                             it,
                             graph["vertex"],

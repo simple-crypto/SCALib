@@ -3,3 +3,6 @@
 **/build/
 **/*.swp
 **/*.ipynb
+*.abi3.so
+*.egg-info/
+dist/

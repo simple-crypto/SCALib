@@ -1,5 +1,5 @@
 import numpy as np
-import scale.lib.scale as rust
+from scale import _scale_ext
 import scipy.linalg
 
 class LDAClassifier():
@@ -58,7 +58,7 @@ class LDAClassifier():
     def __init__(self,nc, p):
         self.p_ = p;
         self.nc_ = nc
-        self.lda = rust.LDA(nc,p)
+        self.lda = _scale_ext.LDA(nc,p)
         assert p < nc
 
     def fit(self,l,x):
@@ -105,7 +105,7 @@ class LDAClassifier():
         return dic
     
     def __setstate__(self,state):
-        self.lda = rust.LDA(state["nc"],state["p"])
+        self.lda = _scale_ext.LDA(state["nc"],state["p"])
         self.lda.set_state(state["cov"],state["psd"],
                     state["means"],state["projection"],
                     state["nc"],state["p"])

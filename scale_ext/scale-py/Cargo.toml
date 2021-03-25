@@ -1,11 +1,14 @@
 [package]
 name = "scale-py"
 version = "0.1.0"
-authors = ["Olivier Bronchain <olivier.bronchain@uclouvain.be>", "Gaëtan Cassiers <gaetan.cassiers@uclouvain.be>"]
+authors = [
+    "Olivier Bronchain <olivier.bronchain@uclouvain.be>",
+    "Gaëtan Cassiers <gaetan.cassiers@uclouvain.be>"
+]
 edition = "2018"
 
 [lib]
-name = "scale"
+name = "scale_py"
 crate-type = ["cdylib"]
 
 [features]

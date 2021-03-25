@@ -8,7 +8,7 @@ Notes
 [1] "Simple Key Enumeration (and Rank Estimation) Using Histograms: An
 Integrated Approach", R. Poussier, F.-X. Standaert, V. Grosso in CHES2016.
 """
-import scale.lib.scale as ranklib
+from scale import _scale_ext
 
 def rank_nbin(costs,key,nbins,method="hist"):
     r"""Estimate the rank of the full keys based on scores based on histograms.
@@ -39,7 +39,7 @@ def rank_nbin(costs,key,nbins,method="hist"):
         Upper bound for the rank key.
     
     """
-    return ranklib.rank_nbin(costs,key,nbins,2,method)
+    return _scale_ext.rank_nbin(costs,key,nbins,2,method)
 
 def rank_accuracy(costs,key,acc_bit=1.0,method="hist"):
     r"""Estimate the rank of the full keys based on scores based on histograms.
@@ -71,4 +71,4 @@ def rank_accuracy(costs,key,acc_bit=1.0,method="hist"):
         Upper bound for the rank key.
     """
 
-    return ranklib.rank_accuracy(costs,key,2.0**acc_bit,2,method)
+    return _scale_ext.rank_accuracy(costs,key,2.0**acc_bit,2,method)

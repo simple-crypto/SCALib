@@ -3,15 +3,10 @@ use ndarray::{s, Axis};
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
+use pyo3::types::PyList;
 use pyo3::wrap_pyfunction;
 use scale::lda;
 use scale::snr;
-use pyo3::types::PyList;
-
-#[pyfunction]
-fn sum_as_string(a: usize, b: usize) -> PyResult<String> {
-    Ok((a + b).to_string())
-}
 
 fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
     match s {
@@ -26,22 +21,21 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
 }
 
 #[pymodule]
-fn scale(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _scale_ext(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
     m.add_class::<lda::LDA>()?;
-    m.add_function(wrap_pyfunction!(sum_as_string, m)?)?;
 
     #[pyfn(m, "run_bp")]
     pub fn run_bp(
-    py: Python,
-    functions: &PyList,
-    variables: &PyList,
-    it: usize,
-    vertex: usize,
-    nc: usize,
-    n: usize,
-) -> PyResult<()> {
-        scale::belief_propagation::run_bp(py,functions,variables,it,vertex,nc,n)
+        py: Python,
+        functions: &PyList,
+        variables: &PyList,
+        it: usize,
+        vertex: usize,
+        nc: usize,
+        n: usize,
+    ) -> PyResult<()> {
+        scale::belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n)
     }
 
     #[pyfn(m, "partial_cp")]
