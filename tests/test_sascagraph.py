@@ -1,6 +1,7 @@
 import pytest
 from scale.attacks import SASCAGraph
 import numpy as np
+import os
 
 def test_table():
     """
@@ -34,6 +35,7 @@ y = x -> table
         distri_y_ref[:,y] = distri_x[:,x]
 
     assert np.allclose(distri_y_ref,distri_y)
+    os.remove(fgraph)
 
 def test_xor_public():
     """
@@ -67,6 +69,7 @@ y = x + public
         distri_y_ref[np.arange(n),y] = distri_x[np.arange(n),x]
 
     assert np.allclose(distri_y_ref,distri_y)
+    os.remove(fgraph)
 
 def test_xor():
     """
@@ -102,6 +105,7 @@ z = x ^ y
             distri_z_ref[:,x^y] += distri_x[:,x] * distri_y[:,y]
 
     assert np.allclose(distri_z_ref,distri_z)
+    os.remove(fgraph)
 
 def test_and():
     """
@@ -137,3 +141,4 @@ z = x & y
             distri_z_ref[:,x&y] += distri_x[:,x] * distri_y[:,y]
 
     assert np.allclose(distri_z_ref,distri_z)
+    os.remove(fgraph)

@@ -12,11 +12,14 @@ def test_snr():
     batch = 100
     x = np.random.randint(0,256,(n,ns),dtype=np.int16)-128
     y = np.random.randint(0,nc,(nv,n),dtype=np.uint16)
+
+    # compute SNR with SCALE
     snr = SNR(np=nv,nc=nc,ns=ns)
     for i in range(0,n,batch):
         snr.fit_u(x[i:i+batch,:],y[:,i:i+batch])
     snr_val = snr.get_snr()
 
+    # compte SNR for each method
     means = np.zeros((nc,ns))
     vars = np.zeros((nc,ns))
     for v in range(nv):
