@@ -14,7 +14,7 @@ class SASCAGraph:
     +------------+----------------------------------------------+--------------+
     | Tag        | Meaning                                      | Has distri.  |
     +============+==============================================+==============+
-    |`#secret`   | Secret variable (e.g. key). After the attack,|    Yes       |  
+    |`#secret`   | Secret variable (e.g. key). After the attack,|    Yes       |
     |            | the secret distribution is stored in the     |              |
     |            | `current` distribution.                      |              |
     +------------+----------------------------------------------+--------------+
@@ -31,12 +31,12 @@ class SASCAGraph:
     |`#table`    | Represents a public table (e.g., Sbox). Must |     No       |
     |            | be set to an array of shape `(nc,)`.         |              |
     +------------+----------------------------------------------+--------------+
-    |  /         | A variable can also be implicitly declared as|    Yes       | 
+    |  /         | A variable can also be implicitly declared as|    Yes       |
     |            | the output of a function (see next table).   |              |
     |            | If no flag specified, then it also has a     |              |
     |            | `current` distribution.                      |              |
     +------------+----------------------------------------------+--------------+
-    
+
     Multiple operations can be performed on variables, they are described in the
     following table.
 
@@ -47,7 +47,7 @@ class SASCAGraph:
     |            |             | Describes bitwise XOR between all variables.  |
     |            |             | Can represent XOR between arbitrary number of |
     |            |             | variables in a single line.                   |
-    +------------+-------------+-----------------------------------------------+ 
+    +------------+-------------+-----------------------------------------------+
     |Bitwise AND | `x = y & z` | `x,y,z` must have distributions.              |
     |            |             | Describes bitwise AND.                        |
     +------------+-------------+-----------------------------------------------+
@@ -59,20 +59,20 @@ class SASCAGraph:
     |            |             | `p` must be `#public`. Performs XOR           |
     |            |             | between the `p` and `y`.                      |
     +------------+-------------+-----------------------------------------------+
-   
+
     The flag `#indeploop` means that the following block is repeated `n` times.
     This block must the ended with `#endindeploop`. Tables must be declared
     outside of the loop. Publics must be declared inside of the loops. Profile
     must be declared inside of the loop. Secret can be declared either outside
     or inside of the loop. In the second case, its `current` distribution is of
     shape `(1,nc)`.
-    
+
     An attack attempting to recover the secret key byte `k` can be expressed
     with the following code. `sbox` is the Sbox of the blockcipher, `p` the
     plaintext, `x` the Sbox input and `y` the Sbox output.
 
     .. code-block::
-        
+
         k #secret
         sbox #table
 
