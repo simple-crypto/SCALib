@@ -8,6 +8,10 @@ setuptools = "*"
 wheel = "*"
 setuptools-rust = "*"
 auditwheel = "*"
+sphinx-rtd-theme = "*"
+numpydoc = "*"
+matplotlib = "*"
+ipython = "*"
 
 [dev-packages]
 
