@@ -363,11 +363,18 @@ pub fn xors(inputs: &mut [&mut Array2<f64>]) {
             let mut input = input.slice_mut(s![run, ..]);
             let input_fwt_s = input.as_slice_mut().unwrap();
             fwht(input_fwt_s, nc);
-            make_non_zero(&mut input);
+            // non zero with input_fwt_s possibly negative 
+            input.mapv_inplace(|x| {
+                if x.is_sign_positive() {
+                    x.max(MIN_PROBA)
+                } else {
+                    x.min(-MIN_PROBA)
+                }
+            });
             acc.zip_mut_with(&input, |x, y| *x = *x * y);
             acc /= acc.sum();
         });
-        // Invert accmulation input-wise and invert transform.
+        // Invert accumulation input-wise and invert transform.
         inputs.iter_mut().for_each(|input| {
             let mut input = input.slice_mut(s![run, ..]);
             input.zip_mut_with(&acc, |x, y| *x = *y / *x);

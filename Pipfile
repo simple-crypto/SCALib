@@ -12,6 +12,7 @@ sphinx-rtd-theme = "*"
 numpydoc = "*"
 matplotlib = "*"
 ipython = "*"
+pytest = "*"
 
 [dev-packages]
 
