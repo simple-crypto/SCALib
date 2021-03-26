@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 from setuptools_rust import Binding, RustExtension
 
 with open("README.rst", "r", encoding="utf-8") as fh:
@@ -28,7 +28,7 @@ setup(
             py_limited_api=True,
         )
     ],
-    packages=["scale"],
+    packages=find_packages(include=['scale', 'scale.*']),
     # rust extensions are not zip safe, just like C-extensions.
     zip_safe=False,
     python_requires=">=3.6",
