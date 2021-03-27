@@ -1,6 +1,5 @@
 import numpy as np
 from scale import _scale_ext
-from tqdm import tqdm
 class SNR:
     r"""Computes the Signal-to-Noise Ratio (SNR) between the traces and the
     intermediate values. Informally, it allows to quantified information about a

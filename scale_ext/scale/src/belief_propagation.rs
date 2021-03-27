@@ -17,11 +17,11 @@ use pyo3::types::PyDict;
 use pyo3::types::PyList;
 use rayon::prelude::*;
 
-/// Statitical distribution of a Para node.
+/// Statistical distribution of a Para node.
 /// Axes are (id of the copy of the var, value of the field element).
 type ParaDistri = Array2<f64>;
 
-/// Statitical distribution of a Single node.
+/// Statistical distribution of a Single node.
 /// Axes are (always length 1, value of the field element).
 type SingleDistri = Array2<f64>;
 
@@ -56,7 +56,6 @@ pub enum FuncType {
     /// Bitwise XOR of variables
     XOR,
     /// Bitwise XOR of variables, XORing additionally a public variable.
-    /// The constant is represented as a lookup table. TODO: true ?.
     XORCST(Array1<u32>),
     /// Lookup table function.
     LOOKUP(Array1<u32>),
@@ -363,7 +362,7 @@ pub fn xors(inputs: &mut [&mut Array2<f64>]) {
             let mut input = input.slice_mut(s![run, ..]);
             let input_fwt_s = input.as_slice_mut().unwrap();
             fwht(input_fwt_s, nc);
-            // non zero with input_fwt_s possibly negative 
+            // non zero with input_fwt_s possibly negative
             input.mapv_inplace(|x| {
                 if x.is_sign_positive() {
                     x.max(MIN_PROBA)

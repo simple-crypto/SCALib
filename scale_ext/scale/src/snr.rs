@@ -1,108 +1,137 @@
+//! Estimation for signal-to-noise ratio.
+//!
+//! An estimation of SNR is represented with a SNR struct. Calling update allows
+//! to update the SNR state with fresh measurements. get_snr returns the current value
+//! of the estimate.
+//! The SNR can be computed for np independent random variables and the same measurements.
+//! The measurements are expected to be of length ns. The random variable values must be
+//! included in [0,nc[.
+
 use ndarray::{Array2, Array3, Axis, Zip};
 use numpy::{PyArray2, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
 #[pyclass]
+/// SNR state. stores the sum and the sum of squares of the leakage for each of the class.
+/// This allows to estimate the mean and the variance for each of the classes which are
+/// needed for SNR.
 pub struct SNR {
-    s: Array3<i64>,
-    s2: Array3<i64>,
-    nc: Array2<u64>,
-
+    /// Sum of all the traces corresponding to each of the classes. shape (np,nc,ns)
+    sum: Array3<i64>,
+    /// sum of squares per class with shape (np,nc,ns)
+    sum_square: Array3<i64>,
+    /// number of samples per class (np,nc)
+    n_samples: Array2<u64>,
+    /// number of independent variables
     np: usize,
+    /// number of samples in a trace
     ns: usize,
 }
 #[pymethods]
 impl SNR {
     #[new]
+    /// Create a new SNR state.
+    /// nc: random variables between [0,nc[
+    /// ns: traces length
+    /// np: number of independent random variable for which SNR must be estimated
     fn new(nc: usize, ns: usize, np: usize) -> Self {
         SNR {
-            s: Array3::<i64>::zeros((np, nc, ns)),
-            s2: Array3::<i64>::zeros((np, nc, ns)),
-            nc: Array2::<u64>::zeros((np, nc)),
+            sum: Array3::<i64>::zeros((np, nc, ns)),
+            sum_square: Array3::<i64>::zeros((np, nc, ns)),
+            n_samples: Array2::<u64>::zeros((np, nc)),
 
             ns: ns,
             np: np,
         }
     }
-
-    fn update(
-        &mut self,
-        py: Python,
-        traces: PyReadonlyArray2<i16>, // (len,N_sample)
-        y: PyReadonlyArray2<u16>,      // (Np,len)
-    ) {
+    /// Update the SNR state with n fresh traces
+    /// traces: the leakage traces with shape (n,ns)
+    /// y: realization of random variables with shape (np,n)
+    fn update(&mut self, py: Python, traces: PyReadonlyArray2<i16>, y: PyReadonlyArray2<u16>) {
         let x = traces.as_array();
         let y = y.as_array();
-        let s = &mut self.s;
-        let s2 = &mut self.s2;
-        let nc = &mut self.nc;
+        let sum = &mut self.sum;
+        let sum_square = &mut self.sum_square;
+        let n_samples = &mut self.n_samples;
+        // release the GIL
         py.allow_threads(|| {
-            s.outer_iter_mut()
+            // for each of the independent variables
+            sum.outer_iter_mut()
                 .into_par_iter()
-                .zip(s2.outer_iter_mut().into_par_iter())
-                .zip(nc.outer_iter_mut().into_par_iter())
+                .zip(sum_square.outer_iter_mut().into_par_iter())
+                .zip(n_samples.outer_iter_mut().into_par_iter())
                 .zip(y.outer_iter().into_par_iter())
-                .for_each(|(((mut s, mut s2), mut nc), y)| {
-                    // for each variable
-
-                    s.outer_iter_mut().into_par_iter(). // over classes
-                zip(s2.outer_iter_mut().into_par_iter()).
-                zip(nc.outer_iter_mut().into_par_iter()).
-                enumerate().
-                for_each(|(i,((mut s,mut s2),mut nc))|{
-                    let mut n = 0;
-                    x.outer_iter().zip(y.iter()).for_each(|(x,y)|{
-                    if i == *y as usize{
-                        n += 1;
-                        Zip::from(&mut s)
-                        .and(&mut s2)
-                        .and(&x)
-                        .apply(|s, s2,x| {
-                            let x = *x as i64;
-                            *s += x;
-                            *s2 += x.pow(2);
+                .for_each(|(((mut sum, mut sum_square), mut n_samples), y)| {
+                    // for each of the possible realization of y
+                    sum.outer_iter_mut()
+                        .into_par_iter()
+                        .zip(sum_square.outer_iter_mut().into_par_iter())
+                        .zip(n_samples.outer_iter_mut().into_par_iter())
+                        .enumerate()
+                        .for_each(|(i, ((mut sum, mut sum_square), mut n_samples))| {
+                            let mut n = 0;
+                            x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
+                                // update sum and sum_square if the random value of y is i.
+                                if i == *y as usize {
+                                    n += 1;
+                                    Zip::from(&mut sum).and(&mut sum_square).and(&x).apply(
+                                        |sum, sum_square, x| {
+                                            let x = *x as i64;
+                                            *sum += x;
+                                            *sum_square += x.pow(2);
+                                        },
+                                    );
+                                }
+                            });
+                            n_samples += n;
                         });
-                    }
-                    });
-                    nc += n;
-                });
                 });
         });
     }
+
+    /// Generate the actual SNR metric based on the current state.
     fn get_snr<'py>(&mut self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
         let mut snr = Array2::<f64>::zeros((self.np, self.ns));
-        let s = &self.s;
-        let s2 = &self.s2;
-        let nc = &self.nc;
-        s.outer_iter()
-            .zip(s2.outer_iter())
-            .zip(nc.outer_iter())
-            .zip(snr.outer_iter_mut())
-            .for_each(|(((s, s2), nc), mut snr)| {
-                // for each variable
-                let mut means = Array2::<f64>::zeros(s2.raw_dim());
-                means
-                    .outer_iter_mut()
-                    .into_par_iter()
-                    .zip(nc.outer_iter().into_par_iter())
-                    .zip(s.outer_iter().into_par_iter())
-                    .for_each(|((mut means, nc), s)| {
-                        let nc = *nc.first().unwrap() as f64;
-                        means.zip_mut_with(&s, |x, y| *x = (*y as f64) / nc);
-                    });
-                let mean_var = means.var_axis(Axis(0), 0.0);
+        let sum = &self.sum;
+        let sum_square = &self.sum_square;
+        let n_samples = &self.n_samples;
 
-                means
-                    .outer_iter_mut()
+        // for each independent variable
+        // Note: not par_iter on the outer loop since the tmp array can be large
+        sum.outer_iter()
+            .into_par_iter()
+            .zip(sum_square.outer_iter())
+            .zip(n_samples.outer_iter())
+            .zip(snr.outer_iter_mut())
+            .for_each(|(((sum, sum_square), n_samples), mut snr)| {
+                let mut tmp = Array2::<f64>::zeros(sum.raw_dim());
+                // compute mean for each of the classes
+                tmp.outer_iter_mut()
                     .into_par_iter()
-                    .zip(nc.outer_iter().into_par_iter())
-                    .zip(s2.outer_iter().into_par_iter())
-                    .for_each(|((mut means, nc), s2)| {
-                        let nc = *nc.first().unwrap() as f64;
-                        means.zip_mut_with(&s2, |x, y| *x = ((*y as f64) / nc) - x.powi(2));
+                    .zip(n_samples.outer_iter().into_par_iter())
+                    .zip(sum.outer_iter().into_par_iter())
+                    .for_each(|((mut tmp, n_samples), sum)| {
+                        let n_samples = *n_samples.first().unwrap() as f64;
+                        tmp.zip_mut_with(&sum, |x, y| *x = (*y as f64) / n_samples);
                     });
-                let var_mean = means.mean_axis(Axis(0)).unwrap();
+
+                // variance of means
+                let mean_var = tmp.var_axis(Axis(0), 0.0);
+
+                // compute var for each of the classes. Leverage already compute means.
+                tmp.outer_iter_mut()
+                    .into_par_iter()
+                    .zip(n_samples.outer_iter().into_par_iter())
+                    .zip(sum_square.outer_iter().into_par_iter())
+                    .for_each(|((mut tmp, n_samples), sum_square)| {
+                        let n_samples = *n_samples.first().unwrap() as f64;
+                        tmp.zip_mut_with(&sum_square, |x, y| {
+                            *x = ((*y as f64) / n_samples) - x.powi(2)
+                        });
+                    });
+                // mean of variance
+                let var_mean = tmp.mean_axis(Axis(0)).unwrap();
                 snr.assign(&(&mean_var / &var_mean));
             });
         Ok(&(snr.to_pyarray(py)))
