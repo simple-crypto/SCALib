@@ -1,3 +1,11 @@
+///! Implementation of Linear Discriminant Analysis templates
+///!
+///! When the LDA is fit, it computes a linear projection from a high dimensional space
+///! to a subspace. The mean in the subspace is estimated for each of the possible nc classes.
+///! The covariance of the leakage within the subspace is pooled.
+///!
+///! Probability estimation for each of the classes based on leakage traces
+///! can be derived from the LDA by leveraging the previous templates.
 use lapack::*;
 use ndarray::{s, Array1, Array2, Axis, Zip};
 use ndarray_linalg::*;
@@ -6,32 +14,43 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 
 #[pyclass]
+/// LDA state where leakage has dimension ns. p in the subspace are used.
+/// Random variable can be only in range [0,nc[.
 pub struct LDA {
+    /// Pooled covariance matrix in the subspace. shape (p,p)
     cov: Array2<f64>,
+    /// Pseudo inverse of cov. shape (p,p)
     psd: Array2<f64>,
+    /// Mean for each of the classes in the subspace. shape (p,nc)
     means: Array2<f64>,
+    /// Projection matrix to the subspace. shape of (ns,p)
     projection: Array2<f64>,
-    n_components: usize,
+    /// Number of dimensions in leakage traces
+    ns: usize,
+    /// Number of dimensions in the subspace
+    p: usize,
+    /// Max random variable value.
     nc: usize,
 }
 #[pymethods]
 impl LDA {
     #[new]
-    fn new(_py: Python, nc: usize, n_components: usize) -> Self {
+    fn new(_py: Python, nc: usize, p: usize, ns: usize) -> Self {
         LDA {
-            cov: Array2::<f64>::zeros((1, 1)),
-            psd: Array2::<f64>::zeros((1, 1)),
-            means: Array2::<f64>::zeros((1, 1)),
-            projection: Array2::<f64>::zeros((1, 1)),
+            cov: Array2::<f64>::zeros((p, p)),
+            psd: Array2::<f64>::zeros((p, p)),
+            means: Array2::<f64>::zeros((p, nc)),
+            projection: Array2::<f64>::zeros((ns, p)),
             nc: nc,
-            n_components: n_components,
+            p: p,
+            ns: ns,
         }
     }
     fn fit(&mut self, py: Python, x: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
         let x = x.as_array();
         let y = y.as_array();
         let nc = self.nc;
-        let n_components = self.n_components;
+        let p = self.p;
         py.allow_threads(|| {
             let nk = nc;
             let ns = x.shape()[1];
@@ -121,7 +140,7 @@ impl LDA {
             let evecs = sb_o;
             index.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
             index.reverse();
-            let mut projection = Array2::<f64>::zeros((n_components, index.len()));
+            let mut projection = Array2::<f64>::zeros((p, index.len()));
             index
                 .iter()
                 .zip(projection.axis_iter_mut(Axis(0)))
@@ -131,7 +150,7 @@ impl LDA {
 
             // compute mean and cov
             let means = projection.dot(&c_means.t());
-            let traces_t = projection.dot(&x_f64_t); // (n,n_components)
+            let traces_t = projection.dot(&x_f64_t); // (n,p)
 
             let mut traces_t_t = Array2::zeros(traces_t.t().raw_dim());
             Zip::from(&mut traces_t_t)
@@ -158,10 +177,10 @@ impl LDA {
                 pack.into_iter().map(|(_, x)| 1.0 / f64::sqrt(*x)).collect();
             let psd = &u_s * &psigma_diag.broadcast(u_s.shape()).unwrap();
 
-            self.cov = cov.to_owned();
-            self.psd = psd.to_owned();
-            self.means = means.to_owned();
-            self.projection = projection.t().to_owned();
+            self.cov.assign(&cov);
+            self.psd.assign(&psd);
+            self.means.assign(&means);
+            self.projection.assign(&projection.t());
         })
     }
 
@@ -173,14 +192,16 @@ impl LDA {
         means: PyReadonlyArray2<f64>,
         projection: PyReadonlyArray2<f64>,
         nc: usize,
-        n_components: usize,
+        p: usize,
+        ns: usize,
     ) {
-        self.cov = cov.as_array().to_owned();
-        self.psd = psd.as_array().to_owned();
-        self.means = means.as_array().to_owned();
-        self.projection = projection.as_array().to_owned();
+        self.cov.assign(&cov.as_array());
+        self.psd.assign(&psd.as_array());
+        self.means.assign(&means.as_array());
+        self.projection.assign(&projection.as_array());
         self.nc = nc;
-        self.n_components = n_components;
+        self.p = p;
+        self.ns = ns;
     }
 
     fn predict_proba<'py>(
@@ -193,7 +214,7 @@ impl LDA {
         let psd = &self.psd;
         let projection = &self.projection;
 
-        let ns_in = x.shape()[1];
+        let ns_in = self.ns;
         let ns_proj = projection.shape()[1];
         let mut prs = Array2::<f64>::zeros((x.shape()[0], c_means.shape()[0]));
         py.allow_threads(|| {

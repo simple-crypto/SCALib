@@ -472,14 +472,13 @@ pub fn run_bp(
         // loading bar
         let pb = ProgressBar::new(it as u64);
         pb.set_style(ProgressStyle::default_spinner().template(
-        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"
-    ));
+        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"));
         pb.set_message("Calculating BP...");
 
         for _ in (0..it).progress_with(pb) {
             // This is a technique for runtime borrow-checking: we take reference on all the edges
             // at once, put them into options, then extract the references out of the options, one
-            // at a time an out-of-order.
+            // at a time and out-of-order.
             let mut edge_opt_ref_mut: Vec<Option<&mut Array2<f64>>> =
                 edges.iter_mut().map(|x| Some(x)).collect();
             let mut edge_for_func: Vec<Vec<&mut Array2<f64>>> = functions_rust

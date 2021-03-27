@@ -15,7 +15,7 @@ def test_lda():
     labels = np.random.randint(0,nc,n,dtype=np.uint16)
     traces += m[labels] 
 
-    lda = LDAClassifier(nc,n_components)
+    lda = LDAClassifier(nc,n_components,ns)
     lda.fit(traces,labels)
     
     lda_ref = LDA_sklearn(solver="eigen")

@@ -28,7 +28,7 @@ for (traces,labels,index) in tqdm(zip(DataReader(files_traces,None),
 print("Build LDAClassifier from traces")
 for v in tqdm(profile_var,desc="Fit LDAClassifiers"):
     var = profile_var[v]
-    var["model"] = LDAClassifier(p=1,nc=256)
+    var["model"] = LDAClassifier(p=1,nc=256,ns=len(var["POI"]))
     var["model"].fit(var["samples"],var["data"])
     var.pop("samples")
     var.pop("data")
