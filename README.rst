@@ -19,13 +19,21 @@ requiring to store the traces.
 Develop
 =======
 Install the `pipenv` tool from PyPI, then run `pipenv install` to initialize
-the development environment.
-Running `pipenv run python setup.py develop` builds the native code and makes
-SCALE importable in the environment.
+the development environment. Running 
+```pipenv run python setup.py develop```
+builds the native code and makes SCALE importable in the environment.
 
 Warning: this builds the native code in debug mode, which makes it very slow.
-For production usage, build and install the wheel using `pipenv run setup.py bdist_wheel`,
-then `pip install [path/to/the/wheel`.
+For production usage, build and install the wheel using ``pipenv run setup.py bdist_wheel``, then ``pip install path/to/the/wheel``.
+
+Test
+----
+In the envirnment, the tests can be exected with `pytest`. Running ``pipenv run pytest`` will test functionality of SCALE. Please run the tests before pushing new code.
+
+Documentation
+-------------
+The documentations can be build by running ``pipenv run make -C docs html``.
+
 
 Documentation
 =============
@@ -48,17 +56,6 @@ contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 
 Publications
 ============
-In order to cite SCALE, please use the following bibtex.
-
-.. code-block:: latex
-
-    @misc{SCALE,
-      author = {Olivier Bronchain}
-      title  = {{SCALE: Side-Channel Attacks & Leakage Evaluation}},
-      note   = {\url{github.com}},
-      year   = {2021}
-    }
-
 
 SCALE has been used in various publications, let us know if you used it:
 
