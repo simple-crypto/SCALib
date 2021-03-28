@@ -16,15 +16,12 @@ package. When applicable, it uses one-pass algorithms (e.g., `SNR`) which
 allows to estimate metric / models directly when the data is collected without
 requiring to store the traces.
 
-Features
-========
-
 SCALE workflow
----------------
+==============
 
 The current version of SCALE contains modules for all the necessary steps for a
 profiled side-channel attack. Even if modules of SCALE can be used
-independently, a typical usage of SCALE for it goes in three steps:
+independently, a typical usage of SCALE for it goes in four steps:
 
 1. **Metrics**: In this step, standard metrics are evaluated for the
    measurements. This could be helpful to find point-of-interest (POIs),
@@ -36,7 +33,7 @@ independently, a typical usage of SCALE for it goes in three steps:
    standard `SNR` metric is available and allows to find point of interest of a
    given variable (first order).
 
-2. **Modeling**: In this step, models are build to extract information about a
+2. **Modeling**: In this step, models are built to extract information about a
    variable `y` from the leakage. Modeling methods works in two phases. The
    first one is to `fit()` the model with the random value `x` is the training
    data and `y` is the target value. The will build a model. The second one is
@@ -52,18 +49,19 @@ independently, a typical usage of SCALE for it goes in three steps:
    run advanced SASCA attacks for any circuit that contains boolean operations
    and table lookups.
 
-For details about of the usage of SCALE in a complete anaylisis, please visit
-the examples against protected and unprotected in  `examples <examples/>`. 
+4. **PostProcessing**: Once the attack has been performed, the postprocessing
+   allows to evaluation the efficiency of the attack. Namely by estimating the
+   rank of the correct key with `rank_accuracy`, it allows to quantify what is
+   the remaining computational power that is needed by the adversary to recover
+   the correct key.
 
-We note that the modules of SCALE can easely be replaced by other libraries. As
-an example, the `modeling` methods have an interface similar to `scikit-learn`.
+
+For details about of the usage of SCALE in a complete analysis, please visit
+the examples against protected and unprotected in  `examples <examples/>`.  We
+note that the modules of SCALE can easily be replaced by other libraries. As an
+example, the `modeling` methods have an interface similar to `scikit-learn`.
 The modeling could also be done with any other tools (e.g., deep learning) as
 soon as the modeling is able to return probabilities.
-
-Planned updates
----------------
-In a close future, we plan to add `t-test` in the metric and new modelings.
-Futher suggestions are welcome. See contact below.
 
 
 For developpers
@@ -78,20 +76,21 @@ bdist_wheel``, then ``pip install path/to/the/wheel``.
 
 Tests
 -----
-In the envirnment, the tests can be exected with `pytest`. Running ``pipenv run
+In the environment, the tests can be exacted with `pytest`. Running ``pipenv run
 pytest`` will test functionality of SCALE. Please run the tests before pushing
 new code.
 
 Documentation
 -------------
-The documentations can be build by running ``pipenv run make -C docs html``.
+The documentations can be built by running ``pipenv run make -C docs html``.
 The documentation are available in `docs/_build/html/`.
 
 About us
 ========
 SCALE has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. It has already been used by many other researcher at
-UCLouvain which contributed either directly or by constructive feedbacks. 
+UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALE. It has
+already been used by many other researcher at UCLouvain which contributed
+either directly or by constructive feedbacks. 
 
 Contributions and Issues
 ========================
