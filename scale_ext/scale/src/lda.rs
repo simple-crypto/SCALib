@@ -241,14 +241,16 @@ impl LDA {
 
         let x = x.as_array();
         let n = x.shape()[0];
-        let means = &self.means.t();
+        let means = &self.means;
         let psd = &self.psd;
         let projection = &self.projection;
         let ns = self.ns;
         let p = self.p;
+        let nc = self.nc;
 
-        let mut prs = Array2::<f64>::zeros((n, means.shape()[0]));
+        let mut prs = Array2::<f64>::zeros((n, nc));
         py.allow_threads(|| {
+            // along with x and prs
             x.outer_iter()
                 .into_par_iter()
                 .zip(prs.outer_iter_mut().into_par_iter())
@@ -260,23 +262,26 @@ impl LDA {
                             Array1::<f64>::zeros((p,)),
                         )
                     },
-                    |(ref mut x_i, ref mut x_proj, ref mut mu), (x, mut prs)| {
-                        x_i.zip_mut_with(&x, |x, y| *x = *y as f64);
-                        // project trace for subspace
+                    |(ref mut x_f64, ref mut x_proj, ref mut mu), (x, mut prs)| {
+                        x_f64.zip_mut_with(&x, |x, y| *x = *y as f64);
+                        // project trace for subspace such that x_proj = projection @ x_i
+                        // we don't use x_projet = projection.dot(x_i) since ndarray calls openblas
+                        // for typical parameters and the concurrent rayon jobs overload the CPUs
                         x_proj.assign(
                             &projection
                                 .axis_iter(Axis(1))
                                 .map(|p| {
                                     p.iter()
-                                        .zip(x_i.iter())
-                                        .fold(0.0, |acc, (p, x_i)| acc + p * x_i)
+                                        .zip(x_f64.iter())
+                                        .fold(0.0, |acc, (p, x_f64)| acc + p * x_f64)
                                 })
                                 .collect::<Array1<f64>>(),
                         );
 
+                        // prs[c] = exp(-.5*sum(((x_proj-mean[c]) @ psd)**2))
                         prs.assign(
                             &(means
-                                .outer_iter()
+                                .axis_iter(Axis(1))
                                 .map(|means| {
                                     mu.assign(&means);
                                     mu.zip_mut_with(&x_proj, |mu, x_proj| *mu -= x_proj);
@@ -285,6 +290,7 @@ impl LDA {
                                 .collect::<Array1<f64>>()),
                         );
                         prs.mapv_inplace(|x| f64::exp(-0.5 * x));
+
                         prs /= prs.sum();
                     },
                 );
