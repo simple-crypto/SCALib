@@ -5,6 +5,7 @@
 
 Welcome to SCALE's documentation!
 ==================================
+
 Side-Channel Attack & Leakage Evaluation (SCALE) is a tool-box that
 contains state-of-the-art tools for side-channel evaluation. Its focus is on
 providing efficient implementations of analysis methods widely used by the
@@ -21,18 +22,76 @@ package. When applicable, it uses one-pass algorithms (e.g., `SNR`) which
 allows to estimate metric / models directly when the data is collected without
 requiring to store the traces.
 
+Features
+========
 
-Functionalities
+SCALE workflow
+""""""""""""""
+
+The current version of SCALE contains modules for all the necessary steps for a
+profiled side-channel attack. Even if modules of SCALE can be used
+independently, a typical usage of SCALE for it goes in three steps:
+
+1. **Metrics**: In this step, standard metrics are evaluated for the
+   measurements. This could be helpful to find point-of-interest (POIs),
+   leakage, etc. When applicable, these metrics are implemented with a one-pass
+   algorithm. This allows either to load one the traces from the disk and
+   evaluate the metric on the complete dataset. It also allows to directly
+   compute the metrics once the traces are captured. In the case where only the
+   metric must be evaluated, this remove the need to store the data. The
+   standard `SNR` metric is available and allows to find point of interest of a
+   given variable (first order).
+
+2. **Modeling**: In this step, models are build to extract information about a
+   variable `y` from the leakage. Modeling methods works in two phases. The
+   first one is to `fit()` the model with the random value `x` is the training
+   data and `y` is the target value. The will build a model. The second one is
+   to return probabilities for each of the classes based on leakage `xt` by
+   using the function `predict_proba(xt)`. Only modeling based on `LDA` and
+   Gaussian templates is available.
+
+3. **Attacks**: This modules contains attack methodologies. It essentially uses
+   the probabilities from the `modeling` step in order and recombine them to
+   recover a key. The module `SASCAGraph` represent how the probabilities on
+   variables can be recombined. It can be used to model a standard template
+   attack on unprotected implementations. The same module can also be used to
+   run advanced SASCA attacks for any circuit that contains boolean operations
+   and table lookups.
+
+For details about of the usage of SCALE in a complete anaylisis, please visit
+the examples against protected and unprotected in  `examples <examples/>`. 
+
+We note that the modules of SCALE can easely be replaced by other libraries. As
+an example, the `modeling` methods have an interface similar to `scikit-learn`.
+The modeling could also be done with any other tools (e.g., deep learning) as
+soon as the modeling is able to return probabilities.
+
+Planned updates
+"""""""""""""""
+In a close future, we plan to add `t-test` in the metric and new modelings.
+Futher suggestions are welcome. See contact below.
+
+
+For developpers
 ===============
+Install the `pipenv` tool from PyPI, then run `pipenv install` to initialize
+the development environment. Running ``pipenv run python setup.py develop``
+builds the native code and makes SCALE importable in the environment.
 
-.. toctree::
-   :maxdepth: 2
-   
-   source/scale.metrics.rst
-   source/scale.modeling.rst
-   source/scale.attacks.rst
-   source/scale.ioutils.rst
-   source/scale.postprocessing.rst
+Warning: this builds the native code in debug mode, which makes it very slow.
+For production usage, build and install the wheel using ``pipenv run setup.py
+bdist_wheel``, then ``pip install path/to/the/wheel``.
+
+Tests
+"""""
+In the envirnment, the tests can be exected with `pytest`. Running ``pipenv run
+pytest`` will test functionality of SCALE. Please run the tests before pushing
+new code.
+
+Documentation
+"""""""""""""
+The documentations can be build by running ``pipenv run make -C docs html``.
+The documentation are available in `docs/_build/html/`.
 
 About us
 ========
@@ -49,17 +108,6 @@ contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 
 Publications
 ============
-In order to cite SCALE, please use the following bibtex.
-
-.. code-block:: latex
-
-    @misc{SCALE,
-      author = {Olivier Bronchain}
-      title  = {{SCALE: Side-Channel Attacks & Leakage Evaluation}},
-      note   = {\url{github.com}},
-      year   = {2021}
-    }
-
 
 SCALE has been used in various publications, let us know if you used it:
 
@@ -76,3 +124,16 @@ SCALE has been used in various publications, let us know if you used it:
 4. "Improved Leakage-Resistant Authenticated Encryption based on Hardware AES
    Coprocessors". O. Bronchain, C. Momin, T. Peters, F.-X. Standaert in
    TCHES2021 - Issue 3.
+
+Functionalities
+===============
+
+.. toctree::
+   :maxdepth: 2
+   
+   source/scale.metrics.rst
+   source/scale.modeling.rst
+   source/scale.attacks.rst
+   source/scale.ioutils.rst
+   source/scale.postprocessing.rst
+
