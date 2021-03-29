@@ -1,2 +1,7 @@
 [build-system]
 requires = ["setuptools", "wheel", "setuptools-rust"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:.*np.float.*:DeprecationWarning:sklearn[.*]"
+]
