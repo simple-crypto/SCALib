@@ -2,25 +2,23 @@ import numpy as np
 from scale import _scale_ext
 class SNR:
     r"""Computes the Signal-to-Noise Ratio (SNR) between the traces and the
-    intermediate values. Informally, it allows to quantified information about a
-    random variable contained in the mean of the leakage  a variable. High SNR
-    means more information contained in the means. The SNR metric is defined
+    intermediate values. Informally, SNR allows to quantify the amount of information about a
+    random variable :math:`X` contained in the mean of the leakage :math:`L_X`. High SNR
+    means more information contained in the mean. The SNR metric is defined
     with the following equation.
 
     .. math::
-        \mathrm{SNR} = \frac{\mathrm{var}_x(E[L_x])}
-                {E_x(\mathrm{var}[L_x])}
+        \mathrm{SNR} = \frac{\mathrm{Var}_{x\leftarrow X}(\mathrm{E}[L_x])}
+                {\mathrm{E}_{x\leftarrow X}(\mathrm{Var}[L_x])}
 
-    where :math:`x` is a possible value for the random variable `X`. :math:`L_x`
-    is the leakage associate to the value `x` for the random variable. The
-    estimation of SNR is done by providing the leakages `L` and the value `x` of
+    The SNR is estimated from leakage samples :math:`L_x` and the value `x` of
     the random variable.
 
     Parameters
     ----------
     nc : int
-        Number of possible values for random variable `X` (e.g., 256 for 8-bit
-        target). `nc` must be smaller than `65536`.
+        Number of possible values for the random variable :math:`X` (e.g., 256 for 8-bit
+        target). `nc` must be between :math:`1` and :math:`2^{16}` (included).
     ns : int
         Number of samples in a single trace.
     np : int
@@ -42,56 +40,37 @@ class SNR:
 
     """
     def __init__(self,nc,ns,np=1):
+        if nc not in range(1, 2**16+1):
+            raise ValueError(f"SNR can be computed on max 16 bit variable, nc={nc} given")
 
-        if nc >= (2**16):
-            raise Exception("SNR can be computed on max 16 bit, {} given".format(Nc))
-      
-        self.nc_ = nc
-        self.ns_ = ns
-        self.np_ = np
-        self.snr = _scale_ext.SNR(nc,ns,np)
+        self._ns = ns
+        self._np = np
+        self._snr = _scale_ext.SNR(nc,ns,np)
 
     def fit_u(self,l,x):
-        r""" Updates the SNR estimation with samples of `l` for the classes `x` 
+        r""" Updates the SNR estimation with samples of `l` for the classes `x`
         traces.
 
         Parameters
         ----------
-        l : array_like, int16
+        l : array_like, np.int16
             Array that contains the signal. The array must
-            be of dimension `(n,ns)` and its type must be `int16`.
-        x : array_like, uint16
-            Labels for each trace. Must be of shape `(np,n)` and
-            must be `uint16`.
+            be of dimension `(n, ns)` and its type must be `np.int16`.
+        x : array_like, np.uint16
+            Labels for each trace. Must be of shape `(n, np)` and must be
+            `np.uint16`.
         """
-        nl,nsl = l.shape
-        npx,nx = x.shape
-        if not (npx == self.np_ and nx==nl):
-            raise Exception("Expected y with shape (%d,%d)"%(self.np_,nl))
-        if not (nsl == self.ns_):
-            raise Exception("x is too long. Expected second dim of size %d"%(self.ns_))
-        self.snr.update(l,x)
+        nl, nsl = l.shape
+        nx, npx = x.shape
+        if not (npx == self._np and nx==nl):
+            raise ValueError(f"Expected y with shape ({self._np}, {nl})")
+        if not (nsl == self._ns):
+            raise Exception(f"x is too long. Expected second dim of size {self._ns}.")
+        # _scale_ext uses inverted axes for x.
+        self._snr.update(l,x.transpose())
 
     def get_snr(self):
-        r"""Return the current SNR estimation with an array of shape `(np,ns)`. 
+        r"""Return the current SNR estimation with an array of shape `(np,ns)`.
         """
-        return self.snr.get_snr()
+        return self._snr.get_snr()
 
-    def __del__(self):
-        del self.snr
-
-
-if __name__ == "__main__":
-    n = int(1E4)
-    ns = 5000
-    np = 4
-    import time
-    traces = np.random.randint(0,256,(n,ns)).astype(np.int16)
-    labels = np.random.randint(0,256,(np,n)).astype(np.uint16)
-
-    snr = SNR(256,ns,np)
-    start = time.time()
-    for i in range(10):
-        snr.fit_u(traces,labels)
-    snr_val = snr.get_snr()
-    print(start - time.time())
