@@ -102,9 +102,8 @@ impl LDA {
             // mean of every class
             let means_ns = &sums_ns / &s.broadcast(sums_ns.shape()).unwrap();
 
-            // Compute covariance matrix of x without carrying of the classes
-            // store transpose of x in f64.
-            // This consumes twice the memory but allows openblas to be used by ndarray.
+            // Compute covariance matrix of x without carrying of the classes store transpose of x
+            // in f64.  This consumes twice the memory but allows openblas to be used by ndarray.
             let mut x_f64 = x.mapv(|x| x as f64);
             let mut x_f64_t = Array2::<f64>::zeros(x.t().raw_dim());
             Zip::from(&mut x_f64_t)
@@ -112,10 +111,10 @@ impl LDA {
                 .par_apply(|x, y| *x = *y);
             let st = x_f64_t.dot(&x_f64) / (n as f64) - mean_total.dot(&mean_total.t());
 
-            // Computes the covariance of the noise. That is the pooled covariance
-            // of the centered traces according to the class. x_f64 = x - means_ns[y]
-            // Using same trick with transpose for openblas
-            // reversed_axes is to use fortran layout to easily use lapack
+            // Computes the covariance of the noise. That is the pooled covariance of the centered
+            // traces according to the class. x_f64 = x - means_ns[y]. It uses the same trick with
+            // transpose for openblas reversed_axes is to use fortran layout to easily use lapack
+            // for the next step
             let mut sw = Array2::<f64>::zeros((ns, ns)).reversed_axes();
             x_f64
                 .outer_iter_mut()
@@ -137,9 +136,10 @@ impl LDA {
                 .and(&sw)
                 .par_apply(|sb, st, sw| *sb = st - sw);
 
-            // Generalized eigenvalue decomposition for sb and sw with a call to dsysgvd
-            // Lapack routine. Eigen vectors are stored inplace in sb.
-            // See: https://www.netlib.org/lapack/explore-html/d2/d8a/group__double_s_yeigen_ga912ae48bb1650b2c7174807ffa5456ca.html
+            // Generalized eigenvalue decomposition for sb and sw with a call to dsysgvd Lapack
+            // routine. Eigen vectors are stored inplace in sb.
+            // See:
+            // https://www.netlib.org/lapack/explore-html/d2/d8a/group__double_s_yeigen_ga912ae48bb1650b2c7174807ffa5456ca.html
             let mut evals = vec![0.0; ns as usize];
             unsafe {
                 let mut i: i32 = 0;
@@ -264,8 +264,8 @@ impl LDA {
                     },
                     |(ref mut x_f64, ref mut x_proj, ref mut mu), (x, mut prs)| {
                         x_f64.zip_mut_with(&x, |x, y| *x = *y as f64);
-                        // project trace for subspace such that x_proj = projection @ x_i
-                        // we don't use x_projet = projection.dot(x_i) since ndarray calls openblas
+                        // project trace for subspace such that x_proj = projection @ x_i.  we
+                        // don't use x_projet = projection.dot(x_i) since ndarray calls openblas
                         // for typical parameters and the concurrent rayon jobs overload the CPUs
                         x_proj.assign(
                             &projection
