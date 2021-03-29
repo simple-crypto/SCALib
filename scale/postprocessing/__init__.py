@@ -1,1 +1,1 @@
-from .rankestimation import rank_nbin,rank_accuracy 
+from .rankestimation import rank_nbin, rank_accuracy
