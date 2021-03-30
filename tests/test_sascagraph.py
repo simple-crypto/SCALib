@@ -33,6 +33,39 @@ def test_table():
 
     assert np.allclose(distri_y_ref,distri_y)
 
+def test_and_public():
+    """
+    Test AND with public data
+    """
+    nc = 16
+    n = 100
+    public = np.random.randint(0,nc,n,dtype=np.uint32)
+    distri_x = np.random.randint(1,100,(n,nc))
+    distri_x = (distri_x.T / np.sum(distri_x,axis=1)).T
+
+    graph = """
+        # some comments
+        PROPERTY y = x & p
+        VAR MULTI y
+        VAR MULTI x
+        VAR MULTI p#come comments
+        """
+    graph = SASCAGraph(graph,nc,n)
+    graph.set_public("p",public)
+    graph.set_distribution("x",distri_x)
+
+    graph.run_bp(1)
+
+    distri_y = graph.get_distribution("y")
+    distri_y_ref = np.zeros(distri_x.shape)
+    for x in range(nc):
+        y = x & public
+        distri_y_ref[np.arange(n),y] += distri_x[np.arange(n),x]
+
+    assert np.allclose(distri_y_ref,distri_y)
+
+
+
 def test_xor_public():
     """
     Test XOR with public data

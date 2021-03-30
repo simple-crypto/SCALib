@@ -57,6 +57,8 @@ pub enum FuncType {
     XOR,
     /// Bitwise XOR of variables, XORing additionally a public variable.
     XORCST(Array1<u32>),
+    /// Bitwise AND of variables, XORing additionally a public variable.
+    ANDCST(Array1<u32>),
     /// Lookup table function.
     LOOKUP(Array1<u32>),
 }
@@ -133,6 +135,9 @@ pub fn to_func(function: &PyDict) -> Func {
     } else if func == 2 {
         let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
         f = FuncType::XORCST(values.as_array().to_owned());
+    } else if func == 4 {
+        let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
+        f = FuncType::ANDCST(values.as_array().to_owned());
     } else {
         let table: PyReadonlyArray1<u32> = function.get_item("table").unwrap().extract().unwrap();
         f = FuncType::LOOKUP(table.as_array().to_owned());
@@ -316,6 +321,33 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                         let value = value.first().unwrap();
                         for i1 in 0..nc {
                             let o: usize = ((i1 as u32) ^ value) as usize;
+                            input1_msg_s_mut[i1] += output_msg_s[o];
+                            output_msg_s_mut[o] += input1_msg_s[i1];
+                        }
+                    });
+            }
+            FuncType::ANDCST(values) => {
+                let input1_msg = edge.pop().unwrap();
+                let output_msg = edge.pop().unwrap();
+                let nc = input1_msg.shape()[1];
+                input1_msg
+                    .outer_iter_mut()
+                    .into_par_iter()
+                    .zip(output_msg.outer_iter_mut().into_par_iter())
+                    .zip(values.outer_iter().into_par_iter())
+                    .for_each(|((mut input1_msg, mut output_msg), value)| {
+                        let input1_msg_o = input1_msg.to_owned();
+                        let output_msg_o = output_msg.to_owned();
+                        let input1_msg_s = input1_msg_o.as_slice().unwrap();
+                        let output_msg_s = output_msg_o.as_slice().unwrap();
+
+                        input1_msg.fill(0.0);
+                        output_msg.fill(0.0);
+                        let input1_msg_s_mut = input1_msg.as_slice_mut().unwrap();
+                        let output_msg_s_mut = output_msg.as_slice_mut().unwrap();
+                        let value = value.first().unwrap();
+                        for i1 in 0..nc {
+                            let o: usize = ((i1 as u32) & value) as usize;
                             input1_msg_s_mut[i1] += output_msg_s[o];
                             output_msg_s_mut[o] += input1_msg_s[i1];
                         }
