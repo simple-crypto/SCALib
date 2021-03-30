@@ -81,7 +81,7 @@ fn make_non_zero<S: ndarray::DataMut + ndarray::RawData<Elem = f64>, D: ndarray:
 /// Convert the python description of a variable node to a Var.
 pub fn to_var(function: &PyDict) -> Var {
     let neighboors: Vec<isize> = function.get_item("neighboors").unwrap().extract().unwrap();
-    let inloop: bool = function.get_item("in_loop").unwrap().extract().unwrap();
+    let inloop: bool = function.get_item("para").unwrap().extract().unwrap();
     let is_profiled = function.contains("initial").unwrap();
     let distri_current: PyReadonlyArray2<f64> =
         function.get_item("current").unwrap().extract().unwrap();

@@ -1,4 +1,5 @@
 import numpy as np
+from functools import reduce
 from scale import _scale_ext
 class SASCAGraph:
     r"""SASCAGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
@@ -100,56 +101,119 @@ class SASCAGraph:
         The file that contains the graph description.
     nc : int
         The size distributions. e.g., 256 when 8-bit variables are manipulated.
+    n : int
+        The number of independent traces to process
 
     """
-    def __init__(self,fname,nc):
+    def __init__(self,fname,nc,n):
         self.fname_ = fname
         self.nc_ = nc
-
-        self.graph_ = _create_graph(fname)
-        self.n_ = 0
-        self.initialized_ = False
-
-    def init_graph_memory(self,n):
-        r"""Initialize the internal arrays for tables, publics and variables.
-        They then can be accessed / modified through `get_variable()`,
-        `get_public()` and `get_table()`.
-
-        Parameters
-        ----------
-        n : int
-            Number of iterations in the #indeploop.
-        """
         self.n_ = n
-        self.initialized_ = True
-        _init_graph_memory(self.graph_,n,self.nc_)
 
-    def get_distribution(self,var,key):
-        r"""Returns distribution of a variables. To modify a distribution, the
+        # open file, remove empty lines and comments
+        with open(fname) as fp:
+            lines = map(lambda l:l.rstrip('\n').split("#",1)[0],fp.readlines())
+            lines = filter(lambda l : len(l) > 0 and not l.isspace(),lines)
+        
+        var = {}
+        tables = {}
+        op = []
+        for l in lines:
+            tag = l.split()[0]
+            if tag == "VAR":
+                # VAR " " MULTI|SINGLE " " key [# comment]
+                s = l.split()
+                para = s[1]
+                key = s[2]
+
+                # assert para parameter is fine
+                if para != "MULTI" and para != "SINGLE":
+                    raise Exception("Unrecognized %s in "%(para)+l)
+
+                var[key] = {"para":para=="MULTI","neighboors":[]}
+            elif tag == "PROPERTY":
+                # PROPERTY " " res " " = " "
+                l = l.replace("PROPERTY","").replace(" ","")
+                s = l.split("=")
+                if len(s) != 2:
+                    raise Exception("Not able to parse "+l)
+                res = s[0]
+                prop = s[1]
+                
+                if '^' in prop:
+                    tag = "XOR"
+                    if '^^' in prop:
+                        raise Exception("Cannot parse line" + l)
+                    inputs = prop.split('^')
+                    op.append({"op":tag,"output":res,"inputs":inputs,"neighboors":[]}) 
+                elif '&' in prop:
+                    tag = "AND"
+                    if '&&' in prop:
+                        raise Exception("Cannot parse line" + l)
+                    inputs = prop.split('&')
+                    if len(inputs) != 2:
+                        raise Exception("AND must have two operands")
+                    op.append({"op":tag,"output":res,"inputs":inputs,"neighboors":[]}) 
+                elif '[' in prop and ']' in prop:
+                    tag = "LOOKUP"
+                    tab = prop.split("[")[0]
+                    inputs = [prop.split("[")[1].strip("]")]
+                    op.append({"op":tag,"output":res,
+                                    "inputs":inputs,"tab":tab,"neighboors":[]}) 
+                else:
+                    raise Exception("Not able to parse "+l)
+            elif tag == "TABLE":
+                # VAR " " MULTI|SINGLE " " key [# comment]
+                l = l.replace("TABLE","").replace(" ","")
+                if "=" in l: # intialized table
+                    name = l.split("=")[0]
+                    tab = l.split("=")[1]
+                    if tab[0] != "[" or tab[-1] != "]":
+                        raise Exception("Not able to parse table in line "+l)
+                    tab = tab.replace("[","").replace("]","").split(',')
+                    tab = np.array(list(map(lambda x: int(x),tab)),dtype=np.uint32)
+                    if len(tab) != self.nc_:
+                        raise Exception("Table must be of length nc (%d)"%(self.nc_))
+
+                    tables[name] = tab
+                else:
+                    tables[l] = []
+            else:
+                raise Exception("Not able to parse "+l)
+        self.tables_ = tables
+        self.op_ = op
+        self.var_ = var
+        self.publics_ = {}
+
+    def set_distribution(self,var,distribution):
+        r"""Sets distribution of a variables. To modify a distribution, the
         returned array must be modified. 
 
         Parameters
         ----------
         var : string
             Label of an variable with a distribution (nor public nor table).
-        key : string
-            Internal array to return. `current` for the current estimated
-            distribution. `initial` for the initial distribution of profiled
-            variable.
-
-        Returns
-        -------
         distribution : array_like, f64
-            Requested distribution of `var`. Has shape `(n,nc)` if variable
-            declared in the loop, `(1,nc)` otherwise.
+            TODO
         """
-        
-        if not self.initialized_:
-            raise Exception("SASCAGraph not initialized")
+        para = self.var_[var]["para"]
+        if para:
+            shape_exp = (self.n_,self.nc_)
+            if distribution.shape != shape_exp:
+                raise Exception("Distribution has wrong shape")
+        elif distribution.shape == (self.nc_,):
+            distribution = distribution.reshape((1,self.nc_))
+        elif distribution.shape != (1,self.nc_):
+            raise Exception("Distribution has wrong shape")
 
-        return self.graph_["var"][var][key]
+        self.var_[var]["initial"] = distribution
+    
+    def get_distribution(self,var):
+        if not var in self.var_:
+            raise Exception(var+ "not found")
+        return self.var_[var]["current"]
 
-    def get_public(self,p):
+    def set_public(self,public,values):
         r"""Returns the array representing public data. To modify public data,
         the returned array must be modified.
 
@@ -163,13 +227,20 @@ class SASCAGraph:
         data : array_like, uint32
             Internal array for the public data `p`. Array is of shape `(n,)`.
         """
+        if values.shape != (self.n_,):
+            raise Exception("Public data has wrong shape")
         
-        if not self.initialized_:
-            raise Exception("SASCAGraph not initialized")
+        if values.dtype != np.uint32:
+            raise Exception("Public data must be np.uint32")
 
-        return self.graph_["publics"][p]
+        if not self.var_[public]["para"]:
+            print("WARNING: VAR SINGLE to public")
+        # remove public from variables
+        del self.var_[public]
 
-    def get_table(self,t):
+        self.publics_[public] = values
+
+    def set_table(self,table,values):
         r"""Returns the array representing a table lookup. To modify a table, 
         the returned array must be modified.
 
@@ -184,45 +255,107 @@ class SASCAGraph:
             Internal array for the table `t`. Array is of shape `(nc,)`.
         """
 
-        if not self.initialized_:
-            raise Exception("SASCAGraph not initialized")
+        if values.shape != (self.nc_,):
+            raise Exception("Table has wrong shape")
 
-        return self.graph_["tables"][t]
+        if values.dtype != np.uint32:
+            raise Exception("Table must be np.uint32")
+
+        self.tables_[table] = values
+
+    def _share_vertex(self,op,v):
+        op["neighboors"].append(self.vertex_)
+        self.var_[v]["neighboors"].append(self.vertex_)
+        self.vertex_ += 1
+
+    def _init_graph(self):
+        # mapping to Rust functions
+        AND = 0
+        XOR = 1
+        XOR_CST = 2
+        LOOKUP = 3
+
+        # vertex id
+        self.vertex_ = 0
+        for op in self.op_:
+            if op["output"] not in self.var_:
+                raise Exception("Can not assign "+op["output"])
+            npara = len(list(filter(lambda x: (x in self.var_)
+                            and self.var_[x]["para"],
+                            [op["output"]]+op["inputs"]))) 
+            if op["op"] == "LOOKUP":
+                op["func"]=LOOKUP
+                if op["inputs"][0] not in self.var_:
+                    raise Exception("Can only LOOKUP var: "+op["inputs"][0])
+                if npara == 0:
+                    raise Exception("Can have only one SINGLE per PROPERTY")
+                if len(self.tables_[op["tab"]]) != self.nc_:
+                    raise Exception("Table "+op["tab"]+" used but unset")
+
+                # get the table into the function
+                op["table"] = self.tables_[op["tab"]]
     
-    def get_secret_labels(self):
-        r"""Return a label for all the secret variables.
+                # set vertex to input and output
+                self._share_vertex(op,op["output"])
+                self._share_vertex(op,op["inputs"][0])
 
-        Returns
-        -------
-        labels : array_like, string
-            All the labels that are flagged as `#secret`
-        """
-        var = self.graph_["var"]
-        return list(filter(lambda x: var[x]["flags"] & SECRET != 0,var))
+            elif op["op"] == "AND":
+                # AND
 
-    def get_profile_labels(self):
-        r"""Return a label for all the profile variables.
+                if len(op["inputs"]) != 2:
+                    raise Exception("AND can only have 2 inputs")
+                if npara < 1:
+                    raise Exception("Can have only one SINGLE per PROPERTY")
+                if any(x in self.publics_ for x in op["inputs"]):
+                    raise Exception("Do not support public in AND")
 
-        Returns
-        -------
-        labels : array_like, string
-            All the labels that are flagged as `#profile`
-        """
-        var = self.graph_["var"]
-        return list(filter(lambda x: var[x]["flags"] & PROFILE != 0,var))
+                op["func"] = AND
+                self._share_vertex(op,op["output"])
+                for i in op["inputs"]:
+                    self._share_vertex(op,i)
 
-    def get_public_labels(self):
-        r"""Return a label for all the public variables.
 
-        Returns
-        -------
-        labels : array_like, string
-            All the labels that are flagged as `#public`
-        """
-        var = self.graph_["var"]
-        return list(self.graph_["publics"])
-        
+            elif op["op"] == "XOR":
+                if all(x in self.var_ for x in op["inputs"]):
+                    if npara < len(op["inputs"]):
+                        raise Exception("Can have only one SINGLE per PROPERTY")
 
+                    # no public XOR
+                    op["func"] = XOR
+                    self._share_vertex(op,op["output"])
+                    for i in op["inputs"]:
+                        self._share_vertex(op,i)
+                
+                elif len(op["inputs"]) == 2:
+                    if npara == 0:
+                        raise Exception("Can have only one SINGLE per PROPERTY")
+
+                    # XOR with one public
+                    op["func"] = XOR_CST
+                    self._share_vertex(op,op["output"])
+                    if op["inputs"][0] in self.var_:
+                        i = (0,1)
+                    elif op["inputs"][1] in self.var_: 
+                        i = (1,0)
+                    else:
+                        raise Exception("Not able to process",op)
+                    self._share_vertex(op,op["inputs"][i[0]])
+
+                    if len(self.publics_[op["inputs"][i[1]]]) != self.n_:
+                        raise Exception("Public %s with" \
+                                "length different than n"%(op["inputs"][i[1]]))
+                    op["values"] = self.publics_[op["inputs"][i[1]]]
+
+                else:
+                    raise Exception("Not able to process",op)
+
+        for v in self.var_:
+            v = self.var_[v]
+            if v["para"]:
+                v["current"] = np.ones((self.n_,self.nc_))
+            else:
+                v["current"] = np.ones((1,self.nc_))
+ 
     def run_bp(self,it):
         r"""Runs belief propagation algorithm on the current state of the graph.
         Updates the `current` distribution for all the variables. Note that only
@@ -233,182 +366,9 @@ class SASCAGraph:
         it : int
             Number of iterations of belief propagation.
         """
-        if not self.initialized_:
-            raise Exception("SASCAGraph not initialized")
-
-        graph = self.graph_
-        _reset_graph_memory(graph,self.nc_)
-        _scale_ext.run_bp(graph["functions"],
-                            graph["var_list"],
+        self._init_graph()   
+        _scale_ext.run_bp(self.op_,
+                            [self.var_[x] for x in list(self.var_)],
                             it,
-                            graph["vertex"],
+                            self.vertex_,
                             self.nc_,self.n_)
-
-###########################
-# PRIVATE Helper Methods 
-###########################
-AND = 0
-XOR = 1
-XOR_CST = 2
-LOOKUP = 3
-symbols = {"&":{"val":AND,"inputs_distri":2},
-        "^":{"val":XOR,"inputs_distri":-1},
-        "+":{"val":XOR_CST,"inputs_distri":1},
-        "->":{"val":LOOKUP,"inputs_distri":1}}
-
-delimiter = "#indeploop"
-end_delimiter = "#endindeploop"
-secret_flag = "#secret"
-public_flag = "#public"
-profile_flag = "#profile"
-tab_flag = "#table"
-
-SECRET = 1 << 0
-PUBLIC = 1 << 1
-PROFILE = 1 << 2
-TABLE = 1 << 3
-
-CLIP = 1E-50
-
-def _new_variable(i):
-    return {"id":i,"neighboors":[],"flags":0,"in_loop":False}
-def _new_function(i,func):
-    return {"id":i,"inputs":[],"outputs":[],"func":func}
-
-def _init_graph_memory(graph,N,Nc):
-    functions = graph["functions"]
-    variables = graph["var"]
-    # init the distribution
-    for var in variables:
-        var = variables[var]
-        in_loop = var["in_loop"]
-        if in_loop: 
-            n = N 
-        else: 
-            n = 1
-
-        if var["flags"] & (PUBLIC) != 0:
-            if "values" in var: del var["values"]
-            var["values"] = np.zeros(n,dtype=np.uint32)
-        elif var["flags"] & (TABLE) != 0:
-            if "table" in var: del var["table"]
-            var["table"] = np.zeros(Nc,dtype=np.uint32)
-        else:
-            if var["flags"] & PROFILE != 0:
-                if "initial" in var: del var["initial"]
-                var["initial"] = np.ones((n,Nc))
-            if "current" in var: del var["current"]
-            var["current"] = np.zeros((n,Nc))
-
-    for p in graph["publics"]:
-        graph["publics"][p] = np.zeros(N,dtype=np.uint32)
-    for p in graph["tables"]:
-        graph["tables"][p] = np.zeros(Nc,dtype=np.uint32)
- 
-def _create_graph(fname):
-    functions = []
-    variables = {}
-    publics = {}
-    tables = {}
-    vertex = 0
-    in_loop = False
-    with open(fname) as fp:
-        lines = map(lambda l:l.rstrip('\n'),fp.readlines())
-        lines = filter(lambda l : len(l) > 0 and not l.isspace()  and l[0] != '%',lines)
-
-    # for each line
-    for line in lines:
-        split = line.split()
-        # delimiter
-        if delimiter in split:
-            in_loop = True
-            continue
-        if end_delimiter in split:
-            in_loop = False
-            continue
-
-        # get current variable
-        v = split[0]
-
-        # create variable if not exists
-        if v in variables:
-            node = variables[v]
-        else:
-            node = _new_variable(len(variables))
-            node["in_loop"] = in_loop
-        
-        insert = True
-        # add the flags
-        if secret_flag in split:
-            node["flags"] |= SECRET 
-        if public_flag in split:
-            node["flags"] |= PUBLIC; 
-            insert = False; publics[v] = []
-        if profile_flag in split:
-            node["flags"] |= PROFILE
-        if tab_flag in split:
-            node["flags"] |= TABLE;
-            insert = False; tables[v] = []
-        
-        if insert:
-            variables[v] = node
-
-        # add function if line contains one symbol
-        op = list(set(split) & set(list(symbols)))
-        if len(op) > 0:
-            # operation are only allowed in the loop
-            assert in_loop
-
-            # get the function sumbol and id and output
-            f = symbols[op[0]]
-            i = len(functions)
-            v = variables[split[0]] 
-
-            # create new function
-            func = _new_function(i,f["val"])
-            func["in_loop"] = in_loop
-
-            # add relation between fct and output
-            v["neighboors"].append(vertex); 
-            func["outputs"].append(vertex); vertex+=1
-
-            # add relation between fct and inputs
-            for j,labels in enumerate(split[::2][1:]):
-                # add neighboors only if the input has a distribution
-                if f["inputs_distri"] == -1 or j < f["inputs_distri"]:
-                    v = variables[labels]
-                    func["inputs"].append(vertex)
-                    v["neighboors"].append(vertex); vertex+=1
-          
-            if f["val"] == LOOKUP:
-                func["table_label"] = split[-1]
-            elif f["val"] == XOR_CST:
-                func["value_label"] = split[-1]
-
-            # set as neighboors all the inputs that have a distribution
-            func["neighboors"] = func["outputs"].copy()
-            func["neighboors"] += func["inputs"][:].copy() 
-            functions.append(func)
-
-    # generate the list
-    variables_list = list(map(lambda x:variables[x],variables))
-   
-    return {"functions":functions,"var_list":variables_list,"vertex":vertex,
-                    "var":variables,"publics":publics,"tables":tables}
-
-def _reset_graph_memory(graph,Nc):
-    variables_list = graph["var_list"]
-    for var in variables_list:
-        # if node has distribution
-        if "initial" in var:
-            # normalize
-            var["initial"][:,:]= (var["initial"].T / np.sum(var["initial"],axis=1)).T
-            # clip the distribution
-            np.clip(var["initial"],CLIP,1,out=var["initial"])
-
-    for f in graph["functions"]:
-        if f["func"] == XOR_CST:
-            f["values"] = graph["publics"][f["value_label"]]
-        if f["func"] == LOOKUP:
-            f["table"] = graph["tables"][f["table_label"]]
-
