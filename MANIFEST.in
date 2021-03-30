@@ -1,4 +1,6 @@
 include tests/*.py
-include examples/*/*.py examples/*/*.sh
+recursive-include examples/*/*.py examples/*/*.sh
 include scale_ext/Cargo.toml scale_ext/Cargo.lock
-recursive-include scale_ext/[ranklib,scale,scale-py] *
+recursive-include scale_ext/ranklib *
+recursive-include scale_ext/scale *
+recursive-include scale_ext/scale-py *
