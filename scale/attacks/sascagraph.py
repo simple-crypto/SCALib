@@ -105,15 +105,13 @@ class SASCAGraph:
         The number of independent traces to process
 
     """
-    def __init__(self,fname,nc,n):
-        self.fname_ = fname
+    def __init__(self,string,nc,n):
         self.nc_ = nc
         self.n_ = n
 
         # open file, remove empty lines and comments
-        with open(fname) as fp:
-            lines = map(lambda l:l.rstrip('\n').split("#",1)[0],fp.readlines())
-            lines = filter(lambda l : len(l) > 0 and not l.isspace(),lines)
+        lines = map(lambda l:l.rstrip('\n').split("#",1)[0],string.split("\n"))
+        lines = filter(lambda l : len(l) > 0 and not l.isspace(),lines)
         
         var = {}
         tables = {}
