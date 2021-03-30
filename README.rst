@@ -1,4 +1,5 @@
 Welcome to SCALE's documentation!
+pX11Forwarding yes
 ==================================
 Side-Channel Attack & Leakage Evaluation (SCALE) is a tool-box that
 contains state-of-the-art tools for side-channel evaluation. Its focus is on
@@ -66,7 +67,7 @@ soon as the modeling is able to return probabilities.
 
 For developpers
 ===============
-Install the `pipenv` tool from PyPI, then run `pipenv install` to initialize
+Install the `pipenv` tool from PyPI, then run ``pipenv install`` to initialize
 the development environment. Running ``pipenv run python setup.py develop``
 builds the native code and makes SCALE importable in the environment.
 
