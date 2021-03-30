@@ -35,7 +35,6 @@ pub struct LDA {
 #[pymethods]
 impl LDA {
     #[new]
-
     /// Init an LDA with empty arrays
     fn new(_py: Python, nc: usize, p: usize, ns: usize) -> Self {
         LDA {
