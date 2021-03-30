@@ -45,22 +45,23 @@ class SASCAGraph:
     |            | can also be specified through `set_table()`.                |
     +------------+-------------------------------------------------------------+
 
-    Properties linking the different variables are listed bellow with their
-    corresponding syntax. We note the public variables cannot be assigned with
-    PROPERTY and that a PROPERTY can only contain one VAR SINGLE.
+    Properties allows to set relationship between variables with the syntax
+    `PROPERTY " " Operation`. The possible operations are listed below. We note
+    the public variables cannot be assigned with PROPERTY and that a PROPERTY
+    can only contain one VAR SINGLE.
 
     +---------+--------------+-------------------------------------------------+
     |Operation| Syntax       | Description                                     |
     +=========+==============+=================================================+
     |XOR      | `x = y^z^...`| Assigns to `x` as the XORs between the variables|
     |         |              | separated with `^`. If a public variable is used|
-    |         |              | only two operands are allowed. Only one public  |
-    |         |              | is allowed. XOR is bitwise.                     |
+    |         |              | ,only two operands are allowed. Only one public |
+    |         |              | operand is allowed. XOR is bitwise.             |
     +---------+--------------+-------------------------------------------------+
     |AND      | `x = y&z`    | Assigns to `x` as the AND between two variables |
     |         |              | separated with `&`. If a public variable is used|
     |         |              | only two operands are allowed. Only one public  |
-    |         |              | is allowed. AND is bitwise.                     |
+    |         |              | operand is allowed. AND is bitwise.             |
     +---------+--------------+-------------------------------------------------+
     |LOOKUP   | `x = t[y]`   | Assigns to `x` the value at index `y` in table  |
     |         |              | `t`. No public variable is allowed in this      |
@@ -99,9 +100,9 @@ class SASCAGraph:
         k_distri = graph.get_distribution("k")
         key_guess = np.argmax(k_distri[0,:])
     
-    By running a belief propagation algorithm (see [1]), the distribution on all
-    the variables are updated based on their initial distributions. For
-    `SASCAGraph`, this is done with `run_bp()`.
+    By running a belief propagation algorithm (see [1]), the distributions on all
+    the variables are updated based on their initial distributions. The
+    `SASCAGraph`, can be solved by using `run_bp()`.
 
     Notes
     -----
@@ -110,7 +111,7 @@ class SASCAGraph:
 
     Parameters
     ----------
-    fname : string
+    description : string
         String containing the graph description. 
     nc : int
         The size distributions. e.g., 256 when 8-bit variables are manipulated.
@@ -119,17 +120,18 @@ class SASCAGraph:
         variables.
 
     """
-    def __init__(self,string,nc,n):
+    def __init__(self,description,nc,n):
         self.nc_ = nc
         self.n_ = n
+        self.solved_ = False
 
         # remove empty lines and comments
-        lines = map(lambda l:l.split("#",1)[0],string.split("\n"))
+        lines = map(lambda l:l.split("#",1)[0],description.split("\n"))
         lines = filter(lambda l : len(l) > 0 and not l.isspace(),lines)
         
         var = {}
         tables = {}
-        op = []
+        property = []
         errors = []
         for l in lines:
             tag = l.split()[0]
@@ -150,13 +152,17 @@ class SASCAGraph:
                 var[key] = {"para":para=="MULTI","neighboors":[]}
             elif tag == "PROPERTY":
                 # PROPERTY " " res " " = " "
+
+                # replace spaces
                 l = l.replace("PROPERTY","").replace(" ","")
                 s = l.split("=")
                 if len(s) != 2:
                     errors.append(("Cannot parse",l))
                     continue
 
+                # assigned value
                 res = s[0]
+                # equation
                 prop = s[1]
                 
                 if '^' in prop:
@@ -165,7 +171,7 @@ class SASCAGraph:
                         errors.append(("Cannot parse",l))
                         continue
                     inputs = prop.split('^')
-                    op.append({"op":tag,"output":res,"inputs":inputs,"neighboors":[]}) 
+                    property.append({"property":tag,"output":res,"inputs":inputs,"neighboors":[]}) 
                 elif '&' in prop:
                     tag = "AND"
                     if '&&' in prop:
@@ -176,12 +182,15 @@ class SASCAGraph:
                     if len(inputs) != 2:
                         errors.append(("AND must have two operands",l))
 
-                    op.append({"op":tag,"output":res,"inputs":inputs,"neighboors":[]}) 
+                    property.append({"property":tag,"output":res,"inputs":inputs,"neighboors":[]}) 
                 elif '[' in prop and ']' in prop:
                     tag = "LOOKUP"
+                    # get table
                     tab = prop.split("[")[0]
+                    
+                    # get inside of the brackets
                     inputs = [prop.split("[")[1].strip("]")]
-                    op.append({"op":tag,"output":res,
+                    property.append({"property":tag,"output":res,
                                     "inputs":inputs,"tab":tab,"neighboors":[]}) 
                 else:
                     errors.append(("Cannot parse",l))
@@ -190,7 +199,8 @@ class SASCAGraph:
             elif tag == "TABLE":
                 # VAR " " MULTI|SINGLE " " key [# comment]
                 l = l.replace("TABLE","").replace(" ","")
-                if "=" in l: # intialized table
+
+                if "=" in l: # table has to be initialized
                     name = l.split("=")[0]
                     tab = l.split("=")[1]
                     if tab[0] != "[" or tab[-1] != "]":
@@ -199,8 +209,8 @@ class SASCAGraph:
                     tab = tab.replace("[","").replace("]","").split(',')
                     tab = np.array(list(map(lambda x: int(x),tab)),dtype=np.uint32)
                     if len(tab) != self.nc_:
-                        errors.append(("Table must have length nc"\
-                            "(%d)"%(self.nc_),l),)
+                        errors.append(("Table must have length nc "\
+                            " = %d "%(self.nc_),l),)
                         continue
 
                     if not np.all(tab < self.nc_):
@@ -210,6 +220,7 @@ class SASCAGraph:
 
                     tables[name] = tab
                 else:
+                    # set empty table if not initialized
                     tables[l] = []
             else:
                 errors.append(("Cannot parse",l))
@@ -221,20 +232,20 @@ class SASCAGraph:
             raise Exception("Error in description parsing")
 
         self.tables_ = tables
-        self.op_ = op
+        self.properties_ = property
         self.var_ = var
         self.publics_ = {}
 
     def set_distribution(self,var,distribution):
-        r"""Sets distribution of a variables. To modify a distribution, the
-        returned array must be modified. 
-
+        r"""Sets distribution of a variables.
+        
         Parameters
         ----------
         var : string
-            Label of an variable with a distribution (nor public nor table).
+            Identifier of the variable to assign the distribution to.
         distribution : array_like, f64
-            TODO
+            Distribution to assign. If `var` is SINGLE, must be of shape `(nc,)`
+            or `(1,nc)`. If `var` is MULTI, must be of shape `(n,nc)`.
         """
         para = self.var_[var]["para"]
         if para:
@@ -245,54 +256,64 @@ class SASCAGraph:
             distribution = distribution.reshape((1,self.nc_))
         elif distribution.shape != (1,self.nc_):
             raise Exception("Distribution has wrong shape")
-
+        
         self.var_[var]["initial"] = distribution
     
     def get_distribution(self,var):
+        r"""Returns the current distribution of a variable `var`. Must be solved
+        beforehand with `run_bp()`.
+
+        Parameters:
+        -----------
+        var : string
+            Identifier of the variable for which distribution must be returned
+
+        Returns:
+        --------
+        distribution : array_like, f64
+            Distribution of `var`. If `var` is SINGLE, distribution has shape
+            `(1,nc)` else, has shape `(n,nc)`. 
+        """
+        if not self.solved_:
+            raise Exception("SASCAGraph not solved yet")
         if not var in self.var_:
             raise Exception(var+ "not found")
         return self.var_[var]["current"]
 
-    def set_public(self,public,values):
-        r"""Returns the array representing public data. To modify public data,
-        the returned array must be modified.
+    def set_public(self,var,values):
+        r"""Marks a variable `var` has public with provided `values`.
 
         Parameters
         ----------
-        p : string
-            Label of public variable to return.
-
-        Returns
-        -------
-        data : array_like, uint32
-            Internal array for the public data `p`. Array is of shape `(n,)`.
+        var : string
+            Identifier of the variable to mark as public
+        values: array_like, uint32
+            Public values for each of the independent executions. Must be of
+            shape `(n,)`. 
         """
         if values.shape != (self.n_,):
             raise Exception("Public data has wrong shape")
         
         if values.dtype != np.uint32:
             raise Exception("Public data must be np.uint32")
-
-        if not self.var_[public]["para"]:
+        
+        # remove from the standard variables and move it to publics
+        if not self.var_[var]["para"]:
             print("WARNING: VAR SINGLE to public")
         # remove public from variables
-        del self.var_[public]
+        del self.var_[var]
 
-        self.publics_[public] = values
+        self.publics_[var] = values
 
     def set_table(self,table,values):
-        r"""Returns the array representing a table lookup. To modify a table, 
-        the returned array must be modified.
+        r"""Defines a `table` content.
 
         Parameters
         ----------
-        p : string
-            Label of the table to return.
-
-        Returns
-        -------
-        data : array_like, uint32
-            Internal array for the table `t`. Array is of shape `(nc,)`.
+        table : string
+            Identifier of the table to fill.
+        values: array_like, uint32
+            Content of the table. Must be of shape `(nc,)`.
         """
 
         if values.shape != (self.nc_,):
@@ -306,111 +327,158 @@ class SASCAGraph:
 
         self.tables_[table] = values
 
-    def _share_vertex(self,op,v):
-        op["neighboors"].append(self.vertex_)
-        self.var_[v]["neighboors"].append(self.vertex_)
-        self.vertex_ += 1
+    def run_bp(self,it):
+        r"""Runs belief propagation algorithm on the current state of the graph.
+
+        Parameters
+        ----------
+        it : int
+            Number of iterations of belief propagation.
+        """
+        self._init_graph()   
+        _scale_ext.run_bp(self.properties_,
+                            [self.var_[x] for x in list(self.var_)],
+                            it,
+                            self.edge_,
+                            self.nc_,self.n_)
+        self.solved_ = True
+
+    def _share_edge(self,property,v):
+        property["neighboors"].append(self.edge_)
+        self.var_[v]["neighboors"].append(self.edge_)
+        self.edge_ += 1
 
     def _init_graph(self):
         # mapping to Rust functions
         AND = 0
         XOR = 1
         XOR_CST = 2
-        AND_CST = 4
         LOOKUP = 3
+        AND_CST = 4
 
-        # vertex id
-        self.vertex_ = 0
-        for op in self.op_:
-            if op["output"] not in self.var_:
-                raise Exception("Can not assign "+op["output"])
+        # edge id
+        self.edge_ = 0
+
+        # Going over all the operations. For each of the value to assign and 
+        # its inputs, create a edge uniquely identified with an integer. 
+        # Share the edge with the corresponding variable.
+        # Check also that the conditions on the inputs are supported by the Rust
+        # backend.
+        for property in self.properties_:
+
+            if property["output"] not in self.var_:
+                raise Exception("Can not assign "+property["output"])
+
+            # number of VAR MULTI in the PROPERTY
             npara = len(list(filter(lambda x: (x in self.var_)
                             and self.var_[x]["para"],
-                            [op["output"]]+op["inputs"]))) 
-            if op["op"] == "LOOKUP":
-                op["func"]=LOOKUP
-                if op["inputs"][0] not in self.var_:
-                    raise Exception("Can only LOOKUP var: "+op["inputs"][0])
+                            [property["output"]]+property["inputs"])))
+
+            if property["property"] == "LOOKUP":
+                property["func"]=LOOKUP
+
+                # input cannot be a public
+                if property["inputs"][0] not in self.var_:
+                    raise Exception("Can only LOOKUP var: "+property["inputs"][0])
+                # if npara == 0 means that both input and output are SINGLE
                 if npara == 0:
                     raise Exception("Can have only one SINGLE per PROPERTY")
-                if len(self.tables_[op["tab"]]) != self.nc_:
-                    raise Exception("Table "+op["tab"]+" used but unset")
+                if len(self.tables_[property["tab"]]) != self.nc_:
+                    raise Exception("Table "+property["tab"]+" used but unset")
 
                 # get the table into the function
-                op["table"] = self.tables_[op["tab"]]
+                property["table"] = self.tables_[property["tab"]]
     
-                # set vertex to input and output
-                self._share_vertex(op,op["output"])
-                self._share_vertex(op,op["inputs"][0])
+                # set edge to input and output
+                self._share_edge(property,property["output"])
+                self._share_edge(property,property["inputs"][0])
 
-            elif op["op"] == "AND":
-                # AND
-                if len(op["inputs"]) != 2:
+            elif property["property"] == "AND":
+                if len(property["inputs"]) != 2:
                     raise Exception("AND can only have 2 inputs")
 
-                if all(x in self.var_ for x in op["inputs"]):
-                    if npara < len(op["inputs"]):
+                # If no public inputs
+                if all(x in self.var_ for x in property["inputs"]):
+                    if npara < len(property["inputs"]):
                         raise Exception("Can have only one SINGLE per PROPERTY")
 
                     # no public AND
-                    op["func"] = AND
-                    self._share_vertex(op,op["output"])
-                    for i in op["inputs"]:
-                        self._share_vertex(op,i)
-                
-                elif len(op["inputs"]) == 2:
+                    property["func"] = AND
+                    self._share_edge(property,property["output"])
+                    for i in property["inputs"]:
+                        self._share_edge(property,i)
+
+                # if and with public input 
+                elif len(property["inputs"]) == 2:
+                    # if npara == 0 means that both input and output are SINGLE
                     if npara == 0:
                         raise Exception("Can have only one SINGLE per PROPERTY")
 
                     # XOR with one public
-                    op["func"] = AND_CST
-                    self._share_vertex(op,op["output"])
-                    if op["inputs"][0] in self.var_:
+                    property["func"] = AND_CST
+
+                    self._share_edge(property,property["output"])
+                    
+                    # which of both inputs is public
+                    if property["inputs"][0] in self.var_:
                         i = (0,1)
-                    elif op["inputs"][1] in self.var_: 
+                    elif property["inputs"][1] in self.var_: 
                         i = (1,0)
                     else:
-                        raise Exception("Not able to process",op)
-                    self._share_vertex(op,op["inputs"][i[0]])
+                        raise Exception("Not able to process",property)
 
-                    if len(self.publics_[op["inputs"][i[1]]]) != self.n_:
+                    # share edge with non public input 
+                    self._share_edge(property,property["inputs"][i[0]])
+
+                    # merge public input in the property
+                    if len(self.publics_[property["inputs"][i[1]]]) != self.n_:
                         raise Exception("Public %s with" \
-                                "length different than n"%(op["inputs"][i[1]]))
-                    op["values"] = self.publics_[op["inputs"][i[1]]]
+                                "length different than n"%(property["inputs"][i[1]]))
+                    property["values"] = self.publics_[property["inputs"][i[1]]]
 
 
-            elif op["op"] == "XOR":
-                if all(x in self.var_ for x in op["inputs"]):
-                    if npara < len(op["inputs"]):
+            elif property["property"] == "XOR":
+                # if no inputs are public
+                if all(x in self.var_ for x in property["inputs"]):
+                    # XOR with no public
+                    property["func"] = XOR
+                    
+                    if npara < len(property["inputs"]):
                         raise Exception("Can have only one SINGLE per PROPERTY")
 
-                    # no public XOR
-                    op["func"] = XOR
-                    self._share_vertex(op,op["output"])
-                    for i in op["inputs"]:
-                        self._share_vertex(op,i)
+                    # share edge with the output 
+                    self._share_edge(property,property["output"])
+
+                    # share edge with all the inputs
+                    for i in property["inputs"]:
+                        self._share_edge(property,i)
                 
-                elif len(op["inputs"]) == 2:
+                elif len(property["inputs"]) == 2:
+                    # XOR with one public
+                    property["func"] = XOR_CST
+
                     if npara == 0:
                         raise Exception("Can have only one SINGLE per PROPERTY")
 
-                    # XOR with one public
-                    op["func"] = XOR_CST
-                    self._share_vertex(op,op["output"])
-                    if op["inputs"][0] in self.var_:
+                    # which of both inputs is public
+                    if property["inputs"][0] in self.var_:
                         i = (0,1)
-                    elif op["inputs"][1] in self.var_: 
+                    elif property["inputs"][1] in self.var_: 
                         i = (1,0)
                     else:
-                        raise Exception("Not able to process",op)
-                    self._share_vertex(op,op["inputs"][i[0]])
+                        raise Exception("Not able to process",property)
 
-                    if len(self.publics_[op["inputs"][i[1]]]) != self.n_:
+                    # share edges with variables
+                    self._share_edge(property,property["output"])
+                    self._share_edge(property,property["inputs"][i[0]])
+
+                    # merge public into the property
+                    if len(self.publics_[property["inputs"][i[1]]]) != self.n_:
                         raise Exception("Public %s with" \
-                                "length different than n"%(op["inputs"][i[1]]))
-                    op["values"] = self.publics_[op["inputs"][i[1]]]
+                                "length different than n"%(property["inputs"][i[1]]))
+                    property["values"] = self.publics_[property["inputs"][i[1]]]
                 else:
-                    raise Exception("Not able to process",op)
+                    raise Exception("Not able to process",property)
 
         for v in self.var_:
             v = self.var_[v]
@@ -419,19 +487,3 @@ class SASCAGraph:
             else:
                 v["current"] = np.ones((1,self.nc_))
  
-    def run_bp(self,it):
-        r"""Runs belief propagation algorithm on the current state of the graph.
-        Updates the `current` distribution for all the variables. Note that only
-        the `initial` distributions are taken as input for belief propagation.
-
-        Parameters
-        ----------
-        it : int
-            Number of iterations of belief propagation.
-        """
-        self._init_graph()   
-        _scale_ext.run_bp(self.op_,
-                            [self.var_[x] for x in list(self.var_)],
-                            it,
-                            self.vertex_,
-                            self.nc_,self.n_)
