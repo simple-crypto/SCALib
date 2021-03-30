@@ -1,5 +1,4 @@
 Welcome to SCALE's documentation!
-pX11Forwarding yes
 ==================================
 Side-Channel Attack & Leakage Evaluation (SCALE) is a tool-box that
 contains state-of-the-art tools for side-channel evaluation. Its focus is on
