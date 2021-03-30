@@ -16,6 +16,7 @@ use pyo3::prelude::{PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::types::PyList;
 use rayon::prelude::*;
+use std::convert::TryInto;
 
 /// Statistical distribution of a Para node.
 /// Axes are (id of the copy of the var, value of the field element).
@@ -262,123 +263,112 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
         .zip(edges.par_iter_mut())
         .for_each(|(function, edge)| match &function.functype {
             FuncType::AND => {
-                let (output_msg, input1_msg, input2_msg) = match edge.as_mut_slice() {
-                    [om, i1m, i2m] => (om, i1m, i2m),
-                    _ => unreachable!(),
-                };
+                let [output_msg, input1_msg, input2_msg]: &mut [_; 3] =
+                    edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
-                input1_msg
-                    .outer_iter_mut()
+                (
+                    input1_msg.outer_iter_mut(),
+                    input2_msg.outer_iter_mut(),
+                    output_msg.outer_iter_mut(),
+                )
                     .into_par_iter()
-                    .zip(input2_msg.outer_iter_mut().into_par_iter())
-                    .zip(output_msg.outer_iter_mut().into_par_iter())
                     // Use for_each_init to limit the number of a allocation of the message
                     // scratch-pad.
                     .for_each_init(
-                        || (Array1::zeros((nc,)), Array1::zeros((nc,)), Array1::zeros((nc,))),
-                        |
-                        (ref mut in1_msg_scratch, ref mut in2_msg_scratch, ref mut out_msg_scratch),
-                        ((mut input1_msg, mut input2_msg), mut output_msg)
-                        | {
+                        || (Array1::zeros(nc), Array1::zeros(nc), Array1::zeros(nc)),
+                        |(in1_msg_scratch, in2_msg_scratch, out_msg_scratch),
+                         (mut input1_msg, mut input2_msg, mut output_msg)| {
                             in1_msg_scratch.fill(0.0);
                             in2_msg_scratch.fill(0.0);
                             out_msg_scratch.fill(0.0);
-                        for i1 in 0..nc {
-                            for i2 in 0..nc {
-                                let o: usize = i1 & i2;
-                                in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
-                                in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
-                                out_msg_scratch[o] += input1_msg[i1] * input2_msg[i2];
+                            for i1 in 0..nc {
+                                for i2 in 0..nc {
+                                    let o: usize = i1 & i2;
+                                    in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
+                                    in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
+                                    out_msg_scratch[o] += input1_msg[i1] * input2_msg[i2];
+                                }
                             }
-                        }
-                        input1_msg.assign(in1_msg_scratch);
-                        input2_msg.assign(in2_msg_scratch);
-                        output_msg.assign(out_msg_scratch);
-                    });
+                            input1_msg.assign(in1_msg_scratch);
+                            input2_msg.assign(in2_msg_scratch);
+                            output_msg.assign(out_msg_scratch);
+                        },
+                    );
             }
             FuncType::XOR => {
                 xors(edge.as_mut());
             }
             FuncType::XORCST(values) => {
-                let input1_msg = edge.pop().unwrap();
-                let output_msg = edge.pop().unwrap();
+                let [output_msg, input1_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
-                input1_msg
-                    .outer_iter_mut()
+                (
+                    input1_msg.outer_iter_mut(),
+                    output_msg.outer_iter_mut(),
+                    values.outer_iter(),
+                )
                     .into_par_iter()
-                    .zip(output_msg.outer_iter_mut().into_par_iter())
-                    .zip(values.outer_iter().into_par_iter())
-                    .for_each(|((mut input1_msg, mut output_msg), value)| {
-                        let input1_msg_o = input1_msg.to_owned();
-                        let output_msg_o = output_msg.to_owned();
-                        let input1_msg_s = input1_msg_o.as_slice().unwrap();
-                        let output_msg_s = output_msg_o.as_slice().unwrap();
-
-                        input1_msg.fill(0.0);
-                        output_msg.fill(0.0);
-                        let input1_msg_s_mut = input1_msg.as_slice_mut().unwrap();
-                        let output_msg_s_mut = output_msg.as_slice_mut().unwrap();
-                        let value = value.first().unwrap();
-                        for i1 in 0..nc {
-                            let o: usize = ((i1 as u32) ^ value) as usize;
-                            input1_msg_s_mut[i1] += output_msg_s[o];
-                            output_msg_s_mut[o] += input1_msg_s[i1];
-                        }
-                    });
+                    .for_each_init(
+                        || (Array1::zeros(nc), Array1::zeros(nc)),
+                        |(in1_msg_scratch, out_msg_scratch),
+                         (mut input1_msg, mut output_msg, value)| {
+                            in1_msg_scratch.fill(0.0);
+                            out_msg_scratch.fill(0.0);
+                            let value = value.first().unwrap();
+                            for i1 in 0..nc {
+                                let o: usize = ((i1 as u32) ^ value) as usize;
+                                in1_msg_scratch[i1] += output_msg[o];
+                                out_msg_scratch[o] += input1_msg[i1];
+                            }
+                            input1_msg.assign(in1_msg_scratch);
+                            output_msg.assign(out_msg_scratch);
+                        },
+                    );
             }
             FuncType::ANDCST(values) => {
-                let input1_msg = edge.pop().unwrap();
-                let output_msg = edge.pop().unwrap();
+                let [output_msg, input1_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
-                input1_msg
-                    .outer_iter_mut()
+                (
+                    input1_msg.outer_iter_mut(),
+                    output_msg.outer_iter_mut(),
+                    values.outer_iter(),
+                )
                     .into_par_iter()
-                    .zip(output_msg.outer_iter_mut().into_par_iter())
-                    .zip(values.outer_iter().into_par_iter())
-                    .for_each(|((mut input1_msg, mut output_msg), value)| {
-                        let input1_msg_o = input1_msg.to_owned();
-                        let output_msg_o = output_msg.to_owned();
-                        let input1_msg_s = input1_msg_o.as_slice().unwrap();
-                        let output_msg_s = output_msg_o.as_slice().unwrap();
-
-                        input1_msg.fill(0.0);
-                        output_msg.fill(0.0);
-                        let input1_msg_s_mut = input1_msg.as_slice_mut().unwrap();
-                        let output_msg_s_mut = output_msg.as_slice_mut().unwrap();
-                        let value = value.first().unwrap();
-                        for i1 in 0..nc {
-                            let o: usize = ((i1 as u32) & value) as usize;
-                            input1_msg_s_mut[i1] += output_msg_s[o];
-                            output_msg_s_mut[o] += input1_msg_s[i1];
-                        }
-                    });
+                    .for_each_init(
+                        || (Array1::zeros(nc), Array1::zeros(nc)),
+                        |(in1_msg_scratch, out_msg_scratch),
+                         (mut input1_msg, mut output_msg, value)| {
+                            in1_msg_scratch.fill(0.0);
+                            out_msg_scratch.fill(0.0);
+                            let value = value.first().unwrap();
+                            for i1 in 0..nc {
+                                let o: usize = ((i1 as u32) & value) as usize;
+                                in1_msg_scratch[i1] += output_msg[o];
+                                out_msg_scratch[o] += input1_msg[i1];
+                            }
+                            input1_msg.assign(in1_msg_scratch);
+                            output_msg.assign(out_msg_scratch);
+                        },
+                    );
             }
             FuncType::LOOKUP(table) => {
-                let input1_msg = edge.pop().unwrap();
-                let output_msg = edge.pop().unwrap();
+                let [output_msg, input1_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
-                let table = table.as_slice().unwrap();
-                input1_msg
-                    .outer_iter_mut()
+                (input1_msg.outer_iter_mut(), output_msg.outer_iter_mut())
                     .into_par_iter()
-                    .zip(output_msg.outer_iter_mut().into_par_iter())
-                    .for_each(|(mut input1_msg, mut output_msg)| {
-                        let input1_msg_o = input1_msg.to_owned();
-                        let output_msg_o = output_msg.to_owned();
-                        let input1_msg_s = input1_msg_o.as_slice().unwrap();
-                        let output_msg_s = output_msg_o.as_slice().unwrap();
-
-                        input1_msg.fill(0.0);
-                        output_msg.fill(0.0);
-                        let input1_msg_s_mut = input1_msg.as_slice_mut().unwrap();
-                        let output_msg_s_mut = output_msg.as_slice_mut().unwrap();
-
-                        for i1 in 0..nc {
-                            let o: usize = table[i1] as usize;
-                            input1_msg_s_mut[i1] += output_msg_s[o];
-                            output_msg_s_mut[o] += input1_msg_s[i1];
-                        }
-                    });
+                    .for_each_init(
+                        || (Array1::zeros(nc), Array1::zeros(nc)),
+                        |(in1_msg_scratch, out_msg_scratch), (mut input1_msg, mut output_msg)| {
+                            in1_msg_scratch.fill(0.0);
+                            out_msg_scratch.fill(0.0);
+                            for i1 in 0..nc {
+                                let o: usize = table[i1] as usize;
+                                in1_msg_scratch[i1] += output_msg[o];
+                                out_msg_scratch[o] += input1_msg[i1];
+                            }
+                            input1_msg.assign(in1_msg_scratch);
+                            output_msg.assign(out_msg_scratch);
+                        },
+                    );
             }
         });
 }
