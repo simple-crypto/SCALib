@@ -281,11 +281,34 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             in1_msg_scratch.fill(0.0);
                             in2_msg_scratch.fill(0.0);
                             out_msg_scratch.fill(0.0);
+                            // FIXME Check which implementation for inputs is correct.
+                            for i2 in 0..nc {
+                                let mut tot = 0.0;
+                                for i1 in 0..nc {
+                                    let o: usize = i1 & i2;
+                                    tot += output_msg[o];
+                                }
+                                for i1 in 0..nc {
+                                    let o: usize = i1 & i2;
+                                    in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o] / tot;
+                                }
+                            }
+                            for i1 in 0..nc {
+                                let mut tot = 0.0;
+                                for i2 in 0..nc {
+                                    let o: usize = i1 & i2;
+                                    tot += output_msg[o];
+                                }
+                                for i2 in 0..nc {
+                                    let o: usize = i1 & i2;
+                                    in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o] / tot;
+                                }
+                            }
                             for i1 in 0..nc {
                                 for i2 in 0..nc {
                                     let o: usize = i1 & i2;
-                                    in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
-                                    in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
+                                    //in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
+                                    //in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
                                     out_msg_scratch[o] += input1_msg[i1] * input2_msg[i2];
                                 }
                             }
@@ -362,6 +385,9 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             out_msg_scratch.fill(0.0);
                             for i1 in 0..nc {
                                 let o: usize = table[i1] as usize;
+                                // This requires table to be bijective. Otherwise, we would have to
+                                // divide the messge on the output by the number of matching inputs
+                                // to get the message to forward on the input edge.
                                 in1_msg_scratch[i1] += output_msg[o];
                                 out_msg_scratch[o] += input1_msg[i1];
                             }

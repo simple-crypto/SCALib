@@ -1,10 +1,8 @@
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Axis};
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
-use pyo3::prelude::*;
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 use pyo3::types::PyList;
-use pyo3::wrap_pyfunction;
 use scale::lda;
 use scale::snr;
 

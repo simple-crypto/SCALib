@@ -13,15 +13,16 @@ def test_table():
     distri_x = np.random.randint(1,2048,(n,nc))
     distri_x = (distri_x.T / np.sum(distri_x,axis=1)).T
 
-    graph = """
+    graph = f"""
             PROPERTY y = table[x]
             TABLE table
             VAR MULTI x
             VAR MULTI y
+            NC {nc}
             """
-    graph = SASCAGraph(graph,nc,n)
+    graph = SASCAGraph(graph,n)
     graph.set_table("table",table)
-    graph.set_distribution("x",distri_x)
+    graph.set_init_distribution("x",distri_x)
 
     graph.run_bp(1)
     distri_y = graph.get_distribution("y")
@@ -43,16 +44,17 @@ def test_and_public():
     distri_x = np.random.randint(1,100,(n,nc))
     distri_x = (distri_x.T / np.sum(distri_x,axis=1)).T
 
-    graph = """
+    graph = f"""
         # some comments
+        NC {nc}
         PROPERTY y = x & p
         VAR MULTI y
         VAR MULTI x
         VAR MULTI p#come comments
         """
-    graph = SASCAGraph(graph,nc,n)
+    graph = SASCAGraph(graph,n)
     graph.set_public("p",public)
-    graph.set_distribution("x",distri_x)
+    graph.set_init_distribution("x",distri_x)
 
     graph.run_bp(1)
 
@@ -76,15 +78,16 @@ def test_xor_public():
     distri_x = np.random.randint(1,100,(n,nc))
     distri_x = (distri_x.T / np.sum(distri_x,axis=1)).T
 
-    graph = """
+    graph = f"""
         PROPERTY y = x ^ p
         VAR MULTI y
         VAR MULTI x
         VAR MULTI p
+        NC {nc}
         """
-    graph = SASCAGraph(graph,nc,n)
+    graph = SASCAGraph(graph,n)
     graph.set_public("p",public)
-    graph.set_distribution("x",distri_x)
+    graph.set_init_distribution("x",distri_x)
 
     graph.run_bp(1)
 
@@ -107,16 +110,17 @@ def test_xor():
     distri_y = np.random.randint(1,100,(n,nc))
     distri_y = (distri_y.T / np.sum(distri_y,axis=1)).T
 
-    graph = """
+    graph = f"""
         # some comments
+        NC {nc}
         PROPERTY z = x^y
         VAR MULTI x # some comments too
         VAR MULTI y
         VAR MULTI z"""
 
-    graph = SASCAGraph(graph,nc,n)
-    graph.set_distribution("x",distri_x)
-    graph.set_distribution("y",distri_y) 
+    graph = SASCAGraph(graph,n)
+    graph.set_init_distribution("x",distri_x)
+    graph.set_init_distribution("y",distri_y) 
 
     graph.run_bp(1)
     distri_z = graph.get_distribution("z")
