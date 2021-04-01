@@ -1,20 +1,21 @@
-Welcome to SCALE's documentation!
-==================================
+Welcome to SCALE
+================
 Side-Channel Attack & Leakage Evaluation (SCALE) is a tool-box that
 contains state-of-the-art tools for side-channel evaluation. Its focus is on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
-The `SASCAGraph` is a central component of SCALE. It allows to express in a
-`.txt` what is the implementation to evaluate. It details what are the secrets
-to recover (e.g., keys), what variables must be profiled and how they interact
-with each other. 
+Features
+   SCALE contains various features:
 
-For efficiency, SCALE uses a custom Rust library which enables efficient
-serialization and machine specific code while providing a userfriendly Python3
-package. When applicable, it uses one-pass algorithms (e.g., `SNR`) which
-allows to estimate metric / models directly when the data is collected without
-requiring to store the traces.
+   - Metrics for side-channel analysis
+      - SNR
+   - Modeling of leakage PDF
+      - LDA Templates
+   - Attacks to recover secret keys
+      - SASCAGraph
+   - PostProcessing to analysis attack efficiency
+      - rankestimation
 
 SCALE workflow
 ==============
