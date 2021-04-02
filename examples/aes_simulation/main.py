@@ -24,6 +24,14 @@ if __name__ == "__main__":
 
     _,ns = traces_p.shape
     print("2. Profiling")
+    # For each of the 16 variables at the output of the Sbox (xi)
+    # we build a model that store in the dictonnary models. 
+    #
+    # The profiling is done in 3 phases
+    # 1. Compute SNR for all xi
+    # 2. Select the Point-of-Interest based on the SNR
+    # 3. Fit an LDA model for each of the xi
+
     models = {}
     for i in range(16): models[f"x{i}"] = {}
 
@@ -38,6 +46,7 @@ if __name__ == "__main__":
     snr_val = snr.get_snr()
 
     print(f"    2.2 Keep {npoi} POIs for each xi")
+    # POI are the npoi indexes with the largest SNR
     for i in range(16): 
         models[f"x{i}"]["poi"] = np.argsort(snr_val[i])[-npoi:]
     
@@ -60,11 +69,13 @@ if __name__ == "__main__":
         graph_desc +=f"""
                 VAR SINGLE k{i} # The key
                 VAR MULTI p{i}  # The plaintext
-                VAR MULTI x{i}
-                VAR MULTI y{i}
+                VAR MULTI x{i}  # Sbox output
+                VAR MULTI y{i}  # Sbox input
                 PROPERTY y{i} = k{i} ^ p{i} # Key addition
                 PROPERTY x{i} = sbox[y{i}]  # Sbox lookup
                 """
+
+    # Init SASCAGraph with graph_desc and the number of attack traces
     sasca = SASCAGraph(graph_desc,n=ntraces_a)
     
     print("    3.2 Add public information in the SASCAGraph")
@@ -86,12 +97,17 @@ if __name__ == "__main__":
     print("4. Attack evaluation")
     print("    4.1 Byte-wise attack")
 
+    # correct secret key
     secret_key = []
+    # distribution for each of the key bytes
     key_distribution = []
+    # the best key guess of the adversary
     guess_key = []
+    # rank for all the key bytes
     ranks = []
+    
     for i in range(16):
-        sk = labels_a[f"k{i}"][0]
+        sk = labels_a[f"k{i}"][0] # secret key byte
         distribution = sasca.get_distribution(f"k{i}")[0,:]
 
         guess_key.append(np.argmax(distribution))
@@ -108,6 +124,7 @@ if __name__ == "__main__":
 
     print(f"   4.3 Estimate full log2 key rank:")
     key_distribution = np.array(key_distribution)
+    
     rmin,r,rmax = rank_accuracy(-np.log10(key_distribution),secret_key,1)
 
     lrmin,lr,lrmax = (np.log2(rmin),np.log2(r),np.log2(rmax))
