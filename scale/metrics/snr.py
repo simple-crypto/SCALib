@@ -29,7 +29,7 @@ class SNR:
     >>> from scale.metrics import SNR
     >>> import numpy as np
     >>> traces = np.random.randint(0,256,(100,200),dtype=np.int16)
-    >>> X = np.random.randint(0,256,(10,100),dtype=np.uint16)
+    >>> X = np.random.randint(0,256,(100,10),dtype=np.uint16)
     >>> snr = SNR(256,200,10)
     >>> snr.fit_u(traces,X)
 
@@ -63,9 +63,9 @@ class SNR:
         nl, nsl = l.shape
         nx, npx = x.shape
         if not (npx == self._np and nx==nl):
-            raise ValueError(f"Expected y with shape ({self._np}, {nl})")
+            raise ValueError(f"Expected x with shape ({nl}, {self._np})")
         if not (nsl == self._ns):
-            raise Exception(f"x is too long. Expected second dim of size {self._ns}.")
+            raise Exception(f"l is too long. Expected second dim of size {self._ns}.")
         # _scale_ext uses inverted axes for x.
         self._snr.update(l,x.transpose())
 

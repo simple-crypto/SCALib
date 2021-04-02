@@ -294,7 +294,7 @@ class SASCAGraph:
                             "In current implementation public vars can only be ^ or & operands.\n"
                             + "Cannot use " + inp + " in table lookup."
                             )
-            if not any(self.var_[v]["para"] for v in property["inputs"] + [property["output"]]):
+            if not any(v in self.var_ and self.var_[v]["para"] for v in property["inputs"] + [property["output"]]):
                 raise ValueError(
                         "In current implementation, there must be at least one PARA var per property."
                         )

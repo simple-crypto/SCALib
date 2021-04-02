@@ -248,6 +248,7 @@ pub fn update_variables(edges: &mut [Vec<&mut Array2<f64>>], variables: &mut [Va
                         normalize_distri(*msg);
                         make_non_zero(msg);
                     });
+                    make_non_zero(distri_current);
                 }
             }
         });
@@ -457,19 +458,11 @@ pub fn run_bp(
     // Mapping of each edge to its (variable node id, position in variable node).
     let mut vec_vars_id: Vec<(usize, usize)> = vec![(0, 0); edge];
 
-    // loading bar
-    let pb = ProgressBar::new(functions.len() as u64);
-    pb.set_style(ProgressStyle::default_spinner().template(
-        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
-    ));
-    pb.set_message("Init functions...");
-
     // Is it so slow as to require a progress bar ?
     // map all python functions to rust ones + generate the mapping in vec_functs_id
     let functions_rust: Vec<Func> = functions
         .iter()
         .enumerate()
-        .progress_with(pb)
         .map(|(i, x)| {
             let dict = x.downcast::<PyDict>().unwrap();
             let f = to_func(dict);
@@ -480,20 +473,12 @@ pub fn run_bp(
         })
         .collect();
 
-    // loading bar
-    let pb = ProgressBar::new(variables.len() as u64);
-    pb.set_style(ProgressStyle::default_spinner().template(
-        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
-    ));
-    pb.set_message("Init variables...");
-
     // Is it so slow as to require a progress bar ?
     // map all python var to rust ones
     // generate the edge mapping in vec_vars_id
     // init the messages along the edges with initial distributions
     let mut variables_rust: Vec<Var> = variables
         .iter()
-        .progress_with(pb)
         .enumerate()
         .map(|(i, x)| {
             let dict = x.downcast::<PyDict>().unwrap();
@@ -554,14 +539,8 @@ pub fn run_bp(
         }
     });
 
-    let pb = ProgressBar::new(variables.len() as u64);
-    pb.set_style(ProgressStyle::default_spinner().template(
-        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
-    ));
-    pb.set_message("Dump variables...");
     variables_rust
         .iter()
-        .progress_with(pb)
         .zip(variables)
         .for_each(|(v_rust, v_python)| {
             let distri_current = match &v_rust.vartype {
