@@ -9,13 +9,65 @@ Features
    SCALE contains various features:
 
    - Metrics for side-channel analysis
-      - SNR
-   - Modeling of leakage PDF
-      - LDA Templates
+      - `SNR <scale/metrics/snr.py>`_: Signal-to-noise ratio.
+   - Modeling of leakage PDF:
+      - `LDClassifier <scale/modeling/ldaclassifier.py>`_: Template in linear subspaces.
    - Attacks to recover secret keys
-      - SASCAGraph
+      - `SASCAGraph <scale/attacks/sascagraph.py>`_: Generalization of divide and conquer with Soft Analytical Attacks.
    - PostProcessing to analysis attack efficiency
-      - rankestimation
+      - `rankestimation <scale/postprocessing/rankestimation.py>`_: 
+
+
+Install
+=======
+You can simply install SCALE by using PyPi and running:
+.. code-block::
+
+   pip install scale
+
+Wheels for Windows and Linux are provided. More information about source compilation, checkout `develop <DEVELOP.rst>`_ informations.
+
+Examples
+========
+Next, we detail a short pseudo example which illustrates the usage of SCALE. It gives insight about the flavor of SCALE. For a full running example, please visit XXXXX. For a detail on each of the steps, please visit XXXX. 
+
+
+    .. code-block::
+
+         # compute snr
+         snr = SNR(nc=256,ns=ns,p=1) 
+         snr.fit(traces_p,x_p)
+         
+         # build model
+         pois_x = np.argsort(snr.get_snr()[0][:-npoi])
+         lda = LDAClassifier(nc=256,ns=npoi,p=1)
+         lda.fit(traces_p[:,pois_x],x_p)
+
+         # Describe and generate the SASCAGraph
+         graph_desc = ´´´
+            # Small unprotected Sbox example
+            TABLE sbox   # The Sbox
+            VAR SINGLE k # The key
+            VAR MULTI p  # The plaintext
+            VAR MULTI x
+            VAR MULTI y
+            PROPERTY x = sbox[y] # Sbox lookup
+            PROPERTY x = k ^ p   # Key addition
+            ´´´
+         graph = SASCAGraph(graph_desc,256,len(traces_a))
+
+         # Encode data into the graph
+         graph.set_table("sbox",aes_sbox)
+         graph.set_public("p",plaintexts)
+         graph.set_distribution("x",lda.predict_proba(traces_a))
+
+         # Solve graph
+         graph.run_bp(it=3)
+
+         # Get key distribution and derive key guess
+         k_distri = graph.get_distribution("k")
+         key_guess = np.argmax(k_distri[0,:])
+
 
 SCALE workflow
 ==============
@@ -65,27 +117,6 @@ The modeling could also be done with any other tools (e.g., deep learning) as
 soon as the modeling is able to return probabilities.
 
 
-For developpers
-===============
-Install the `pipenv` tool from PyPI, then run ``pipenv install`` to initialize
-the development environment. Running ``pipenv run python setup.py develop``
-builds the native code and makes SCALE importable in the environment.
-
-Warning: this builds the native code in debug mode, which makes it very slow.
-For production usage, build and install the wheel using ``pipenv run setup.py
-bdist_wheel``, then ``pip install path/to/the/wheel``.
-
-Tests
------
-In the environment, the tests can be exacted with `pytest`. Running ``pipenv run
-pytest`` will test functionality of SCALE. Please run the tests before pushing
-new code.
-
-Documentation
--------------
-The documentations can be built by running ``pipenv run make -C docs html``.
-The documentation are available in `docs/_build/html/`.
-
 About us
 ========
 SCALE has been initiated by Olivier Bronchain during his PhD at Crypto Group,
@@ -118,3 +149,4 @@ SCALE has been used in various publications, let us know if you used it:
 4. "Improved Leakage-Resistant Authenticated Encryption based on Hardware AES
    Coprocessors". O. Bronchain, C. Momin, T. Peters, F.-X. Standaert in
    TCHES2021 - Issue 3.
+
