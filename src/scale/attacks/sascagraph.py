@@ -120,7 +120,6 @@ class SASCAGraph:
     n : int
         The number of independent traces to process within the `VAR MULTI`
         variables.
-
     """
 
     def __init__(self, description, n):
@@ -160,17 +159,17 @@ class SASCAGraph:
         self.var_[var]["initial"] = distribution
 
     def get_distribution(self, var):
-        r"""Returns the current distribution of a variable `var`. Must be solved
-        beforehand with `run_bp()`.
+        r"""Returns the current distribution of a variable `var`. Must be
+        solved beforehand with `run_bp()`.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         var : string
             Identifier of the variable for which distribution must be returned.
             Distribution cannot be obtained for public variables.
 
-        Returns:
-        --------
+        Returns
+        -------
         distribution : array_like, f64
             Distribution of `var`. If `var` is SINGLE, distribution has shape
             `(1,nc)` else, has shape `(n,nc)`.

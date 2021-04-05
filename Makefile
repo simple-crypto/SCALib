@@ -1,16 +1,20 @@
 
-.PHONY: pipenv dev test devtest docs
+.PHONY: dev test devtest coverage docs
 
-pipenv:
-	pipenv sync
 
 dev:
-	pipenv run python setup.py develop
+	tox -e dev
+	@echo "Run source .tox/dev/bin/activate to activate development virtualenv."
 
 test:
-	pipenv run pytest
+	tox -e test
 
-devtest: dev test
+devtest:
+	tox -e dev pytest
 
-docs: dev
-	cd docs && pipenv run make html
+coverage:
+	tox -e test-cov
+	@echo "Open htmlcov/index.html to see detailled coverage information."
+
+docs:
+	tox -e build_docs

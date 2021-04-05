@@ -6,3 +6,10 @@
 *.abi3.so
 *.egg-info/
 dist/
+.tox/
+.coverage
+.cargo_build/
+docs/_build/
+htmlcov/
+src/scale/version.py
+

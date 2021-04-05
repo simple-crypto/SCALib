@@ -17,6 +17,8 @@ pytest = "*"
 scipy = "*"
 numpy = "*"
 scikit-learn = "0.23.1"
+tox = "*"
+
 [dev-packages]
 
 [requires]

@@ -1,7 +1,22 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools-rust"]
+requires = [
+    "setuptools>=42",
+     "setuptools_scm[toml]>=3.4",
+     "setuptools_scm_git_archive",
+    "wheel",
+    "setuptools-rust",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+write_to = "src/scale/version.py"
 
 [tool.pytest.ini_options]
 filterwarnings = [
     "ignore:.*np.float.*:DeprecationWarning:sklearn[.*]"
+]
+minversion="6.0"
+addopts = "-ra"
+testpaths = [
+    "tests",
 ]
