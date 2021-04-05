@@ -20,7 +20,7 @@ jobs:
         # Run tox using the version of Python in `PATH`
         run: tox -e test
 
-  build:
+  build_wheels:
     name: Build wheels on ${{ matrix.os }}  - ${{ matrix.vers }}
     runs-on: ${{ matrix.os }}
     strategy:
