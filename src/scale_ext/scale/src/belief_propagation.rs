@@ -72,7 +72,7 @@ pub struct Func {
 }
 
 /// The minimum non-zero probability (to avoid denormalization, etc.)
-const MIN_PROBA: f64 = 1e-50;
+const MIN_PROBA: f64 = 1e-20;
 
 /// Clip down to `MIN_PROBA`
 fn make_non_zero<S: ndarray::DataMut + ndarray::RawData<Elem = f64>, D: ndarray::Dimension>(
@@ -282,34 +282,12 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             in1_msg_scratch.fill(0.0);
                             in2_msg_scratch.fill(0.0);
                             out_msg_scratch.fill(0.0);
-                            // FIXME Check which implementation for inputs is correct.
-                            for i2 in 0..nc {
-                                let mut tot = 0.0;
-                                for i1 in 0..nc {
-                                    let o: usize = i1 & i2;
-                                    tot += output_msg[o];
-                                }
-                                for i1 in 0..nc {
-                                    let o: usize = i1 & i2;
-                                    in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o] / tot;
-                                }
-                            }
-                            for i1 in 0..nc {
-                                let mut tot = 0.0;
-                                for i2 in 0..nc {
-                                    let o: usize = i1 & i2;
-                                    tot += output_msg[o];
-                                }
-                                for i2 in 0..nc {
-                                    let o: usize = i1 & i2;
-                                    in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o] / tot;
-                                }
-                            }
+
                             for i1 in 0..nc {
                                 for i2 in 0..nc {
                                     let o: usize = i1 & i2;
-                                    //in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
-                                    //in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
+                                    in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
+                                    in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
                                     out_msg_scratch[o] += input1_msg[i1] * input2_msg[i2];
                                 }
                             }
@@ -458,7 +436,6 @@ pub fn run_bp(
     // Mapping of each edge to its (variable node id, position in variable node).
     let mut vec_vars_id: Vec<(usize, usize)> = vec![(0, 0); edge];
 
-    // Is it so slow as to require a progress bar ?
     // map all python functions to rust ones + generate the mapping in vec_functs_id
     let functions_rust: Vec<Func> = functions
         .iter()
@@ -473,7 +450,6 @@ pub fn run_bp(
         })
         .collect();
 
-    // Is it so slow as to require a progress bar ?
     // map all python var to rust ones
     // generate the edge mapping in vec_vars_id
     // init the messages along the edges with initial distributions

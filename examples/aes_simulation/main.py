@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
     # Parameters
     std = 1
-    ntraces_a = 100
+    ntraces_a = 1000
     ntraces_p = 20000
     
     print("1. Generate simulated traces with parameters:")
@@ -122,7 +122,7 @@ if __name__ == "__main__":
     print("        key byte ranks  :"," ".join(["%3d"%(x) for x in ranks]))
     print("")
 
-    print(f"   4.3 Estimate full log2 key rank:")
+    print(f"    4.2 Estimate full log2 key rank:")
     key_distribution = np.array(key_distribution)
     
     rmin,r,rmax = rank_accuracy(-np.log10(key_distribution),secret_key,1)
