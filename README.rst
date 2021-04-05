@@ -7,19 +7,24 @@ side-channel community and maintaining a flexible and simple interface.
 
 SCALE contains various features for side-channel analysis:
 
-- Metrics for side-channel analysis
+- Metrics for side-channel analysis:
+
   - `SNR <scale/metrics/snr.py>`_: Signal-to-noise ratio.
 - Modeling leakage distribution:
+
   - `LDClassifier <scale/modeling/ldaclassifier.py>`_: Template in linear subspaces.
 - Attacks to recover secret keys
+
   - `SASCAGraph <scale/attacks/sascagraph.py>`_: Generalization of divide and conquer with Soft Analytical Attacks.
 - Postprocessing to analyse attacks results
+
   - `rankestimation <scale/postprocessing/rankestimation.py>`_: Histogram based full key rank estimation 
 
 
 Install
 =======
 You can simply install SCALE by using PyPi and running:
+
 .. code-block::
 
    pip install scale
@@ -30,7 +35,7 @@ compilation, checkout `develop <DEVELOP.rst>`_ informations.
 Pseudo-Example
 ==============
 Next, we detail a short pseudo example which illustrates the usage of SCALE. 
-For a full running example, please visit `this example <examples/aes>_`. 
+For a full running example, please visit `this example <examples/aes_simulation/>`_. 
 
 .. code-block::
 
