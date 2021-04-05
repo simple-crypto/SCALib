@@ -46,7 +46,7 @@ jobs:
       CIBW_BUILD: "cp36-*"
       CIBW_SKIP: "*-win32 *_i686 *_ppc64le *_s390x" 
       # I don't know how to make doctring tests work with only one command
-      CIBW_TEST_COMMAND: pytest {project}/tests; pytest --pyargs scale
+      CIBW_TEST_COMMAND: cd {project}; pytest tests && pytest --pyargs scale
       CIBW_TEST_EXTRAS: test
 
     steps:
