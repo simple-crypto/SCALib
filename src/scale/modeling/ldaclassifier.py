@@ -29,12 +29,12 @@ class LDAClassifier():
     --------
     >>> from scale.modeling import LDAClassifier
     >>> import numpy as np
-    >>> x = np.random.randint(0,256,(50000,200),dtype=np.int16)
-    >>> y = np.random.randint(0,256,50000,dtype=np.uint16)
-    >>> lda = LDAClassifier(256,8)
+    >>> x = np.random.randint(0,256,(5000,10),dtype=np.int16)
+    >>> y = np.random.randint(0,256,5000,dtype=np.uint16)
+    >>> lda = LDAClassifier(256,8,10)
     >>> lda.fit(x,y)
-    >>> x = np.random.randint(0,256,(50000,200),dtype=np.int16)
-    >>> lda.predict_proba(x)
+    >>> x = np.random.randint(0,256,(20,10),dtype=np.int16)
+    >>> predicted_proba = lda.predict_proba(x)
 
     Notes
     ----- 

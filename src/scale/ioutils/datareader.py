@@ -27,8 +27,8 @@ class DataReader(threading.Thread):
         Examples
         --------
         >>> files = ["data_%d.npy"%(i) for i in range(10)]
-        >>> for traces in DataReader(files,None):
-                print(np.mean(traces,axis=0))
+        >>> #for traces in DataReader(files,None):
+        >>> #    print(np.mean(traces,axis=0))
         """
 
         super(DataReader,self).__init__()
