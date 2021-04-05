@@ -10,13 +10,3 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
 write_to = "src/scale/version.py"
-
-[tool.pytest.ini_options]
-filterwarnings = [
-    "ignore:.*np.float.*:DeprecationWarning:sklearn[.*]"
-]
-minversion="6.0"
-addopts = "-ra"
-testpaths = [
-    "tests",
-]
