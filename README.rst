@@ -12,7 +12,7 @@ SCALE contains various features for side-channel analysis:
   - `SNR <scale/metrics/snr.py>`_: Signal-to-noise ratio.
 - Modeling leakage distribution:
 
-  - `LDClassifier <scale/modeling/ldaclassifier.py>`_: Template in linear subspaces.
+  - `LDAClassifier <scale/modeling/ldaclassifier.py>`_: Template in linear subspaces.
 - Attacks to recover secret keys
 
   - `SASCAGraph <scale/attacks/sascagraph.py>`_: Generalization of divide and conquer with Soft Analytical Attacks.
@@ -130,9 +130,9 @@ either directly or by constructive feedbacks.
 Contributions and Issues
 ========================
 We are happy to take any suggestion for features would be useful for
-side-channel evaluators. For such suggestion, contributions or issues, please
+side-channel evaluators. If you want to contribute to the project, please visit `DEVELOP.rst <DEVELOP.rst>`_ for relevant information. Please
 contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
-<olivier.bronchain@uclouvain.be>`_.
+<olivier.bronchain@uclouvain.be>`_ for any futher suggestions / questions.
 
 License
 =======
@@ -140,7 +140,7 @@ License
 Publications
 ============
 
-SCALE has been used in various publications, let us know if you used it:
+SCALE has been used in various publications, let us know if you used it so that we can add it to the list.
 
 1. "Mode-Level vs. Implementation-Level Physical Security in Symmetric
    Cryptography: A Practical Guide Through the Leakage-Resistance Jungle", D.
