@@ -5,17 +5,16 @@ contains state-of-the-art tools for side-channel evaluation. Its focus is on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
-Features
-   SCALE contains various features:
+SCALE contains various features for side-channel analysis:
 
-   - Metrics for side-channel analysis
-      - `SNR <scale/metrics/snr.py>`_: Signal-to-noise ratio.
-   - Modeling of leakage PDF:
-      - `LDClassifier <scale/modeling/ldaclassifier.py>`_: Template in linear subspaces.
-   - Attacks to recover secret keys
-      - `SASCAGraph <scale/attacks/sascagraph.py>`_: Generalization of divide and conquer with Soft Analytical Attacks.
-   - PostProcessing to analysis attack efficiency
-      - `rankestimation <scale/postprocessing/rankestimation.py>`_: 
+- Metrics for side-channel analysis
+  - `SNR <scale/metrics/snr.py>`_: Signal-to-noise ratio.
+- Modeling leakage distribution:
+  - `LDClassifier <scale/modeling/ldaclassifier.py>`_: Template in linear subspaces.
+- Attacks to recover secret keys
+  - `SASCAGraph <scale/attacks/sascagraph.py>`_: Generalization of divide and conquer with Soft Analytical Attacks.
+- Postprocessing to analyse attacks results
+  - `rankestimation <scale/postprocessing/rankestimation.py>`_: Histogram based full key rank estimation 
 
 
 Install
@@ -25,48 +24,49 @@ You can simply install SCALE by using PyPi and running:
 
    pip install scale
 
-Wheels for Windows and Linux are provided. More information about source compilation, checkout `develop <DEVELOP.rst>`_ informations.
+Wheels for Windows and Linux are provided. More information about source
+compilation, checkout `develop <DEVELOP.rst>`_ informations.
 
-Examples
-========
-Next, we detail a short pseudo example which illustrates the usage of SCALE. It gives insight about the flavor of SCALE. For a full running example, please visit XXXXX. For a detail on each of the steps, please visit XXXX. 
+Pseudo-Example
+==============
+Next, we detail a short pseudo example which illustrates the usage of SCALE. 
+For a full running example, please visit `this example <examples/aes>_`. 
 
+.. code-block::
 
-    .. code-block::
+     # compute snr
+     snr = SNR(nc=256,ns=ns,p=1) 
+     snr.fit(traces_p,x_p)
+     
+     # build model
+     pois_x = np.argsort(snr.get_snr()[0][:-npoi])
+     lda = LDAClassifier(nc=256,ns=npoi,p=1)
+     lda.fit(traces_p[:,pois_x],x_p)
 
-         # compute snr
-         snr = SNR(nc=256,ns=ns,p=1) 
-         snr.fit(traces_p,x_p)
-         
-         # build model
-         pois_x = np.argsort(snr.get_snr()[0][:-npoi])
-         lda = LDAClassifier(nc=256,ns=npoi,p=1)
-         lda.fit(traces_p[:,pois_x],x_p)
+     # Describe and generate the SASCAGraph
+     graph_desc = ´´´
+        # Small unprotected Sbox example
+        TABLE sbox   # The Sbox
+        VAR SINGLE k # The key
+        VAR MULTI p  # The plaintext
+        VAR MULTI x  # Sbox input
+        VAR MULTI y  # Sbox output
+        PROPERTY x = k ^ p   # Key addition
+        PROPERTY y = sbox[x] # Sbox lookup
+        ´´´
+     graph = SASCAGraph(graph_desc,256,len(traces_a))
 
-         # Describe and generate the SASCAGraph
-         graph_desc = ´´´
-            # Small unprotected Sbox example
-            TABLE sbox   # The Sbox
-            VAR SINGLE k # The key
-            VAR MULTI p  # The plaintext
-            VAR MULTI x
-            VAR MULTI y
-            PROPERTY x = sbox[y] # Sbox lookup
-            PROPERTY x = k ^ p   # Key addition
-            ´´´
-         graph = SASCAGraph(graph_desc,256,len(traces_a))
+     # Encode data into the graph
+     graph.set_table("sbox",aes_sbox)
+     graph.set_public("p",plaintexts)
+     graph.set_distribution("x",lda.predict_proba(traces_a))
 
-         # Encode data into the graph
-         graph.set_table("sbox",aes_sbox)
-         graph.set_public("p",plaintexts)
-         graph.set_distribution("x",lda.predict_proba(traces_a))
+     # Solve graph
+     graph.run_bp(it=3)
 
-         # Solve graph
-         graph.run_bp(it=3)
-
-         # Get key distribution and derive key guess
-         k_distri = graph.get_distribution("k")
-         key_guess = np.argmax(k_distri[0,:])
+     # Get key distribution and derive key guess
+     k_distri = graph.get_distribution("k")
+     key_guess = np.argmax(k_distri[0,:])
 
 
 SCALE workflow
@@ -108,14 +108,12 @@ independently, a typical usage of SCALE for it goes in four steps:
    the remaining computational power that is needed by the adversary to recover
    the correct key.
 
-
 For details about of the usage of SCALE in a complete analysis, please visit
 the examples against protected and unprotected in  `examples <examples/>`.  We
 note that the modules of SCALE can easily be replaced by other libraries. As an
 example, the `modeling` methods have an interface similar to `scikit-learn`.
 The modeling could also be done with any other tools (e.g., deep learning) as
 soon as the modeling is able to return probabilities.
-
 
 About us
 ========
@@ -130,6 +128,9 @@ We are happy to take any suggestion for features would be useful for
 side-channel evaluators. For such suggestion, contributions or issues, please
 contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 <olivier.bronchain@uclouvain.be>`_.
+
+License
+=======
 
 Publications
 ============
