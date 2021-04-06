@@ -5,3 +5,9 @@ members = [
     "ranklib",
     "scale-py"
 ]
+
+[patch.crates-io]
+numpy = { git = 'https://github.com/cassiersg/rust-numpy', branch = 'upgrade-ndarray' }
+ndarray-stats = { git = 'https://github.com/cassiersg/ndarray-stats', branch = 'ndarray-0.15' }
+ndarray-linalg = { git = 'https://github.com/cassiersg/ndarray-linalg', branch = 'upgrade-ndarray' }
+

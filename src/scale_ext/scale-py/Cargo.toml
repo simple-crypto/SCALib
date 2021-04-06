@@ -14,9 +14,12 @@ crate-type = ["cdylib"]
 [features]
 ntl = ["ranklib/ntl"]
 hellib = ["ranklib/hellib"]
+openblas-system = ["openblas-src/system"]
 
 [dependencies]
-ndarray = { version = "0.14.0", features = ["rayon","blas"] }
+ndarray = { version = "0.15.1", features = ["rayon","blas"] }
+blas-src = { version = "0.8", default-features = false, features = ["openblas"] }
+openblas-src = { version = "0.10.4", default-features = true, features = ["static"] }
 numpy = "0.13.0"
 indicatif = "0.15.0"
 

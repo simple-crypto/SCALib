@@ -99,7 +99,7 @@ impl LDA {
             // mean of the traces (without carrying of the classes)
             let mean_total = sums_ns.sum_axis(Axis(0)).insert_axis(Axis(1)) / (n as f64);
             // mean of every class
-            let means_ns = &sums_ns / &s.broadcast(sums_ns.shape()).unwrap();
+            let means_ns = sums_ns / s;
 
             // Compute covariance matrix of x without carrying of the classes store transpose of x
             // in f64.  This consumes twice the memory but allows openblas to be used by ndarray.

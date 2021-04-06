@@ -1,3 +1,5 @@
+extern crate openblas_src as _;
+
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Axis};
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
