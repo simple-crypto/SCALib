@@ -5,6 +5,7 @@ members = [
     "ranklib",
     "scale-py"
 ]
+resolver = "2"
 
 [patch.crates-io]
 numpy = { git = 'https://github.com/cassiersg/rust-numpy', branch = 'upgrade-ndarray' }
