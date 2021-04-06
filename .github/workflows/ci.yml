@@ -101,7 +101,7 @@ jobs:
         uses: joerick/cibuildwheel@v1.10.0
         env:
           CIBW_ARCHS_WINDOWS: ${{ matrix.vers }}
-          CIBW_ENVIRONMENT: "PATH=\"$PATH:$HOME/.cargo/bin\" VCPKG_ROOT=${{ github.workspace }}/vcpkg"
+          VCPKG_ROOT: ${{ github.workspace }}\vcpkg
 
       - uses: actions/upload-artifact@v2
         with:
