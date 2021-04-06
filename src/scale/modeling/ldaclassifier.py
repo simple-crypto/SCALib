@@ -111,3 +111,6 @@ class LDAClassifier():
         self.lda.set_state(state["cov"],state["psd"],
                     state["means"],state["projection"],
                     state["nc"],state["p"],state["ns"])
+        self.nc_ = state["nc"]
+        self.ns_ = state["ns"]
+        self.p_ = state["p"]
