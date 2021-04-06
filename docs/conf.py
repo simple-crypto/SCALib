@@ -17,6 +17,7 @@ release = scale.__version__
 extensions = [
     'sphinx.ext.autodoc',
     'numpydoc',
+    'sphinx.ext.autosectionlabel',
     'sphinx.ext.intersphinx',
     'sphinx.ext.coverage',
     'sphinx.ext.doctest',
