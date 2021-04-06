@@ -1,29 +1,29 @@
 Welcome to SCALE
 ================
-Side-Channel Attack & Leakage Evaluation (SCALE) is a tool-box that
-contains state-of-the-art tools for side-channel evaluation. Its focus is on
+Side-Channel Attack & Leakage Evaluation (SCALE) is a Python package that
+contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
-SCALE contains various features for side-channel analysis:
+SCALE contains various features for side-channel analysis. Please read :ref:`the SCALE workflow<SCALE workflow>` for more details:
 
-- Metrics for side-channel analysis:
+- Metrics:
 
   - `SNR <scale/metrics/snr.py>`_: Signal-to-noise ratio.
 - Modeling leakage distribution:
 
   - `LDAClassifier <scale/modeling/ldaclassifier.py>`_: Template in linear subspaces.
-- Attacks to recover secret keys
+- Attacks:
 
-  - `SASCAGraph <scale/attacks/sascagraph.py>`_: Generalization of divide and conquer with Soft Analytical Attacks.
-- Postprocessing to analyse attacks results
+  - `SASCAGraph <scale/attacks/sascagraph.py>`_: Generalization of `Divide & Conquer` with Soft Analytical Attacks.
+- Postprocessing to analyse attacks results:
 
-  - `rankestimation <scale/postprocessing/rankestimation.py>`_: Histogram based full key rank estimation 
+  - `rankestimation <scale/postprocessing/rankestimation.py>`_: Histogram based full key rank estimation.
 
 
 Install
 =======
-You can simply install SCALE by using PyPi and running:
+You can install SCALE by using PyPi packages and running:
 
 .. code-block::
 
@@ -81,44 +81,30 @@ The current version of SCALE contains modules for all the necessary steps for a
 profiled side-channel attack. Even if modules of SCALE can be used
 independently, a typical usage of SCALE for it goes in four steps:
 
-1. **Metrics**: In this step, standard metrics are evaluated for the
-   measurements. This could be helpful to find point-of-interest (POIs),
-   leakage, etc. When applicable, these metrics are implemented with a one-pass
-   algorithm. This allows either to load one the traces from the disk and
-   evaluate the metric on the complete dataset. It also allows to directly
-   compute the metrics once the traces are captured. In the case where only the
-   metric must be evaluated, this remove the need to store the data. The
-   standard `SNR` metric is available and allows to find point of interest of a
-   given variable (first order).
+1. **Metrics**: In this step, standard metrics are evaluated from the
+   measurements. This helps to find point-of-interest (POIs), quantify avaiable information, etc. 
+   When applicable, these metrics are implemented with a one-pass
+   algorithm to save the cost of data load / store.
 
 2. **Modeling**: In this step, models are built to extract information about a
-   variable `y` from the leakage. Modeling methods works in two phases. The
-   first one is to `fit()` the model with the random value `x` is the training
-   data and `y` is the target value. The will build a model. The second one is
-   to return probabilities for each of the classes based on leakage `xt` by
-   using the function `predict_proba(xt)`. Only modeling based on `LDA` and
-   Gaussian templates is available.
+   variable `y` from the leakage. Modeling methods work in two phases. The
+   first one is to `fit(t,x)` with traces `t` and target values `x`. This creates the
+   model parameters. In the second step, this model can be used to 
+   `predict_proba(t)` that returns the probability of every possible target values based on the
+   traces `t` and the model.
 
 3. **Attacks**: This modules contains attack methodologies. It essentially uses
    the probabilities from the `modeling` step in order and recombine them to
-   recover a key. The module `SASCAGraph` represent how the probabilities on
-   variables can be recombined. It can be used to model a standard template
-   attack on unprotected implementations. The same module can also be used to
-   run advanced SASCA attacks for any circuit that contains boolean operations
-   and table lookups.
+   recover a key. The module `SASCAGraph` is an extension of Divide & Conquer attacks that leverage `soft analytical side-channel attacks`. It allows to define `PROPERTY` that link intermediate varibles within an implementation.
+   By providing the `SASCAGraph` with the distributions of these variables, it propagates information on all the variables (e.g. secret keys).
 
 4. **PostProcessing**: Once the attack has been performed, the postprocessing
-   allows to evaluation the efficiency of the attack. Namely by estimating the
+   allows to evaluate the efficiency of the attack. Namely by estimating the
    rank of the correct key with `rank_accuracy`, it allows to quantify what is
    the remaining computational power that is needed by the adversary to recover
    the correct key.
 
-For details about of the usage of SCALE in a complete analysis, please visit
-the examples against protected and unprotected in  `examples <examples/>`.  We
-note that the modules of SCALE can easily be replaced by other libraries. As an
-example, the `modeling` methods have an interface similar to `scikit-learn`.
-The modeling could also be done with any other tools (e.g., deep learning) as
-soon as the modeling is able to return probabilities.
+Full example of SCALE is available `here <examples/aes_simulation/>`_. 
 
 About us
 ========
@@ -136,6 +122,7 @@ contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 
 License
 =======
+TODO 
 
 Publications
 ============
