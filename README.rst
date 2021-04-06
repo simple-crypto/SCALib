@@ -5,7 +5,7 @@ contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
-SCALE contains various features for side-channel analysis. Please read :ref:`the SCALE workflow<SCALE workflow>` for more details:
+SCALE contains various features for side-channel analysis. Please read SCALE-workflow_ for more details:
 
 - Metrics:
 
@@ -73,8 +73,9 @@ For a full running example, please visit `this example <examples/aes_simulation/
      k_distri = graph.get_distribution("k")
      key_guess = np.argmax(k_distri[0,:])
 
+.. _SCALE-workflow::
 
-SCALE workflow
+SCALE-workflow
 ==============
 
 The current version of SCALE contains modules for all the necessary steps for a
