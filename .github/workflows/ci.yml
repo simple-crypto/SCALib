@@ -61,17 +61,18 @@ jobs:
 #       if: runner.os == 'Windows'
 #       run: choco install boost-msvc-14.2
 
-      - uses: actions/checkout@v1
       - uses: actions/cache@v2
         with:
             path: ./vcpkg
             key: vcpkg-openblas
       - name: Install vcpkg
+        if: runner.os == 'Windows'
         run: |
             git clone https://github.com/Microsoft/vcpkg.git --depth 1
             cd vcpkg
             ./bootstrap-vcpkg.bat
       - name: Install static OpenBLAS by vcpkg
+        if: runner.os == 'Windows'
         run: |
             ./vcpkg/vcpkg.exe install openblas:x64-windows-static
 
