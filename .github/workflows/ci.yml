@@ -91,6 +91,37 @@ jobs:
         run: >
             conda info
 
+      - name: Compile and install OpenBLAS (1.a)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            echo a && echo b
+
+      - name: Compile and install OpenBLAS (1.b)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            echo a &&
+            echo b
+
+      - name: Compile and install OpenBLAS (1.0)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            echo %HOME%
+
+      - name: Compile and install OpenBLAS (1.1)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            cd %HOME%
+
+      - name: Compile and install OpenBLAS (1.2)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            cd %HOME%/openblas/build
+
       - name: Compile and install OpenBLAS (1)
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
         shell: cmd /C CALL {0}
