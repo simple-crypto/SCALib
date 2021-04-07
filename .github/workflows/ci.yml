@@ -63,10 +63,10 @@ jobs:
                   cmake --build . --config Release
                   cmake --install . --prefix %GITHUB_WORKSPACE%\openblas-inst -v
             - name: Upload OpenBLAS build
-                uses: actions/upload-artifact@v2
-                with:
-                    name: openblas-windows-2019
-                    path: openblas-inst
+              uses: actions/upload-artifact@v2
+              with:
+                  name: openblas-windows-2019
+                  path: openblas-inst
 
     build_wheels:
         name: Build wheels on ${{ matrix.os }}  - ${{ matrix.vers }}
@@ -105,9 +105,9 @@ jobs:
 
             - name: Download OpenBLAS build
               if: ${{ runner.os == 'Windows' }}
-                uses: actions/download-artifact@v2
-                with:
-                    name: openblas-windows-2019
+              uses: actions/download-artifact@v2
+              with:
+                  name: openblas-windows-2019
 
             - name: Set up QEMU
               if: runner.os == 'Linux'
