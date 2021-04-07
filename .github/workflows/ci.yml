@@ -48,7 +48,6 @@ jobs:
       # I don't know how to make doctring tests work with only one command
       CIBW_TEST_COMMAND: cd {project}; pytest tests && pytest --pyargs scale
       CIBW_TEST_EXTRAS: test
-      OPENBLAS_BUILD_DIR: ${{ env.GITHUB_WORKSPACE}}\openblas\OpenBLAS-0.3.14\build
 
     steps:
       - uses: actions/checkout@v2
@@ -121,7 +120,7 @@ jobs:
         run: >
             echo %GITHUB_WORKSPACE% &&
             echo openblas_build_dir &&
-            echo %OPENBLAS_BUILD_DIR%
+            echo %GITHUB_WORKSPACE%\openblas\OpenBLAS-0.3.14\build
 
       - name: Compile and install OpenBLAS (1.1)
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
@@ -146,21 +145,21 @@ jobs:
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
         shell: cmd /C CALL {0}
         run: >
-            cd %OPENBLAS_BUILD_DIR% && dir
+            cd %GITHUB_WORKSPACE%\openblas\OpenBLAS-0.3.14\build && dir
 
       - name: Compile and install OpenBLAS (1)
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
         shell: cmd /C CALL {0}
         run: >
             conda info &&
-            cd %OPENBLAS_BUILD_DIR%
+            cd %GITHUB_WORKSPACE%\openblas\OpenBLAS-0.3.14\build
 
       - name: Compile and install OpenBLAS (2)
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
         shell: cmd /C CALL {0}
         run: >
             conda info &&
-            cd %OPENBLAS_BUILD_DIR% &&
+            cd %GITHUB_WORKSPACE%\openblas\OpenBLAS-0.3.14\build &&
             "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
 
       - name: Compile and install OpenBLAS (3)
@@ -168,7 +167,7 @@ jobs:
         shell: cmd /C CALL {0}
         run: >
             conda info &&
-            cd %OPENBLAS_BUILD_DIR% &&
+            cd %GITHUB_WORKSPACE%\openblas\OpenBLAS-0.3.14\build &&
             "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat" &&
             set "LIB=%CONDA_PREFIX%/Library/lib;%LIB%"
 
@@ -177,7 +176,7 @@ jobs:
         shell: cmd /C CALL {0}
         run: >
             conda info &&
-            cd %OPENBLAS_BUILD_DIR% &&
+            cd %GITHUB_WORKSPACE%\openblas\OpenBLAS-0.3.14\build &&
             "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat" &&
             set "LIB=%CONDA_PREFIX%/Library/lib;%LIB%" &&
             set "CPATH=%CONDA_PREFIX%/Library/include;%CPATH%"
@@ -187,7 +186,7 @@ jobs:
         shell: cmd /C CALL {0}
         run: >
             conda info &&
-            cd %OPENBLAS_BUILD_DIR% &&
+            cd %GITHUB_WORKSPACE%\openblas\OpenBLAS-0.3.14\build &&
             "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat" &&
             set "LIB=%CONDA_PREFIX%/Library/lib;%LIB%" &&
             set "CPATH=%CONDA_PREFIX%/Library/include;%CPATH%" &&
