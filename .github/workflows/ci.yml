@@ -192,7 +192,8 @@ jobs:
       - name: Compile and install OpenBLAS
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
         shell: cmd /C CALL {0}
-        run: %GITHUB_WORKSPACE%\build_openblas.bat
+        run: >
+            %GITHUB_WORKSPACE%\build_openblas.bat
 
       - name: Set up QEMU
         if: runner.os == 'Linux'
