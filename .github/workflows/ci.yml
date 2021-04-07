@@ -67,8 +67,9 @@ jobs:
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
         uses: conda-incubator/setup-miniconda@v2
         with:
-            auto-update-conda: true
+            miniconda-version: "latest"
             channels: conda-forge
+            activate-environment: buildenv
       - name: Install openblas build dependencies (with conda)
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
         shell: cmd /C CALL {0}
@@ -84,10 +85,51 @@ jobs:
             tar xzf OpenBLAS-0.3.14.tar.gz
             cd OpenBLAS-0.3.14
             mkdir build
+      - name: Compile and install OpenBLAS (0)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            conda info
+
+      - name: Compile and install OpenBLAS (1)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            conda info &&
+            cd %HOME%/openblas/build
+
+      - name: Compile and install OpenBLAS (2)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            conda info &&
+            cd %HOME%/openblas/build &&
+            "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
+
+      - name: Compile and install OpenBLAS (3)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            conda info &&
+            cd %HOME%/openblas/build &&
+            "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat" &&
+            set "LIB=%CONDA_PREFIX%/Library/lib;%LIB%"
+
+      - name: Compile and install OpenBLAS (4)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            conda info &&
+            cd %HOME%/openblas/build &&
+            "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat" &&
+            set "LIB=%CONDA_PREFIX%/Library/lib;%LIB%" &&
+            set "CPATH=%CONDA_PREFIX%/Library/include;%CPATH%"
+
       - name: Compile and install OpenBLAS
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
         shell: cmd /C CALL {0}
-        run: >-
+        run: >
+            conda info &&
             cd %HOME%/openblas/build &&
             "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat" &&
             set "LIB=%CONDA_PREFIX%/Library/lib;%LIB%" &&
