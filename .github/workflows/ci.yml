@@ -132,7 +132,7 @@ jobs:
               uses: joerick/cibuildwheel@v1.10.0
               env:
                   CIBW_ARCHS_WINDOWS: ${{ matrix.vers }}
-                  SCALE_OPENBLAS_LIB_DIR: ${{ env.GITHUB_WORKSPACE}}/openblas-inst/lib
+                  SCALE_OPENBLAS_LIB_DIR: ${{ github.workspace }}/openblas-inst/lib
 
             - uses: actions/upload-artifact@v2
               with:
@@ -163,7 +163,7 @@ jobs:
                   path: dist/*.tar.gz
 
     release:
-        needs: [build_wheels, build_sdist]
+        needs: [build_wheels, build_sdist, test]
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         runs-on: ubuntu-latest
         steps:
