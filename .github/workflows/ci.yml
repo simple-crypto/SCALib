@@ -124,7 +124,14 @@ jobs:
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
         shell: cmd /C CALL {0}
         run: >
-            cd %GITHUB_WORKSPACE%
+            cd %GITHUB_WORKSPACE% && pwd && dir
+
+      - name: Compile and install OpenBLAS (1.1a)
+        if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
+        shell: cmd /C CALL {0}
+        run: >
+            cd %GITHUB_WORKSPACE%\openblas && pwd && dir
+
 
       - name: Compile and install OpenBLAS (1.2)
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}

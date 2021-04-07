@@ -53,7 +53,8 @@ fn main() {
         let openblas_lib_env_name = "SCALE_OPENBLAS_LIB";
         let openblas_lib = std::env::var_os(openblas_lib_env_name)
             .expect(&format!("{} not defined.", openblas_lib_env_name));
-        if !std::path::Path::new(&openblas_lib).exists() {
+        let path = std::path::Path::new(&openblas_lib);
+        if !path.exists() {
             panic!(
                 "No file at {} (given by {})",
                 openblas_lib.to_string_lossy(),
@@ -61,8 +62,14 @@ fn main() {
             );
         }
         println!(
+            "cargo:rustc-link-search=native={}",
+            path.file_name()
+                .expect("Missing file name.")
+                .to_string_lossy()
+        );
+        println!(
             "cargo:rustc-link-lib=static={}",
-            openblas_lib.to_string_lossy()
+            path.parent().expect("Missing directory.").to_string_lossy()
         );
         println!("cargo:rerun-if-env-changed={}", openblas_lib_env_name);
         println!("cargo:rerun-if-changed={}", openblas_lib_env_name);
