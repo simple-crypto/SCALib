@@ -50,7 +50,7 @@ fn main() {
         // 8. The location of the OpenBLAS library is
         //    SCALE_OPENBLAS_LIB=%OPENBLAS_INSTALL_DIR%\lib\openblas.lib
         //
-        let openblas_lib_env_name = "SCALE_OPENBLAS_LIB";
+        let openblas_lib_env_name = "SCALE_OPENBLAS_LIB_DIR";
         let openblas_lib = std::env::var_os(openblas_lib_env_name)
             .expect(&format!("{} not defined.", openblas_lib_env_name));
         let path = std::path::Path::new(&openblas_lib);
@@ -61,16 +61,8 @@ fn main() {
                 openblas_lib_env_name
             );
         }
-        println!(
-            "cargo:rustc-link-search=native={}",
-            path.parent().expect("Missing directory.").to_string_lossy()
-        );
-        println!(
-            "cargo:rustc-link-link=static={}",
-            path.file_name()
-                .expect("Missing file name.")
-                .to_string_lossy()
-        );
+        println!("cargo:rustc-link-search=native={}", path.to_string_lossy());
+        println!("cargo:rustc-link-link=static=openblas",);
         println!("cargo:rerun-if-env-changed={}", openblas_lib_env_name);
         println!("cargo:rerun-if-changed={}", openblas_lib_env_name);
     } else {
