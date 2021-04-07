@@ -54,6 +54,8 @@ fn main() {
         let openblas_lib = std::env::var_os(openblas_lib_env_name)
             .expect(&format!("{} not defined.", openblas_lib_env_name));
         let path = std::path::Path::new(&openblas_lib);
+        let mut path_lib = path.to_owned();
+        path_lib.push("openblas.lib");
         if !path.exists() {
             panic!(
                 "No file at {} (given by {})",
@@ -62,9 +64,9 @@ fn main() {
             );
         }
         println!("cargo:rustc-link-search=native={}", path.to_string_lossy());
-        println!("cargo:rustc-link-link=static=openblas",);
+        println!("cargo:rustc-link-lib=static=openblas");
         println!("cargo:rerun-if-env-changed={}", openblas_lib_env_name);
-        println!("cargo:rerun-if-changed={}", openblas_lib_env_name);
+        println!("cargo:rerun-if-changed={}", path_lib.to_string_lossy());
     } else {
         // Do not re-run.
         println!("cargo:rerun-if-changed=build.rs");
