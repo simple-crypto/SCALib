@@ -21,13 +21,13 @@ jobs:
               run: tox -e test
   
     build_openblas_windows:
-        name: Build OpenBLAS on ${{ matrix.os }}  - ${{ matrix.vers }}
+        name: Build OpenBLAS on Windows
         runs-on: windows-2019
         steps:
             - uses: actions/cache@v2
               id: cache-openblas
               with:
-                  path: ${{ env.GITHUB_WORKSPACE }}/openblas-inst
+                  path: ${{ github.workspace }}/openblas-inst
                   key: openblas-0.3.14-v0
             - name: Enable miniconda
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
