@@ -63,13 +63,13 @@ fn main() {
         }
         println!(
             "cargo:rustc-link-search=native={}",
+            path.parent().expect("Missing directory.").to_string_lossy()
+        );
+        println!(
+            "cargo:rustc-link-link=static={}",
             path.file_name()
                 .expect("Missing file name.")
                 .to_string_lossy()
-        );
-        println!(
-            "cargo:rustc-link-lib=static={}",
-            path.parent().expect("Missing directory.").to_string_lossy()
         );
         println!("cargo:rerun-if-env-changed={}", openblas_lib_env_name);
         println!("cargo:rerun-if-changed={}", openblas_lib_env_name);
