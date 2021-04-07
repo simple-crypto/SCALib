@@ -79,12 +79,22 @@ jobs:
         shell: bash
         run: |
             cd $HOME
+            pwd
+            ls
             mkdir openblas
+            ls
             cd openblas
+            pwd
+            ls
             curl -L -O https://github.com/xianyi/OpenBLAS/releases/download/v0.3.14/OpenBLAS-0.3.14.tar.gz
+            ls
             tar xzf OpenBLAS-0.3.14.tar.gz
+            ls
             cd OpenBLAS-0.3.14
+            pwd
+            ls
             mkdir build
+            ls
       - name: Compile and install OpenBLAS (0)
         if: ${{ runner.os == 'Windows' && steps.cache-openblas.outputs.cache-hit != 'true' }}
         shell: cmd /C CALL {0}
