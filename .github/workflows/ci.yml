@@ -28,8 +28,8 @@ jobs:
               id: cache-openblas
               with:
                   path: |
-                      ${{ github.workspace }}/openblas/inst
-                  key: openblas-0.3.14-WORKSPACE:${{ github.workspace }}-v1
+                      openblas/inst
+                  key: openblas-0.3.14-v1
             - name: Download OpenBLAS source
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: bash
@@ -118,7 +118,7 @@ jobs:
               uses: actions/download-artifact@v2
               with:
                   name: openblas-windows-2019
-                  path: openblas
+                  path: openblas/inst
 
             - name: Test download openblas
               if: ${{ runner.os == 'Windows' }}
