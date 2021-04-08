@@ -3,6 +3,7 @@
 #include setup.cfg
 #include LICENSE.rst
 #include pyproject.toml
+exclude src/scale/_scale_ext.abi3.so
 
 recursive-include src/scale_ext/ranklib *
 recursive-include src/scale_ext/scale *
