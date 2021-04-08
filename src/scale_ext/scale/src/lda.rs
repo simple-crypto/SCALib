@@ -175,11 +175,13 @@ impl LDA {
             index.reverse();
             println!("projection: {:?}", projection);
             println!("index: {:?}", index);
+            println!("evecs: {:?}", evecs);
             println!("Before slice 2");
             index
                 .iter()
                 .zip(projection.axis_iter_mut(Axis(0)))
                 .for_each(|((i, _), mut proj)| {
+                    println!("i: {}", i);
                     &evecs.slice(s![.., *i]);
                 });
             println!("After slice 2");
