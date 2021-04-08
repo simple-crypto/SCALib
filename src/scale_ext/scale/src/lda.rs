@@ -173,14 +173,24 @@ impl LDA {
             let evecs = sb;
             index.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
             index.reverse();
+            println!("projection: {:?}", projection);
+            println!("index: {:?}", index);
             println!("Before slice 2");
+            index
+                .iter()
+                .zip(projection.axis_iter_mut(Axis(0)))
+                .for_each(|((i, _), mut proj)| {
+                    &evecs.slice(s![.., *i]);
+                });
+            println!("After slice 2");
+            println!("Before slice 3");
             index
                 .iter()
                 .zip(projection.axis_iter_mut(Axis(0)))
                 .for_each(|((i, _), mut proj)| {
                     proj.assign(&evecs.slice(s![.., *i]));
                 });
-            println!("After slice 2");
+            println!("After slice 3");
 
             // ---- Step 2
             // means per class within the subspace by projecting means_ns
