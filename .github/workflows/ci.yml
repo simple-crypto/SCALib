@@ -29,15 +29,7 @@ jobs:
               with:
                   path: |
                       ${{ github.workspace }}/openblas/inst
-                      ${{ github.workspace }}/openblas/flib
                   key: openblas-0.3.14-WORKSPACE:${{ github.workspace }}-v1
-            - name: Enable miniconda
-              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
-              uses: conda-incubator/setup-miniconda@v2
-              with:
-                  miniconda-version: "latest"
-                  channels: conda-forge
-                  activate-environment: buildenv
             - name: Download OpenBLAS source
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: bash
@@ -48,7 +40,13 @@ jobs:
                   curl -L -O https://github.com/xianyi/OpenBLAS/releases/download/v0.3.14/OpenBLAS-0.3.14.tar.gz
                   tar xzf OpenBLAS-0.3.14.tar.gz
                   mkdir OpenBLAS-0.3.14/build
-                  mkdir flib
+            - name: Enable miniconda
+              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
+              uses: conda-incubator/setup-miniconda@v2
+              with:
+                  miniconda-version: "latest"
+                  channels: conda-forge
+                  activate-environment: buildenv
             - name: Install openblas build dependencies (with conda)
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
@@ -57,24 +55,8 @@ jobs:
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
               run: |
-                  copy %CONDA_PREFIX%\Library\lib\flangmain.lib %GITHUB_WORKSPACE%\openblas\flib\
-                  copy %CONDA_PREFIX%\Library\lib\libflang.lib %GITHUB_WORKSPACE%\openblas\flib\
-                  copy %CONDA_PREFIX%\Library\lib\libflangrti.lib %GITHUB_WORKSPACE%\openblas\flib\
-                  copy %CONDA_PREFIX%\Library\lib\libompstub.lib %GITHUB_WORKSPACE%\openblas\flib\
-                  copy %CONDA_PREFIX%\Library\lib\libpgmath.lib %GITHUB_WORKSPACE%\openblas\flib\
-                  set "LIB="
-                  echo "lib1"
-                  echo %LIB%
                   cd %GITHUB_WORKSPACE%\openblas\OpenBLAS-0.3.14\build
                   call "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
-                  echo "lib2"
-                  echo %LIB%
-                  set "LIB=%GITHUB_WORKSPACE%\openblas\flib;%LIB%"
-                  echo "lib3"
-                  echo %LIB%
-                  set "CPATH=%CONDA_PREFIX%/Library/include;%CPATH%"
-                  echo "SET"
-                  SET
                   cmake .. -G "Ninja" -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER=clang-cl -DCMAKE_Fortran_COMPILER=flang -DBUILD_WITHOUT_LAPACK=no -DNOFORTRAN=0 -DDYNAMIC_ARCH=ON -DCMAKE_BUILD_TYPE=Release -DUSE_THREAD=ON -DNUM_THREADS=128 -DUSE_OPENMP=0 -DFCOMMON_OPT=-static-flang-libs
                   cmake --build . --config Release
                   cmake --install . --prefix %GITHUB_WORKSPACE%\openblas\inst -v
@@ -84,7 +66,6 @@ jobs:
                   name: openblas-windows-2019
                   path: |
                       openblas/inst
-                      openblas/flib
 
     build_wheels:
         name: Build wheels on ${{ matrix.os }}  - ${{ matrix.vers }}
@@ -121,6 +102,17 @@ jobs:
               with:
                   python-version: "3.6"
 
+            - name: Enable miniconda
+              if: ${{ runner.os == 'Windows' }}
+              uses: conda-incubator/setup-miniconda@v2
+              with:
+                  miniconda-version: "latest"
+                  channels: conda-forge
+                  activate-environment: buildenv
+            - name: Install openblas build dependencies (with conda)
+              if: ${{ runner.os == 'Windows' }}
+              shell: cmd /C CALL {0}
+              run: conda install -y flang libflang
             - name: Download OpenBLAS build
               if: ${{ runner.os == 'Windows' }}
               uses: actions/download-artifact@v2
