@@ -51,6 +51,7 @@ impl LDA {
     /// x: traces with shape (n,ns)
     /// y: random value realization (n,)
     fn fit(&mut self, py: Python, x: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
+        panic!("Stop here!");
         let x = x.as_array();
         let y = y.as_array();
         let nc = self.nc;
