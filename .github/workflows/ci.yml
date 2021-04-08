@@ -161,7 +161,7 @@ jobs:
               uses: joerick/cibuildwheel@v1.10.0
               env:
                   CIBW_ARCHS_WINDOWS: ${{ matrix.vers }}
-                  SCALE_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas-inst\lib
+                  SCALE_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas\inst\lib
 
             - uses: actions/upload-artifact@v2
               with:
