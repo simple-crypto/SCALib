@@ -51,7 +51,6 @@ impl LDA {
     /// x: traces with shape (n,ns)
     /// y: random value realization (n,)
     fn fit(&mut self, py: Python, x: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
-        panic!("Stop here!");
         let x = x.as_array();
         let y = y.as_array();
         let nc = self.nc;
@@ -116,6 +115,7 @@ impl LDA {
             // transpose for openblas reversed_axes is to use fortran layout to easily use lapack
             // for the next step
             let mut sw = Array2::<f64>::zeros((ns, ns)).reversed_axes();
+            println!("Before slice 1");
             x_f64
                 .outer_iter_mut()
                 .into_par_iter()
@@ -124,6 +124,7 @@ impl LDA {
                     let y = y.first().unwrap();
                     x -= &means_ns.slice(s![*y as usize, ..]);
                 });
+            println!("After slice 1");
             Zip::from(&mut x_f64_t)
                 .and(&x_f64.t())
                 .par_apply(|x, y| *x = *y);
@@ -172,12 +173,14 @@ impl LDA {
             let evecs = sb;
             index.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
             index.reverse();
+            println!("Before slice 2");
             index
                 .iter()
                 .zip(projection.axis_iter_mut(Axis(0)))
                 .for_each(|((i, _), mut proj)| {
                     proj.assign(&evecs.slice(s![.., *i]));
                 });
+            println!("After slice 2");
 
             // ---- Step 2
             // means per class within the subspace by projecting means_ns
@@ -211,9 +214,11 @@ impl LDA {
 
             // corresponding eigen vectors
             let mut u_s = Array2::<f64>::zeros((u.shape()[0], pack.len()));
+            println!("Before slice 3");
             pack.iter()
                 .zip(u_s.axis_iter_mut(Axis(1)))
                 .for_each(|((i, _), mut u_s)| u_s.assign(&u.slice(s![.., *i])));
+            println!("After slice 3");
 
             //  psd = eigen_vec * (1/sqrt(eigen_val))
             let psigma_diag: Array1<f64> =
