@@ -108,6 +108,7 @@ jobs:
               uses: actions/download-artifact@v2
               with:
                   name: openblas-windows-2019
+                  path: openblas-inst
 
             - name: Test download openblas bash
               if: ${{ runner.os == 'Windows' }}
