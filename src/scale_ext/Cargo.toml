@@ -12,3 +12,5 @@ numpy = { git = 'https://github.com/cassiersg/rust-numpy', branch = 'upgrade-nda
 ndarray-stats = { git = 'https://github.com/cassiersg/ndarray-stats', branch = 'ndarray-0.15' }
 ndarray-linalg = { git = 'https://github.com/cassiersg/ndarray-linalg', branch = 'upgrade-ndarray' }
 
+[profile.release]
+debug = true
