@@ -109,6 +109,23 @@ jobs:
               with:
                   name: openblas-windows-2019
 
+            - name: Test download openblas
+              if: ${{ runner.os == 'Windows' }}
+              run: |
+                  pwd
+                  ls
+                  ls openblas-inst
+
+            - name: Test download openblas 2
+              if: ${{ runner.os == 'Windows' }}
+              shell: cmd
+              run: |
+                  echo %SCALE_OPENBLAS_LIB_DIR%
+                  dir %SCALE_OPENBLAS_LIB_DIR%
+              env:
+                  SCALE_OPENBLAS_LIB_DIR: ${{ github.workspace }}/openblas-inst/lib
+
+
             - name: Set up QEMU
               if: runner.os == 'Linux'
               uses: docker/setup-qemu-action@v1

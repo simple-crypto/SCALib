@@ -58,8 +58,8 @@ fn main() {
         path_lib.push("openblas.lib");
         if !path.exists() {
             panic!(
-                "No file at {} (given by {})",
-                openblas_lib.to_string_lossy(),
+                "No file at {} (computed from {})",
+                path_lib.to_string_lossy(),
                 openblas_lib_env_name
             );
         }
