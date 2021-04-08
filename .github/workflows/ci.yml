@@ -109,6 +109,14 @@ jobs:
               with:
                   name: openblas-windows-2019
 
+            - name: Test download openblas bash
+              if: ${{ runner.os == 'Windows' }}
+              shell: bash
+              run: |
+                  pwd
+                  ls
+                  ls openblas-inst
+
             - name: Test download openblas
               if: ${{ runner.os == 'Windows' }}
               run: |
