@@ -89,7 +89,7 @@ jobs:
             SCCACHE_VERSION: 0.2.13
             CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
             CIBW_BUILD_VERBOSITY: "1" # Make some more noise so that travis doesn't stall
-            CIBW_ENVIRONMENT: 'PATH="$PATH:$HOME/.cargo/bin"'
+            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=1 PATH="$PATH:$HOME/.cargo/bin"'
             CIBW_BUILD: "cp36-*"
             CIBW_SKIP: "*-win32 *_i686 *_ppc64le *_s390x" 
             # I don't know how to make both normal and doctring tests work with only one command
