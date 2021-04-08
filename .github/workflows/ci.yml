@@ -62,13 +62,14 @@ jobs:
                   copy %CONDA_PREFIX%\Library\lib\libflangrti.lib %GITHUB_WORKSPACE%\openblas\flib\
                   copy %CONDA_PREFIX%\Library\lib\libompstub.lib %GITHUB_WORKSPACE%\openblas\flib\
                   copy %CONDA_PREFIX%\Library\lib\libpgmath.lib %GITHUB_WORKSPACE%\openblas\flib\
+                  set "LIB="
                   echo "lib1"
                   echo %LIB%
                   cd %GITHUB_WORKSPACE%\openblas\OpenBLAS-0.3.14\build
                   call "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
                   echo "lib2"
                   echo %LIB%
-                  set "LIB=%GITHUB_WORKSPACE%/openblas/flib;%CONDA_PREFIX%/Library/lib;%LIB%"
+                  set "LIB=%GITHUB_WORKSPACE%\openblas\flib;%LIB%"
                   echo "lib3"
                   echo %LIB%
                   set "CPATH=%CONDA_PREFIX%/Library/include;%CPATH%"
