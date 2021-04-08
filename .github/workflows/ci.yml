@@ -57,7 +57,7 @@ jobs:
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
               run: |
-                  call %GITHUB_WORKSPACE%\build_openblas.bat
+                  call "%GITHUB_WORKSPACE%/build_openblas.bat"
             - name: Upload OpenBLAS build
               uses: actions/upload-artifact@v2
               with:
