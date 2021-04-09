@@ -113,11 +113,18 @@ jobs:
               if: ${{ runner.os == 'Windows' }}
               shell: cmd /C CALL {0}
               run: conda install -y flang libflang
+
             - name: Find conda installed libs (1)
               if: ${{ runner.os == 'Windows' }}
               shell: bash -l {0}
               run: |
                   echo $CONDA_PREFIX $LIB
+                  echo 1
+                  ls $CONDA_PREFIX
+                  echo 2
+                  ls $CONDA_PREFIX/Library
+                  echo 3
+                  ls $CONDA_PREFIX/Library/lib
             - name: Find conda installed libs (2)
               if: ${{ runner.os == 'Windows' }}
               shell: cmd /C CALL {0}
@@ -129,6 +136,16 @@ jobs:
                   dir %CONDA_PREFIX%\Library
                   dir %CONDA_PREFIX%\Library\lib
                   dir C:\Miniconda3\envs\buildenv\Library\lib
+            - name: Clean conda libs
+              if: ${{ runner.os == 'Windows' }}
+              shell: bash -l {0}
+              run: |
+                  cd $CONDA_PREFIX/Library
+                  mkdir lib2
+                  cp lib/lib*.lib lib2/
+                  cp lib/flang*.lib lib2/
+                  rm -rf lib
+                  mv lib2 lib
             - name: Download OpenBLAS build
               if: ${{ runner.os == 'Windows' }}
               uses: actions/download-artifact@v2
