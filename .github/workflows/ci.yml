@@ -108,9 +108,8 @@ jobs:
               id: cache-flang-libs
               with:
                   path: |
-                      C:/Miniconda3/envs/buildenv/Library/lib/lib*.lib
-                      C:/Miniconda3/envs/buildenv/Library/lib/flang*.lib
-                  key: cache-flang-libs-v0
+                      cache_flanglib
+                  key: cache-flang-libs-v1
             - name: Enable miniconda
               if: ${{ runner.os == 'Windows' && steps.cache-flang-libs.outputs.cache-hit != 'true' }}
               uses: conda-incubator/setup-miniconda@v2
@@ -122,39 +121,28 @@ jobs:
               if: ${{ runner.os == 'Windows' && steps.cache-flang-libs.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
               run: conda install -y flang libflang
-
-            - name: Find conda installed libs (1)
-              if: ${{ runner.os == 'Windows' }}
-              shell: bash -l {0}
-              run: |
-                  echo $CONDA_PREFIX $LIB
-                  echo 1
-                  ls $CONDA_PREFIX
-                  echo 2
-                  ls $CONDA_PREFIX/Library
-                  echo 3
-                  ls $CONDA_PREFIX/Library/lib
-            - name: Find conda installed libs (2)
-              if: ${{ runner.os == 'Windows' }}
-              shell: cmd /C CALL {0}
-              run: |
-                  echo %CONDA_PREFIX%
-                  echo %LIB%
-                  dir C:\
-                  dir %CONDA_PREFIX%
-                  dir %CONDA_PREFIX%\Library
-                  dir %CONDA_PREFIX%\Library\lib
-                  dir C:\Miniconda3\envs\buildenv\Library\lib
             - name: Clean conda libs
               if: ${{ runner.os == 'Windows' && steps.cache-flang-libs.outputs.cache-hit != 'true' }}
               shell: bash -l {0}
               run: |
-                  cd $CONDA_PREFIX/Library
-                  mkdir lib2
-                  cp lib/lib*.lib lib2/
-                  cp lib/flang*.lib lib2/
-                  rm -rf lib
-                  mv lib2 lib
+                  mkdir -p cache_flanglib
+                  cp C:/Miniconda3/envs/buildenv/Library/lib/lib*.lib cache_flanglib/
+                  cp C:/Miniconda3/envs/buildenv/Library/lib/flang*.lib cache_flanglib/
+                  rm -rf C:/Miniconda3/envs/buildenv/Library/lib
+                  echo "cache_flanglib"
+                  ls -R cache_flanglib
+                  echo "conda lib"
+                  ls C:/Miniconda3/envs/buildenv/Library
+            - name: Restore conda libs
+              if: ${{ runner.os == 'Windows' }}
+              shell: bash
+              run: |
+                  mkdir -p C:/Miniconda3/envs/buildenv/Library/lib
+                  cp cache_flanglib/*.lib C:/Miniconda3/envs/buildenv/Library/lib/
+                  echo "cache_flanglib"
+                  ls -R cache_flanglib
+                  echo "conda lib"
+                  ls -R C:/Miniconda3/envs/buildenv/Library/lib
             - name: Download OpenBLAS build
               if: ${{ runner.os == 'Windows' }}
               uses: actions/download-artifact@v2
