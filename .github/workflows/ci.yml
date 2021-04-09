@@ -102,15 +102,22 @@ jobs:
               with:
                   python-version: "3.6"
 
+            - uses: actions/cache@v2
+              id: cache-flang-libs
+              with:
+                  path: |
+                      C:/Miniconda3/envs/buildenv/Library/lib/lib*.lib
+                      C:/Miniconda3/envs/buildenv/Library/lib/flang*.lib
+                  key: cache-flang-libs-v0
             - name: Enable miniconda
-              if: ${{ runner.os == 'Windows' }}
+              if: ${{ runner.os == 'Windows' steps.cache-flang-libs.outputs.cache-hit != 'true' }}
               uses: conda-incubator/setup-miniconda@v2
               with:
                   miniconda-version: "latest"
                   channels: conda-forge
                   activate-environment: buildenv
             - name: Install openblas build dependencies (with conda)
-              if: ${{ runner.os == 'Windows' }}
+              if: ${{ runner.os == 'Windows' steps.cache-flang-libs.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
               run: conda install -y flang libflang
 
@@ -137,7 +144,7 @@ jobs:
                   dir %CONDA_PREFIX%\Library\lib
                   dir C:\Miniconda3\envs\buildenv\Library\lib
             - name: Clean conda libs
-              if: ${{ runner.os == 'Windows' }}
+              if: ${{ runner.os == 'Windows' steps.cache-flang-libs.outputs.cache-hit != 'true' }}
               shell: bash -l {0}
               run: |
                   cd $CONDA_PREFIX/Library
@@ -189,12 +196,26 @@ jobs:
               env:
                   CIBW_ARCHS_MACOS: ${{ matrix.vers }}
 
+            - uses: actions/cache@v2
+              if: runner.os == 'Windows'
+              id: cache-windows-cargo_target_dir
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      ${{ github.workspace }}/cargo_build
+                  key: ${{ runner.os }}-cargo-${{ hashFiles('src/scale_ext/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-${{ hashFiles('src/scale_ext/Cargo.lock') }}
+                      ${{ runner.os }}-cargo-
+
             - name: wheels Windows ${{ matrix.vers }}
               if: runner.os == 'Windows'
               uses: joerick/cibuildwheel@v1.10.0
               env:
                   CIBW_ARCHS_WINDOWS: ${{ matrix.vers }}
                   SCALE_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas\inst\lib
+                  CARGO_TARGET_DIR: ${{ github.workspace }}\cargo_build
 
             - uses: actions/upload-artifact@v2
               with:
