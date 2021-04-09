@@ -112,7 +112,7 @@ jobs:
             - name: Install openblas build dependencies (with conda)
               if: ${{ runner.os == 'Windows' }}
               shell: cmd /C CALL {0}
-              run: conda install -y libflang
+              run: conda install -y flang libflang
             - name: Find conda installed libs (1)
               if: ${{ runner.os == 'Windows' }}
               shell: bash -l {0}
