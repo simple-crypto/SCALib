@@ -614,6 +614,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "lapacke"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a106623f23efdcf6c364d4a984811466971d1fe6e7b711ab7adb98abfc6d65f8"
+dependencies = [
+ "lapacke-sys",
+ "libc",
+ "num-complex 0.3.1",
+]
+
+[[package]]
+name = "lapacke-sys"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f7d0817c6f4a6029f3b153de01d6498dcf9df659a7536c58bd8df5cd3ccaa6e"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "lax"
 version = "0.1.0"
 source = "git+https://github.com/cassiersg/ndarray-linalg?branch=upgrade-ndarray#06af362c1bc779672f11b9aeeaa511ab047655bb"
@@ -1262,7 +1282,7 @@ dependencies = [
  "criterion",
  "indicatif",
  "itertools 0.10.0",
- "lapack",
+ "lapacke",
  "ndarray",
  "ndarray-linalg",
  "ndarray-stats",

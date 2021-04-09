@@ -73,8 +73,6 @@ For a full running example, please visit `this example <examples/aes_simulation/
      k_distri = graph.get_distribution("k")
      key_guess = np.argmax(k_distri[0,:])
 
-.. _SCAFFE-workflow::
-
 SCAFFE-workflow
 ==============
 
