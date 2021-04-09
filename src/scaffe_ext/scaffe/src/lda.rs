@@ -6,9 +6,8 @@
 ///!
 ///! Probability estimation for each of the classes based on leakage traces
 ///! can be derived from the LDA by leveraging the previous templates.
-use lapack::*;
 use ndarray::{s, Array1, Array2, Axis, Zip};
-use ndarray_linalg::*;
+use ndarray_linalg::Eigh;
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 use rayon::prelude::*;
@@ -114,7 +113,7 @@ impl LDA {
             // traces according to the class. x_f64 = x - means_ns[y]. It uses the same trick with
             // transpose for openblas reversed_axes is to use fortran layout to easily use lapack
             // for the next step
-            let mut sw = Array2::<f64>::zeros((ns, ns)).reversed_axes();
+            let mut sw = Array2::<f64>::zeros((ns, ns));
             x_f64
                 .outer_iter_mut()
                 .into_par_iter()
@@ -129,7 +128,7 @@ impl LDA {
             sw.assign(&(x_f64_t.dot(&x_f64) / (n as f64)));
 
             // sb = st - sw
-            let mut sb = Array2::<f64>::zeros((ns, ns)).reversed_axes();
+            let mut sb = Array2::<f64>::zeros((ns, ns));
             Zip::from(&mut sb)
                 .and(&st)
                 .and(&sw)
@@ -141,27 +140,18 @@ impl LDA {
             // https://www.netlib.org/lapack/explore-html/d2/d8a/group__double_s_yeigen_ga912ae48bb1650b2c7174807ffa5456ca.html
             let mut evals = vec![0.0; ns as usize];
             unsafe {
-                let mut i: i32 = 0;
-                let itype = vec![1];
-                let nwork = 1 + 6 * ns + 2 * ns * ns;
-                let niwork = 3 + 5 * ns;
-                let mut work = vec![0.0; nwork];
-                let mut iwork = vec![0; niwork];
-                dsygvd(
-                    &itype,
+                let itype = 1;
+                let i = lapacke::dsygvd(
+                    lapacke::Layout::RowMajor,
+                    itype,
                     b'V',
                     b'L',
                     ns as i32,
-                    sb.as_allocated_mut().unwrap(),
+                    sb.as_slice_mut().unwrap(),
                     ns as i32,
-                    sw.as_allocated_mut().unwrap(),
+                    sw.as_slice_mut().unwrap(),
                     ns as i32,
                     &mut evals,
-                    &mut work,
-                    nwork as i32,
-                    &mut iwork,
-                    niwork as i32,
-                    &mut i,
                 );
                 if i != 0 {
                     panic!("dsygvd failed, i={}", i);
@@ -200,7 +190,7 @@ impl LDA {
             // This is a translation of _PSD in scipy.multivariate
             // ref: https://github.com/scipy/scipy/blob/5ab7426247900db9de856e790b8bea1bd71aec49/scipy/stats/_multivariate.py#L115
 
-            let (s, u) = cov.eigh(UPLO::Lower).unwrap();
+            let (s, u) = cov.eigh(ndarray_linalg::UPLO::Lower).unwrap();
             // threshold for eigen values
             let cond =
                 (cov.len() as f64) * (s.fold(f64::MIN, |acc, x| acc.max(f64::abs(*x)))) * 2.3E-16;
