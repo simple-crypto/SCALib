@@ -110,14 +110,14 @@ jobs:
                       C:/Miniconda3/envs/buildenv/Library/lib/flang*.lib
                   key: cache-flang-libs-v0
             - name: Enable miniconda
-              if: ${{ runner.os == 'Windows' steps.cache-flang-libs.outputs.cache-hit != 'true' }}
+              if: ${{ runner.os == 'Windows' && steps.cache-flang-libs.outputs.cache-hit != 'true' }}
               uses: conda-incubator/setup-miniconda@v2
               with:
                   miniconda-version: "latest"
                   channels: conda-forge
                   activate-environment: buildenv
             - name: Install openblas build dependencies (with conda)
-              if: ${{ runner.os == 'Windows' steps.cache-flang-libs.outputs.cache-hit != 'true' }}
+              if: ${{ runner.os == 'Windows' && steps.cache-flang-libs.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
               run: conda install -y flang libflang
 
@@ -144,7 +144,7 @@ jobs:
                   dir %CONDA_PREFIX%\Library\lib
                   dir C:\Miniconda3\envs\buildenv\Library\lib
             - name: Clean conda libs
-              if: ${{ runner.os == 'Windows' steps.cache-flang-libs.outputs.cache-hit != 'true' }}
+              if: ${{ runner.os == 'Windows' && steps.cache-flang-libs.outputs.cache-hit != 'true' }}
               shell: bash -l {0}
               run: |
                   cd $CONDA_PREFIX/Library
