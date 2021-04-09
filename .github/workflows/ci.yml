@@ -50,7 +50,7 @@ jobs:
             - name: Install openblas build dependencies (with conda)
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
-              run: conda install -y cmake flang clangdev perl libflang ninja
+              run: conda install -y cmake flang clangdev perl libflang ninja libxml2
             - name: Compile and install OpenBLAS
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
