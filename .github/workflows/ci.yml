@@ -117,8 +117,7 @@ jobs:
               if: ${{ runner.os == 'Windows' }}
               shell: bash -l {0}
               run: |
-                  echo $CONDA_PREFIX
-                  echo $LIB
+                  echo $CONDA_PREFIX $LIB
             - name: Find conda installed libs (2)
               if: ${{ runner.os == 'Windows' }}
               shell: cmd /C CALL {0}
@@ -127,6 +126,9 @@ jobs:
                   echo %LIB%
                   dir C:\
                   dir %CONDA_PREFIX%
+                  dir %CONDA_PREFIX%\Library
+                  dir %CONDA_PREFIX%\Library\lib
+                  dir C:\Miniconda3\envs\buildenv\Library\lib
             - name: Download OpenBLAS build
               if: ${{ runner.os == 'Windows' }}
               uses: actions/download-artifact@v2
