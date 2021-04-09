@@ -165,6 +165,9 @@ impl LDA {
                     niwork as i32,
                     &mut i,
                 );
+                if i != 0 {
+                    panic!("dsygvd failed, i={}", i);
+                }
             }
 
             // Get the projection from eigen vectors and eigen values
