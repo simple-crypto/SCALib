@@ -115,7 +115,6 @@ impl LDA {
             // transpose for openblas reversed_axes is to use fortran layout to easily use lapack
             // for the next step
             let mut sw = Array2::<f64>::zeros((ns, ns)).reversed_axes();
-            println!("Before slice 1");
             x_f64
                 .outer_iter_mut()
                 .into_par_iter()
@@ -124,7 +123,6 @@ impl LDA {
                     let y = y.first().unwrap();
                     x -= &means_ns.slice(s![*y as usize, ..]);
                 });
-            println!("After slice 1");
             Zip::from(&mut x_f64_t)
                 .and(&x_f64.t())
                 .par_apply(|x, y| *x = *y);
@@ -174,28 +172,15 @@ impl LDA {
             let mut projection = Array2::<f64>::zeros((p, ns));
             let mut index: Vec<(usize, f64)> = (0..evals.len()).zip(evals).collect();
             let evecs = sb;
+            println!("evecs: {:?}", evecs);
             index.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
             index.reverse();
-            println!("projection: {:?}", projection);
-            println!("index: {:?}", index);
-            println!("evecs: {:?}", evecs);
-            println!("Before slice 2");
-            index
-                .iter()
-                .zip(projection.axis_iter_mut(Axis(0)))
-                .for_each(|((i, _), mut proj)| {
-                    println!("i: {}", i);
-                    &evecs.slice(s![.., *i]);
-                });
-            println!("After slice 2");
-            println!("Before slice 3");
             index
                 .iter()
                 .zip(projection.axis_iter_mut(Axis(0)))
                 .for_each(|((i, _), mut proj)| {
                     proj.assign(&evecs.slice(s![.., *i]));
                 });
-            println!("After slice 3");
 
             // ---- Step 2
             // means per class within the subspace by projecting means_ns
