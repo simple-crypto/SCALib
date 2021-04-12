@@ -12,12 +12,12 @@ import toml
 
 setup(
     project_urls={
-        "Bug Tracker": "https://github.com/obronchain/scale/issues",
+        "Bug Tracker": "https://github.com/obronchain/scaffe/issues",
     },
     rust_extensions=[
         RustExtension(
-            "scale._scale_ext",
-            path="src/scale_ext/scale-py/Cargo.toml",
+            "scaffe._scaffe_ext",
+            path="src/scaffe_ext/scaffe-py/Cargo.toml",
             binding=Binding.PyO3,
             features=["pyo3/abi3"],
             py_limited_api=True,

@@ -3,5 +3,5 @@ Attacks
 
 SASCAGraph 
 ----------
-.. autoclass:: scale.attacks.sascagraph.SASCAGraph
+.. autoclass:: scaffe.attacks.sascagraph.SASCAGraph
    :members:

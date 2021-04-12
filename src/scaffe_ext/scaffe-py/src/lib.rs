@@ -13,8 +13,8 @@ use ndarray::{s, Axis};
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 use pyo3::types::PyList;
-use scale::lda;
-use scale::snr;
+use scaffe::lda;
+use scaffe::snr;
 
 fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
     match s {
@@ -29,7 +29,7 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
 }
 
 #[pymodule]
-fn _scale_ext(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _scaffe_ext(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
     m.add_class::<lda::LDA>()?;
 
@@ -43,7 +43,7 @@ fn _scale_ext(_py: Python, m: &PyModule) -> PyResult<()> {
         nc: usize,
         n: usize,
     ) -> PyResult<()> {
-        scale::belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n)
+        scaffe::belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n)
     }
 
     #[pyfn(m, "partial_cp")]

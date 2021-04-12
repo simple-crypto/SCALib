@@ -1,6 +1,6 @@
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
-from scale.modeling import LDAClassifier
+from scaffe.modeling import LDAClassifier
 import numpy as np
 import scipy.stats
 

@@ -3,15 +3,15 @@
 #include setup.cfg
 #include LICENSE.rst
 #include pyproject.toml
-exclude src/scale/_scale_ext.abi3.so
+exclude src/scaffe/_scaffe_ext.abi3.so
 
-recursive-include src/scale_ext/ranklib *
-recursive-include src/scale_ext/scale *
-recursive-include src/scale_ext/scale-py *
-include src/scale_ext/Cargo.toml
-include src/scale_ext/Cargo.lock
+recursive-include src/scaffe_ext/ranklib *
+recursive-include src/scaffe_ext/scaffe *
+recursive-include src/scaffe_ext/scaffe-py *
+include src/scaffe_ext/Cargo.toml
+include src/scaffe_ext/Cargo.lock
 
-#recursive-include scalear *.pyx *.c *.pxd
+#recursive-include scaffear *.pyx *.c *.pxd
 #recursive-include docs *
 #recursive-include licenses *
 #recursive-include scripts *

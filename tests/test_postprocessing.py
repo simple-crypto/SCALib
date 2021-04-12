@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from scale.postprocessing import rank_accuracy
+from scaffe.postprocessing import rank_accuracy
 
 def test_rank_accuracy():
     nc = 256

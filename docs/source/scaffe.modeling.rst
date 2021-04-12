@@ -4,5 +4,5 @@ Modeling
 LDAClassifier
 -------------
 
-.. automodule:: scale.modeling.ldaclassifier
+.. automodule:: scaffe.modeling.ldaclassifier
    :members:

@@ -93,7 +93,7 @@ jobs:
             CIBW_BUILD: "cp36-*"
             CIBW_SKIP: "*-win32 *_i686 *_ppc64le *_s390x" 
             # I don't know how to make both normal and doctring tests work with only one command
-            CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scale
+            CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scaffe
             CIBW_TEST_EXTRAS: test
         steps:
             - uses: actions/checkout@v2
@@ -172,10 +172,10 @@ jobs:
               if: ${{ runner.os == 'Windows' }}
               shell: cmd
               run: |
-                  echo %SCALE_OPENBLAS_LIB_DIR%
-                  dir %SCALE_OPENBLAS_LIB_DIR%
+                  echo %SCAFFE_OPENBLAS_LIB_DIR%
+                  dir %SCAFFE_OPENBLAS_LIB_DIR%
               env:
-                  SCALE_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas\inst\lib
+                  SCAFFE_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas\inst\lib
 
 
             - name: Set up QEMU
@@ -204,9 +204,9 @@ jobs:
                       ~/.cargo/registry
                       ~/.cargo/git
                       ${{ github.workspace }}/cargo_build
-                  key: ${{ runner.os }}-cargo-${{ hashFiles('src/scale_ext/Cargo.lock') }}
+                  key: ${{ runner.os }}-cargo-${{ hashFiles('src/scaffe_ext/Cargo.lock') }}
                   restore-keys: |
-                      ${{ runner.os }}-cargo-${{ hashFiles('src/scale_ext/Cargo.lock') }}
+                      ${{ runner.os }}-cargo-${{ hashFiles('src/scaffe_ext/Cargo.lock') }}
                       ${{ runner.os }}-cargo-
 
             - name: wheels Windows ${{ matrix.vers }}
@@ -214,7 +214,7 @@ jobs:
               uses: joerick/cibuildwheel@v1.10.0
               env:
                   CIBW_ARCHS_WINDOWS: ${{ matrix.vers }}
-                  SCALE_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas\inst\lib
+                  SCAFFE_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas\inst\lib
                   CARGO_TARGET_DIR: ${{ github.workspace }}\cargo_build
 
             - uses: actions/upload-artifact@v2

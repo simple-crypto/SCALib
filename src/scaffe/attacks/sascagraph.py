@@ -1,6 +1,6 @@
 import numpy as np
 from functools import reduce
-from scale import _scale_ext
+from scaffe import _scaffe_ext
 
 
 class SASCAGraph:
@@ -240,7 +240,7 @@ class SASCAGraph:
             Number of iterations of belief propagation.
         """
         self._init_graph()
-        _scale_ext.run_bp(
+        _scaffe_ext.run_bp(
             self.properties_,
             [self.var_[x] for x in list(self.var_)],
             it,

@@ -11,5 +11,5 @@ dist/
 .cargo_build/
 docs/_build/
 htmlcov/
-src/scale/version.py
+src/scaffe/version.py
 

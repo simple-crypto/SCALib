@@ -1256,7 +1256,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "scale"
+name = "scaffe"
 version = "0.1.0"
 dependencies = [
  "criterion",
@@ -1273,7 +1273,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "scale-py"
+name = "scaffe-py"
 version = "0.1.0"
 dependencies = [
  "blas-src",
@@ -1283,7 +1283,7 @@ dependencies = [
  "openblas-src",
  "pyo3",
  "ranklib",
- "scale",
+ "scaffe",
 ]
 
 [[package]]

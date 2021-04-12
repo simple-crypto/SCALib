@@ -1,41 +1,41 @@
-Welcome to SCALE
-================
-Side-Channel Attack & Leakage Evaluation (SCALE) is a Python package that
+Welcome to SCAFFE
+=================
+Side-Channel Attack & Leakage Evaluation (SCAFFE) is a Python package that
 contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
-SCALE contains various features for side-channel analysis. Please read `SCALE workflow`_ for more details:
+SCAFFE contains various features for side-channel analysis. Please read `SCAFFE workflow`_ for more details:
 
-- :doc:`source/scale.metrics`:
+- :doc:`source/scaffe.metrics`:
 
   - `SNR`: Signal-to-noise ratio.
 
-- :doc:`source/scale.modeling`: 
+- :doc:`source/scaffe.modeling`: 
 
   - `LDAClassifier`: Template in linear subspaces.
-- :doc:`source/scale.attacks`:
+- :doc:`source/scaffe.attacks`:
 
   - `SASCAGraph`: Generalization of `Divide & Conquer` with Soft Analytical Attacks.
-- :doc:`source/scale.postprocessing`:
+- :doc:`source/scaffe.postprocessing`:
 
   - `rankestimation`: Histogram based full key rank estimation.
 
 
 Install
 =======
-You can install SCALE by using PyPi packages and running:
+You can install SCAFFE by using PyPi packages and running:
 
 .. code-block::
 
-   pip install scale
+   pip install scaffe
 
 Wheels for Windows and Linux are provided. More information about source
 compilation, checkout :doc:`source/DEVELOP` page.
 
 Pseudo-Example
 ==============
-Next, we detail a short pseudo example which illustrates the usage of SCALE. 
+Next, we detail a short pseudo example which illustrates the usage of SCAFFE. 
 For a full running example, please visit `this example` (ADD LINK TO GITHUB PAGE). 
 
 .. code-block::
@@ -74,12 +74,12 @@ For a full running example, please visit `this example` (ADD LINK TO GITHUB PAGE
      k_distri = graph.get_distribution("k")
      key_guess = np.argmax(k_distri[0,:])
 
-SCALE workflow
-==============
+SCAFFE workflow
+===============
 
-The current version of SCALE contains modules for all the necessary steps for a
-profiled side-channel attack. Even if modules of SCALE can be used
-independently, a typical usage of SCALE for it goes in four steps:
+The current version of SCAFFE contains modules for all the necessary steps for a
+profiled side-channel attack. Even if modules of SCAFFE can be used
+independently, a typical usage of SCAFFE for it goes in four steps:
 
 1. **Metrics**: In this step, standard metrics are evaluated from the
    measurements. This helps to find point-of-interest (POIs), quantify avaiable information, etc. 
@@ -104,12 +104,12 @@ independently, a typical usage of SCALE for it goes in four steps:
    the remaining computational power that is needed by the adversary to recover
    the correct key.
 
-Full example of SCALE is available `here` (ADD LINK TO GITHUB PAGE). 
+Full example of SCAFFE is available `here` (ADD LINK TO GITHUB PAGE). 
 
 About us
 ========
-SCALE has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALE. It has
+SCAFFE has been initiated by Olivier Bronchain during his PhD at Crypto Group,
+UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCAFFE. It has
 already been used by many other researcher at UCLouvain which contributed
 either directly or by constructive feedbacks. 
 
@@ -127,7 +127,7 @@ TODO
 Publications
 ============
 
-SCALE has been used in various publications, let us know if you used it so that we can add it to the list.
+SCAFFE has been used in various publications, let us know if you used it so that we can add it to the list.
 
 1. "Mode-Level vs. Implementation-Level Physical Security in Symmetric
    Cryptography: A Practical Guide Through the Leakage-Resistance Jungle", D.
@@ -147,8 +147,8 @@ SCALE has been used in various publications, let us know if you used it so that 
    :maxdepth: 2
    :hidden:
 
-   source/scale.metrics.rst
-   source/scale.modeling.rst
-   source/scale.attacks.rst
-   source/scale.postprocessing.rst
+   source/scaffe.metrics.rst
+   source/scaffe.modeling.rst
+   source/scaffe.attacks.rst
+   source/scaffe.postprocessing.rst
    source/DEVELOP.rst

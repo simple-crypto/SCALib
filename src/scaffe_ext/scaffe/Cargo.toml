@@ -1,5 +1,5 @@
 [package]
-name = "scale"
+name = "scaffe"
 version = "0.1.0"
 authors = ["obronchain <olivier.bronchain@uclouvain.be>"]
 edition = "2018"

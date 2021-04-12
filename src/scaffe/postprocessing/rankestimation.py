@@ -11,7 +11,7 @@ Integrated Approach", R. Poussier, F.-X. Standaert, V. Grosso in CHES2016.
 
 import math
 
-from scale import _scale_ext
+from scaffe import _scaffe_ext
 
 
 def rank_nbin(costs, key, nbins, method="hist"):
@@ -43,7 +43,7 @@ def rank_nbin(costs, key, nbins, method="hist"):
         Upper bound for the rank key.
 
     """
-    return _scale_ext.rank_nbin(costs, key, nbins, choose_merge_value(costs), method)
+    return _scaffe_ext.rank_nbin(costs, key, nbins, choose_merge_value(costs), method)
 
 
 def rank_accuracy(costs, key, acc_bit=1.0, method="hist"):
@@ -76,7 +76,7 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist"):
         Upper bound for the rank key.
     """
 
-    return _scale_ext.rank_accuracy(
+    return _scaffe_ext.rank_accuracy(
         costs, key, 2.0 ** acc_bit, choose_merge_value(costs), method
     )
 

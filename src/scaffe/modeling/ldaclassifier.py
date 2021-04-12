@@ -1,5 +1,5 @@
 import numpy as np
-from scale import _scale_ext
+from scaffe import _scaffe_ext
 
 class LDAClassifier():
     r"""Models the leakage :math:`\bm{l}` with :math:`n_s` dimensions with a
@@ -27,7 +27,7 @@ class LDAClassifier():
     
     Examples
     --------
-    >>> from scale.modeling import LDAClassifier
+    >>> from scaffe.modeling import LDAClassifier
     >>> import numpy as np
     >>> x = np.random.randint(0,256,(5000,10),dtype=np.int16)
     >>> y = np.random.randint(0,256,5000,dtype=np.uint16)
@@ -60,7 +60,7 @@ class LDAClassifier():
         self.p_ = p;
         self.nc_ = nc
         self.ns_ = ns
-        self.lda = _scale_ext.LDA(nc,p,ns)
+        self.lda = _scaffe_ext.LDA(nc,p,ns)
         assert p < nc
 
     def fit(self,l,x):
@@ -107,7 +107,7 @@ class LDAClassifier():
         return dic
     
     def __setstate__(self,state):
-        self.lda = _scale_ext.LDA(state["nc"],state["p"],state["ns"])
+        self.lda = _scaffe_ext.LDA(state["nc"],state["p"],state["ns"])
         self.lda.set_state(state["cov"],state["psd"],
                     state["means"],state["projection"],
                     state["nc"],state["p"],state["ns"])

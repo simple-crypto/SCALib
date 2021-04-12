@@ -1,5 +1,5 @@
 import pytest
-from scale.metrics import SNR
+from scaffe.metrics import SNR
 import numpy as np
 def test_snr():
     """
@@ -13,7 +13,7 @@ def test_snr():
     x = np.random.randint(0,256,(n,ns),dtype=np.int16)-128
     y = np.random.randint(0,nc,(n,nv),dtype=np.uint16)
 
-    # compute SNR with SCALE
+    # compute SNR with SCAFFE
     snr = SNR(np=nv,nc=nc,ns=ns)
     for i in range(0,n,batch):
         snr.fit_u(x[i:i+batch,:],y[i:i+batch,:])

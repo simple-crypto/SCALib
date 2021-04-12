@@ -4,6 +4,6 @@ Postprocessing
 RankEstimation
 --------------
 
-.. automodule:: scale.postprocessing.rankestimation
+.. automodule:: scaffe.postprocessing.rankestimation
    :members:
    :undoc-members:

@@ -1,40 +1,40 @@
-Welcome to SCALE
+Welcome to SCAFFE
 ================
-Side-Channel Attack & Leakage Evaluation (SCALE) is a Python package that
+Side-Channel Attack & Leakage Evaluation (SCAFFE) is a Python package that
 contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
-SCALE contains various features for side-channel analysis. Please read SCALE-workflow_ for more details:
+SCAFFE contains various features for side-channel analysis. Please read SCAFFE-workflow_ for more details:
 
 - Metrics:
 
-  - `SNR <scale/metrics/snr.py>`_: Signal-to-noise ratio.
+  - `SNR <scaffe/metrics/snr.py>`_: Signal-to-noise ratio.
 - Modeling leakage distribution:
 
-  - `LDAClassifier <scale/modeling/ldaclassifier.py>`_: Template in linear subspaces.
+  - `LDAClassifier <scaffe/modeling/ldaclassifier.py>`_: Template in linear subspaces.
 - Attacks:
 
-  - `SASCAGraph <scale/attacks/sascagraph.py>`_: Generalization of `Divide & Conquer` with Soft Analytical Attacks.
+  - `SASCAGraph <scaffe/attacks/sascagraph.py>`_: Generalization of `Divide & Conquer` with Soft Analytical Attacks.
 - Postprocessing to analyse attacks results:
 
-  - `rankestimation <scale/postprocessing/rankestimation.py>`_: Histogram based full key rank estimation.
+  - `rankestimation <scaffe/postprocessing/rankestimation.py>`_: Histogram based full key rank estimation.
 
 
 Install
 =======
-You can install SCALE by using PyPi packages and running:
+You can install SCAFFE by using PyPi packages and running:
 
 .. code-block::
 
-   pip install scale
+   pip install scaffe
 
 Wheels for Windows and Linux are provided. More information about source
 compilation, checkout `develop <DEVELOP.rst>`_ informations.
 
 Pseudo-Example
 ==============
-Next, we detail a short pseudo example which illustrates the usage of SCALE. 
+Next, we detail a short pseudo example which illustrates the usage of SCAFFE. 
 For a full running example, please visit `this example <examples/aes_simulation/>`_. 
 
 .. code-block::
@@ -73,14 +73,14 @@ For a full running example, please visit `this example <examples/aes_simulation/
      k_distri = graph.get_distribution("k")
      key_guess = np.argmax(k_distri[0,:])
 
-.. _SCALE-workflow::
+.. _SCAFFE-workflow::
 
-SCALE-workflow
+SCAFFE-workflow
 ==============
 
-The current version of SCALE contains modules for all the necessary steps for a
-profiled side-channel attack. Even if modules of SCALE can be used
-independently, a typical usage of SCALE for it goes in four steps:
+The current version of SCAFFE contains modules for all the necessary steps for a
+profiled side-channel attack. Even if modules of SCAFFE can be used
+independently, a typical usage of SCAFFE for it goes in four steps:
 
 1. **Metrics**: In this step, standard metrics are evaluated from the
    measurements. This helps to find point-of-interest (POIs), quantify avaiable information, etc. 
@@ -105,12 +105,12 @@ independently, a typical usage of SCALE for it goes in four steps:
    the remaining computational power that is needed by the adversary to recover
    the correct key.
 
-Full example of SCALE is available `here <examples/aes_simulation/>`_. 
+Full example of SCAFFE is available `here <examples/aes_simulation/>`_. 
 
 About us
 ========
-SCALE has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALE. It has
+SCAFFE has been initiated by Olivier Bronchain during his PhD at Crypto Group,
+UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCAFFE. It has
 already been used by many other researcher at UCLouvain which contributed
 either directly or by constructive feedbacks. 
 
@@ -128,7 +128,7 @@ TODO
 Publications
 ============
 
-SCALE has been used in various publications, let us know if you used it so that we can add it to the list.
+SCAFFE has been used in various publications, let us know if you used it so that we can add it to the list.
 
 1. "Mode-Level vs. Implementation-Level Physical Security in Symmetric
    Cryptography: A Practical Guide Through the Leakage-Resistance Jungle", D.

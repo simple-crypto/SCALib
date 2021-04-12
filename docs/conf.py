@@ -1,14 +1,14 @@
 # Configuration file for the Sphinx documentation builder.
 
-import scale
+import scaffe
 
 # -- Project information -----------------------------------------------------
 
-project = 'Scale'
+project = 'SCAFFE'
 copyright = '2021, UCLouvain'
 
 # The full version, including alpha/beta/rc tags
-release = scale.__version__
+release = scaffe.__version__
 
 
 # Add any Sphinx extension module names here, as strings. They can be

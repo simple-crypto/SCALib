@@ -4,5 +4,5 @@ Metrics
 SNR
 ---
 
-.. automodule:: scale.metrics.snr
+.. automodule:: scaffe.metrics.snr
    :members:
