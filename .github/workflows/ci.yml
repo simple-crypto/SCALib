@@ -50,16 +50,12 @@ jobs:
             - name: Install openblas build dependencies (with conda)
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
-              run: conda install -y cmake flang clangdev perl libflang ninja
+              run: conda install -y cmake=3.19.7 flang=11.0.1 clangdev=11.0.1 perl=5.32.0.1 libflang=11.0.1 ninja=1.10.2
             - name: Compile and install OpenBLAS
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
               run: |
-                  cd %GITHUB_WORKSPACE%\openblas\OpenBLAS-0.3.14\build
-                  call "c:/Program Files (x86)/Microsoft Visual Studio/2019/Enterprise/VC/Auxiliary/Build/vcvars64.bat"
-                  cmake .. -G "Ninja" -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_C_COMPILER=clang-cl -DCMAKE_Fortran_COMPILER=flang -DBUILD_WITHOUT_LAPACK=no -DNOFORTRAN=0 -DDYNAMIC_ARCH=ON -DCMAKE_BUILD_TYPE=Release -DUSE_THREAD=ON -DNUM_THREADS=128 -DUSE_OPENMP=0 -DFCOMMON_OPT=-static-flang-libs
-                  cmake --build . --config Release
-                  cmake --install . --prefix %GITHUB_WORKSPACE%\openblas\inst -v
+                  call %GITHUB_WORKSPACE%\build_openblas.bat
             - name: Upload OpenBLAS build
               uses: actions/upload-artifact@v2
               with:
