@@ -24,6 +24,7 @@ jobs:
         name: Build OpenBLAS on Windows
         runs-on: windows-2019
         steps:
+            - uses: actions/checkout@v2
             - name: Test
               shell: cmd /C CALL {0}
               run: |
