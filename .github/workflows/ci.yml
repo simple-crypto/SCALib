@@ -1,6 +1,6 @@
 name: CI
 
-on: [push]
+on: [push,pull_request]
 
 jobs:
     test:
@@ -18,18 +18,13 @@ jobs:
               run: pip install tox
             - name: Run tests
               # Run tox using the version of Python in `PATH`
-              run: tox -e test
-  
+              run: tox -e test,build_docs,codestyle
+
     build_openblas_windows:
         name: Build OpenBLAS on Windows
         runs-on: windows-2019
         steps:
             - uses: actions/checkout@v2
-            - name: Test
-              shell: cmd /C CALL {0}
-              run: |
-                  pwd
-                  dir
             - uses: actions/cache@v2
               id: cache-openblas
               with:
@@ -47,119 +42,53 @@ jobs:
                   tar xzf OpenBLAS-0.3.14.tar.gz
                   mkdir OpenBLAS-0.3.14/build
             - name: Enable miniconda
-              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
+              #if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               uses: conda-incubator/setup-miniconda@v2
               with:
                   miniconda-version: "latest"
                   channels: conda-forge
                   activate-environment: buildenv
             - name: Install openblas build dependencies (with conda)
-              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
+              #if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
               run: conda install -y cmake=3.19.7 flang=11.0.1 clangdev=11.0.1 perl=5.32.0.1 libflang=11.0.1 ninja=1.10.2
             - name: Compile and install OpenBLAS
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               run: cmd /C CALL build_openblas.bat
+            - name: Copy flang libs
+              #if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
+              shell: bash -l {0}
+              run: |
+                  mkdir -p openblas/libs
+                  cp C:/Miniconda3/envs/buildenv/Library/lib/lib*.lib openblas/libs/
+                  cp C:/Miniconda3/envs/buildenv/Library/lib/flang*.lib openblas/libs/
             - name: Upload OpenBLAS build
               uses: actions/upload-artifact@v2
               with:
                   name: openblas-windows-2019
                   path: |
                       openblas/inst
+                      openblas/libs
 
-    build_wheels:
-        name: Build wheels on ${{ matrix.os }}  - ${{ matrix.vers }}
+    build_wheel_windows:
+        name: Build wheel on Windows
         needs: [build_openblas_windows]
-        runs-on: ${{ matrix.os }}
-        strategy:
-            fail-fast: false
-            matrix:
-                include:
-                    - vers: auto64
-                      os: ubuntu-20.04
-                    - vers: auto64
-                      os: windows-2019
-#                   - vers: aarch64
-#                     os: ubuntu-20.04
-#                   - vers: arm64
-#                     os: macos-10.15
-#                   - vers: auto64
-#                     os: macos-10.15
-        env:
-            SCCACHE_VERSION: 0.2.13
-            CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
-            CIBW_BUILD_VERBOSITY: "1" # Make some more noise so that travis doesn't stall
-            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full PATH="$PATH:$HOME/.cargo/bin"'
-            CIBW_BUILD: "cp36-*"
-            CIBW_SKIP: "*-win32 *_i686 *_ppc64le *_s390x" 
-            # I don't know how to make both normal and doctring tests work with only one command
-            CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scaffe
-            CIBW_TEST_EXTRAS: test
+        runs-on: windows-2019
         steps:
             - uses: actions/checkout@v2
             - uses: actions/setup-python@v2
-              name: Install Python
-              with:
-                  python-version: "3.6"
-
-            - uses: actions/cache@v2
-              id: cache-flang-libs
-              with:
-                  path: |
-                      cache_flanglib
-                  key: cache-flang-libs-v1
-            - name: Enable miniconda
-              if: ${{ runner.os == 'Windows' && steps.cache-flang-libs.outputs.cache-hit != 'true' }}
-              uses: conda-incubator/setup-miniconda@v2
-              with:
-                  miniconda-version: "latest"
-                  channels: conda-forge
-                  activate-environment: buildenv
-            - name: Install openblas build dependencies (with conda)
-              if: ${{ runner.os == 'Windows' && steps.cache-flang-libs.outputs.cache-hit != 'true' }}
-              shell: cmd /C CALL {0}
-              run: conda install -y flang=11.0.1 libflang=11.0.1
-            - name: Clean conda libs
-              if: ${{ runner.os == 'Windows' && steps.cache-flang-libs.outputs.cache-hit != 'true' }}
-              shell: bash -l {0}
-              run: |
-                  mkdir -p cache_flanglib
-                  cp C:/Miniconda3/envs/buildenv/Library/lib/lib*.lib cache_flanglib/
-                  cp C:/Miniconda3/envs/buildenv/Library/lib/flang*.lib cache_flanglib/
-                  rm -rf C:/Miniconda3/envs/buildenv/Library/lib
-            - name: Restore conda libs
-              if: ${{ runner.os == 'Windows' }}
-              shell: bash
-              run: |
-                  mkdir -p C:/Miniconda3/envs/buildenv/Library/lib
-                  cp cache_flanglib/*.lib C:/Miniconda3/envs/buildenv/Library/lib/
+              with: python-version: "3.6"
             - name: Download OpenBLAS build
-              if: ${{ runner.os == 'Windows' }}
               uses: actions/download-artifact@v2
               with:
                   name: openblas-windows-2019
-                  path: openblas/inst
-
-            - name: Set up QEMU
-              if: runner.os == 'Linux'
-              uses: docker/setup-qemu-action@v1
-              with:
-                  platforms: all
-
-            - name: wheels Linux ${{ matrix.vers }}
-              if: runner.os == 'Linux'
-              uses: joerick/cibuildwheel@v1.10.0
-              env:
-                  CIBW_ARCHS_LINUX: ${{ matrix.vers }}
-
-            - name: wheels Macos ${{ matrix.vers }}
-              if: runner.os == 'Macos'
-              uses: joerick/cibuildwheel@v1.10.0
-              env:
-                  CIBW_ARCHS_MACOS: ${{ matrix.vers }}
-
+                  path: openblas
+            - name: Restore conda libs
+              shell: bash
+              run: |
+                  mkdir -p C:/Miniconda3/envs/buildenv/Library/lib
+                  cp openblas/libs/*.lib C:/Miniconda3/envs/buildenv/Library/lib/
             - uses: actions/cache@v2
-              if: runner.os == 'Windows'
               id: cache-windows-cargo_target_dir
               with:
                   path: |
@@ -170,17 +99,69 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-cargo-${{ hashFiles('src/scaffe_ext/Cargo.lock') }}
                       ${{ runner.os }}-cargo-
-
             - name: wheels Windows ${{ matrix.vers }}
-              if: runner.os == 'Windows'
               uses: joerick/cibuildwheel@v1.10.0
               env:
-                  CIBW_ARCHS_WINDOWS: ${{ matrix.vers }}
                   SCAFFE_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas\inst\lib
                   CARGO_TARGET_DIR: ${{ github.workspace }}\cargo_build
-
+                  CIBW_ARCHS_WINDOWS: native
+                  CIBW_BUILD_VERBOSITY: "1"
+                  CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full'
+                  CIBW_BUILD: "cp36-win_amd64"
+                  # I don't know how to make both normal and doctring tests
+                  # work with only one command, so I use shell &&.
+                  CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scaffe
+                  CIBW_TEST_EXTRAS: test
             - uses: actions/upload-artifact@v2
               with:
+                  name: dist
+                  path: ./wheelhouse/*.whl
+
+    build_wheels:
+        name: Build wheels on ${{ matrix.os }}  - ${{ matrix.vers }}
+        runs-on: ${{ matrix.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - vers: auto64
+                      os: ubuntu-20.04
+#                   - vers: aarch64
+#                     os: ubuntu-20.04
+#                   - vers: arm64
+#                     os: macos-10.15
+#                   - vers: auto64
+#                     os: macos-10.15
+        env:
+            SCCACHE_VERSION: 0.2.13
+            CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
+            CIBW_BUILD_VERBOSITY: "1"
+            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full PATH="$PATH:$HOME/.cargo/bin"'
+            CIBW_BUILD: "cp36-*-_{x86_64,amd64}"
+            # I don't know how to make both normal and doctring tests work with only one command,
+            # so I use shell &&.
+            CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scaffe
+            CIBW_TEST_EXTRAS: test
+        steps:
+            - uses: actions/checkout@v2
+            - uses: actions/setup-python@v2
+              with: python-version: "3.6"
+            - name: Set up QEMU
+              if: runner.os == 'Linux'
+              uses: docker/setup-qemu-action@v1
+              with:
+                  platforms: all
+            - name: wheels Linux ${{ matrix.vers }}
+              if: runner.os == 'Linux'
+              uses: joerick/cibuildwheel@v1.10.0
+              env: CIBW_ARCHS_LINUX: ${{ matrix.vers }}
+            - name: wheels Macos ${{ matrix.vers }}
+              if: runner.os == 'Macos'
+              uses: joerick/cibuildwheel@v1.10.0
+              env: CIBW_ARCHS_MACOS: ${{ matrix.vers }}
+            - uses: actions/upload-artifact@v2
+              with:
+                  name: dist
                   path: ./wheelhouse/*.whl
 
     build_sdist:
@@ -193,34 +174,42 @@ jobs:
               with:
                   toolchain: stable
                   profile: minimal
-
-            - uses: actions/setup-python@v2
-              name: Install Python
-              with:
-                  python-version: "3.6"
-
             - name: Build sdist
               run: |
                   python -m pip install build
                   python -m build --sdist .
             - uses: actions/upload-artifact@v2
               with:
+                  name: dist
                   path: dist/*.tar.gz
 
+    check_dist:
+        needs: [build_wheels, build_wheel_windows, build_sdist]
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/download-artifact@v2
+              with:
+                  name: dist
+                  path: dist
+            - name: Install twine
+              run: pip install twine
+            - name: Check dist
+              run: twine check dist/*
+
     release:
-        needs: [build_wheels, build_sdist, test]
+        needs: [check_dist, test]
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         runs-on: ubuntu-latest
         steps:
             - uses: actions/download-artifact@v2
               with:
-                  name: artifact
+                  name: dist
                   path: dist
             - name: Release
               uses: softprops/action-gh-release@v1
               with:
                   body: |
-                      view the CHANGELOG.md for full changes
+                      view the CHANGELOG.rst for full changes
                   files: |
                       dist/*
               env:
