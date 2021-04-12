@@ -24,6 +24,13 @@ jobs:
         name: Build OpenBLAS on Windows
         runs-on: windows-2019
         steps:
+            - name: Test
+              shell: cmd /C CALL {0}
+              run: |
+                  pwd
+                  dir
+            - name: Test 1
+              run: cmd /C CALL x.cmd
             - uses: actions/cache@v2
               id: cache-openblas
               with:
