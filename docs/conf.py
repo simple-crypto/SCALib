@@ -1,14 +1,9 @@
 # Configuration file for the Sphinx documentation builder.
 
-import scaffe
-
 # -- Project information -----------------------------------------------------
 
 project = 'SCAFFE'
 copyright = '2021, UCLouvain'
-
-# The full version, including alpha/beta/rc tags
-release = scaffe.__version__
 
 
 # Add any Sphinx extension module names here, as strings. They can be
@@ -48,4 +43,18 @@ html_theme = 'pydata_sphinx_theme'
 
 autoclass_content = 'both'
 numpydoc_show_class_members = False
+
+# We do not need to install an build the package to generate the doc.
+# We only have to mock dependencies, binary packages, and add the source to the
+# python path.
+autodoc_mock_imports = [
+        "scaffe._scaffe_ext", "numpy", "tqdm", "sklearn", "scipy"
+        ]
+
+import sys
+sys.path.append('../src')
+
+#from scaffe.version import version
+# The full version, including alpha/beta/rc tags
+#release = version
 
