@@ -1,5 +1,5 @@
 Welcome to SCAFFE
-================
+=================
 Side-Channel Attack & Leakage Evaluation (SCAFFE) is a Python package that
 contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
@@ -74,7 +74,7 @@ For a full running example, please visit `this example <examples/aes_simulation/
      key_guess = np.argmax(k_distri[0,:])
 
 SCAFFE-workflow
-==============
+===============
 
 The current version of SCAFFE contains modules for all the necessary steps for a
 profiled side-channel attack. Even if modules of SCAFFE can be used
