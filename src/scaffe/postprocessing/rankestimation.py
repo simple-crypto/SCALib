@@ -1,18 +1,27 @@
-r"""This modules contains functions in order to estimate the rank of the full
-key based on a list of score for each of its sub-keys. The scores are expected
-to be the negative log probabilities.
+r"""Estimation of the rank of a true key given likelihood of sub-keys.
+
+Rank estimation estimates the rank of the full (e.g. 128-bit) key based on a
+score for each value of its (e.g 8-bit) sub-keys. The scores must be additive
+and positive (e.g. negative log probabilities).
+
+`rank_accuracy` allows to specify the desired precision of the bound in
+bits (may not be achieved if computationally untractable), while `rank_nbin`
+gives direct, lower-level control over the number of bins in the historgrams.
 
 
 Notes
 -----
-[1] "Simple Key Enumeration (and Rank Estimation) Using Histograms: An
-Integrated Approach", R. Poussier, F.-X. Standaert, V. Grosso in CHES2016.
+The rank estimation algorithm is based on [1]_, with the following
+optimization: computation of histogram bins with higher score than the expected
+key is skipped, since it has no impact on the final rank.
+
+.. [1] "Simple Key Enumeration (and Rank Estimation) Using Histograms: An
+   Integrated Approach", R. Poussier, F.-X. Standaert, V. Grosso in CHES2016.
 """
 
 import math
 
 from scaffe import _scaffe_ext
-
 
 def rank_nbin(costs, key, nbins, method="hist"):
     r"""Estimate the rank of the full keys based on scores based on histograms.
@@ -35,15 +44,13 @@ def rank_nbin(costs, key, nbins, method="hist"):
 
     Returns
     -------
-    rmin : f64
-        Lower bound for the rank key.
-    r : f64
-        Estimated key rank.
-    rmax : f64
-        Upper bound for the rank key.
+    (rmin, r, rmax): (float, float, float)
 
+            - **rmin** is a lower bound for the key rank.
+            - **r** is the stimated key rank.
+            - **rmax** is an upper bound for the key rank.
     """
-    return _scaffe_ext.rank_nbin(costs, key, nbins, choose_merge_value(costs), method)
+    return _scaffe_ext.rank_nbin(costs, key, nbins, _choose_merge_value(costs), method)
 
 
 def rank_accuracy(costs, key, acc_bit=1.0, method="hist"):
@@ -68,20 +75,19 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist"):
 
     Returns
     -------
-    rmin : f64
-        Lower bound for the rank key.
-    r : f64
-        Estimated key rank.
-    rmax : f64
-        Upper bound for the rank key.
+    (rmin, r, rmax): (float, float, float)
+
+            - **rmin** is a lower bound for the key rank.
+            - **r** is the stimated key rank.
+            - **rmax** is an upper bound for the key rank.
     """
 
     return _scaffe_ext.rank_accuracy(
-        costs, key, 2.0 ** acc_bit, choose_merge_value(costs), method
+        costs, key, 2.0 ** acc_bit, _choose_merge_value(costs), method
     )
 
 
-def choose_merge_value(costs):
+def _choose_merge_value(costs):
     """The merge parameter is the number of sub-keys to merge in a
     brute-force manner before computing histograms. Merging may improve
     accuracy at the expense of running time.

@@ -2,55 +2,66 @@ import numpy as np
 from scaffe import _scaffe_ext
 
 class LDAClassifier():
-    r"""Models the leakage :math:`\bm{l}` with :math:`n_s` dimensions with a
-    Gaussian distribution in a linear subspace with `p` dimensions. The
-    projection is defined by a matrix :math:`\bm{W}` of size
-    (:math:`p`, :math:`n_s`). `LDAClassifier` uses the conditional probability
-    density function of the form
+    r"""Models the leakage :math:`\bm{l}` with :math:`n_s` dimensions using
+    linear discriminant analysis dimentionality reduction and gaussian
+    templates.
+    Based on the training data, linear discriminant analysis build a linear
+    dimentionality reduction to :math:`p` dimensions that maximizes class
+    separation.
+    Then, a multivariate gaussian template is fitted for each class (using the
+    same covariance matrix for all the classes) in the reduced dimensionality
+    space to predict leakage likelihood [1]_.
 
-    .. math:: 
-            \mathsf{\hat{f}}(\bm{l} | x) = 
+    Let :math:`\bm{W}` be the dimensionality reduction matrix of size
+    (:math:`p`, :math:`n_s`). The likelihood is
+
+    .. math::
+            \mathsf{\hat{f}}(\bm{l} | x) =
                 \frac{1}{\sqrt{(2\pi)^{p} \cdot |\bm{\Sigma} |}} \cdot
-                \exp^{\frac{1}{2} 
+                \exp^{\frac{1}{2}
                     (\bm{W} \cdot \bm{l} - \bm{\mu}_x)
-                    \bm{\Sigma} 
+                    \bm{\Sigma}
                     ( \bm{W} \cdot \bm{l}-\bm{\mu}_x)'}
 
-    where :math:`\bm{\mu}_x` is the mean of the leakage for class :math:`x`
-    in the linear subspace and :math:`\bm{\Sigma}` its covariance. It
-    provides the probability of each class with `predict_proba` thanks to
-    Bayes' law such that
+    where :math:`\bm{\mu}_x` is the mean of the leakage for class :math:`x` in
+    the projected space (:math:`\mu_x = \mathbb{E}(\bm{W}\bm{l}_x)`, where
+    :math:`\bm{l}_x` denotes the leakage traces of class :math:`x`) and
+    :math:`\bm{\Sigma}` its covariance (:math:`\bm{\Sigma} =
+    \mathbb{Cov}(\bm{W}\bm{l}_x - \bm{\mu}_x)`).
+
+    `LDAClassifier` provides the probability of each class with `predict_proba`
+    thanks to Bayes' law such that
 
     .. math::
         \hat{\mathsf{pr}}(x|\bm{l}) = \frac{\hat{\mathsf{f}}(\bm{l}|x)}
-                    {\sum_{x^*=0}^{n_c-1} \hat{\mathsf{f}}(\bm{l}|x^*)}
-    
+                    {\sum_{x^*=0}^{n_c-1} \hat{\mathsf{f}}(\bm{l}|x^*)}.
+
     Examples
     --------
     >>> from scaffe.modeling import LDAClassifier
     >>> import numpy as np
     >>> x = np.random.randint(0,256,(5000,10),dtype=np.int16)
     >>> y = np.random.randint(0,256,5000,dtype=np.uint16)
-    >>> lda = LDAClassifier(256,8,10)
+    >>> lda = LDAClassifier(256,3,10)
     >>> lda.fit(x,y)
     >>> x = np.random.randint(0,256,(20,10),dtype=np.int16)
     >>> predicted_proba = lda.predict_proba(x)
 
     Notes
-    ----- 
+    -----
     This implementation uses custom implementation of
     `sklearn.LDA(solver="eigen")` to compute the projection matrix and a custom
     implementation of `scipy.stats.multivariate_normal.pdf()`.
 
-    [1] François-Xavier Standaert and Cédric Archambeau, "Using
-    Subspace-Based Template Attacks to Compare and Combine Power and
-    Electromagnetic Information Leakages", CHES 2008: 411-425
+    .. [1] François-Xavier Standaert and Cédric Archambeau, "Using
+       Subspace-Based Template Attacks to Compare and Combine Power and
+       Electromagnetic Information Leakages", CHES 2008: 411-425
 
     Parameters
     ----------
     nc : int
         Number of possible classes (e.g., 256 for 8-bit target). `nc` must
-        be smaller than `65536`.
+        be smaller than `2**16`.
     p : int
         Number of dimensions in the linear subspace.
     ns: int
@@ -68,6 +79,7 @@ class LDAClassifier():
         :math:`\bm{W}`, the means :math:`\bm{\mu}_x` and the covariance
         :math:`\bm{\Sigma}`.
 
+
         Parameters
         ----------
         l : array_like, int16
@@ -76,12 +88,17 @@ class LDAClassifier():
         x : array_like, uint16
             Labels for each trace. Must be of shape `(n)` and
             must be `uint16`.
+
+        Notes
+        -----
+        This method does not support updating the model: calling this method
+        twice overrides the previous result.
         """
         self.lda.fit(l,x)
 
     def predict_proba(self,l):
         r"""Computes the probability for each of the classes for the traces
-        contained in `x`.
+        contained in `l`.
 
         Parameters
         ----------
@@ -91,9 +108,8 @@ class LDAClassifier():
 
         Returns
         -------
-        prs : array_like, f64
-            Array to contains probabilities on each of its rows. `prs` is of
-            shapre `(n,ns)`.
+        array_like, f64
+            Probabilities. Shape `(n, nc)`.
         """
         prs = self.lda.predict_proba(l)
         return prs
@@ -105,7 +121,7 @@ class LDAClassifier():
                 "psd":lda.get_psd(),"nc":self.nc_,
                 "p":self.p_,"ns":self.ns_}
         return dic
-    
+
     def __setstate__(self,state):
         self.lda = _scaffe_ext.LDA(state["nc"],state["p"],state["ns"])
         self.lda.set_state(state["cov"],state["psd"],

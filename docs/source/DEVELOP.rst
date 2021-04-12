@@ -11,31 +11,43 @@ is installed, you can create a `virtualenv` and enter it with
 
 It will compile the Rust library and import SCAFFE python files
 from `src/scaffe`. You can then edit directly these files. To run tests in that
-virtualenv, you can run 
+virtualenv, you can run (no need to activate the virtualenv before)
 
 .. code-block::
-    
+
     make devtest
-    
-You can also run the same tests with 
+
+
+**Warning**: this builds the native code in debug mode, which makes it very
+slow. If you want to compile your current version of SCAFFE with efficient
+code, you can run
 
 .. code-block::
 
     make test
 
-This will create the wheel and compile the Rust library with optimization
-It must be done before deployment.
-
-
-
-**Warning**: this builds the native code in debug mode, which makes it very slow. If you want to compile your current version of SCAFFE with efficient code, you can run
+The following create the wheel and compile the Rust library with optimization
 
 .. code-block::
-    
+ 
     CARGO_TARGET_DIR=.cargo_build pip wheel .
 
 which will create the wheel. You can the simply install it with 
 
 .. code-block::
-
+ 
     pip install XXX.whl --force-reinstall 
+
+You can run the test with python coverage information with
+
+.. code-block::
+ 
+    make test-cov
+
+then open the result in `htmlcov`.
+
+Finally, to build the docs in `docs/_build/html`
+
+.. code-block::
+ 
+    make docs

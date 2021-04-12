@@ -5,90 +5,53 @@ from scaffe import _scaffe_ext
 
 class SASCAGraph:
     r"""SASCAGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
-    It takes as input a string that represents the implementation (or graph) to
-    evaluate. Namely, it contains the intermediate variables (VAR) within the
-    implementations and explicits the operations (PROPERTY) that link them. Once
-    the description is loaded, and so the SASCAGraph created, user can mark
-    variables as PUBLIC (e.g., plaintext), set their distribution (e.g., Sbox
-    output) and specify table lookups (e.g. Sbox of the cipher).
-    Through the flags SINGLE and MULTI, SASCAGraph description allows to mark
-    multiple independent execution of described circuit.
 
-    The variables within the computation are represented with VAR with the
-    syntax `VAR " " MULTI|SINGLE " " name`. We note that public variables can
-    only the MULTI. We describe the attributes below:
+    A `SASCAGraph` attack is based on a set of variables, on knowledge of
+    relationships between those variables and information about the values of
+    the variables.
 
-    +------------+-------------------------------------------------------------+
-    | Key word   | Meaning                                                     |
-    +============+=============================================================+
-    | SINGLE     | This variable is unique for all the executions of the       |
-    |            | circuit. Encryption keys are usually marked as SINGLE.      |
-    +------------+-------------------------------------------------------------+
-    | MULTI      | This variable changes at every execution of the circuit.    |
-    |            | Intermediate variables of the encryption (e.g., Sbox output)|
-    |            | are usually marked as MULTI.                                |
-    +------------+-------------------------------------------------------------+
-    | name       | Unique identifier for the intermediate variable. It must    |
-    |            | be unique.                                                  |
-    +------------+-------------------------------------------------------------+
+    Variables have value in a binary finite field of size `nc`, and are viewed
+    as bit vectors. Those values are represented as integers in [0, nc).
+    Variables can be qualified as `SINGLE` or `MULTI`, which relates
+    to the multiple-execution feature of `SASCAGraph`: when performing a
+    SASCA, it is useful to acquire multiple execution traces. In these
+    executions, some variables stay the same (e.g. an encryption key), and other
+    change (e.g. plaintext, masked variables, etc.).
+    The `SINGLE` qualifier should be used for variables that remain the same
+    and `MULTI` for variables that change.
+    `SASCAGraph` will then build a graph where each `MULTI` variable is
+    replicated `n` times (once for each execution), as well as all the
+    relationships that relate at least on `MULTI` variable.
 
-    Tables can also be included in the graph description with the syntax
-    `TABLE name ["=[,,,]"]` that we describe below:
+    Relationships between variables are bitwise XOR, bitwise AND, and lookup
+    table. A lookup table can describe any function that maps a single variable
+    to another variable.
+    Description of `nc`, the variables, and the relationships is given in a
+    text format specified below.
 
-    +------------+-------------------------------------------------------------+
-    | Key word   | Meaning                                                     |
-    +============+=============================================================+
-    | name       | Unique identifier for the intermediate variable. It must    |
-    |            | be unique.                                                  |
-    +------------+-------------------------------------------------------------+
-    | =[,...,]   | Optional description of the table. The table is described   |
-    |            | with comma separated integers. The size of the table must be|
-    |            | equal to `nc` and all its contains smalled than `nc`. Table |
-    |            | can also be specified through `set_table()`.                |
-    +------------+-------------------------------------------------------------+
+    Finally, information about variables can be provided in two shapes: certain
+    information about the value of so-called *public* variables (with
+    `set_public`), and uncertain information about a variable in form of a
+    prior distribution (with `set_init_distribution`).
 
-    Properties allows to set relationship between variables with the syntax
-    `PROPERTY " " Operation`. The possible operations are listed below. We note
-    the public variables cannot be assigned with PROPERTY and that a PROPERTY
-    can only contain one VAR SINGLE.
-
-    +---------+--------------+-------------------------------------------------+
-    |Operation| Syntax       | Description                                     |
-    +=========+==============+=================================================+
-    |XOR      | `x = y^z^...`| Assigns to `x` as the XORs between the variables|
-    |         |              | separated with `^`. If a public variable is used|
-    |         |              | ,only two operands are allowed. Only one public |
-    |         |              | operand is allowed. XOR is bitwise.             |
-    +---------+--------------+-------------------------------------------------+
-    |AND      | `x = y&z`    | Assigns to `x` as the AND between two variables |
-    |         |              | separated with `&`. If a public variable is used|
-    |         |              | only two operands are allowed. Only one public  |
-    |         |              | operand is allowed. AND is bitwise.             |
-    +---------+--------------+-------------------------------------------------+
-    |LOOKUP   | `x = t[y]`   | Assigns to `x` the value at index `y` in table  |
-    |         |              | `t`. No public variable is allowed in this      |
-    |         |              | PROPERTY.                                       |
-    +---------+--------------+-------------------------------------------------+
-
-
-    An attack attempting to recover the secret key byte `k` can be expressed
-    with the following pseudo code. `sbox` is the Sbox of the blockcipher, `p` the
-    plaintext, `x` the Sbox input and `y` the Sbox output.
+    An attack attempting to recover the secret key byte `k` is shown below.
 
     .. code-block::
 
         # Describe and generate the SASCAGraph
-        graph_desc = ´´´
+        graph_desc = '''
             # Small unprotected Sbox example
-            TABLE sbox   # The Sbox
-            VAR SINGLE k # The key
-            VAR MULTI p  # The plaintext
-            VAR MULTI x
-            VAR MULTI y
-            PROPERTY x = sbox[y] # Sbox lookup
+            NC 256 # Graph over GF(256)
+            TABLE sbox   # Sbox
+            VAR SINGLE k # key (to recover !)
+            VAR MULTI p  # plaintext (known)
+            VAR MULTI x # Sbox input
+            VAR MULTI y # Sbox output (whose leakage is targeted)
             PROPERTY x = k ^ p   # Key addition
-            ´´´
-        graph = SASCAGraph(graph_desc,256,n)
+            PROPERTY x = sbox[y] # Sbox lookup
+            '''
+        # n is the number of traces for our attack.
+        graph = SASCAGraph(graph_desc,n)
 
         # Encode data into the graph
         graph.set_table("sbox",aes_sbox)
@@ -102,31 +65,60 @@ class SASCAGraph:
         k_distri = graph.get_distribution("k")
         key_guess = np.argmax(k_distri[0,:])
 
-    By running a belief propagation algorithm (see [1]), the distributions on all
+    By running a belief propagation algorithm (see [1]_), the distributions on all
     the variables are updated based on their initial distributions. The
-    `SASCAGraph`, can be solved by using `run_bp()`.
+    `SASCAGraph` can be solved by using `run_bp()`.
 
     Notes
     -----
-    [1] "Soft Analytical Side-Channel Attacks". N. Veyrat-Charvillon, B. Gérard,
-    F.-X. Standaert, ASIACRYPT2014.
+
+    **The graph description format** is a text line-oriented format (each line
+    of text is a statement) that describes a set of variables and relationships
+    between those variables.
+    The ordering of the statements is irrelevant and whitespace is irrelevant
+    except for newlines and around keywords. End-of-line comments start with
+    the `#` symbol.
+    The statements are:
+
+    - `NC <nc>`: specifies the field size (must be a power of two). There must
+      be one `NC` statement in the description.
+    - `VAR SINGLE|MULTI variable_name`: declares a variables.  `variable_name`
+      is an identifier of the variable (allowed characters are letters, digits
+      and underscore). One of the qualifiers `SINGLE` or `MULTI` must be given.
+    - `PROPERTY w = x^y^z`: declares a bitwise XOR property. There can be any
+      number of operands with at most one public operand. If there is a public
+      operand, there must be exactly two operands.
+    - `PROPERTY x = x&y`: declares a bitwise AND property. There must be
+      exactly two operands, with at most one public operand.
+    - `LOOKUP x = t[y]`: declares a LOOKUP property (`y` is the lookup of the
+      table `t` at index `y`). No public variable is allowed in this property.
+    - `TABLE` t = [0, 3, 2, 1]`: Declares a table that can be used in a LOOKUP.
+      The values provided in the table must belong to the interval [0, nc).
+      The initialization expression can be omitted from the graph description
+      (e.g. `TABLE t`) and be given with `set_table`.
+
+
+    **Note**: if the `MULTI` feature doesn't match your use-case, using only
+    `SINGLE` variables works.
+
+
+    .. [1] "Soft Analytical Side-Channel Attacks". N. Veyrat-Charvillon, B.
+       Gérard, F.-X. Standaert, ASIACRYPT2014.
 
     Parameters
     ----------
-    description : string
-        String containing the graph description.
-    nc : int
-        The size distributions. e.g., 256 when 8-bit variables are manipulated.
+    graph: string
+        The graph description.
     n : int
-        The number of independent traces to process within the `VAR MULTI`
+        The number of independent traces to process for the `VAR MULTI`
         variables.
     """
 
-    def __init__(self, description, n):
+    def __init__(self, graph, n):
         self.n_ = n
         self.solved_ = False
 
-        self.graph = SASCAGraphParser(description)
+        self.graph = SASCAGraphParser(graph)
         self.nc_ = self.graph.nc
         self.tables_ = {table: None for table in self.graph.tables}
         for tab_name, init in self.graph.tables.items():
@@ -239,6 +231,8 @@ class SASCAGraph:
         it : int
             Number of iterations of belief propagation.
         """
+        if self.solved_:
+            raise Exception("Cannot run bp twice on a graph.")
         self._init_graph()
         _scaffe_ext.run_bp(
             self.properties_,

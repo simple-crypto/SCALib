@@ -5,7 +5,7 @@ class SNR:
     intermediate values. Informally, SNR allows to quantify the amount of information about a
     random variable :math:`X` contained in the mean of the leakage :math:`L_X`. High SNR
     means more information contained in the mean. The SNR metric is defined
-    with the following equation.
+    with the following equation [1]_:
 
     .. math::
         \mathrm{SNR} = \frac{\mathrm{Var}_{x\leftarrow X}(\mathrm{E}[L_x])}
@@ -35,8 +35,8 @@ class SNR:
 
     Notes
     -----
-    [1] "Hardware Countermeasures against DPA ? A
-    Statistical Analysis of Their Effectiveness", Stefan Mangard, CT-RSA 2004: 222-235
+    .. [1] "Hardware Countermeasures against DPA ? A Statistical Analysis of
+       Their Effectiveness", Stefan Mangard, CT-RSA 2004: 222-235
 
     """
     def __init__(self,nc,ns,np=1):
@@ -49,7 +49,7 @@ class SNR:
 
     def fit_u(self,l,x):
         r""" Updates the SNR estimation with samples of `l` for the classes `x`
-        traces.
+        traces. This method may be called multiple times.
 
         Parameters
         ----------
