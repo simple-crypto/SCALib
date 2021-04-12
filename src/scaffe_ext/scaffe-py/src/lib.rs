@@ -22,9 +22,15 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
         "hist" => Ok(ranklib::RankingMethod::Hist),
         #[cfg(feature = "ntl")]
         "histbignum" => Ok(ranklib::RankingMethod::HistBigNum),
+        #[cfg(not(feature = "ntl"))]
+        "histbignum" => Err("Ranking method 'ntl' is not supported. Compile scaffe_ext with ntl feature enabled."),
         #[cfg(feature = "hellib")]
         "hellib" => Ok(ranklib::RankingMethod::Hellib),
-        _ => Err("Invalid method name"),
+        #[cfg(not(feature = "hellib"))]
+        "histbignum" => Err("Ranking method 'hellib' is not supported. Compile scaffe_ext with hellib feature enabled."),
+        _ => Err(
+            "Invalid ranking method name."
+        ),
     }
 }
 
@@ -74,21 +80,14 @@ fn _scaffe_ext(_py: Python, m: &PyModule) -> PyResult<()> {
         merge: Option<usize>,
         method: String,
     ) -> PyResult<(f64, f64, f64)> {
-        let res = str2method(&method);
+        let res = str2method(&method).unwrap_or_else(|s| panic!("{}", s));
+        let res = res.rank_accuracy(&costs, &key, acc, merge);
         match res {
-            Ok(res) => {
-                let res = res.rank_accuracy(&costs, &key, acc, merge);
-                match res {
-                    Ok(res) => Ok((res.min, res.est, res.max)),
-                    Err(s) => {
-                        println!("{}", s);
-                        panic!()
-                    }
-                }
+            Ok(res) => Ok((res.min, res.est, res.max)),
+            Err(s) => {
+                panic!("{}", s);
             }
-            Err(_) => panic!(),
         }
-        //return Ok((res.min, res.est, res.max));
     }
 
     #[pyfn(m, "rank_nbin")]
@@ -99,19 +98,13 @@ fn _scaffe_ext(_py: Python, m: &PyModule) -> PyResult<()> {
         merge: Option<usize>,
         method: String,
     ) -> PyResult<(f64, f64, f64)> {
-        let res = str2method(&method);
+        let res = str2method(&method).unwrap_or_else(|s| panic!("{}", s));
+        let res = res.rank_nbin(&costs, &key, nb_bin, merge);
         match res {
-            Ok(res) => {
-                let res = res.rank_nbin(&costs, &key, nb_bin, merge);
-                match res {
-                    Ok(res) => Ok((res.min, res.est, res.max)),
-                    Err(s) => {
-                        println!("{}", s);
-                        panic!()
-                    }
-                }
+            Ok(res) => Ok((res.min, res.est, res.max)),
+            Err(s) => {
+                panic!("{}", s);
             }
-            Err(_) => panic!(),
         }
     }
 
