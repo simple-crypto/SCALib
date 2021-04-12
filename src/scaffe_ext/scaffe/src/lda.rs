@@ -162,7 +162,6 @@ impl LDA {
             let mut projection = Array2::<f64>::zeros((p, ns));
             let mut index: Vec<(usize, f64)> = (0..evals.len()).zip(evals).collect();
             let evecs = sb;
-            println!("evecs: {:?}", evecs);
             index.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
             index.reverse();
             index
