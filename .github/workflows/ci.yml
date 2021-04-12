@@ -30,7 +30,8 @@ jobs:
               with:
                   path: |
                       openblas/inst
-                  key: openblas-0.3.14-v2
+                      openblas/libs
+                  key: openblas-0.3.14-v3
             - name: Download OpenBLAS source
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: bash
@@ -42,21 +43,21 @@ jobs:
                   tar xzf OpenBLAS-0.3.14.tar.gz
                   mkdir OpenBLAS-0.3.14/build
             - name: Enable miniconda
-              #if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
+              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               uses: conda-incubator/setup-miniconda@v2
               with:
                   miniconda-version: "latest"
                   channels: conda-forge
                   activate-environment: buildenv
             - name: Install openblas build dependencies (with conda)
-              #if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
+              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: cmd /C CALL {0}
               run: conda install -y cmake=3.19.7 flang=11.0.1 clangdev=11.0.1 perl=5.32.0.1 libflang=11.0.1 ninja=1.10.2
             - name: Compile and install OpenBLAS
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               run: cmd /C CALL build_openblas.bat
             - name: Copy flang libs
-              #if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
+              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: bash -l {0}
               run: |
                   mkdir -p openblas/libs
@@ -138,7 +139,7 @@ jobs:
             CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
             CIBW_BUILD_VERBOSITY: "1"
             CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full PATH="$PATH:$HOME/.cargo/bin"'
-            CIBW_BUILD: "cp36-*-_{x86_64,amd64}"
+            CIBW_BUILD: "cp36-*_x86_64"
             # I don't know how to make both normal and doctring tests work with only one command,
             # so I use shell &&.
             CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scaffe
