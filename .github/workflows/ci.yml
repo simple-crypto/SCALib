@@ -37,7 +37,7 @@ jobs:
               with:
                   path: |
                       openblas/inst
-                  key: openblas-0.3.14-v1
+                  key: openblas-0.3.14-v2
             - name: Download OpenBLAS source
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
               shell: bash
