@@ -53,9 +53,7 @@ jobs:
               run: conda install -y cmake=3.19.7 flang=11.0.1 clangdev=11.0.1 perl=5.32.0.1 libflang=11.0.1 ninja=1.10.2
             - name: Compile and install OpenBLAS
               if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
-              shell: cmd /C CALL {0}
-              run: |
-                  call "%GITHUB_WORKSPACE%\build_openblas.bat"
+              run: cmd /C CALL build_openblas.bat
             - name: Upload OpenBLAS build
               uses: actions/upload-artifact@v2
               with:
