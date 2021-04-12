@@ -23,6 +23,7 @@ import math
 
 from scaffe import _scaffe_ext
 
+
 def rank_nbin(costs, key, nbins, method="hist"):
     r"""Estimate the rank of the full keys based on scores based on histograms.
 

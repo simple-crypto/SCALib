@@ -1,5 +1,7 @@
 import numpy as np
 from scaffe import _scaffe_ext
+
+
 class SNR:
     r"""Computes the Signal-to-Noise Ratio (SNR) between the traces and the
     intermediate values. Informally, SNR allows to quantify the amount of information about a
@@ -39,16 +41,19 @@ class SNR:
        Their Effectiveness", Stefan Mangard, CT-RSA 2004: 222-235
 
     """
-    def __init__(self,nc,ns,np=1):
-        if nc not in range(1, 2**16+1):
-            raise ValueError(f"SNR can be computed on max 16 bit variable, nc={nc} given")
+
+    def __init__(self, nc, ns, np=1):
+        if nc not in range(1, 2 ** 16 + 1):
+            raise ValueError(
+                f"SNR can be computed on max 16 bit variable, nc={nc} given"
+            )
 
         self._ns = ns
         self._np = np
-        self._snr = _scaffe_ext.SNR(nc,ns,np)
+        self._snr = _scaffe_ext.SNR(nc, ns, np)
 
-    def fit_u(self,l,x):
-        r""" Updates the SNR estimation with samples of `l` for the classes `x`
+    def fit_u(self, l, x):
+        r"""Updates the SNR estimation with samples of `l` for the classes `x`
         traces. This method may be called multiple times.
 
         Parameters
@@ -62,15 +67,13 @@ class SNR:
         """
         nl, nsl = l.shape
         nx, npx = x.shape
-        if not (npx == self._np and nx==nl):
+        if not (npx == self._np and nx == nl):
             raise ValueError(f"Expected x with shape ({nl}, {self._np})")
         if not (nsl == self._ns):
             raise Exception(f"l is too long. Expected second dim of size {self._ns}.")
         # _scaffe_ext uses inverted axes for x.
-        self._snr.update(l,x.transpose())
+        self._snr.update(l, x.transpose())
 
     def get_snr(self):
-        r"""Return the current SNR estimation with an array of shape `(np,ns)`.
-        """
+        r"""Return the current SNR estimation with an array of shape `(np,ns)`."""
         return self._snr.get_snr()
-

@@ -220,7 +220,7 @@ class SASCAGraph:
         elif set(values) != set(range(self.nc_)):
             raise ValueError(
                 "In current implementation, table is not a bijection over the set of values [0, nc)."
-                )
+            )
         self.tables_[table] = values
 
     def run_bp(self, it):
@@ -274,24 +274,29 @@ class SASCAGraph:
         for property in self.properties_:
             if property["output"] in self.publics_:
                 raise ValueError(
-                        "In current implementation public vars can only be ^ or & operands.\n"
-                        + "Cannot assign " + property["output"]
-                        )
+                    "In current implementation public vars can only be ^ or & operands.\n"
+                    + "Cannot assign "
+                    + property["output"]
+                )
             if len([inp for inp in property["inputs"] if inp in self.publics_]) > 1:
                 raise ValueError(
-                        "In current implementation there can only be one public operand."
-                        )
+                    "In current implementation there can only be one public operand."
+                )
             for inp in property["inputs"]:
                 if inp in self.publics_ and property["property"] == "LOOKUP":
                     raise ValueError(
-                            "In current implementation public vars can only be ^ or & operands.\n"
-                            + "Cannot use " + inp + " in table lookup."
-                            )
-            if not any(v in self.var_ and self.var_[v]["para"] for v in property["inputs"] + [property["output"]]):
+                        "In current implementation public vars can only be ^ or & operands.\n"
+                        + "Cannot use "
+                        + inp
+                        + " in table lookup."
+                    )
+            if not any(
+                v in self.var_ and self.var_[v]["para"]
+                for v in property["inputs"] + [property["output"]]
+            ):
                 raise ValueError(
-                        "In current implementation, there must be at least one PARA var per property."
-                        )
-
+                    "In current implementation, there must be at least one PARA var per property."
+                )
 
             # number of VAR MULTI in the PROPERTY
             npara = len(
@@ -374,8 +379,8 @@ class SASCAGraph:
 
                 else:
                     raise ValueError(
-                            "XOR must have two operands when one operand is public."
-                            )
+                        "XOR must have two operands when one operand is public."
+                    )
 
             else:
                 assert False, "Property must be either LOOKUP, AND or XOR."
@@ -387,11 +392,14 @@ class SASCAGraph:
             else:
                 v["current"] = np.ones((1, self.nc_))
 
+
 class SASCAGraphError(Exception):
     pass
 
-class SASCAGraphParser():
-    MAX_DISP_ERRORS=10
+
+class SASCAGraphParser:
+    MAX_DISP_ERRORS = 10
+
     def __init__(self, description):
         self.nc_decls = []
         self.var_decls = []
@@ -411,10 +419,10 @@ class SASCAGraphParser():
     def _build_properties(self):
         for prop_kind, res, inputs in self.prop_decls:
             prop = {
-                    "property": prop_kind,
-                    "output": res,
-                    "neighboors": [],
-                    }
+                "property": prop_kind,
+                "output": res,
+                "neighboors": [],
+            }
             if prop_kind == "LOOKUP":
                 tab = inputs[0]
                 if tab not in self.tables:
@@ -424,11 +432,12 @@ class SASCAGraphParser():
             prop["inputs"] = inputs
             missing_vars = [v for v in inputs + [res] if v not in self.var]
             if missing_vars:
-                self.errors.extend([f"Variable '{v}' not declared." for v in missing_vars])
+                self.errors.extend(
+                    [f"Variable '{v}' not declared." for v in missing_vars]
+                )
             else:
                 self.properties.append(prop)
         self._raise_errors()
-
 
     def _build_tables(self):
         for tab_name, init in self.table_decls:
@@ -445,7 +454,7 @@ class SASCAGraphParser():
             if key in self.var:
                 self.errors.append(f"Variable {key} multiply declared.")
             else:
-                self.var[key] = { "para": para == "MULTI", "neighboors": [] }
+                self.var[key] = {"para": para == "MULTI", "neighboors": []}
         self._raise_errors()
 
     def _get_nc(self):
@@ -453,7 +462,7 @@ class SASCAGraphParser():
             self.errors.append("NC appears multiple times, can only appear once.")
         elif len(self.nc_decls) == 0:
             self.errors.append("NC not declared.")
-        elif self.nc_decls[0] not in range(1, 2**16+1):
+        elif self.nc_decls[0] not in range(1, 2 ** 16 + 1):
             self.errors.append("NC not in admissible range [1, 2^16].")
         else:
             self.nc = self.nc_decls[0]
@@ -468,7 +477,9 @@ class SASCAGraphParser():
                 try:
                     self._parse_sasca_graph_line(line)
                 except SASCAGraphError as e:
-                    self.errors.append(f"Syntax Error at line {i}:'{line}'\n\t{e.args[0]}")
+                    self.errors.append(
+                        f"Syntax Error at line {i}:'{line}'\n\t{e.args[0]}"
+                    )
         self._raise_errors()
 
     def _parse_sasca_ident(self, ident):
@@ -491,8 +502,8 @@ class SASCAGraphParser():
             res, prop = rem.replace(" ", "").split("=")
         except ValueError:
             raise SASCAGraphError(
-                    "PROPERTY declaration should contain one '=' character."
-                    )
+                "PROPERTY declaration should contain one '=' character."
+            )
         res = self._parse_sasca_ident(res)
         if "^" in prop:
             prop_kind = "XOR"
@@ -501,16 +512,12 @@ class SASCAGraphParser():
             prop_kind = "AND"
             inputs = prop.split("&")
             if len(inputs) != 2:
-                raise SASCAGraphError(
-                        "Wrong number of & operands: must be 2."
-                )
+                raise SASCAGraphError("Wrong number of & operands: must be 2.")
         elif "[" in prop and "]" in prop:
             prop_kind = "LOOKUP"
             tab, in_ = prop.split("[")
             if not in_.endswith("]"):
-                raise SASCAGraphError(
-                        "Missing losing bracket of lookup expression."
-                )
+                raise SASCAGraphError("Missing losing bracket of lookup expression.")
             inputs = [tab, in_[:-1]]
         else:
             raise SASCAGraphError("Unknown PROPERTY expression.")
@@ -539,7 +546,7 @@ class SASCAGraphParser():
                 raise SASCAGraphError("Wrong number of parameters to VAR declaration.")
             if para not in ("MULTI", "SINGLE"):
                 raise SASCAGraphError(
-                        f"Expected VAR description MULTI or SINGLE, found '{para}'."
+                    f"Expected VAR description MULTI or SINGLE, found '{para}'."
                 )
             key = self._parse_sasca_ident(key)
             self.var_decls.append((key, para))
@@ -550,21 +557,17 @@ class SASCAGraphParser():
             try:
                 name, *init = rem.replace(" ", "").split("=")
             except ValueError:
-                raise SASCAGraphError(
-                        "Missing table name in table declaration."
-                        )
+                raise SASCAGraphError("Missing table name in table declaration.")
             name = self._parse_sasca_ident(name)
             if init:
                 try:
-                    init, = init
+                    (init,) = init
                 except ValueError:
-                    raise SASCAGraphError(
-                            "Multiple '=' signs in table declaration."
-                            )
+                    raise SASCAGraphError("Multiple '=' signs in table declaration.")
                 if not (init.startswith("[") and init.endswith("]")):
                     raise SASCAGraphError(
-                            "Table initialization not enclosed in brackets."
-                            )
+                        "Table initialization not enclosed in brackets."
+                    )
                 init = [self._parse_sasca_int(x) for x in init[1:-1].split(",")]
             else:
                 init = None
@@ -576,12 +579,10 @@ class SASCAGraphParser():
         if self.errors:
             if len(self.errors) > self.MAX_DISP_ERRORS:
                 final_comment = "\n[...] {} other errors not shown.".format(
-                        len(self.errors)-self.MAX_DISP_ERRORS
-                        )
+                    len(self.errors) - self.MAX_DISP_ERRORS
+                )
             else:
                 final_comment = ""
             raise SASCAGraphError(
-                    "\n".join(self.errors[:self.MAX_DISP_ERRORS]) +
-                    final_comment
-                    )
-
+                "\n".join(self.errors[: self.MAX_DISP_ERRORS]) + final_comment
+            )

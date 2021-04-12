@@ -1,7 +1,8 @@
 import numpy as np
 from scaffe import _scaffe_ext
 
-class LDAClassifier():
+
+class LDAClassifier:
     r"""Models the leakage :math:`\bm{l}` with :math:`n_s` dimensions using
     linear discriminant analysis dimentionality reduction and gaussian
     templates.
@@ -67,14 +68,15 @@ class LDAClassifier():
     ns: int
         Number of dimensions in the leakage.
     """
-    def __init__(self,nc, p,ns):
-        self.p_ = p;
+
+    def __init__(self, nc, p, ns):
+        self.p_ = p
         self.nc_ = nc
         self.ns_ = ns
-        self.lda = _scaffe_ext.LDA(nc,p,ns)
+        self.lda = _scaffe_ext.LDA(nc, p, ns)
         assert p < nc
 
-    def fit(self,l,x):
+    def fit(self, l, x):
         r"""Estimates the PDF parameters that is the projection matrix
         :math:`\bm{W}`, the means :math:`\bm{\mu}_x` and the covariance
         :math:`\bm{\Sigma}`.
@@ -94,9 +96,9 @@ class LDAClassifier():
         This method does not support updating the model: calling this method
         twice overrides the previous result.
         """
-        self.lda.fit(l,x)
+        self.lda.fit(l, x)
 
-    def predict_proba(self,l):
+    def predict_proba(self, l):
         r"""Computes the probability for each of the classes for the traces
         contained in `l`.
 
@@ -116,17 +118,28 @@ class LDAClassifier():
 
     def __getstate__(self):
         lda = self.lda
-        dic = {"means":lda.get_means(),"cov":lda.get_cov(),
-                "projection":lda.get_projection(),
-                "psd":lda.get_psd(),"nc":self.nc_,
-                "p":self.p_,"ns":self.ns_}
+        dic = {
+            "means": lda.get_means(),
+            "cov": lda.get_cov(),
+            "projection": lda.get_projection(),
+            "psd": lda.get_psd(),
+            "nc": self.nc_,
+            "p": self.p_,
+            "ns": self.ns_,
+        }
         return dic
 
-    def __setstate__(self,state):
-        self.lda = _scaffe_ext.LDA(state["nc"],state["p"],state["ns"])
-        self.lda.set_state(state["cov"],state["psd"],
-                    state["means"],state["projection"],
-                    state["nc"],state["p"],state["ns"])
+    def __setstate__(self, state):
+        self.lda = _scaffe_ext.LDA(state["nc"], state["p"], state["ns"])
+        self.lda.set_state(
+            state["cov"],
+            state["psd"],
+            state["means"],
+            state["projection"],
+            state["nc"],
+            state["p"],
+            state["ns"],
+        )
         self.nc_ = state["nc"]
         self.ns_ = state["ns"]
         self.p_ = state["p"]
