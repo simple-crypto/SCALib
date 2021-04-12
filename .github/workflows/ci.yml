@@ -30,8 +30,6 @@ jobs:
               run: |
                   pwd
                   dir
-            - name: Test 1
-              run: cmd /C CALL x.cmd
             - uses: actions/cache@v2
               id: cache-openblas
               with:
@@ -129,20 +127,12 @@ jobs:
                   cp C:/Miniconda3/envs/buildenv/Library/lib/lib*.lib cache_flanglib/
                   cp C:/Miniconda3/envs/buildenv/Library/lib/flang*.lib cache_flanglib/
                   rm -rf C:/Miniconda3/envs/buildenv/Library/lib
-                  echo "cache_flanglib"
-                  ls -R cache_flanglib
-                  echo "conda lib"
-                  ls C:/Miniconda3/envs/buildenv/Library
             - name: Restore conda libs
               if: ${{ runner.os == 'Windows' }}
               shell: bash
               run: |
                   mkdir -p C:/Miniconda3/envs/buildenv/Library/lib
                   cp cache_flanglib/*.lib C:/Miniconda3/envs/buildenv/Library/lib/
-                  echo "cache_flanglib"
-                  ls -R cache_flanglib
-                  echo "conda lib"
-                  ls -R C:/Miniconda3/envs/buildenv/Library/lib
             - name: Download OpenBLAS build
               if: ${{ runner.os == 'Windows' }}
               uses: actions/download-artifact@v2
