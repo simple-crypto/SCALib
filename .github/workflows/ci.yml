@@ -156,11 +156,13 @@ jobs:
             - name: wheels Linux ${{ matrix.vers }}
               if: runner.os == 'Linux'
               uses: joerick/cibuildwheel@v1.10.0
-              env: CIBW_ARCHS_LINUX: ${{ matrix.vers }}
+              env:
+                  CIBW_ARCHS_LINUX: ${{ matrix.vers }}
             - name: wheels Macos ${{ matrix.vers }}
               if: runner.os == 'Macos'
               uses: joerick/cibuildwheel@v1.10.0
-              env: CIBW_ARCHS_MACOS: ${{ matrix.vers }}
+              env:
+                  CIBW_ARCHS_MACOS: ${{ matrix.vers }}
             - uses: actions/upload-artifact@v2
               with:
                   name: dist
