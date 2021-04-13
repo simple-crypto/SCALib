@@ -203,11 +203,9 @@ impl LDA {
 
             // corresponding eigen vectors
             let mut u_s = Array2::<f64>::zeros((u.shape()[0], pack.len()));
-            println!("Before slice 3");
             pack.iter()
                 .zip(u_s.axis_iter_mut(Axis(1)))
                 .for_each(|((i, _), mut u_s)| u_s.assign(&u.slice(s![.., *i])));
-            println!("After slice 3");
 
             //  psd = eigen_vec * (1/sqrt(eigen_val))
             let psigma_diag: Array1<f64> =
