@@ -122,7 +122,7 @@ contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 
 License
 =======
-TODO 
+This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`. See `COPYING <https://github.com/simple-crypto/scaffe/blob/main/COPYING>`_ for more information.
 
 Publications
 ============

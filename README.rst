@@ -121,7 +121,8 @@ contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 
 License
 =======
-TODO 
+This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`. See `COPYING <COPYING>`_ for more information.
+
 
 Publications
 ============
