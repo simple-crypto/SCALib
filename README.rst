@@ -1,6 +1,6 @@
 Welcome to SCAFFE
 =================
-Side-Channel Analysis Framawork for Fast Evaluation (SCAFFE) is a Python package that
+Side-Channel Analysis Framework for Fast Evaluation (SCAFFE) is a Python package that
 contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
@@ -121,7 +121,8 @@ contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 
 License
 =======
-TODO 
+This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`. See `COPYING <COPYING>`_ for more information.
+
 
 Publications
 ============

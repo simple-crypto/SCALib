@@ -1,6 +1,6 @@
 Welcome to SCAFFE
 =================
-Side-Channel Attack & Leakage Evaluation (SCAFFE) is a Python package that
+Side-Channel Analysis Framework for Fast Evaluation (SCAFFE) is a Python package that
 contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
@@ -36,7 +36,7 @@ compilation, checkout :doc:`source/DEVELOP` page.
 Pseudo-Example
 ==============
 Next, we detail a short pseudo example which illustrates the usage of SCAFFE. 
-For a full running example, please visit `this example` (ADD LINK TO GITHUB PAGE). 
+For a full running example, please visit `this example <https://github.com/simple-crypto/scaffe/tree/main/examples/aes_simulation>`_. 
 
 .. code-block::
 
@@ -104,7 +104,7 @@ independently, a typical usage of SCAFFE for it goes in four steps:
    the remaining computational power that is needed by the adversary to recover
    the correct key.
 
-Full example of SCAFFE is available `here` (ADD LINK TO GITHUB PAGE). 
+Full example of SCAFFE is available `here <https://github.com/simple-crypto/scaffe/tree/main/examples/aes_simulation>`_. 
 
 About us
 ========
@@ -116,13 +116,13 @@ either directly or by constructive feedbacks.
 Contributions and Issues
 ========================
 We are happy to take any suggestion for features would be useful for
-side-channel evaluators. If you want to contribute to the project, please visit DEVELOP.rst for relevant information. Please
+side-channel evaluators. If you want to contribute to the project, please visit :doc:`source/DEVELOP` for relevant information. Please
 contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 <olivier.bronchain@uclouvain.be>`_ for any futher suggestions / questions.
 
 License
 =======
-TODO 
+This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`. See `COPYING <https://github.com/simple-crypto/scaffe/blob/main/COPYING>`_ for more information.
 
 Publications
 ============

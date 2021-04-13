@@ -1,8 +1,9 @@
 For developers
 ===============
 
-In order to use the developer environment, you will need to use `tox`. Once it
-is installed, you can create a `virtualenv` and enter it with
+In order to use the developer environment, you will need to use `tox` and the
+latest stable release of the `rust toolchain`. Once it is installed, you can
+create a `virtualenv` and enter it with
 
 .. code-block::
 
