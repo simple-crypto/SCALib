@@ -48,7 +48,12 @@ numpydoc_show_class_members = False
 # We only have to mock dependencies, binary packages, and add the source to the
 # python path.
 autodoc_mock_imports = [
-        "scaffe._scaffe_ext", "numpy", "tqdm", "sklearn", "scipy"
+        "scaffe._scaffe_ext",
+        "scaffe.version",
+        "numpy",
+        "tqdm",
+        "sklearn",
+        "scipy"
         ]
 
 import sys
