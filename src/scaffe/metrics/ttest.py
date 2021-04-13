@@ -28,7 +28,7 @@ class Ttest:
             raise ValueError(f"Expected x with shape ({nl},)")
         if not (nsl == self._ns):
             raise Exception(f"l is too long. Expected second dim of size {self._ns}.")
-        # _scaffe_ext uses inverted axes for x.
+        
         self._ttest.update(l, x)
 
     def get_ttest(self):

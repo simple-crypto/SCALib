@@ -56,7 +56,7 @@ def test_ttest_d2():
     ns = 10
     d = 2
     nc = 2
-    n = 200
+    n = 2000
     
     m = np.random.randint(0,2,(nc,ns))
     traces = np.random.randint(0,10,(n,ns),dtype=np.int16)
@@ -73,7 +73,7 @@ def test_ttest_d6():
     ns = 10
     d = 6
     nc = 2
-    n = 200
+    n = 2000
     
     m = np.random.randint(0,2,(nc,ns))
     traces = np.random.randint(0,10,(n,ns),dtype=np.int16)

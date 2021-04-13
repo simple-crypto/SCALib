@@ -1,14 +1,13 @@
-use ndarray::{s, Array1, Array2, Array3, Axis, Zip};
+use ndarray::{s, Array1, Array2, Array3, Axis};
 use num_integer::binomial;
-use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
+use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
-use rayon::prelude::*;
 
 #[pyclass]
 pub struct Ttest {
     /// raw moment of order 1 with shape (2,ns)
     m: Array2<f64>,
-    /// central sum up to orer d*2 with shape (2,2*d,ns)
+    /// central sum up to orer d*2 with shape (2,ns,2*d)
     cs: Array3<f64>,
     /// number of samples per class (2,)
     n_samples: Array1<u64>,
@@ -26,7 +25,7 @@ impl Ttest {
     fn new(ns: usize, d: usize) -> Self {
         Ttest {
             m: Array2::<f64>::zeros((2, ns)),
-            cs: Array3::<f64>::zeros((2, 2 * d, ns)),
+            cs: Array3::<f64>::zeros((2, ns, 2 * d)),
             n_samples: Array1::<u64>::zeros((2,)),
 
             d: d,
@@ -59,35 +58,51 @@ impl Ttest {
                     let mut n = self.n_samples.slice_mut(s![*y as usize]);
                     n += 1;
                     let n = *n.first().unwrap() as f64;
+
+                    // mean and central moments
                     let mut cs = self.cs.slice_mut(s![*y as usize, .., ..]);
                     let mut m = self.m.slice_mut(s![*y as usize, ..]);
+                    let mut delta_pows = Array1::<f64>::zeros(2 * self.d);
 
-                    // compute delta
-                    let delta = (traces.mapv(|t| t as f64) - &m) / (n as f64);
-                    cbs.iter().for_each(|(j, vec)| {
-                        if n > 1.0 {
-                            let mult = (n - 1.0).powi(*j as i32)
-                                * (1.0 - (-1.0 / (n - 1.0)).powi(*j as i32 - 1));
-                            cs.slice_mut(s![*j - 1, ..])
-                                .zip_mut_with(&delta, |r, delta| {
-                                    *r += delta.powi(*j as i32) * mult
+                    let mults: Vec<f64> = cbs
+                        .iter()
+                        .map(|(j, _)| {
+                            (n - 1.0).powi(*j as i32)
+                                * (1.0 - (-1.0 / (n - 1.0)).powi(*j as i32 - 1))
+                        })
+                        .collect();
+
+                    cs.axis_iter_mut(Axis(0))
+                        .zip(m.iter_mut())
+                        .zip(traces.iter())
+                        .for_each(|((mut cs, m), traces)| {
+                            let cs = cs.as_slice_mut().unwrap();
+                            let delta = ((*traces as f64) - *m) / (n as f64);
+
+                            // delta_pows[i] = delta ** (i+1)
+                            // We will need all of them next
+                            delta_pows.iter_mut().fold(delta, |acc, x| {
+                                *x = acc;
+                                acc * delta
+                            });
+                            cbs.iter().zip(mults.iter()).for_each(|((j, vec), mult)| {
+                                if n > 1.0 {
+                                    cs[*j - 1] += delta_pows[*j - 1] * mult;
+                                }
+                                vec.iter().for_each(|(cb, k)| {
+                                    let a = cs[*j - *k - 1];
+                                    if (k & 0x1) == 1 {
+                                        // k is not pair
+                                        cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
+                                    } else {
+                                        // k is pair
+                                        cs[*j - 1] += cb * delta_pows[*k - 1] * a;
+                                    }
                                 });
-                        }
-                        vec.iter().for_each(|(cb, k)| {
-                            let i = (j - *k - 1)..(*j);
-                            let tab = cs.slice_mut(s![i;*k, ..]);
-                            let (a, mut b) = tab.split_at(Axis(0), 1);
-                            Zip::from(&mut b.slice_mut(s![0, ..]))
-                                .and(&a.slice(s![0, ..]))
-                                .and(&delta)
-                                .for_each(|dest, cs, delta| {
-                                    *dest += cb * (-delta).powi(*k as i32) * cs
-                                });
+                            });
+                            *m += delta;
+                            cs[0] = *m;
                         });
-                    });
-
-                    m += &delta;
-                    cs.slice_mut(s![0, ..]).assign(&m);
                 });
         });
     }
@@ -99,66 +114,43 @@ impl Ttest {
         let n0 = n_samples[[0]] as f64;
         let n1 = n_samples[[1]] as f64;
 
-        let cm0 = &cs.slice(s![0,..,..])/(n_samples[[0]] as f64);
-        let cm1 = &cs.slice(s![1,..,..])/(n_samples[[1]] as f64);
-        
-        let mut u0 = Array1::<f64>::zeros(self.ns);
-        let mut u1 = Array1::<f64>::zeros(self.ns);
-
-        let mut v0 = Array1::<f64>::zeros(self.ns);
-        let mut v1 = Array1::<f64>::zeros(self.ns);
         py.allow_threads(|| {
-            for d in 1..(self.d+1){
-                if d == 1{
-                    u0.assign(&self.m.slice(s![0,..]));
-                    u1.assign(&self.m.slice(s![1,..]));
-                    
-                    v0.assign(&cm0.slice(s![1,..]));
-                    v1.assign(&cm1.slice(s![1,..]));
-                }else if d == 2{
-                    u0.assign(&cm0.slice(s![1,..]));
-                    u1.assign(&cm1.slice(s![1,..]));
+            ttest
+                .axis_iter_mut(Axis(1))
+                .zip(cs.axis_iter(Axis(1)))
+                .for_each(|(mut ttest, cs)| {
+                    let mut u0;
+                    let mut u1;
+                    let mut v0;
+                    let mut v1;
+                    for d in 1..(self.d + 1) {
+                        if d == 1 {
+                            u0 = cs[[0, 0]];
+                            u1 = cs[[1, 0]];
 
-                    Zip::from(&mut v0)
-                        .and(&cm0.slice(s![3,..]))
-                        .and(&cm0.slice(s![1,..]))
-                        .for_each(|v,cmu,cml| *v = cmu - cml.powi(2));
+                            v0 = cs[[0, 1]] / n0;
+                            v1 = cs[[1, 1]] / n1;
+                        } else if d == 2 {
+                            u0 = cs[[0, 1]] / n0;
+                            u1 = cs[[1, 1]] / n1;
 
-                    Zip::from(&mut v1)
-                        .and(&cm1.slice(s![3,..]))
-                        .and(&cm1.slice(s![1,..]))
-                        .for_each(|v,cmu,cml| *v = cmu - cml.powi(2));
-                }else{
-                    Zip::from(&mut u0)
-                        .and(&cm0.slice(s![d-1,..]))
-                        .and(&cm0.slice(s![1,..]))
-                        .for_each(|v,cmu,cml| *v = cmu / cml.powf(d as f64/2.0));
-                    Zip::from(&mut u1)
-                        .and(&cm1.slice(s![d-1,..]))
-                        .and(&cm1.slice(s![1,..]))
-                        .for_each(|v,cmu,cml| *v = cmu / cml.powf(d as f64/2.0));
+                            v0 = cs[[0, 3]] / n0 - ((cs[[0, 1]] / n0).powi(2));
+                            v1 = cs[[1, 3]] / n1 - ((cs[[1, 1]] / n1).powi(2));
+                        } else {
+                            u0 = (cs[[0, d - 1]] / n0) / ((cs[[0, 1]] / n0).powf(d as f64 / 2.0));
+                            u1 = (cs[[1, d - 1]] / n1) / ((cs[[1, 1]] / n1).powf(d as f64 / 2.0));
 
-                    Zip::from(&mut v0)
-                        .and(&cm0.slice(s![(d*2)-1,..]))
-                        .and(&cm0.slice(s![d-1,..]))
-                        .and(&cm0.slice(s![1,..]))
-                        .for_each(|v,cmu,cml,cmd| *v = (cmu-cml.powi(2)) / cmd.powi(d as i32));
-                    Zip::from(&mut v1)
-                        .and(&cm1.slice(s![(d*2)-1,..]))
-                        .and(&cm1.slice(s![d-1,..]))
-                        .and(&cm1.slice(s![1,..]))
-                        .for_each(|v,cmu,cml,cmd| *v = (cmu-cml.powi(2)) / cmd.powi(d as i32));
-                }
+                            v0 = cs[[0, (2 * d) - 1]] / n0 - ((cs[[0, d - 1]] / n0).powi(2));
+                            v0 /= (cs[[0, 1]] / n0).powi(d as i32);
 
-                Zip::from(&mut ttest.slice_mut(s![d-1,..])).
-                    and(&u0).and(&u1).and(&v0).and(&v1).for_each(|t,u0,u1,v0,v1|{
-                        *t = (u0-u1)/f64::sqrt((v0/n0) + (v1/n1));
+                            v1 = cs[[1, (2 * d) - 1]] / n1 - ((cs[[1, d - 1]] / n1).powi(2));
+                            v1 /= (cs[[1, 1]] / n1).powi(d as i32);
+                        }
+
+                        ttest[d - 1] = (u0 - u1) / f64::sqrt((v0 / n0) + (v1 / n1));
                     }
-                );
-            }
-
+                });
         });
         Ok(&(ttest.to_pyarray(py)))
     }
-
 }
