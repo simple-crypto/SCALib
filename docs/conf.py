@@ -22,7 +22,7 @@ extensions = [
     'matplotlib.sphinxext.plot_directive',
     'IPython.sphinxext.ipython_console_highlighting',
     'IPython.sphinxext.ipython_directive',
-    'sphinx.ext.imgmath',
+    'sphinx.ext.mathjax',
 ]
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
