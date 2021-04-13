@@ -15,6 +15,7 @@ use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 use pyo3::types::PyList;
 use scaffe::lda;
 use scaffe::snr;
+use scaffe::ttest;
 
 fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
     match s {
@@ -37,6 +38,7 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
 #[pymodule]
 fn _scaffe_ext(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
+    m.add_class::<ttest::Ttest>()?;
     m.add_class::<lda::LDA>()?;
 
     #[pyfn(m, "run_bp")]
