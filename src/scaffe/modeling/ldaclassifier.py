@@ -3,7 +3,7 @@ from scaffe import _scaffe_ext
 
 
 class LDAClassifier:
-    r"""Models the leakage :math:`\bm{l}` with :math:`n_s` dimensions using
+    r"""Models the leakage :math:`\mathbf{l}` with :math:`n_s` dimensions using
     linear discriminant analysis dimentionality reduction and gaussian
     templates.
     Based on the training data, linear discriminant analysis build a linear
@@ -13,29 +13,29 @@ class LDAClassifier:
     same covariance matrix for all the classes) in the reduced dimensionality
     space to predict leakage likelihood [1]_.
 
-    Let :math:`\bm{W}` be the dimensionality reduction matrix of size
+    Let :math:`\mathbf{W}` be the dimensionality reduction matrix of size
     (:math:`p`, :math:`n_s`). The likelihood is
 
     .. math::
-            \mathsf{\hat{f}}(\bm{l} | x) =
-                \frac{1}{\sqrt{(2\pi)^{p} \cdot |\bm{\Sigma} |}} \cdot
+            \mathsf{\hat{f}}(\mathbf{l} | x) =
+                \frac{1}{\sqrt{(2\pi)^{p} \cdot |\mathbf{\Sigma} |}} \cdot
                 \exp^{\frac{1}{2}
-                    (\bm{W} \cdot \bm{l} - \bm{\mu}_x)
-                    \bm{\Sigma}
-                    ( \bm{W} \cdot \bm{l}-\bm{\mu}_x)'}
+                    (\mathbf{W} \cdot \mathbf{l} - \mathbf{\mu}_x)
+                    \mathbf{\Sigma}
+                    ( \mathbf{W} \cdot \mathbf{l}-\mathbf{\mu}_x)'}
 
-    where :math:`\bm{\mu}_x` is the mean of the leakage for class :math:`x` in
-    the projected space (:math:`\mu_x = \mathbb{E}(\bm{W}\bm{l}_x)`, where
-    :math:`\bm{l}_x` denotes the leakage traces of class :math:`x`) and
-    :math:`\bm{\Sigma}` its covariance (:math:`\bm{\Sigma} =
-    \mathbb{Cov}(\bm{W}\bm{l}_x - \bm{\mu}_x)`).
+    where :math:`\mathbf{\mu}_x` is the mean of the leakage for class :math:`x` in
+    the projected space (:math:`\mu_x = \mathbb{E}(\mathbf{W}\mathbf{l}_x)`, where
+    :math:`\mathbf{l}_x` denotes the leakage traces of class :math:`x`) and
+    :math:`\mathbf{\Sigma}` its covariance (:math:`\mathbf{\Sigma} =
+    \mathbb{Cov}(\mathbf{W}\mathbf{l}_x - \mathbf{\mu}_x)`).
 
     `LDAClassifier` provides the probability of each class with `predict_proba`
     thanks to Bayes' law such that
 
     .. math::
-        \hat{\mathsf{pr}}(x|\bm{l}) = \frac{\hat{\mathsf{f}}(\bm{l}|x)}
-                    {\sum_{x^*=0}^{n_c-1} \hat{\mathsf{f}}(\bm{l}|x^*)}.
+        \hat{\mathsf{pr}}(x|\mathbf{l}) = \frac{\hat{\mathsf{f}}(\mathbf{l}|x)}
+                    {\sum_{x^*=0}^{n_c-1} \hat{\mathsf{f}}(\mathbf{l}|x^*)}.
 
     Examples
     --------
@@ -78,8 +78,8 @@ class LDAClassifier:
 
     def fit(self, l, x):
         r"""Estimates the PDF parameters that is the projection matrix
-        :math:`\bm{W}`, the means :math:`\bm{\mu}_x` and the covariance
-        :math:`\bm{\Sigma}`.
+        :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
+        :math:`\mathbf{\Sigma}`.
 
 
         Parameters
