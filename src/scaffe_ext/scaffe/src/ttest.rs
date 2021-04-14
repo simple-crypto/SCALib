@@ -74,7 +74,6 @@ impl Ttest {
                     n += 1;
                     let n = *n.first().unwrap() as f64;
 
-                    // array for powers of delta
                     //let mut delta_pows = Array1::<f64>::zeros(2 * self.d);
 
                     // compute the multiplicative factor similar for all trace samples
@@ -86,13 +85,16 @@ impl Ttest {
                         })
                         .collect();
 
+                    // par iter on chuncks of size 20
                     (
-                        cs.axis_chunks_iter_mut(Axis(0), 10),
-                        traces.axis_chunks_iter(Axis(0), 10),
+                        cs.axis_chunks_iter_mut(Axis(0), 20),
+                        traces.axis_chunks_iter(Axis(0), 20),
                     )
                         .into_par_iter()
                         .for_each_init(
-                            || Array1::<f64>::zeros(2 * d),
+                            || 
+                                // array for powers of delta
+                                Array1::<f64>::zeros(2 * d),
                             |ref mut delta_pows, (mut cs, traces)| {
                                 cs.axis_iter_mut(Axis(0)).zip(traces.iter()).for_each(
                                     |(mut cs, traces)| {
@@ -134,6 +136,7 @@ impl Ttest {
                 });
         });
     }
+
     fn get_ttest<'py>(&mut self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
         let mut ttest = Array2::<f64>::zeros((self.d, self.ns));
         let cs = &self.cs;

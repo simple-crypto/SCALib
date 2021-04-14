@@ -37,7 +37,7 @@ def reference(traces,x,D):
         t[d-1,:] = (u0-u1)/(np.sqrt((v0/n[0]) + (v1/n[1])))
     return t
 def test_ttest_d1():
-    ns = 10
+    ns = 100
     d = 1
     nc = 2
     n = 200
@@ -53,7 +53,7 @@ def test_ttest_d1():
     t = ttest.get_ttest()
     assert(np.allclose(t_ref,t,rtol=1E-3))
 def test_ttest_d2():
-    ns = 10
+    ns = 100
     d = 2
     nc = 2
     n = 2000
@@ -70,7 +70,7 @@ def test_ttest_d2():
     assert(np.allclose(t_ref,t,rtol=1E-3))
 
 def test_ttest_d6():
-    ns = 10
+    ns = 100
     d = 6
     nc = 2
     n = 2000
