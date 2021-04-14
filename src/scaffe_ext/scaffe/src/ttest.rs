@@ -12,6 +12,7 @@ use ndarray::{s, Array1, Array2, Array3, Axis};
 use num_integer::binomial;
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
 #[pyclass]
 pub struct Ttest {
@@ -46,7 +47,7 @@ impl Ttest {
     fn update(&mut self, py: Python, traces: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
         let traces = traces.as_array();
         let y = y.as_array();
-
+        let d = self.d;
         // pre computes the combinatorial factors
         let cbs: Vec<(usize, Vec<(f64, usize)>)> = (2..((2 * self.d) + 1))
             .rev()
@@ -74,7 +75,7 @@ impl Ttest {
                     let n = *n.first().unwrap() as f64;
 
                     // array for powers of delta
-                    let mut delta_pows = Array1::<f64>::zeros(2 * self.d);
+                    //let mut delta_pows = Array1::<f64>::zeros(2 * self.d);
 
                     // compute the multiplicative factor similar for all trace samples
                     let mults: Vec<f64> = cbs
@@ -85,39 +86,51 @@ impl Ttest {
                         })
                         .collect();
 
-                    cs.axis_iter_mut(Axis(0))
-                        .zip(traces.iter())
-                        .for_each(|(mut cs, traces)| {
-                            let cs = cs.as_slice_mut().unwrap();
+                    (
+                        cs.axis_chunks_iter_mut(Axis(0), 10),
+                        traces.axis_chunks_iter(Axis(0), 10),
+                    )
+                        .into_par_iter()
+                        .for_each_init(
+                            || Array1::<f64>::zeros(2 * d),
+                            |ref mut delta_pows, (mut cs, traces)| {
+                                cs.axis_iter_mut(Axis(0)).zip(traces.iter()).for_each(
+                                    |(mut cs, traces)| {
+                                        let cs = cs.as_slice_mut().unwrap();
 
-                            // compute the delta
-                            let delta = ((*traces as f64) - cs[0]) / (n as f64);
+                                        // compute the delta
+                                        let delta = ((*traces as f64) - cs[0]) / (n as f64);
 
-                            // delta_pows[i] = delta ** (i+1)
-                            // We will need all of them next
-                            delta_pows.iter_mut().fold(delta, |acc, x| {
-                                *x = acc;
-                                acc * delta
-                            });
+                                        // delta_pows[i] = delta ** (i+1)
+                                        // We will need all of them next
+                                        delta_pows.iter_mut().fold(delta, |acc, x| {
+                                            *x = acc;
+                                            acc * delta
+                                        });
 
-                            // apply the one-pass update rule
-                            cbs.iter().zip(mults.iter()).for_each(|((j, vec), mult)| {
-                                if n > 1.0 {
-                                    cs[*j - 1] += delta_pows[*j - 1] * mult;
-                                }
-                                vec.iter().for_each(|(cb, k)| {
-                                    let a = cs[*j - *k - 1];
-                                    if (k & 0x1) == 1 {
-                                        // k is not pair
-                                        cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
-                                    } else {
-                                        // k is pair
-                                        cs[*j - 1] += cb * delta_pows[*k - 1] * a;
-                                    }
-                                });
-                            });
-                            cs[0] += delta;
-                        });
+                                        // apply the one-pass update rule
+                                        cbs.iter().zip(mults.iter()).for_each(
+                                            |((j, vec), mult)| {
+                                                if n > 1.0 {
+                                                    cs[*j - 1] += delta_pows[*j - 1] * mult;
+                                                }
+                                                vec.iter().for_each(|(cb, k)| {
+                                                    let a = cs[*j - *k - 1];
+                                                    if (k & 0x1) == 1 {
+                                                        // k is not pair
+                                                        cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
+                                                    } else {
+                                                        // k is pair
+                                                        cs[*j - 1] += cb * delta_pows[*k - 1] * a;
+                                                    }
+                                                });
+                                            },
+                                        );
+                                        cs[0] += delta;
+                                    },
+                                );
+                            },
+                        );
                 });
         });
     }
