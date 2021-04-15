@@ -16,10 +16,10 @@ use rayon::prelude::*;
 
 #[pyclass]
 pub struct Ttest {
-    /// Central sums of order 1 up to order d*2 with shape (2,ns,2*d),
+    /// Central sums of order 1 up to order d*2 with shape (ns,2,2*d),
     /// where central sums is sum((x-u_x)**i).
     /// Axes are (class, trace sample, order).
-    /// cs[..,0,..] contains the current estimation of means instead of
+    /// cs[..,..,0] contains the current estimation of means instead of
     /// the central sum (which would be zero).
     /// number of samples in a trace
     cs: Array3<f64>,
@@ -39,7 +39,7 @@ impl Ttest {
     /// d: order of the Ttest
     fn new(ns: usize, d: usize) -> Self {
         Ttest {
-            cs: Array3::<f64>::zeros((2, ns, 2 * d)),
+            cs: Array3::<f64>::zeros((ns, 2, 2 * d)),
             n_samples: Array1::<u64>::zeros((2,)),
             d: d,
             ns: ns,
@@ -97,7 +97,7 @@ impl Ttest {
                 })
                 .collect();
 
-            (traces.axis_iter(Axis(1)), self.cs.axis_iter_mut(Axis(1)))
+            (traces.axis_iter(Axis(1)), self.cs.axis_iter_mut(Axis(0)))
                 .into_par_iter()
                 .for_each_init(
                     || Array1::<f64>::zeros(2 * d),
@@ -155,13 +155,13 @@ impl Ttest {
         py.allow_threads(|| {
             (
                 ttest.axis_chunks_iter_mut(Axis(1), 20),
-                cs.axis_chunks_iter(Axis(1), 20),
+                cs.axis_chunks_iter(Axis(0), 20),
             )
                 .into_par_iter()
                 .for_each(|(mut ttest, cs)| {
                     ttest
                         .axis_iter_mut(Axis(1))
-                        .zip(cs.axis_iter(Axis(1)))
+                        .zip(cs.axis_iter(Axis(0)))
                         .for_each(|(mut ttest, cs)| {
                             let mut u0;
                             let mut u1;
