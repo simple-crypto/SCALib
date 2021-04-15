@@ -98,45 +98,47 @@ impl Ttest {
                 .collect();
 
             traces
-                .outer_iter()
-                .zip(shared_data.iter())
-                .for_each(|(traces, (n, y, mults))| {
-                    let mut cs = self.cs.slice_mut(s![*y, .., ..]);
-
+                .axis_iter(Axis(1))
+                .zip(self.cs.axis_iter_mut(Axis(1)))
+                .for_each(|(traces, mut cs)| {
                     let mut delta_pows = Array1::<f64>::zeros(2 * d);
+                    traces
+                        .iter()
+                        .zip(shared_data.iter())
+                        .for_each(|(trace, (n, y, mults))| {
+                            let mut cs = cs.slice_mut(s![*y, ..]);
 
-                    cs.axis_iter_mut(Axis(0))
-                        .zip(traces.iter())
-                        .for_each(|(mut cs, traces)| {
-                            let cs = cs.as_slice_mut().unwrap();
+                            cs.axis_iter_mut(Axis(0)).for_each(|mut cs| {
+                                let cs = cs.as_slice_mut().unwrap();
 
-                            // compute the delta
-                            let delta = ((*traces as f64) - cs[0]) / (*n as f64);
+                                // compute the delta
+                                let delta = ((*trace as f64) - cs[0]) / (*n as f64);
 
-                            // delta_pows[i] = delta ** (i+1)
-                            // We will need all of them next
-                            delta_pows.iter_mut().fold(delta, |acc, x| {
-                                *x = acc;
-                                acc * delta
-                            });
-
-                            // apply the one-pass update rule
-                            cbs.iter().zip(mults.iter()).for_each(|((j, vec), mult)| {
-                                if *n > 1.0 {
-                                    cs[*j - 1] += delta_pows[*j - 1] * mult;
-                                }
-                                vec.iter().for_each(|(cb, k)| {
-                                    let a = cs[*j - *k - 1];
-                                    if (k & 0x1) == 1 {
-                                        // k is not pair
-                                        cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
-                                    } else {
-                                        // k is pair
-                                        cs[*j - 1] += cb * delta_pows[*k - 1] * a;
-                                    }
+                                // delta_pows[i] = delta ** (i+1)
+                                // We will need all of them next
+                                delta_pows.iter_mut().fold(delta, |acc, x| {
+                                    *x = acc;
+                                    acc * delta
                                 });
+
+                                // apply the one-pass update rule
+                                cbs.iter().zip(mults.iter()).for_each(|((j, vec), mult)| {
+                                    if *n > 1.0 {
+                                        cs[*j - 1] += delta_pows[*j - 1] * mult;
+                                    }
+                                    vec.iter().for_each(|(cb, k)| {
+                                        let a = cs[*j - *k - 1];
+                                        if (k & 0x1) == 1 {
+                                            // k is not pair
+                                            cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
+                                        } else {
+                                            // k is pair
+                                            cs[*j - 1] += cb * delta_pows[*k - 1] * a;
+                                        }
+                                    });
+                                });
+                                cs[0] += delta;
                             });
-                            cs[0] += delta;
                         });
                 });
         });
