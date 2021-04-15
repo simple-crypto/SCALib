@@ -78,7 +78,7 @@ impl SNR {
                                     // update sum and sum_square if the random value of y is i.
                                     if i == *y as usize {
                                         n_samples += 1;
-                                        Zip::from(&mut sum).and(&mut sum_square).and(&x).apply(
+                                        Zip::from(&mut sum).and(&mut sum_square).and(&x).for_each(
                                             |sum, sum_square, x| {
                                                 let x = *x as i64;
                                                 *sum += x;
