@@ -97,19 +97,17 @@ impl Ttest {
                 })
                 .collect();
 
-            traces
-                .axis_iter(Axis(1))
-                .zip(self.cs.axis_iter_mut(Axis(1)))
-                .for_each(|(traces, mut cs)| {
-                    let mut delta_pows = Array1::<f64>::zeros(2 * d);
-                    traces
-                        .iter()
-                        .zip(shared_data.iter())
-                        .for_each(|(trace, (n, y, mults))| {
-                            let mut cs = cs.slice_mut(s![*y, ..]);
-
-                            cs.axis_iter_mut(Axis(0)).for_each(|mut cs| {
-                                let cs = cs.as_slice_mut().unwrap();
+            (traces.axis_iter(Axis(1)), self.cs.axis_iter_mut(Axis(1)))
+                .into_par_iter()
+                .for_each_init(
+                    || Array1::<f64>::zeros(2 * d),
+                    |ref mut delta_pows, (traces, mut cs)| {
+                        traces
+                            .iter()
+                            .zip(shared_data.iter())
+                            .for_each(|(trace, (n, y, mults))| {
+                                let mut cs_s = cs.slice_mut(s![*y, ..]);
+                                let cs = cs_s.as_slice_mut().unwrap();
 
                                 // compute the delta
                                 let delta = ((*trace as f64) - cs[0]) / (*n as f64);
@@ -139,8 +137,8 @@ impl Ttest {
                                 });
                                 cs[0] += delta;
                             });
-                        });
-                });
+                    },
+                );
         });
     }
 
