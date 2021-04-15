@@ -59,13 +59,11 @@ impl Ttest {
             traces
                 .outer_iter()
                 .zip(y.outer_iter())
-                .for_each(|(traces, y)| {
-                    let y = y.first().unwrap();
+                    let y = *y.first().unwrap() as usize;
+                    assert!(y <= 1);
+                    let mut cs = self.cs.slice_mut(s![y, .., ..]);
 
-                    // select the moment to update depending on the value of y
-                    let mut cs = self.cs.slice_mut(s![*y as usize, .., ..]);
-
-                    // updat the number of observation
+                    // update the number of observations
                     let mut n = self.n_samples.slice_mut(s![*y as usize]);
                     n += 1;
                     let n = *n.first().unwrap() as f64;
