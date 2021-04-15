@@ -137,6 +137,8 @@ impl Ttest {
         });
     }
 
+    /// Generate the actual Ttest metric based on the current state.
+    /// return array axes (d,ns)
     fn get_ttest<'py>(&mut self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
         let mut ttest = Array2::<f64>::zeros((self.d, self.ns));
         let cs = &self.cs;
@@ -146,40 +148,51 @@ impl Ttest {
         let n1 = n_samples[[1]] as f64;
 
         py.allow_threads(|| {
-            ttest
-                .axis_iter_mut(Axis(1))
-                .zip(cs.axis_iter(Axis(1)))
+            (
+                ttest.axis_chunks_iter_mut(Axis(1), 20),
+                cs.axis_chunks_iter(Axis(1), 20),
+            )
+                .into_par_iter()
                 .for_each(|(mut ttest, cs)| {
-                    let mut u0;
-                    let mut u1;
-                    let mut v0;
-                    let mut v1;
-                    for d in 1..(self.d + 1) {
-                        if d == 1 {
-                            u0 = cs[[0, 0]];
-                            u1 = cs[[1, 0]];
+                    ttest
+                        .axis_iter_mut(Axis(1))
+                        .zip(cs.axis_iter(Axis(1)))
+                        .for_each(|(mut ttest, cs)| {
+                            let mut u0;
+                            let mut u1;
+                            let mut v0;
+                            let mut v1;
+                            for d in 1..(self.d + 1) {
+                                if d == 1 {
+                                    u0 = cs[[0, 0]];
+                                    u1 = cs[[1, 0]];
 
-                            v0 = cs[[0, 1]] / n0;
-                            v1 = cs[[1, 1]] / n1;
-                        } else if d == 2 {
-                            u0 = cs[[0, 1]] / n0;
-                            u1 = cs[[1, 1]] / n1;
+                                    v0 = cs[[0, 1]] / n0;
+                                    v1 = cs[[1, 1]] / n1;
+                                } else if d == 2 {
+                                    u0 = cs[[0, 1]] / n0;
+                                    u1 = cs[[1, 1]] / n1;
 
-                            v0 = cs[[0, 3]] / n0 - ((cs[[0, 1]] / n0).powi(2));
-                            v1 = cs[[1, 3]] / n1 - ((cs[[1, 1]] / n1).powi(2));
-                        } else {
-                            u0 = (cs[[0, d - 1]] / n0) / ((cs[[0, 1]] / n0).powf(d as f64 / 2.0));
-                            u1 = (cs[[1, d - 1]] / n1) / ((cs[[1, 1]] / n1).powf(d as f64 / 2.0));
+                                    v0 = cs[[0, 3]] / n0 - ((cs[[0, 1]] / n0).powi(2));
+                                    v1 = cs[[1, 3]] / n1 - ((cs[[1, 1]] / n1).powi(2));
+                                } else {
+                                    u0 = (cs[[0, d - 1]] / n0)
+                                        / ((cs[[0, 1]] / n0).powf(d as f64 / 2.0));
+                                    u1 = (cs[[1, d - 1]] / n1)
+                                        / ((cs[[1, 1]] / n1).powf(d as f64 / 2.0));
 
-                            v0 = cs[[0, (2 * d) - 1]] / n0 - ((cs[[0, d - 1]] / n0).powi(2));
-                            v0 /= (cs[[0, 1]] / n0).powi(d as i32);
+                                    v0 =
+                                        cs[[0, (2 * d) - 1]] / n0 - ((cs[[0, d - 1]] / n0).powi(2));
+                                    v0 /= (cs[[0, 1]] / n0).powi(d as i32);
 
-                            v1 = cs[[1, (2 * d) - 1]] / n1 - ((cs[[1, d - 1]] / n1).powi(2));
-                            v1 /= (cs[[1, 1]] / n1).powi(d as i32);
-                        }
+                                    v1 =
+                                        cs[[1, (2 * d) - 1]] / n1 - ((cs[[1, d - 1]] / n1).powi(2));
+                                    v1 /= (cs[[1, 1]] / n1).powi(d as i32);
+                                }
 
-                        ttest[d - 1] = (u0 - u1) / f64::sqrt((v0 / n0) + (v1 / n1));
-                    }
+                                ttest[d - 1] = (u0 - u1) / f64::sqrt((v0 / n0) + (v1 / n1));
+                            }
+                        });
                 });
         });
         Ok(&(ttest.to_pyarray(py)))
