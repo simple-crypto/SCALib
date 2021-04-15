@@ -29,7 +29,7 @@ class Ttest:
     >>> from scaffe.metrics import Ttest
     >>> import numpy as np
     >>> traces = np.random.randint(0,256,(100,200),dtype=np.int16)
-    >>> X = np.random.randint(0,2,100,dtype=np.uint8)
+    >>> X = np.random.randint(0,2,100,dtype=np.uint16)
     >>> ttest = Ttest(200,d=3)
     >>> ttest.fit_u(traces,X)
     >>> t = ttest.get_ttest()
@@ -69,7 +69,6 @@ class Ttest:
         """
         nl, nsl = l.shape
         nx = x.shape[0]
-        print(x.shape)
         if not (nx == nl):
             raise ValueError(f"Expected x with shape ({nl},)")
         if not (nsl == self._ns):
