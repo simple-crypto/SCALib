@@ -15,15 +15,11 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 
 #[pyclass]
-pub struct Ttest {
-    /// central sums of order i up to orer d*2 with shape (2,ns,2*d)
+    /// Central sums of order 1 up to order d*2 with shape (2,ns,2*d),
     /// where central sums is sum((x-u_x)**i).
-    /// cs[..,0,..] contains the current estmation of means instead of the central sum.
-    cs: Array3<f64>,
-    /// number of samples per class (2,)
-    n_samples: Array1<u64>,
-    /// order of the test
-    d: usize,
+    /// Axes are (class, trace sample, order).
+    /// cs[..,0,..] contains the current estimation of means instead of
+    /// the central sum (which would be zero).
     /// number of samples in a trace
     ns: usize,
 }
