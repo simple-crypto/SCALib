@@ -10,6 +10,7 @@ SCAFFE contains various features for side-channel analysis. Please read `SCAFFE 
 - :doc:`source/scaffe.metrics`:
 
   - `SNR`: Signal-to-noise ratio.
+  - `Ttest`: T-test estimation.
 
 - :doc:`source/scaffe.modeling`: 
 

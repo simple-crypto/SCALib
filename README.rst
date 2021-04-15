@@ -10,6 +10,7 @@ SCAFFE contains various features for side-channel analysis. Please read SCAFFE-w
 - Metrics:
 
   - `SNR <scaffe/metrics/snr.py>`_: Signal-to-noise ratio.
+  - `SNR <scaffe/metrics/ttest.py>`_: T-test estimation.
 - Modeling leakage distribution:
 
   - `LDAClassifier <scaffe/modeling/ldaclassifier.py>`_: Template in linear subspaces.
