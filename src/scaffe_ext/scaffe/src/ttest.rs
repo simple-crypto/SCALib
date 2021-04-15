@@ -6,7 +6,7 @@
 //! The measurements are expected to be of length ns.
 //!
 //! This is based on the one-pass algorithm proposed in
-//! https://eprint.iacr.org/2015/207
+//! <https://eprint.iacr.org/2015/207>.
 
 use ndarray::{s, Array1, Array2, Array3, Axis};
 use num_integer::binomial;
@@ -15,14 +15,22 @@ use pyo3::prelude::*;
 use rayon::prelude::*;
 
 #[pyclass]
+pub struct Ttest {
     /// Central sums of order 1 up to order d*2 with shape (2,ns,2*d),
     /// where central sums is sum((x-u_x)**i).
     /// Axes are (class, trace sample, order).
     /// cs[..,0,..] contains the current estimation of means instead of
     /// the central sum (which would be zero).
     /// number of samples in a trace
+    cs: Array3<f64>,
+    /// number of samples per class (2,)
+    n_samples: Array1<u64>,
+    /// order of the test
+    d: usize,
+    /// Number of samples per trace
     ns: usize,
 }
+
 #[pymethods]
 impl Ttest {
     #[new]
@@ -59,16 +67,16 @@ impl Ttest {
             traces
                 .outer_iter()
                 .zip(y.outer_iter())
+                .for_each(|(traces, y)| {
+
                     let y = *y.first().unwrap() as usize;
                     assert!(y <= 1);
                     let mut cs = self.cs.slice_mut(s![y, .., ..]);
 
                     // update the number of observations
-                    let mut n = self.n_samples.slice_mut(s![*y as usize]);
-                    n += 1;
-                    let n = *n.first().unwrap() as f64;
-
-                    //let mut delta_pows = Array1::<f64>::zeros(2 * self.d);
+                    let n = &mut self.n_samples[y];
+                    *n += 1;
+                    let n = *n as f64;
 
                     // compute the multiplicative factor similar for all trace samples
                     let mults: Vec<f64> = cbs
