@@ -69,6 +69,23 @@ def test_ttest_d2():
     t = ttest.get_ttest()
     assert(np.allclose(t_ref,t,rtol=1E-3))
 
+def test_ttest_d6_multiple_fit():
+    ns = 100
+    d = 6
+    nc = 2
+    n = 200
+    
+    m = np.random.randint(0,2,(nc,ns))
+    traces = np.random.randint(0,10,(n,ns),dtype=np.int16)
+    labels = np.random.randint(0,nc,n,dtype=np.uint16)
+    traces += m[labels] 
+
+    t_ref = reference(traces,labels,d)
+    ttest = Ttest(ns,d)
+    for i in range(0,n,10):
+        ttest.fit_u(traces[i:i+10,:],labels[i:i+10])
+    t = ttest.get_ttest()
+    assert(np.allclose(t_ref,t,rtol=1E-3))
 def test_ttest_d6():
     ns = 100
     d = 6

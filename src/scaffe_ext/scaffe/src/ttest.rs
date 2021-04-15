@@ -51,90 +51,93 @@ impl Ttest {
     fn update(&mut self, py: Python, traces: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
         let traces = traces.as_array();
         let y = y.as_array();
-        let d = self.d;
-        // pre computes the combinatorial factors
-        let cbs: Vec<(usize, Vec<(f64, usize)>)> = (2..((2 * self.d) + 1))
-            .rev()
-            .map(|j| {
-                (
-                    j,
-                    (1..(j - 1)).map(|k| (binomial(j, k) as f64, k)).collect(),
-                )
-            })
-            .collect();
-
         py.allow_threads(|| {
-            traces
-                .outer_iter()
-                .zip(y.outer_iter())
-                .for_each(|(traces, y)| {
+            let d = self.d;
 
-                    let y = *y.first().unwrap() as usize;
+            // pre computes the combinatorial factors
+            let cbs: Vec<(usize, Vec<(f64, usize)>)> = (2..((2 * self.d) + 1))
+                .rev()
+                .map(|j| {
+                    (
+                        j,
+                        (1..(j - 1)).map(|k| (binomial(j, k) as f64, k)).collect(),
+                    )
+                })
+                .collect();
+
+            // contains the data that are the same for all the points in a single traces
+            // Contains tupes (n:f64,y:usize,mults:Vec<f64>)
+            // n : number of previously processed traces for the class y
+            // y : set to update
+            // mults: (n-1)**(j) * (1.0 - (-1.0/(n-1.0))**(j-1) for j in [2..(2*d-1)].rev()
+            let shared_data: Vec<(f64, usize, Vec<f64>)> = y
+                .iter()
+                .map(|y| {
+                    let y = *y as usize;
                     assert!(y <= 1);
-                    let mut cs = self.cs.slice_mut(s![y, .., ..]);
 
                     // update the number of observations
                     let n = &mut self.n_samples[y];
                     *n += 1;
                     let n = *n as f64;
 
-                    // compute the multiplicative factor similar for all trace samples
-                    let mults: Vec<f64> = cbs
-                        .iter()
-                        .map(|(j, _)| {
-                            (n - 1.0).powi(*j as i32)
-                                * (1.0 - (-1.0 / (n - 1.0)).powi(*j as i32 - 1))
-                        })
-                        .collect();
-
-                    // par iter on chuncks of size 20
                     (
-                        cs.axis_chunks_iter_mut(Axis(0), 20),
-                        traces.axis_chunks_iter(Axis(0), 20),
+                        // number of sample on that class
+                        n,
+                        // y value
+                        y,
+                        // compute the multiplicative factor similar for all trace samples
+                        cbs.iter()
+                            .map(|(j, _)| {
+                                (n - 1.0).powi(*j as i32)
+                                    * (1.0 - (-1.0 / (n - 1.0)).powi(*j as i32 - 1))
+                            })
+                            .collect(),
                     )
-                        .into_par_iter()
-                        .for_each_init(
-                            || 
-                                // array for powers of delta
-                                Array1::<f64>::zeros(2 * d),
-                            |ref mut delta_pows, (mut cs, traces)| {
-                                cs.axis_iter_mut(Axis(0)).zip(traces.iter()).for_each(
-                                    |(mut cs, traces)| {
-                                        let cs = cs.as_slice_mut().unwrap();
+                })
+                .collect();
 
-                                        // compute the delta
-                                        let delta = ((*traces as f64) - cs[0]) / (n as f64);
+            traces
+                .outer_iter()
+                .zip(shared_data.iter())
+                .for_each(|(traces, (n, y, mults))| {
+                    let mut cs = self.cs.slice_mut(s![*y, .., ..]);
 
-                                        // delta_pows[i] = delta ** (i+1)
-                                        // We will need all of them next
-                                        delta_pows.iter_mut().fold(delta, |acc, x| {
-                                            *x = acc;
-                                            acc * delta
-                                        });
+                    let mut delta_pows = Array1::<f64>::zeros(2 * d);
 
-                                        // apply the one-pass update rule
-                                        cbs.iter().zip(mults.iter()).for_each(
-                                            |((j, vec), mult)| {
-                                                if n > 1.0 {
-                                                    cs[*j - 1] += delta_pows[*j - 1] * mult;
-                                                }
-                                                vec.iter().for_each(|(cb, k)| {
-                                                    let a = cs[*j - *k - 1];
-                                                    if (k & 0x1) == 1 {
-                                                        // k is not pair
-                                                        cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
-                                                    } else {
-                                                        // k is pair
-                                                        cs[*j - 1] += cb * delta_pows[*k - 1] * a;
-                                                    }
-                                                });
-                                            },
-                                        );
-                                        cs[0] += delta;
-                                    },
-                                );
-                            },
-                        );
+                    cs.axis_iter_mut(Axis(0))
+                        .zip(traces.iter())
+                        .for_each(|(mut cs, traces)| {
+                            let cs = cs.as_slice_mut().unwrap();
+
+                            // compute the delta
+                            let delta = ((*traces as f64) - cs[0]) / (*n as f64);
+
+                            // delta_pows[i] = delta ** (i+1)
+                            // We will need all of them next
+                            delta_pows.iter_mut().fold(delta, |acc, x| {
+                                *x = acc;
+                                acc * delta
+                            });
+
+                            // apply the one-pass update rule
+                            cbs.iter().zip(mults.iter()).for_each(|((j, vec), mult)| {
+                                if *n > 1.0 {
+                                    cs[*j - 1] += delta_pows[*j - 1] * mult;
+                                }
+                                vec.iter().for_each(|(cb, k)| {
+                                    let a = cs[*j - *k - 1];
+                                    if (k & 0x1) == 1 {
+                                        // k is not pair
+                                        cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
+                                    } else {
+                                        // k is pair
+                                        cs[*j - 1] += cb * delta_pows[*k - 1] * a;
+                                    }
+                                });
+                            });
+                            cs[0] += delta;
+                        });
                 });
         });
     }
