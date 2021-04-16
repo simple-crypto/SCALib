@@ -106,7 +106,7 @@ impl LDA {
             let mut x_f64_t = Array2::<f64>::zeros(x.t().raw_dim());
             Zip::from(&mut x_f64_t)
                 .and(&x_f64.t())
-                .par_apply(|x, y| *x = *y);
+                .par_for_each(|x, y| *x = *y);
             let st = x_f64_t.dot(&x_f64) / (n as f64) - mean_total.dot(&mean_total.t());
 
             // Computes the covariance of the noise. That is the pooled covariance of the centered
@@ -124,7 +124,7 @@ impl LDA {
                 });
             Zip::from(&mut x_f64_t)
                 .and(&x_f64.t())
-                .par_apply(|x, y| *x = *y);
+                .par_for_each(|x, y| *x = *y);
             sw.assign(&(x_f64_t.dot(&x_f64) / (n as f64)));
 
             // sb = st - sw
@@ -132,7 +132,7 @@ impl LDA {
             Zip::from(&mut sb)
                 .and(&st)
                 .and(&sw)
-                .par_apply(|sb, st, sw| *sb = st - sw);
+                .par_for_each(|sb, st, sw| *sb = st - sw);
 
             // Generalized eigenvalue decomposition for sb and sw with a call to dsysgvd Lapack
             // routine. Eigen vectors are stored inplace in sb.
@@ -181,7 +181,7 @@ impl LDA {
             let mut traces_t_t = Array2::zeros(traces_t.t().raw_dim());
             Zip::from(&mut traces_t_t)
                 .and(&traces_t.t())
-                .par_apply(|x, y| *x = *y);
+                .par_for_each(|x, y| *x = *y);
             let cov = traces_t.dot(&traces_t_t) / (n as f64);
 
             // ---- Step 3

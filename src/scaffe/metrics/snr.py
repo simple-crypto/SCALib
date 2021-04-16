@@ -34,6 +34,7 @@ class SNR:
     >>> X = np.random.randint(0,256,(100,10),dtype=np.uint16)
     >>> snr = SNR(256,200,10)
     >>> snr.fit_u(traces,X)
+    >>> snr_val = snr.get_snr()
 
     Notes
     -----
@@ -53,8 +54,8 @@ class SNR:
         self._snr = _scaffe_ext.SNR(nc, ns, np)
 
     def fit_u(self, l, x):
-        r"""Updates the SNR estimation with samples of `l` for the classes `x`
-        traces. This method may be called multiple times.
+        r"""Updates the SNR estimation with samples of `l` for the classes `x`.
+        This method may be called multiple times.
 
         Parameters
         ----------
