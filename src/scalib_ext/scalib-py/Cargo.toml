@@ -1,5 +1,5 @@
 [package]
-name = "scaffe-py"
+name = "scalib-py"
 version = "0.1.0"
 authors = [
     "Olivier Bronchain <olivier.bronchain@uclouvain.be>",
@@ -8,7 +8,7 @@ authors = [
 edition = "2018"
 
 [lib]
-name = "scaffe_py"
+name = "scalib_py"
 crate-type = ["cdylib"]
 
 [features]
@@ -35,5 +35,5 @@ features = ["extension-module"]
 [dependencies.ranklib]
 path = "../ranklib"
 
-[dependencies.scaffe]
-path = "../scaffe"
+[dependencies.scalib]
+path = "../scalib"

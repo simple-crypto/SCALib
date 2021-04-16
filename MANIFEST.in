@@ -9,12 +9,12 @@ include pyproject.toml
 include tox.ini
 include Makefile
 
-recursive-include src/scaffe_ext/ranklib *
-recursive-include src/scaffe_ext/scaffe *
-recursive-include src/scaffe_ext/scaffe-py *
-include src/scaffe_ext/Cargo.toml
-include src/scaffe_ext/Cargo.lock
-exclude src/scaffe/_scaffe_ext.abi3.so
+recursive-include src/scalib_ext/ranklib *
+recursive-include src/scalib_ext/scalib *
+recursive-include src/scalib_ext/scalib-py *
+include src/scalib_ext/Cargo.toml
+include src/scalib_ext/Cargo.lock
+exclude src/scalib/_scalib_ext.abi3.so
 
 recursive-include docs/source *.rst
 include docs/conf.py

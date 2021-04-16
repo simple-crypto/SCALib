@@ -1,43 +1,43 @@
-Welcome to SCAFFE
+Welcome to SCALib
 =================
-Side-Channel Analysis Framework for Fast Evaluation (SCAFFE) is a Python package that
+The Side-Channel Analysis Library (SCALib) is a Python package that
 contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
-SCAFFE contains various features for side-channel analysis. Please read `SCAFFE workflow`_ for more details:
+SCALib contains various features for side-channel analysis. Please read `SCALib workflow`_ for more details:
 
-- :doc:`source/scaffe.metrics`:
+- :doc:`source/scalib.metrics`:
 
   - `SNR`: Signal-to-noise ratio.
   - `Ttest`: T-test estimation.
 
-- :doc:`source/scaffe.modeling`: 
+- :doc:`source/scalib.modeling`: 
 
   - `LDAClassifier`: Template in linear subspaces.
-- :doc:`source/scaffe.attacks`:
+- :doc:`source/scalib.attacks`:
 
   - `SASCAGraph`: Generalization of `Divide & Conquer` with Soft Analytical Attacks.
-- :doc:`source/scaffe.postprocessing`:
+- :doc:`source/scalib.postprocessing`:
 
   - `rankestimation`: Histogram based full key rank estimation.
 
 
 Install
 =======
-You can install SCAFFE by using PyPi packages and running:
+You can install SCALib by using PyPi packages and running:
 
 .. code-block::
 
-   pip install scaffe
+   pip install scalib
 
 Wheels for Windows and Linux are provided. More information about source
 compilation, checkout :doc:`source/DEVELOP` page.
 
 Pseudo-Example
 ==============
-Next, we detail a short pseudo example which illustrates the usage of SCAFFE. 
-For a full running example, please visit `this example <https://github.com/simple-crypto/scaffe/tree/main/examples/aes_simulation>`_. 
+Next, we detail a short pseudo example which illustrates the usage of SCALib. 
+For a full running example, please visit `this example <https://github.com/simple-crypto/scalib/tree/main/examples/aes_simulation>`_. 
 
 .. code-block::
 
@@ -75,12 +75,12 @@ For a full running example, please visit `this example <https://github.com/simpl
      k_distri = graph.get_distribution("k")
      key_guess = np.argmax(k_distri[0,:])
 
-SCAFFE workflow
+SCALib workflow
 ===============
 
-The current version of SCAFFE contains modules for all the necessary steps for a
-profiled side-channel attack. Even if modules of SCAFFE can be used
-independently, a typical usage of SCAFFE for it goes in four steps:
+The current version of SCALib contains modules for all the necessary steps for a
+profiled side-channel attack. Even if modules of SCALib can be used
+independently, a typical usage of SCALib for it goes in four steps:
 
 1. **Metrics**: In this step, standard metrics are evaluated from the
    measurements. This helps to find point-of-interest (POIs), quantify avaiable information, etc. 
@@ -105,12 +105,12 @@ independently, a typical usage of SCAFFE for it goes in four steps:
    the remaining computational power that is needed by the adversary to recover
    the correct key.
 
-Full example of SCAFFE is available `here <https://github.com/simple-crypto/scaffe/tree/main/examples/aes_simulation>`_. 
+Full example of SCALib is available `here <https://github.com/simple-crypto/scalib/tree/main/examples/aes_simulation>`_. 
 
 About us
 ========
-SCAFFE has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCAFFE. It has
+SCALib has been initiated by Olivier Bronchain during his PhD at Crypto Group,
+UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. It has
 already been used by many other researcher at UCLouvain which contributed
 either directly or by constructive feedbacks. 
 
@@ -123,12 +123,12 @@ contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
 
 License
 =======
-This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`. See `COPYING <https://github.com/simple-crypto/scaffe/blob/main/COPYING>`_ for more information.
+This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`. See `COPYING <https://github.com/simple-crypto/scalib/blob/main/COPYING>`_ for more information.
 
 Publications
 ============
 
-SCAFFE has been used in various publications, let us know if you used it so that we can add it to the list.
+SCALib has been used in various publications, let us know if you used it so that we can add it to the list.
 
 1. "Mode-Level vs. Implementation-Level Physical Security in Symmetric
    Cryptography: A Practical Guide Through the Leakage-Resistance Jungle", D.
@@ -148,8 +148,8 @@ SCAFFE has been used in various publications, let us know if you used it so that
    :maxdepth: 2
    :hidden:
 
-   source/scaffe.metrics.rst
-   source/scaffe.modeling.rst
-   source/scaffe.attacks.rst
-   source/scaffe.postprocessing.rst
+   source/scalib.metrics.rst
+   source/scalib.modeling.rst
+   source/scalib.attacks.rst
+   source/scalib.postprocessing.rst
    source/DEVELOP.rst

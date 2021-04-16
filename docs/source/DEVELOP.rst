@@ -9,8 +9,8 @@ is installed, you can create a `virtualenv` and enter it with
     make dev
     source .tox/dev/bin/activate
 
-It will compile the Rust library and import SCAFFE python files
-from `src/scaffe`. You can then edit directly these files. To run tests in that
+It will compile the Rust library and import SCALib python files
+from `src/scalib`. You can then edit directly these files. To run tests in that
 virtualenv, you can run (no need to activate the virtualenv before)
 
 .. code-block::
@@ -19,7 +19,7 @@ virtualenv, you can run (no need to activate the virtualenv before)
 
 
 **Warning**: this builds the native code in debug mode, which makes it very
-slow. If you want to compile your current version of SCAFFE with efficient
+slow. If you want to compile your current version of SCALib with efficient
 code, you can run
 
 .. code-block::

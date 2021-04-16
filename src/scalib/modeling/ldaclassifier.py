@@ -1,5 +1,5 @@
 import numpy as np
-from scaffe import _scaffe_ext
+from scalib import _scalib_ext
 
 
 class LDAClassifier:
@@ -39,7 +39,7 @@ class LDAClassifier:
 
     Examples
     --------
-    >>> from scaffe.modeling import LDAClassifier
+    >>> from scalib.modeling import LDAClassifier
     >>> import numpy as np
     >>> x = np.random.randint(0,256,(5000,10),dtype=np.int16)
     >>> y = np.random.randint(0,256,5000,dtype=np.uint16)
@@ -73,7 +73,7 @@ class LDAClassifier:
         self.p_ = p
         self.nc_ = nc
         self.ns_ = ns
-        self.lda = _scaffe_ext.LDA(nc, p, ns)
+        self.lda = _scalib_ext.LDA(nc, p, ns)
         assert p < nc
 
     def fit(self, l, x):
@@ -130,7 +130,7 @@ class LDAClassifier:
         return dic
 
     def __setstate__(self, state):
-        self.lda = _scaffe_ext.LDA(state["nc"], state["p"], state["ns"])
+        self.lda = _scalib_ext.LDA(state["nc"], state["p"], state["ns"])
         self.lda.set_state(
             state["cov"],
             state["psd"],

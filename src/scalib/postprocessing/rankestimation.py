@@ -21,7 +21,7 @@ key is skipped, since it has no impact on the final rank.
 
 import math
 
-from scaffe import _scaffe_ext
+from scalib import _scalib_ext
 
 
 def rank_nbin(costs, key, nbins, method="hist"):
@@ -51,7 +51,7 @@ def rank_nbin(costs, key, nbins, method="hist"):
             - **r** is the stimated key rank.
             - **rmax** is an upper bound for the key rank.
     """
-    return _scaffe_ext.rank_nbin(costs, key, nbins, _choose_merge_value(costs), method)
+    return _scalib_ext.rank_nbin(costs, key, nbins, _choose_merge_value(costs), method)
 
 
 def rank_accuracy(costs, key, acc_bit=1.0, method="hist"):
@@ -83,7 +83,7 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist"):
             - **rmax** is an upper bound for the key rank.
     """
 
-    return _scaffe_ext.rank_accuracy(
+    return _scalib_ext.rank_accuracy(
         costs, key, 2.0 ** acc_bit, _choose_merge_value(costs), method
     )
 

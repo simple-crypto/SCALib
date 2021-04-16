@@ -1,7 +1,7 @@
-from scaffe.metrics import SNR
-from scaffe.modeling import LDAClassifier
-from scaffe.attacks import SASCAGraph
-from scaffe.postprocessing import rank_accuracy
+from scalib.metrics import SNR
+from scalib.modeling import LDAClassifier
+from scalib.attacks import SASCAGraph
+from scalib.postprocessing import rank_accuracy
 
 from utils import sbox,gen_traces
 import numpy as np

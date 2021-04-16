@@ -1,5 +1,5 @@
 import pytest
-from scaffe.metrics import Ttest
+from scalib.metrics import Ttest
 import numpy as np
 import scipy.stats
 

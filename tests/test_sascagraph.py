@@ -1,5 +1,5 @@
 import pytest
-from scaffe.attacks import SASCAGraph
+from scalib.attacks import SASCAGraph
 import numpy as np
 import os
 

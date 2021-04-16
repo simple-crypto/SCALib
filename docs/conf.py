@@ -2,7 +2,7 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'SCAFFE'
+project = 'SCALib'
 copyright = '2021, UCLouvain'
 
 
@@ -48,8 +48,8 @@ numpydoc_show_class_members = False
 # We only have to mock dependencies, binary packages, and add the source to the
 # python path.
 autodoc_mock_imports = [
-        "scaffe._scaffe_ext",
-        "scaffe.version",
+        "scalib._scalib_ext",
+        "scalib.version",
         "numpy",
         "tqdm",
         "sklearn",
@@ -59,7 +59,7 @@ autodoc_mock_imports = [
 import sys
 sys.path.append('../src')
 
-#from scaffe.version import version
+#from scalib.version import version
 # The full version, including alpha/beta/rc tags
 #release = version
 

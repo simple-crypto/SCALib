@@ -1,9 +1,9 @@
 [workspace]
 
 members = [
-    "scaffe",
+    "scalib",
     "ranklib",
-    "scaffe-py"
+    "scalib-py"
 ]
 resolver = "2"
 

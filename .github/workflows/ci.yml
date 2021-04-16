@@ -97,14 +97,14 @@ jobs:
                       ~/.cargo/registry
                       ~/.cargo/git
                       ${{ github.workspace }}/cargo_build
-                  key: ${{ runner.os }}-cargo-${{ hashFiles('src/scaffe_ext/Cargo.lock') }}
+                  key: ${{ runner.os }}-cargo-${{ hashFiles('src/scalib_ext/Cargo.lock') }}
                   restore-keys: |
-                      ${{ runner.os }}-cargo-${{ hashFiles('src/scaffe_ext/Cargo.lock') }}
+                      ${{ runner.os }}-cargo-${{ hashFiles('src/scalib_ext/Cargo.lock') }}
                       ${{ runner.os }}-cargo-
             - name: wheels Windows ${{ matrix.vers }}
               uses: joerick/cibuildwheel@v1.10.0
               env:
-                  SCAFFE_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas\inst\lib
+                  SCALIB_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas\inst\lib
                   CARGO_TARGET_DIR: ${{ github.workspace }}\cargo_build
                   CIBW_ARCHS_WINDOWS: native
                   CIBW_BUILD_VERBOSITY: "1"
@@ -112,7 +112,7 @@ jobs:
                   CIBW_BUILD: "cp36-win_amd64"
                   # I don't know how to make both normal and doctring tests
                   # work with only one command, so I use shell &&.
-                  CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scaffe
+                  CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scalib
                   CIBW_TEST_EXTRAS: test
             - uses: actions/upload-artifact@v2
               with:
@@ -143,7 +143,7 @@ jobs:
             CIBW_BUILD: "cp36-*_x86_64"
             # I don't know how to make both normal and doctring tests work with only one command,
             # so I use shell &&.
-            CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scaffe
+            CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scalib
             CIBW_TEST_EXTRAS: test
         steps:
             - uses: actions/checkout@v2

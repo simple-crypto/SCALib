@@ -1,6 +1,6 @@
 import numpy as np
 from functools import reduce
-from scaffe import _scaffe_ext
+from scalib import _scalib_ext
 
 
 class SASCAGraph:
@@ -234,7 +234,7 @@ class SASCAGraph:
         if self.solved_:
             raise Exception("Cannot run bp twice on a graph.")
         self._init_graph()
-        _scaffe_ext.run_bp(
+        _scalib_ext.run_bp(
             self.properties_,
             [self.var_[x] for x in list(self.var_)],
             it,

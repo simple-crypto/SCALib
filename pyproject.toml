@@ -9,4 +9,4 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
-write_to = "src/scaffe/version.py"
+write_to = "src/scalib/version.py"

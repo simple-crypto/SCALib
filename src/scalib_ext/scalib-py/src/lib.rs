@@ -13,9 +13,9 @@ use ndarray::{s, Axis};
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 use pyo3::types::PyList;
-use scaffe::lda;
-use scaffe::snr;
-use scaffe::ttest;
+use scalib::lda;
+use scalib::snr;
+use scalib::ttest;
 
 fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
     match s {
@@ -24,11 +24,11 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
         #[cfg(feature = "ntl")]
         "histbignum" => Ok(ranklib::RankingMethod::HistBigNum),
         #[cfg(not(feature = "ntl"))]
-        "histbignum" => Err("Ranking method 'ntl' is not supported. Compile scaffe_ext with ntl feature enabled."),
+        "histbignum" => Err("Ranking method 'ntl' is not supported. Compile scalib_ext with ntl feature enabled."),
         #[cfg(feature = "hellib")]
         "hellib" => Ok(ranklib::RankingMethod::Hellib),
         #[cfg(not(feature = "hellib"))]
-        "histbignum" => Err("Ranking method 'hellib' is not supported. Compile scaffe_ext with hellib feature enabled."),
+        "histbignum" => Err("Ranking method 'hellib' is not supported. Compile scalib_ext with hellib feature enabled."),
         _ => Err(
             "Invalid ranking method name."
         ),
@@ -36,7 +36,7 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
 }
 
 #[pymodule]
-fn _scaffe_ext(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
     m.add_class::<ttest::Ttest>()?;
     m.add_class::<lda::LDA>()?;
@@ -51,7 +51,7 @@ fn _scaffe_ext(_py: Python, m: &PyModule) -> PyResult<()> {
         nc: usize,
         n: usize,
     ) -> PyResult<()> {
-        scaffe::belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n)
+        scalib::belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n)
     }
 
     #[pyfn(m, "partial_cp")]

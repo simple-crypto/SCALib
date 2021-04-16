@@ -1,5 +1,5 @@
 import numpy as np
-from scaffe import _scaffe_ext
+from scalib import _scalib_ext
 
 class Ttest:
     r"""Computes the univariate :math:`t`-test at arbitrary order :math:`d`
@@ -26,7 +26,7 @@ class Ttest:
 
     Examples
     --------
-    >>> from scaffe.metrics import Ttest
+    >>> from scalib.metrics import Ttest
     >>> import numpy as np
     >>> traces = np.random.randint(0,256,(100,200),dtype=np.int16)
     >>> X = np.random.randint(0,2,100,dtype=np.uint16)
@@ -52,7 +52,7 @@ class Ttest:
         self._ns = ns
         self._d = d
 
-        self._ttest = _scaffe_ext.Ttest(ns, d)
+        self._ttest = _scalib_ext.Ttest(ns, d)
 
     def fit_u(self, l, x):
         r"""Updates the Ttest estimation with samples of `l` for the sets `x`.

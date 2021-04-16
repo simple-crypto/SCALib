@@ -1,41 +1,41 @@
-Welcome to SCAFFE
+Welcome to SCALib
 =================
-Side-Channel Analysis Framework for Fast Evaluation (SCAFFE) is a Python package that
+The Side-Channel Analysis Library (SCALib) is a Python package that
 contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
-SCAFFE contains various features for side-channel analysis. Please read SCAFFE-workflow_ for more details:
+SCALib contains various features for side-channel analysis. Please read SCALib-workflow_ for more details:
 
 - Metrics:
 
-  - `SNR <scaffe/metrics/snr.py>`_: Signal-to-noise ratio.
-  - `Ttest <scaffe/metrics/ttest.py>`_: T-test estimation.
+  - `SNR <scalib/metrics/snr.py>`_: Signal-to-noise ratio.
+  - `Ttest <scalib/metrics/ttest.py>`_: T-test estimation.
 - Modeling leakage distribution:
 
-  - `LDAClassifier <scaffe/modeling/ldaclassifier.py>`_: Template in linear subspaces.
+  - `LDAClassifier <scalib/modeling/ldaclassifier.py>`_: Template in linear subspaces.
 - Attacks:
 
-  - `SASCAGraph <scaffe/attacks/sascagraph.py>`_: Generalization of `Divide & Conquer` with Soft Analytical Attacks.
+  - `SASCAGraph <scalib/attacks/sascagraph.py>`_: Generalization of `Divide & Conquer` with Soft Analytical Attacks.
 - Postprocessing to analyse attacks results:
 
-  - `rankestimation <scaffe/postprocessing/rankestimation.py>`_: Histogram based full key rank estimation.
+  - `rankestimation <scalib/postprocessing/rankestimation.py>`_: Histogram based full key rank estimation.
 
 
 Install
 =======
-You can install SCAFFE by using PyPi packages and running:
+You can install SCALib by using PyPi packages and running:
 
 .. code-block::
 
-   pip install scaffe
+   pip install scalib
 
 Wheels for Windows and Linux are provided. More information about source
 compilation, checkout `develop <DEVELOP.rst>`_ informations.
 
 Pseudo-Example
 ==============
-Next, we detail a short pseudo example which illustrates the usage of SCAFFE. 
+Next, we detail a short pseudo example which illustrates the usage of SCALib. 
 For a full running example, please visit `this example <examples/aes_simulation/>`_. 
 
 .. code-block::
@@ -74,12 +74,12 @@ For a full running example, please visit `this example <examples/aes_simulation/
      k_distri = graph.get_distribution("k")
      key_guess = np.argmax(k_distri[0,:])
 
-SCAFFE-workflow
+SCALib-workflow
 ===============
 
-The current version of SCAFFE contains modules for all the necessary steps for a
-profiled side-channel attack. Even if modules of SCAFFE can be used
-independently, a typical usage of SCAFFE for it goes in four steps:
+The current version of SCALib contains modules for all the necessary steps for a
+profiled side-channel attack. Even if modules of SCALib can be used
+independently, a typical usage of SCALib for it goes in four steps:
 
 1. **Metrics**: In this step, standard metrics are evaluated from the
    measurements. This helps to find point-of-interest (POIs), quantify avaiable information, etc. 
@@ -104,12 +104,12 @@ independently, a typical usage of SCAFFE for it goes in four steps:
    the remaining computational power that is needed by the adversary to recover
    the correct key.
 
-Full example of SCAFFE is available `here <examples/aes_simulation/>`_. 
+Full example of SCALib is available `here <examples/aes_simulation/>`_. 
 
 About us
 ========
-SCAFFE has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCAFFE. It has
+SCALib has been initiated by Olivier Bronchain during his PhD at Crypto Group,
+UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. It has
 already been used by many other researcher at UCLouvain which contributed
 either directly or by constructive feedbacks. 
 
@@ -128,7 +128,7 @@ This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`. S
 Publications
 ============
 
-SCAFFE has been used in various publications, let us know if you used it so that we can add it to the list.
+SCALib has been used in various publications, let us know if you used it so that we can add it to the list.
 
 1. "Mode-Level vs. Implementation-Level Physical Security in Symmetric
    Cryptography: A Practical Guide Through the Leakage-Resistance Jungle", D.

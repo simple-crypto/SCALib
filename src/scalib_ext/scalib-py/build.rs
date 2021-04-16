@@ -48,9 +48,9 @@ fn main() {
         //    cmake --install . --prefix %OPENBLAS_INSTALL_DIR% -v
         //    ```
         // 8. The location of the OpenBLAS library is
-        //    SCAFFE_OPENBLAS_LIB=%OPENBLAS_INSTALL_DIR%\lib\openblas.lib
+        //    SCALib_OPENBLAS_LIB=%OPENBLAS_INSTALL_DIR%\lib\openblas.lib
         //
-        let openblas_lib_env_name = "SCAFFE_OPENBLAS_LIB_DIR";
+        let openblas_lib_env_name = "SCALIB_OPENBLAS_LIB_DIR";
         let openblas_lib = std::env::var_os(openblas_lib_env_name)
             .expect(&format!("{} not defined.", openblas_lib_env_name));
         let path = std::path::Path::new(&openblas_lib);

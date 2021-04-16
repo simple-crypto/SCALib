@@ -1,5 +1,5 @@
 import numpy as np
-from scaffe import _scaffe_ext
+from scalib import _scalib_ext
 
 
 class SNR:
@@ -28,7 +28,7 @@ class SNR:
 
     Examples
     --------
-    >>> from scaffe.metrics import SNR
+    >>> from scalib.metrics import SNR
     >>> import numpy as np
     >>> traces = np.random.randint(0,256,(100,200),dtype=np.int16)
     >>> X = np.random.randint(0,256,(100,10),dtype=np.uint16)
@@ -51,7 +51,7 @@ class SNR:
 
         self._ns = ns
         self._np = np
-        self._snr = _scaffe_ext.SNR(nc, ns, np)
+        self._snr = _scalib_ext.SNR(nc, ns, np)
 
     def fit_u(self, l, x):
         r"""Updates the SNR estimation with samples of `l` for the classes `x`.
@@ -72,7 +72,7 @@ class SNR:
             raise ValueError(f"Expected x with shape ({nl}, {self._np})")
         if not (nsl == self._ns):
             raise Exception(f"l is too long. Expected second dim of size {self._ns}.")
-        # _scaffe_ext uses inverted axes for x.
+        # _scalib_ext uses inverted axes for x.
         self._snr.update(l, x.transpose())
 
     def get_snr(self):
