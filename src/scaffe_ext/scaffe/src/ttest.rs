@@ -56,12 +56,14 @@ impl Ttest {
     // Updated with measurement t, Q' = Q U t, |Q'| = n
     // CS_{d,Q'} = (1/n) sum((x-mu_x)**d)
     //
+    // delta = y + sum(x)/(n-1)
+    //
     // Update rules is given by:
     //
     // CS_{d,Q'} = CS_{s,Q}
     //      + sum_{k=1,d-2}(
     //         binomial(k,d)
-    //         * CS_{d,Q-k}
+    //         * CS_{d-k,Q}
     //         * (-delta/n)**d
     //         )
     //      + (
