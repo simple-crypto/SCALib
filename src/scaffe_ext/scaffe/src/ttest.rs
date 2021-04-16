@@ -48,6 +48,26 @@ impl Ttest {
     /// Update the Ttest state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
     /// y: realization of random variables with shape (n,)
+    // Q set of all previous traces
+    //
+    // Initial values, |Q| = n-1
+    // CS_{d,Q} = 1/(n-1) sum((x-mu_x)**d)
+    //
+    // Updated with measurement t, Q' = Q U t, |Q'| = n
+    // CS_{d,Q'} = (1/n) sum((x-mu_x)**d)
+    //
+    // Update rules is given by:
+    //
+    // CS_{d,Q'} = CS_{s,Q}
+    //      + sum_{k=1,d-2}(
+    //         binomial(k,d)
+    //         * CS_{d,Q-k}
+    //         * (-delta/n)**d
+    //         )
+    //      + (
+    //          (delta * n-1/n)**d
+    //          (1 - (-1/(n-1)))**(d-1)
+    //        )
     fn update(&mut self, py: Python, traces: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
         let traces = traces.as_array();
         let y = y.as_array();
@@ -144,6 +164,23 @@ impl Ttest {
 
     /// Generate the actual Ttest metric based on the current state.
     /// return array axes (d,ns)
+    //
+    // with central moment defined as:
+    //   CM_{i,Q} = CS_{i,Q}/n
+    //
+    // the statistic is given by:
+    // t = (u0 - u1) / sqrt( s0/n0 + s1/n1)
+    //
+    // d = 1:
+    //      ui = sum(t)/ni
+    //      vi = CM_{2,Q}
+    // d = 2:
+    //      ui = CM_{2,Q}
+    //      vi = CM_{4,Q} - CM_{2,Q}**2
+    // d > 2:
+    //      ui = CM_{d,Q} / CM_{2,Q}**(d/2)
+    //      vi = (CM_{2*d,Q} - CM_{d,Q}**2) / CM{2,Q}**d
+
     fn get_ttest<'py>(&mut self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
         let mut ttest = Array2::<f64>::zeros((self.d, self.ns));
         let cs = &self.cs;
