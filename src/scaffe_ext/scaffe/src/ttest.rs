@@ -51,25 +51,36 @@ impl Ttest {
     // Q set of all previous traces
     //
     // Initial values, |Q| = n-1
-    // CS_{d,Q} = 1/(n-1) sum((x-mu_x)**d)
+    // mu = (1/(n-1)) * sum(Q)
+    // if d>=2:
+    //      CS_{d,Q} = 1/(n-1) sum((Q-mu)**d)
+    // else:
+    //      CS_{1,Q'} = mu'
     //
-    // Updated with measurement t, Q' = Q U t, |Q'| = n
-    // CS_{d,Q'} = (1/n) sum((x-mu_x)**d)
+    // Updated with a single measurement t, Q' = Q U t, |Q'| = n
+    // mu' = (1/(n-1)) * sum(Q')
     //
-    // delta = y + sum(x)/(n-1)
+    // if d >=2:
+    //      CS_{d,Q'} = (1/n) sum((Q-mu')**d)
+    // else:
+    //      CS_{1,Q'} = mu'
     //
     // Update rules is given by:
     //
-    // CS_{d,Q'} = CS_{s,Q}
+    // delta = (t - mu)/n
+    //
+    // CS_{d,Q'} = CS_{d,Q}
     //      + sum_{k=1,d-2}(
     //         binomial(k,d)
     //         * CS_{d-k,Q}
-    //         * (-delta/n)**d
+    //         * (-delta)**d
     //         )
     //      + (
-    //          (delta * n-1/n)**d
-    //          (1 - (-1/(n-1)))**(d-1)
+    //          (delta * (n-1))**d
+    //          *(1 - (-1/(n-1)))**(d-1)
     //        )
+    //
+    // mu' = mu+delta
     fn update(&mut self, py: Python, traces: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
         let traces = traces.as_array();
         let y = y.as_array();
