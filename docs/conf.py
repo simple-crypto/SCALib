@@ -51,9 +51,6 @@ autodoc_mock_imports = [
         "scalib._scalib_ext",
         "scalib.version",
         "numpy",
-        "tqdm",
-        "sklearn",
-        "scipy"
         ]
 
 import sys

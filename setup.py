@@ -12,7 +12,7 @@ import toml
 
 setup(
     project_urls={
-        "Bug Tracker": "https://github.com/obronchain/scalib/issues",
+        "Bug Tracker": "https://github.com/simple-crypto/scalib/issues",
     },
     rust_extensions=[
         RustExtension(

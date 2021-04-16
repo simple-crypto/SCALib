@@ -1,5 +1,5 @@
 
-.PHONY: dev test devtest coverage docs codestyle fmt
+.PHONY: dev test devtest coverage docs codestyle fmt wheel
 
 
 dev:
@@ -24,3 +24,6 @@ codestyle:
 
 fmt:
 	tox -e fmt
+
+wheel:
+	pip wheel .
