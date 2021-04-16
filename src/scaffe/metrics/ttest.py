@@ -72,7 +72,7 @@ class Ttest:
         if not (nx == nl):
             raise ValueError(f"Expected x with shape ({nl},)")
         if not (nsl == self._ns):
-            raise Exception(f"l is too long. Expected second dim of size {self._ns}.")
+            raise Exception(f"Expected second dim of l to have size {self._ns}.")
         
         self._ttest.update(l, x)
 
