@@ -1,6 +1,7 @@
 import numpy as np
 from scalib import _scalib_ext
 
+
 class Ttest:
     r"""Computes the univariate :math:`t`-test at arbitrary order :math:`d`
     between two sets :math:`i` of traces. Informally, it allows to highlight a
@@ -9,13 +10,13 @@ class Ttest:
 
     .. math::
         t = \frac{x_0 - x_1}{\sqrt{(v_0/n_0)+(v_1/n_1)}}
-    
+
     where the both :math:`x_i` and :math:`v_i` are defined independently for
     each of the two sets and :math:`n_i` the number of available samples in the
-    set :math:`i`. 
+    set :math:`i`.
 
     The expressions of :math:`x_i` and :math:`v_i` depend on the order `d` and relies on
-    estimation of central and standardized moments. See [1]_ for full details. 
+    estimation of central and standardized moments. See [1]_ for full details.
 
     Parameters
     ----------
@@ -48,6 +49,7 @@ class Ttest:
        Modules')", Carolyn Whitnall, Elisabeth Oswald, ASIACRYPT 2019
 
     """
+
     def __init__(self, ns, d):
         self._ns = ns
         self._d = d
@@ -73,7 +75,7 @@ class Ttest:
             raise ValueError(f"Expected x with shape ({nl},)")
         if not (nsl == self._ns):
             raise Exception(f"Expected second dim of l to have size {self._ns}.")
-        
+
         self._ttest.update(l, x)
 
     def get_ttest(self):

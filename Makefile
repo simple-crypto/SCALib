@@ -1,5 +1,5 @@
 
-.PHONY: dev test devtest coverage docs
+.PHONY: dev test devtest coverage docs codestyle fmt
 
 
 dev:
@@ -18,3 +18,9 @@ coverage:
 
 docs:
 	tox -e build_docs
+
+codestyle:
+	tox -e codestyle
+
+fmt:
+	tox -e fmt
