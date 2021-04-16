@@ -1,17 +1,31 @@
-#include README.rst
-#include CHANGES.rst
-#include setup.cfg
-#include LICENSE.rst
-#include pyproject.toml
-exclude src/scaffe/_scaffe_ext.abi3.so
+include README.rst
+include CHANGELOG.rst
+include DEVELOP.rst
+include setup.cfg
+include setup.py
+include COPYING
+include MANIFEST.in
+include pyproject.toml
+include tox.ini
+include Makefile
 
 recursive-include src/scaffe_ext/ranklib *
 recursive-include src/scaffe_ext/scaffe *
 recursive-include src/scaffe_ext/scaffe-py *
 include src/scaffe_ext/Cargo.toml
 include src/scaffe_ext/Cargo.lock
+exclude src/scaffe/_scaffe_ext.abi3.so
 
-#recursive-include scaffear *.pyx *.c *.pxd
+recursive-include docs/source *.rst
+include docs/conf.py
+include docs/make.bat
+include docs/Makefile
+include docs/requirements.txt
+include docs/index.rst
+
+recursive-include examples *.py
+recursive-include examples *.rst
+
 #recursive-include docs *
 #recursive-include licenses *
 #recursive-include scripts *
@@ -20,5 +34,5 @@ include src/scaffe_ext/Cargo.lock
 #prune docs/_build
 #prune docs/api
 #
-#global-exclude *.pyc *.o
+global-exclude *.pyc *.o
 
