@@ -9,14 +9,14 @@ SCALib contains various features for side-channel analysis. Please read SCALib-w
 
 - Metrics:
 
-  - `SNR <scalib/metrics/snr.py>`_: Signal-to-noise ratio.
-  - `Ttest <scalib/metrics/ttest.py>`_: T-test estimation.
+  - `SNR <src/scalib/metrics/snr.py>`_: Signal-to-noise ratio.
+  - `Ttest <src/scalib/metrics/ttest.py>`_: T-test estimation.
 - Modeling leakage distribution:
 
-  - `LDAClassifier <scalib/modeling/ldaclassifier.py>`_: Template in linear subspaces.
+  - `LDAClassifier <src/scalib/modeling/ldaclassifier.py>`_: Template in linear subspaces.
 - Attacks:
 
-  - `SASCAGraph <scalib/attacks/sascagraph.py>`_: Generalization of `Divide & Conquer` with Soft Analytical Attacks.
+  - `SASCAGraph <src/scalib/attacks/sascagraph.py>`_: Generalization of `Divide & Conquer` with Soft Analytical Attacks.
 - Postprocessing to analyse attacks results:
 
   - `rankestimation <scalib/postprocessing/rankestimation.py>`_: Histogram based full key rank estimation.
