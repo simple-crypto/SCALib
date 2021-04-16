@@ -24,11 +24,11 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
         #[cfg(feature = "ntl")]
         "histbignum" => Ok(ranklib::RankingMethod::HistBigNum),
         #[cfg(not(feature = "ntl"))]
-        "histbignum" => Err("Ranking method 'ntl' is not supported. Compile scalib_ext with ntl feature enabled."),
+        "histbignum" => Err("Ranking method 'histbignum' is not supported. Compile scalib_ext with ntl feature enabled."),
         #[cfg(feature = "hellib")]
         "hellib" => Ok(ranklib::RankingMethod::Hellib),
         #[cfg(not(feature = "hellib"))]
-        "histbignum" => Err("Ranking method 'hellib' is not supported. Compile scalib_ext with hellib feature enabled."),
+        "hellib" => Err("Ranking method 'hellib' is not supported. Compile scalib_ext with hellib feature enabled."),
         _ => Err(
             "Invalid ranking method name."
         ),
