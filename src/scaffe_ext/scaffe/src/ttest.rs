@@ -99,7 +99,7 @@ impl Ttest {
                 .collect();
 
             // contains the data that are the same for all the points in a single traces
-            // Contains tupes (n:f64,y:usize,mults:Vec<f64>)
+            // Contains tupes (n, y, mults): (f64, usize, Vec<f64>)
             // n : number of previously processed traces for the class y
             // y : set to update
             // mults: (n-1)**(j) * (1.0 - (-1.0/(n-1.0))**(j-1) for j in [2..(2*d-1)].rev()
