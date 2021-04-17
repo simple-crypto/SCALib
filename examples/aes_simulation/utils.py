@@ -1,5 +1,6 @@
 import numpy as np
 
+# fmt: off
 # AES Sbox
 sbox = np.array([
         0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
@@ -19,36 +20,38 @@ sbox = np.array([
         0xe1, 0xf8, 0x98, 0x11, 0x69, 0xd9, 0x8e, 0x94, 0x9b, 0x1e, 0x87, 0xe9, 0xce, 0x55, 0x28, 0xdf,
         0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16
         ],dtype=np.uint32)
+# fmt: on
 
-def gen_traces(ntraces,std,random_key):
-    
+
+def gen_traces(ntraces, std, random_key):
+
     if not random_key:
-        k = np.random.randint(0,256,(1,16),dtype=np.uint8)
-    else: 
-        k = np.random.randint(0,256,(ntraces,16),dtype=np.uint8)
+        k = np.random.randint(0, 256, (1, 16), dtype=np.uint8)
+    else:
+        k = np.random.randint(0, 256, (ntraces, 16), dtype=np.uint8)
 
-    p = np.random.randint(0,256,(ntraces,16),dtype=np.uint8)
+    p = np.random.randint(0, 256, (ntraces, 16), dtype=np.uint8)
 
-    # generate sensible data. 
+    # generate sensible data.
     # Input and output of the Sbox
     y = p ^ k
     x = sbox[y]
-    data = np.concatenate((x,y),axis=1).astype(np.uint8)
-    
+    data = np.concatenate((x, y), axis=1).astype(np.uint8)
+
     # HW + noise
-    hw = np.sum(np.unpackbits(np.expand_dims(data,2),axis=2),axis=2).astype(np.uint8)
-    hw = hw.reshape((ntraces,2*16))
-    traces = hw + np.random.normal(0,std,hw.shape)
+    hw = np.sum(np.unpackbits(np.expand_dims(data, 2), axis=2), axis=2).astype(np.uint8)
+    hw = hw.reshape((ntraces, 2 * 16))
+    traces = hw + np.random.normal(0, std, hw.shape)
     traces *= 256
     traces = traces.astype(np.int16)
 
     # generate all the labels
     labels = {}
-    for j in range(16): labels["k%d"%(j)] = k[:,j]
-    for j in range(16): labels["p%d"%(j)] = p[:,j]
     for j in range(16):
-        labels["x%d"%(j)] = x[:,j]
+        labels["k%d" % (j)] = k[:, j]
+    for j in range(16):
+        labels["p%d" % (j)] = p[:, j]
+    for j in range(16):
+        labels["x%d" % (j)] = x[:, j]
 
-    return traces,labels
-
-
+    return traces, labels
