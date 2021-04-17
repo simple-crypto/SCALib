@@ -10,6 +10,12 @@ jobs:
                 python: [3.6,]
         steps:
             - uses: actions/checkout@v2
+            - uses: actions/cache@v2
+              with:
+                  path: |
+                      ~/.cargo
+                      .cargo_build
+                  key: test-cache-rust-build-cargo-v0
             - name: Setup Python
               uses: actions/setup-python@v2
               with:
@@ -91,13 +97,12 @@ jobs:
                   mkdir -p C:/Miniconda3/envs/buildenv/Library/lib
                   cp openblas/libs/*.lib C:/Miniconda3/envs/buildenv/Library/lib/
             - uses: actions/cache@v2
-              id: cache-windows-cargo_target_dir
               with:
                   path: |
                       ~/.cargo/registry
                       ~/.cargo/git
                       ${{ github.workspace }}/cargo_build
-                  key: ${{ runner.os }}-cargo-${{ hashFiles('src/scalib_ext/Cargo.lock') }}
+                  key: cache-windows-cargo-v0-${{ runner.os }}-cargo-${{ hashFiles('src/scalib_ext/Cargo.lock') }}
                   restore-keys: |
                       ${{ runner.os }}-cargo-${{ hashFiles('src/scalib_ext/Cargo.lock') }}
                       ${{ runner.os }}-cargo-
@@ -119,51 +124,82 @@ jobs:
                   name: dist
                   path: ./wheelhouse/*.whl
 
-    build_wheels:
-        name: Build wheels on ${{ matrix.os }}  - ${{ matrix.vers }}
-        runs-on: ${{ matrix.os }}
+    build_wheel_linux:
+        name: Build wheel on linux ${{ matrix.vers }}
+        runs-on: ubuntu-20.04
         strategy:
             fail-fast: false
             matrix:
                 include:
-                    - vers: auto64
-                      os: ubuntu-20.04
-#                   - vers: aarch64
-#                     os: ubuntu-20.04
-#                   - vers: arm64
-#                     os: macos-10.15
-#                   - vers: auto64
-#                     os: macos-10.15
+                    - vers: x86_64 
+                    #- vers: aarch64 # This is too slow on github CI
         env:
-            SCCACHE_VERSION: 0.2.13
             CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/simple-crypto/manylinux2014_x86_64:rust-1.51.0"
-            #CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y"
             CIBW_BUILD_VERBOSITY: "1"
-            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full PATH="$PATH:$HOME/.cargo/bin"'
-            CIBW_BUILD: "cp36-*_x86_64"
+            # Many vars are for OpenBLAS build.
+            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full CARGO_TARGET_DIR=/host${{ github.workspace }}/cargo_build CARGO_HOME=/host${{ github.workspace }}/cargo_home DYNAMIC_ARCH=ON NUM_THREADS=128 USE_THREAD=1 FCOMMON_OPT=-static-libgfortran NO_AVX512=1'
+            CIBW_BUILD: "cp36-*"
+            CIBW_ARCHS_LINUX: ${{ matrix.vers }}
             # I don't know how to make both normal and doctring tests work with only one command,
             # so I use shell &&.
             CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scalib
             CIBW_TEST_EXTRAS: test
         steps:
             - uses: actions/checkout@v2
+            - uses: actions/cache@v2
+              with:
+                  path: |
+                      cargo_build
+                      cargo_home
+                  key: linux-wheel-cache-rust-build-cargo-v0-${{ matrix.vers }}
             - uses: actions/setup-python@v2
               with:
                   python-version: "3.6"
             - name: wheels Linux ${{ matrix.vers }}
-              if: runner.os == 'Linux'
               uses: joerick/cibuildwheel@v1.10.0
-              env:
-                  CIBW_ARCHS_LINUX: ${{ matrix.vers }}
-            - name: wheels Macos ${{ matrix.vers }}
-              if: runner.os == 'Macos'
-              uses: joerick/cibuildwheel@v1.10.0
-              env:
-                  CIBW_ARCHS_MACOS: ${{ matrix.vers }}
             - uses: actions/upload-artifact@v2
               with:
                   name: dist
                   path: ./wheelhouse/*.whl
+
+# Mac Os wheels do not work currently (maybe due to missing LAPACK in OpenBLAS build.
+#    build_wheel_macos:
+#        name: Build wheels on macos ${{ matrix.vers }}
+#        runs-on: macos-10.15
+#        strategy:
+#            fail-fast: false
+#            matrix:
+#                include:
+#                   #- vers: arm64
+#                   - vers: x86_64
+#        env:
+#            CIBW_BUILD_VERBOSITY: "1"
+#            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full'
+#            CIBW_BUILD: "cp36-*"
+#            # I don't know how to make both normal and doctring tests work with only one command,
+#            # so I use shell &&.
+#            CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scalib
+#            CIBW_TEST_EXTRAS: test
+#            CIBW_ARCHS_MACOS: ${{ matrix.vers }}
+#            CARGO_TARGET_DIR: ${{ github.workspace }}/cargo_build
+#        steps:
+#            - uses: actions/checkout@v2
+#            - uses: actions/cache@v2
+#              with:
+#                  path: |
+#                      ~/.cargo/registry
+#                      ~/.cargo/git
+#                      ${{ github.workspace }}/cargo_build
+#                  key: cache-macos-cargo-v0
+#            - uses: actions/setup-python@v2
+#              with:
+#                  python-version: "3.6"
+#            - name: wheels Macos ${{ matrix.vers }}
+#              uses: joerick/cibuildwheel@v1.10.0
+#            - uses: actions/upload-artifact@v2
+#              with:
+#                  name: dist
+#                  path: ./wheelhouse/*.whl
 
     build_sdist:
         name: Build source distribution
@@ -185,7 +221,7 @@ jobs:
                   path: dist/*.tar.gz
 
     check_dist:
-        needs: [build_wheels, build_wheel_windows, build_sdist]
+        needs: [build_wheel_linux, build_wheel_windows, build_sdist]
         runs-on: ubuntu-latest
         steps:
             - uses: actions/download-artifact@v2
