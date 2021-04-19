@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 
 #[pyclass]
 pub(crate) struct Ttest {
-    inner: scalib::ttest::Ttest
+    inner: scalib::ttest::Ttest,
 }
 
 #[pymethods]
@@ -15,7 +15,9 @@ impl Ttest {
     /// ns: traces length
     /// d: order of the Ttest
     fn new(ns: usize, d: usize) -> Self {
-        Self { inner: scalib::ttest::Ttest::new(ns, d) }
+        Self {
+            inner: scalib::ttest::Ttest::new(ns, d),
+        }
     }
     /// Update the Ttest state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
