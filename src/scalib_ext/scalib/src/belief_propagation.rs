@@ -10,11 +10,6 @@
 
 use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
 use ndarray::{s, Array1, Array2, Axis};
-use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
-use pyo3::prelude::*;
-use pyo3::prelude::{PyResult, Python};
-use pyo3::types::PyDict;
-use pyo3::types::PyList;
 use rayon::prelude::*;
 use std::convert::TryInto;
 
@@ -58,7 +53,7 @@ pub enum FuncType {
     XOR,
     /// Bitwise XOR of variables, XORing additionally a public variable.
     XORCST(Array1<u32>),
-    /// Bitwise AND of variables, XORing additionally a public variable.
+    /// Bitwise AND of variables, ANDing additionally a public variable.
     ANDCST(Array1<u32>),
     /// Lookup table function.
     LOOKUP(Array1<u32>),
@@ -68,7 +63,7 @@ pub enum FuncType {
 pub struct Func {
     /// Ids of edges adjacent to the function node.
     pub neighboors: Vec<usize>,
-    functype: FuncType,
+    pub functype: FuncType,
 }
 
 /// The minimum non-zero probability (to avoid denormalization, etc.)
@@ -79,75 +74,6 @@ fn make_non_zero<S: ndarray::DataMut + ndarray::RawData<Elem = f64>, D: ndarray:
     x: &mut ndarray::ArrayBase<S, D>,
 ) {
     x.mapv_inplace(|y| y.max(MIN_PROBA));
-}
-
-/// Convert the python description of a variable node to a Var.
-pub fn to_var(function: &PyDict) -> Var {
-    let neighboors: Vec<isize> = function.get_item("neighboors").unwrap().extract().unwrap();
-    let inloop: bool = function.get_item("para").unwrap().extract().unwrap();
-    let is_profiled = function.contains("initial").unwrap();
-    let distri_current: PyReadonlyArray2<f64> =
-        function.get_item("current").unwrap().extract().unwrap();
-
-    let neighboors: Vec<usize> = neighboors.iter().map(|x| *x as usize).collect();
-    let f: VarType;
-    if inloop & is_profiled {
-        let distri_orig: PyReadonlyArray2<f64> =
-            function.get_item("initial").unwrap().extract().unwrap();
-        f = VarType::ProfilePara {
-            distri_orig: distri_orig.as_array().to_owned(),
-            distri_current: distri_orig.as_array().to_owned(),
-        };
-    } else if inloop & !is_profiled {
-        f = VarType::NotProfilePara {
-            distri_current: distri_current.as_array().to_owned(),
-        };
-    } else if !inloop & is_profiled {
-        let distri_orig: PyReadonlyArray2<f64> =
-            function.get_item("initial").unwrap().extract().unwrap();
-        f = VarType::ProfileSingle {
-            distri_orig: distri_orig.as_array().to_owned(),
-            distri_current: distri_orig.as_array().to_owned(),
-        };
-    } else {
-        f = VarType::NotProfileSingle {
-            distri_current: distri_current.as_array().to_owned(),
-        };
-    }
-
-    Var {
-        neighboors: neighboors,
-        vartype: f,
-    }
-}
-
-/// Convert the python description of a function node to a Func.
-pub fn to_func(function: &PyDict) -> Func {
-    let neighboors: Vec<isize> = function.get_item("neighboors").unwrap().extract().unwrap();
-    let func: usize = function.get_item("func").unwrap().extract().unwrap();
-
-    let neighboors: Vec<usize> = neighboors.iter().map(|x| *x as usize).collect();
-
-    let f: FuncType;
-    if func == 0 {
-        f = FuncType::AND;
-    } else if func == 1 {
-        f = FuncType::XOR;
-    } else if func == 2 {
-        let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
-        f = FuncType::XORCST(values.as_array().to_owned());
-    } else if func == 4 {
-        let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
-        f = FuncType::ANDCST(values.as_array().to_owned());
-    } else {
-        let table: PyReadonlyArray1<u32> = function.get_item("table").unwrap().extract().unwrap();
-        f = FuncType::LOOKUP(table.as_array().to_owned());
-    }
-
-    Func {
-        neighboors: neighboors,
-        functype: f,
-    }
 }
 
 /// Walsh-Hadamard transform (non-normalized).
@@ -415,11 +341,9 @@ pub fn xors(inputs: &mut [&mut Array2<f64>]) {
 }
 
 /// Run the belief propagation algorithm on the python representation of a factor graph.
-#[pyfunction]
 pub fn run_bp(
-    py: Python,
-    functions: &PyList,
-    variables: &PyList,
+    functions: &[Func],
+    variables: &mut [Var],
     it: usize,
     // number of variable nodes in the graph
     edge: usize,
@@ -427,7 +351,7 @@ pub fn run_bp(
     nc: usize,
     // number of copies in the graph (n_runs)
     n: usize,
-) -> PyResult<()> {
+) -> Result<(), ()> {
     // Scratch array containing all the edge's messages.
     let mut edges: Vec<Array2<f64>> = vec![Array2::<f64>::ones((n, nc)); edge];
 
@@ -437,107 +361,67 @@ pub fn run_bp(
     let mut vec_vars_id: Vec<(usize, usize)> = vec![(0, 0); edge];
 
     // map all python functions to rust ones + generate the mapping in vec_functs_id
-    let functions_rust: Vec<Func> = functions
-        .iter()
-        .enumerate()
-        .map(|(i, x)| {
-            let dict = x.downcast::<PyDict>().unwrap();
-            let f = to_func(dict);
-            f.neighboors.iter().enumerate().for_each(|(j, x)| {
-                vec_funcs_id[*x] = (i, j);
-            });
-            f
-        })
-        .collect();
+    let functions_rust = functions;
+    for (i, f) in functions.iter().enumerate() {
+        f.neighboors.iter().enumerate().for_each(|(j, x)| {
+            vec_funcs_id[*x] = (i, j);
+        });
+    }
 
     // map all python var to rust ones
     // generate the edge mapping in vec_vars_id
     // init the messages along the edges with initial distributions
-    let mut variables_rust: Vec<Var> = variables
-        .iter()
-        .enumerate()
-        .map(|(i, x)| {
-            let dict = x.downcast::<PyDict>().unwrap();
-            let var = to_var(dict);
-            var.neighboors.iter().enumerate().for_each(|(j, x)| {
-                vec_vars_id[*x] = (i, j);
-            });
-            match &var.vartype {
-                VarType::ProfilePara { distri_orig, .. }
-                | VarType::ProfileSingle { distri_orig, .. } => {
-                    var.neighboors.iter().for_each(|x| {
-                        let v = &mut edges[*x];
-                        let distri_orig = distri_orig.broadcast(v.shape()).unwrap();
-                        v.assign(&distri_orig);
-                    })
-                }
-                _ => {}
-            }
-            var
-        })
-        .collect();
-
-    py.allow_threads(|| {
-        // loading bar
-        let pb = ProgressBar::new(it as u64);
-        pb.set_style(ProgressStyle::default_spinner().template(
-        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})"));
-        pb.set_message("Calculating BP...");
-
-        for _ in (0..it).progress_with(pb) {
-            // This is a technique for runtime borrow-checking: we take reference on all the edges
-            // at once, put them into options, then extract the references out of the options, one
-            // at a time and out-of-order.
-            let mut edge_opt_ref_mut: Vec<Option<&mut Array2<f64>>> =
-                edges.iter_mut().map(|x| Some(x)).collect();
-            let mut edge_for_func: Vec<Vec<&mut Array2<f64>>> = functions_rust
-                .iter()
-                .map(|f| {
-                    f.neighboors
-                        .iter()
-                        .map(|e| edge_opt_ref_mut[*e].take().unwrap())
-                        .collect()
-                })
-                .collect();
-            update_functions(&functions_rust, &mut edge_for_func);
-            let mut edge_opt_ref_mut: Vec<Option<&mut Array2<f64>>> =
-                edges.iter_mut().map(|x| Some(x)).collect();
-            let mut edge_for_var: Vec<Vec<&mut Array2<f64>>> = variables_rust
-                .iter()
-                .map(|f| {
-                    f.neighboors
-                        .iter()
-                        .map(|e| edge_opt_ref_mut[*e].take().unwrap())
-                        .collect()
-                })
-                .collect();
-            update_variables(&mut edge_for_var, &mut variables_rust);
-        }
-    });
-
-    variables_rust
-        .iter()
-        .zip(variables)
-        .for_each(|(v_rust, v_python)| {
-            let distri_current = match &v_rust.vartype {
-                VarType::NotProfilePara {
-                    distri_current: distri,
-                }
-                | VarType::NotProfileSingle {
-                    distri_current: distri,
-                }
-                | VarType::ProfilePara {
-                    distri_current: distri,
-                    ..
-                }
-                | VarType::ProfileSingle {
-                    distri_current: distri,
-                    ..
-                } => distri,
-            };
-            v_python
-                .set_item("current", PyArray2::from_array(py, &distri_current))
-                .unwrap();
+    for (i, var) in variables.iter().enumerate() {
+        var.neighboors.iter().enumerate().for_each(|(j, x)| {
+            vec_vars_id[*x] = (i, j);
         });
+        match &var.vartype {
+            VarType::ProfilePara { distri_orig, .. }
+            | VarType::ProfileSingle { distri_orig, .. } => var.neighboors.iter().for_each(|x| {
+                let v = &mut edges[*x];
+                let distri_orig = distri_orig.broadcast(v.shape()).unwrap();
+                v.assign(&distri_orig);
+            }),
+            _ => {}
+        }
+    }
+
+    // loading bar
+    let pb = ProgressBar::new(it as u64);
+    pb.set_style(ProgressStyle::default_spinner().template(
+        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
+    ));
+    pb.set_message("Calculating BP...");
+
+    for _ in (0..it).progress_with(pb) {
+        // This is a technique for runtime borrow-checking: we take reference on all the edges
+        // at once, put them into options, then extract the references out of the options, one
+        // at a time and out-of-order.
+        let mut edge_opt_ref_mut: Vec<Option<&mut Array2<f64>>> =
+            edges.iter_mut().map(|x| Some(x)).collect();
+        let mut edge_for_func: Vec<Vec<&mut Array2<f64>>> = functions_rust
+            .iter()
+            .map(|f| {
+                f.neighboors
+                    .iter()
+                    .map(|e| edge_opt_ref_mut[*e].take().unwrap())
+                    .collect()
+            })
+            .collect();
+        update_functions(&functions_rust, &mut edge_for_func);
+        let mut edge_opt_ref_mut: Vec<Option<&mut Array2<f64>>> =
+            edges.iter_mut().map(|x| Some(x)).collect();
+        let mut edge_for_var: Vec<Vec<&mut Array2<f64>>> = variables
+            .iter()
+            .map(|f| {
+                f.neighboors
+                    .iter()
+                    .map(|e| edge_opt_ref_mut[*e].take().unwrap())
+                    .collect()
+            })
+            .collect();
+        update_variables(&mut edge_for_var, variables);
+    }
+
     Ok(())
 }

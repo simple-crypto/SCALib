@@ -13,9 +13,11 @@ use ndarray::{s, Axis};
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::{pymodule, PyModule, PyResult, Python};
 use pyo3::types::PyList;
-use scalib::lda;
-use scalib::snr;
-use scalib::ttest;
+
+mod belief_propagation;
+mod lda;
+mod snr;
+mod ttest;
 
 fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
     match s {
@@ -51,7 +53,7 @@ fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
         nc: usize,
         n: usize,
     ) -> PyResult<()> {
-        scalib::belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n)
+        belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n)
     }
 
     #[pyfn(m, "partial_cp")]
