@@ -25,6 +25,16 @@ jobs:
             - name: Run tests
               # Run tox using the version of Python in `PATH`
               run: tox -e test,build_docs,codestyle
+              env:
+                RUST_BACKTRACE: full
+                CARGO_TARGET_DIR: ${{ github.workspace }}/cargo_build
+                CARGO_HOME: ${{ github.workspace }}/cargo_home
+                # OpenBLAS build configuration
+                DYNAMIC_ARCH: ON
+                NUM_THREADS: 128
+                USE_THREAD: 1
+                FCOMMON_OPT: -static-libgfortran
+                NO_AVX512: 1
 
     build_openblas_windows:
         name: Build OpenBLAS on Windows
