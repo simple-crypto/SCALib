@@ -8,13 +8,10 @@
 //! This is based on the one-pass algorithm proposed in
 //! <https://eprint.iacr.org/2015/207>.
 
-use ndarray::{s, Array1, Array2, Array3, Axis};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, Axis};
 use num_integer::binomial;
-use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
-use pyo3::prelude::*;
 use rayon::prelude::*;
 
-#[pyclass]
 pub struct Ttest {
     /// Central sums of order 1 up to order d*2 with shape (ns,2,2*d),
     /// where central sums is sum((x-u_x)**i).
@@ -31,13 +28,11 @@ pub struct Ttest {
     ns: usize,
 }
 
-#[pymethods]
 impl Ttest {
-    #[new]
     /// Create a new Ttest state.
     /// ns: traces length
     /// d: order of the Ttest
-    fn new(ns: usize, d: usize) -> Self {
+    pub fn new(ns: usize, d: usize) -> Self {
         Ttest {
             cs: Array3::<f64>::zeros((ns, 2, 2 * d)),
             n_samples: Array1::<u64>::zeros((2,)),
@@ -81,98 +76,94 @@ impl Ttest {
     //        )
     //
     // mu' = mu+delta
-    fn update(&mut self, py: Python, traces: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
-        let traces = traces.as_array();
-        let y = y.as_array();
-        py.allow_threads(|| {
-            let d = self.d;
+    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
+        let d = self.d;
 
-            // pre computes the combinatorial factors
-            let cbs: Vec<(usize, Vec<(f64, usize)>)> = (2..((2 * self.d) + 1))
-                .rev()
-                .map(|j| {
-                    (
-                        j,
-                        (1..(j - 1)).map(|k| (binomial(j, k) as f64, k)).collect(),
-                    )
-                })
-                .collect();
+        // pre computes the combinatorial factors
+        let cbs: Vec<(usize, Vec<(f64, usize)>)> = (2..((2 * self.d) + 1))
+            .rev()
+            .map(|j| {
+                (
+                    j,
+                    (1..(j - 1)).map(|k| (binomial(j, k) as f64, k)).collect(),
+                )
+            })
+            .collect();
 
-            // contains the data that are the same for all the points in a single traces
-            // Contains tupes (n, y, mults): (f64, usize, Vec<f64>)
-            // n : number of previously processed traces for the class y
-            // y : set to update
-            // mults: (n-1)**(j) * (1.0 - (-1.0/(n-1.0))**(j-1) for j in [2..(2*d-1)].rev()
-            let shared_data: Vec<(f64, usize, Vec<f64>)> = y
-                .iter()
-                .map(|y| {
-                    let y = *y as usize;
-                    assert!(y <= 1);
+        // contains the data that are the same for all the points in a single traces
+        // Contains tupes (n, y, mults): (f64, usize, Vec<f64>)
+        // n : number of previously processed traces for the class y
+        // y : set to update
+        // mults: (n-1)**(j) * (1.0 - (-1.0/(n-1.0))**(j-1) for j in [2..(2*d-1)].rev()
+        let shared_data: Vec<(f64, usize, Vec<f64>)> = y
+            .iter()
+            .map(|y| {
+                let y = *y as usize;
+                assert!(y <= 1);
 
-                    // update the number of observations
-                    let n = &mut self.n_samples[y];
-                    *n += 1;
-                    let n = *n as f64;
+                // update the number of observations
+                let n = &mut self.n_samples[y];
+                *n += 1;
+                let n = *n as f64;
 
-                    (
-                        // number of sample on that class
-                        n,
-                        // y value
-                        y,
-                        // compute the multiplicative factor similar for all trace samples
-                        cbs.iter()
-                            .map(|(j, _)| {
-                                (n - 1.0).powi(*j as i32)
-                                    * (1.0 - (-1.0 / (n - 1.0)).powi(*j as i32 - 1))
-                            })
-                            .collect(),
-                    )
-                })
-                .collect();
+                (
+                    // number of sample on that class
+                    n,
+                    // y value
+                    y,
+                    // compute the multiplicative factor similar for all trace samples
+                    cbs.iter()
+                        .map(|(j, _)| {
+                            (n - 1.0).powi(*j as i32)
+                                * (1.0 - (-1.0 / (n - 1.0)).powi(*j as i32 - 1))
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
 
-            (traces.axis_iter(Axis(1)), self.cs.axis_iter_mut(Axis(0)))
-                .into_par_iter()
-                .for_each_init(
-                    || Array1::<f64>::zeros(2 * d),
-                    |ref mut delta_pows, (traces, mut cs)| {
-                        traces
-                            .iter()
-                            .zip(shared_data.iter())
-                            .for_each(|(trace, (n, y, mults))| {
-                                let mut cs_s = cs.slice_mut(s![*y, ..]);
-                                let cs = cs_s.as_slice_mut().unwrap();
+        (traces.axis_iter(Axis(1)), self.cs.axis_iter_mut(Axis(0)))
+            .into_par_iter()
+            .for_each_init(
+                || Array1::<f64>::zeros(2 * d),
+                |ref mut delta_pows, (traces, mut cs)| {
+                    traces
+                        .iter()
+                        .zip(shared_data.iter())
+                        .for_each(|(trace, (n, y, mults))| {
+                            let mut cs_s = cs.slice_mut(s![*y, ..]);
+                            let cs = cs_s.as_slice_mut().unwrap();
 
-                                // compute the delta
-                                let delta = ((*trace as f64) - cs[0]) / (*n as f64);
+                            // compute the delta
+                            let delta = ((*trace as f64) - cs[0]) / (*n as f64);
 
-                                // delta_pows[i] = delta ** (i+1)
-                                // We will need all of them next
-                                delta_pows.iter_mut().fold(delta, |acc, x| {
-                                    *x = acc;
-                                    acc * delta
-                                });
-
-                                // apply the one-pass update rule
-                                cbs.iter().zip(mults.iter()).for_each(|((j, vec), mult)| {
-                                    if *n > 1.0 {
-                                        cs[*j - 1] += delta_pows[*j - 1] * mult;
-                                    }
-                                    vec.iter().for_each(|(cb, k)| {
-                                        let a = cs[*j - *k - 1];
-                                        if (k & 0x1) == 1 {
-                                            // k is not pair
-                                            cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
-                                        } else {
-                                            // k is pair
-                                            cs[*j - 1] += cb * delta_pows[*k - 1] * a;
-                                        }
-                                    });
-                                });
-                                cs[0] += delta;
+                            // delta_pows[i] = delta ** (i+1)
+                            // We will need all of them next
+                            delta_pows.iter_mut().fold(delta, |acc, x| {
+                                *x = acc;
+                                acc * delta
                             });
-                    },
-                );
-        });
+
+                            // apply the one-pass update rule
+                            cbs.iter().zip(mults.iter()).for_each(|((j, vec), mult)| {
+                                if *n > 1.0 {
+                                    cs[*j - 1] += delta_pows[*j - 1] * mult;
+                                }
+                                vec.iter().for_each(|(cb, k)| {
+                                    let a = cs[*j - *k - 1];
+                                    if (k & 0x1) == 1 {
+                                        // k is not pair
+                                        cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
+                                    } else {
+                                        // k is pair
+                                        cs[*j - 1] += cb * delta_pows[*k - 1] * a;
+                                    }
+                                });
+                            });
+                            cs[0] += delta;
+                        });
+                },
+            );
     }
 
     /// Generate the actual Ttest metric based on the current state.
@@ -194,7 +185,7 @@ impl Ttest {
     //      ui = CM_{d,Q} / CM_{2,Q}**(d/2)
     //      vi = (CM_{2*d,Q} - CM_{d,Q}**2) / CM{2,Q}**d
 
-    fn get_ttest<'py>(&mut self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
+    pub fn get_ttest(&self) -> Array2<f64> {
         let mut ttest = Array2::<f64>::zeros((self.d, self.ns));
         let cs = &self.cs;
         let n_samples = &self.n_samples;
@@ -202,54 +193,50 @@ impl Ttest {
         let n0 = n_samples[[0]] as f64;
         let n1 = n_samples[[1]] as f64;
 
-        py.allow_threads(|| {
-            (
-                ttest.axis_chunks_iter_mut(Axis(1), 20),
-                cs.axis_chunks_iter(Axis(0), 20),
-            )
-                .into_par_iter()
-                .for_each(|(mut ttest, cs)| {
-                    ttest
-                        .axis_iter_mut(Axis(1))
-                        .zip(cs.axis_iter(Axis(0)))
-                        .for_each(|(mut ttest, cs)| {
-                            let mut u0;
-                            let mut u1;
-                            let mut v0;
-                            let mut v1;
-                            for d in 1..(self.d + 1) {
-                                if d == 1 {
-                                    u0 = cs[[0, 0]];
-                                    u1 = cs[[1, 0]];
+        (
+            ttest.axis_chunks_iter_mut(Axis(1), 20),
+            cs.axis_chunks_iter(Axis(0), 20),
+        )
+            .into_par_iter()
+            .for_each(|(mut ttest, cs)| {
+                ttest
+                    .axis_iter_mut(Axis(1))
+                    .zip(cs.axis_iter(Axis(0)))
+                    .for_each(|(mut ttest, cs)| {
+                        let mut u0;
+                        let mut u1;
+                        let mut v0;
+                        let mut v1;
+                        for d in 1..(self.d + 1) {
+                            if d == 1 {
+                                u0 = cs[[0, 0]];
+                                u1 = cs[[1, 0]];
 
-                                    v0 = cs[[0, 1]] / n0;
-                                    v1 = cs[[1, 1]] / n1;
-                                } else if d == 2 {
-                                    u0 = cs[[0, 1]] / n0;
-                                    u1 = cs[[1, 1]] / n1;
+                                v0 = cs[[0, 1]] / n0;
+                                v1 = cs[[1, 1]] / n1;
+                            } else if d == 2 {
+                                u0 = cs[[0, 1]] / n0;
+                                u1 = cs[[1, 1]] / n1;
 
-                                    v0 = cs[[0, 3]] / n0 - ((cs[[0, 1]] / n0).powi(2));
-                                    v1 = cs[[1, 3]] / n1 - ((cs[[1, 1]] / n1).powi(2));
-                                } else {
-                                    u0 = (cs[[0, d - 1]] / n0)
-                                        / ((cs[[0, 1]] / n0).powf(d as f64 / 2.0));
-                                    u1 = (cs[[1, d - 1]] / n1)
-                                        / ((cs[[1, 1]] / n1).powf(d as f64 / 2.0));
+                                v0 = cs[[0, 3]] / n0 - ((cs[[0, 1]] / n0).powi(2));
+                                v1 = cs[[1, 3]] / n1 - ((cs[[1, 1]] / n1).powi(2));
+                            } else {
+                                u0 = (cs[[0, d - 1]] / n0)
+                                    / ((cs[[0, 1]] / n0).powf(d as f64 / 2.0));
+                                u1 = (cs[[1, d - 1]] / n1)
+                                    / ((cs[[1, 1]] / n1).powf(d as f64 / 2.0));
 
-                                    v0 =
-                                        cs[[0, (2 * d) - 1]] / n0 - ((cs[[0, d - 1]] / n0).powi(2));
-                                    v0 /= (cs[[0, 1]] / n0).powi(d as i32);
+                                v0 = cs[[0, (2 * d) - 1]] / n0 - ((cs[[0, d - 1]] / n0).powi(2));
+                                v0 /= (cs[[0, 1]] / n0).powi(d as i32);
 
-                                    v1 =
-                                        cs[[1, (2 * d) - 1]] / n1 - ((cs[[1, d - 1]] / n1).powi(2));
-                                    v1 /= (cs[[1, 1]] / n1).powi(d as i32);
-                                }
-
-                                ttest[d - 1] = (u0 - u1) / f64::sqrt((v0 / n0) + (v1 / n1));
+                                v1 = cs[[1, (2 * d) - 1]] / n1 - ((cs[[1, d - 1]] / n1).powi(2));
+                                v1 /= (cs[[1, 1]] / n1).powi(d as i32);
                             }
-                        });
-                });
-        });
-        Ok(&(ttest.to_pyarray(py)))
+
+                            ttest[d - 1] = (u0 - u1) / f64::sqrt((v0 / n0) + (v1 / n1));
+                        }
+                    });
+            });
+        return ttest;
     }
 }
