@@ -5,6 +5,11 @@ Changelog
 Not released
 ------------
 
+v0.1.1
+------
+
+* Fix "invalid instruction" bug for CI wheel on windows.
+
 v0.1.0
 ------
 
