@@ -28,6 +28,13 @@ pub struct LDA {
     /// Max random variable value.
     pub nc: usize,
 }
+
+lazy_static::lazy_static! {
+    /// Mutex to avoid calling Lapack from multiple threads simultaneously (admitedly this is quite
+    /// hacky).
+    static ref LAPACK_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+}
+
 impl LDA {
     /// Init an LDA with empty arrays
     pub fn new(nc: usize, p: usize, ns: usize) -> Self {
@@ -131,6 +138,7 @@ impl LDA {
         // https://www.netlib.org/lapack/explore-html/d2/d8a/group__double_s_yeigen_ga912ae48bb1650b2c7174807ffa5456ca.html
         let mut evals = vec![0.0; ns as usize];
         unsafe {
+            let guard = LAPACK_MUTEX.lock().unwrap(); // keep this variable until end of use of lapack.
             let itype = 1;
             let i = lapacke::dsygvd(
                 lapacke::Layout::RowMajor,
@@ -144,6 +152,7 @@ impl LDA {
                 ns as i32,
                 &mut evals,
             );
+            std::mem::drop(guard);
             if i != 0 {
                 panic!("dsygvd failed, i={}", i);
             }
@@ -180,7 +189,9 @@ impl LDA {
         // This is a translation of _PSD in scipy.multivariate
         // ref: https://github.com/scipy/scipy/blob/5ab7426247900db9de856e790b8bea1bd71aec49/scipy/stats/_multivariate.py#L115
 
+        let guard = LAPACK_MUTEX.lock().unwrap(); // keep this variable until end of use of lapack.
         let (s, u) = cov.eigh(ndarray_linalg::UPLO::Lower).unwrap();
+        std::mem::drop(guard);
         // threshold for eigen values
         let cond =
             (cov.len() as f64) * (s.fold(f64::MIN, |acc, x| acc.max(f64::abs(*x)))) * 2.3E-16;
