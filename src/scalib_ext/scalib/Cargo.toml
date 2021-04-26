@@ -15,7 +15,7 @@ num-integer = "0.1.42"
 indicatif = "0.15.0"
 ndarray = { version = "0.15.1", features = ["rayon"] }
 itertools = "0.10.0"
-ndarray-stats = "0.4.0"
+ndarray-stats = "0.5.0"
 ndarray-linalg = "0.13.1"
 lapacke = "0.3.0"
 lazy_static = "1.4.0"

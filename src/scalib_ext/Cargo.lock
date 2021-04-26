@@ -764,8 +764,9 @@ dependencies = [
 
 [[package]]
 name = "ndarray-stats"
-version = "0.4.0"
-source = "git+https://github.com/cassiersg/ndarray-stats?branch=ndarray-0.15#08fa170d226d00a7c0fb89d7aa662c9c868b4e4e"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22877ad014bafa2f7dcfa5d556b0c7a52b0546cc98061a1ebef6d1834957b069"
 dependencies = [
  "indexmap",
  "itertools 0.10.0",
@@ -873,8 +874,7 @@ checksum = "0ab1bc2a289d34bd04a330323ac98a1b4bc82c9d9fcb1e66b63caa84da26b575"
 [[package]]
 name = "openblas-build"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59ecb601fc56534b17316cec4a4d8c848840f2c6744538a4e0fd3833d24f2e8f"
+source = "git+https://github.com/cassiersg/openblas-src?branch=dyn_arch#4825ff82d6863e13598ca7e99b6f6ba0a2b80b79"
 dependencies = [
  "thiserror",
  "walkdir",
@@ -883,8 +883,7 @@ dependencies = [
 [[package]]
 name = "openblas-src"
 version = "0.10.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35a0967b308cab5942eb908b4737385719bef9e1b4953614a0e9d26ad5d41c69"
+source = "git+https://github.com/cassiersg/openblas-src?branch=dyn_arch#4825ff82d6863e13598ca7e99b6f6ba0a2b80b79"
 dependencies = [
  "dirs",
  "openblas-build",

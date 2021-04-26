@@ -6,7 +6,7 @@ import scipy.stats
 
 
 def test_lda():
-    np.set_printoptions(threshold=np.inf) # for debug
+    np.set_printoptions(threshold=np.inf)  # for debug
     ns = 10
     n_components = 2
     nc = 4
