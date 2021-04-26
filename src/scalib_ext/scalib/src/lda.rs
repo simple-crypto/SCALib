@@ -154,7 +154,7 @@ impl LDA {
             );
             std::mem::drop(guard);
             if i != 0 {
-                panic!("dsygvd failed, i={}", i);
+                panic!("dsygvd failed, i={}, n={}", i, ns as i32);
             }
         }
 
