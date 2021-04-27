@@ -6,8 +6,8 @@
 ///!
 ///! Probability estimation for each of the classes based on leakage traces
 ///! can be derived from the LDA by leveraging the previous templates.
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis, Zip};
-use ndarray_linalg::Eigh;
+use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis, Zip,Array};
+use nalgebra::base::*;
 use rayon::prelude::*;
 
 /// LDA state where leakage has dimension ns. p in the subspace are used.
@@ -189,12 +189,14 @@ impl LDA {
         // This is a translation of _PSD in scipy.multivariate
         // ref: https://github.com/scipy/scipy/blob/5ab7426247900db9de856e790b8bea1bd71aec49/scipy/stats/_multivariate.py#L115
 
-        let guard = LAPACK_MUTEX.lock().unwrap(); // keep this variable until end of use of lapack.
-        let (s, u) = cov.eigh(ndarray_linalg::UPLO::Lower).unwrap();
-        std::mem::drop(guard);
+        let cov_mat = DMatrix::from_iterator(p,p,cov.into_iter().map(|x| *x));
+        let eigh = cov_mat.symmetric_eigen();
+        let s = eigh.eigenvalues;
+        let u = Array::from_iter(eigh.eigenvectors.iter().map(|x| *x)).to_owned();
+        let u = u.into_shape((p,p)).unwrap();
         // threshold for eigen values
         let cond =
-            (cov.len() as f64) * (s.fold(f64::MIN, |acc, x| acc.max(f64::abs(*x)))) * 2.3E-16;
+            (cov.len() as f64) * (s.fold(f64::MIN, |acc, x| acc.max(f64::abs(x)))) * 2.3E-16;
 
         // Only eigen values larger than cond and their id
         // vec<(id,eigenval)>
@@ -204,7 +206,8 @@ impl LDA {
             .collect();
 
         // corresponding eigen vectors
-        let mut u_s = Array2::<f64>::zeros((u.shape()[0], pack.len()));
+        let mut u_s = Array2::<f64>::zeros((p, pack.len()));
+
         pack.iter()
             .zip(u_s.axis_iter_mut(Axis(1)))
             .for_each(|((i, _), mut u_s)| u_s.assign(&u.slice(s![.., *i])));
