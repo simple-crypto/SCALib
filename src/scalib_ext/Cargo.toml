@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "geigen",
     "scalib",
     "ranklib",
     "scalib-py"
@@ -10,7 +11,7 @@ resolver = "2"
 [patch.crates-io]
 numpy = { git = 'https://github.com/cassiersg/rust-numpy', branch = 'upgrade-ndarray' }
 #ndarray-stats = { git = 'https://github.com/cassiersg/ndarray-stats', branch = 'ndarray-0.15' }
-ndarray-linalg = { git = 'https://github.com/cassiersg/ndarray-linalg', branch = 'upgrade-ndarray' }
+#ndarray-linalg = { git = 'https://github.com/cassiersg/ndarray-linalg', branch = 'upgrade-ndarray' }
 openblas-src = { git = 'https://github.com/cassiersg/openblas-src', branch = 'dyn_arch' }
 
 [profile.release]
