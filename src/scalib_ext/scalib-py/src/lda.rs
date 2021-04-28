@@ -19,10 +19,16 @@ impl LDA {
     /// Fit the LDA with measurements to derive projection,means,covariance and psd.
     /// x: traces with shape (n,ns)
     /// y: random value realization (n,)
-    fn fit(&mut self, py: Python, x: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
+    fn fit(
+        &mut self,
+        py: Python,
+        x: PyReadonlyArray2<i16>,
+        y: PyReadonlyArray1<u16>,
+        eigen_mode: u8,
+    ) {
         let x = x.as_array();
         let y = y.as_array();
-        py.allow_threads(|| self.inner.fit(x, y));
+        py.allow_threads(|| self.inner.fit(x, y, eigen_mode));
     }
 
     /// return the probability of each of the possible value for leakage samples

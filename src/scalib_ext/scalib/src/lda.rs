@@ -1,3 +1,4 @@
+use nalgebra::base::*;
 ///! Implementation of Linear Discriminant Analysis templates
 ///!
 ///! When the LDA is fit, it computes a linear projection from a high dimensional space
@@ -6,8 +7,7 @@
 ///!
 ///! Probability estimation for each of the classes based on leakage traces
 ///! can be derived from the LDA by leveraging the previous templates.
-use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis, Zip,Array};
-use nalgebra::base::*;
+use ndarray::{s, Array, Array1, Array2, ArrayView1, ArrayView2, Axis, Zip};
 use rayon::prelude::*;
 
 /// LDA state where leakage has dimension ns. p in the subspace are used.
@@ -35,6 +35,112 @@ lazy_static::lazy_static! {
     static ref LAPACK_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 }
 
+/// Generalized eigenvalues solver A*x = lambda*B*x
+/// A and B must be symmetric, B must be semipositive-definite.
+/// Solve for only the n largest eigenvalues and associated eigenvectors.
+trait Geigen: Sized {
+    type Error;
+    fn new(a: &ArrayView2<f64>, b: &ArrayView2<f64>, n: usize) -> Result<Self, Self::Error>;
+    fn vecs(&self) -> ArrayView2<f64>;
+    // no guarantee about order
+    fn vals(&self) -> &[f64];
+}
+
+struct CXXGeigen {
+    solver: geigen::GEigenSolver,
+    evecs: Array2<f64>,
+    evals: Vec<f64>,
+}
+
+impl Geigen for CXXGeigen {
+    type Error = ();
+    fn new(a: &ArrayView2<f64>, b: &ArrayView2<f64>, n: usize) -> Result<Self, Self::Error> {
+        let ns = a.shape()[0];
+        let solver = geigen::GEigenSolver::new(a, b);
+        let evals = solver.get_eigenvals();
+        let a = solver.get_eigenvecs();
+        let mut index: Vec<(usize, f64)> = evals.iter().cloned().enumerate().collect();
+        index.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+        let mut evecs = Array2::<f64>::zeros((ns, n));
+        index
+            .iter()
+            .zip(evecs.axis_iter_mut(Axis(1)))
+            .for_each(|((i, _), mut evec)| {
+                evec.assign(&a.slice(s![.., *i]));
+            });
+        let evals: Vec<f64> = index.into_iter().map(|(_, v)| v).take(n).collect();
+        Ok(Self {
+            solver,
+            evecs,
+            evals,
+        })
+    }
+    fn vecs<'a>(&'a self) -> ArrayView2<'a, f64> {
+        //let evecs: ArrayView2<'a, f64> = self.solver.get_eigenvecs();
+        //evecs.clone().slice_move(s![.., -(self.n as isize)..; -1])
+        self.evecs.view()
+    }
+    fn vals(&self) -> &[f64] {
+        //let vals = self.solver.get_eigenvals();
+        //&vals[..vals.len() - self.n]
+        &self.evals
+    }
+}
+
+struct LapackGeigen {
+    evecs: Array2<f64>,
+    evals: Vec<f64>,
+}
+impl Geigen for LapackGeigen {
+    type Error = i32;
+    fn new(a: &ArrayView2<f64>, b: &ArrayView2<f64>, n: usize) -> Result<Self, Self::Error> {
+        let mut a = a.to_owned();
+        let mut b = b.to_owned();
+        let ns = a.shape()[0];
+        assert_eq!(a.shape()[1], ns);
+        assert_eq!(b.shape()[0], ns);
+        assert_eq!(b.shape()[1], ns);
+        let mut evals = vec![0.0; ns as usize];
+        unsafe {
+            let guard = LAPACK_MUTEX.lock().unwrap(); // keep this variable until end of use of lapack.
+            let itype = 1;
+            let i: i32 = lapacke::dsygvd(
+                lapacke::Layout::RowMajor,
+                itype,
+                b'V',
+                b'L',
+                ns as i32,
+                a.as_slice_mut().unwrap(),
+                ns as i32,
+                b.as_slice_mut().unwrap(),
+                ns as i32,
+                &mut evals,
+            );
+            std::mem::drop(guard);
+            if i != 0 {
+                return Err(i);
+            }
+        }
+        let mut index: Vec<(usize, f64)> = evals.into_iter().enumerate().collect();
+        index.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+        let mut evecs = Array2::<f64>::zeros((ns, n));
+        index
+            .iter()
+            .zip(evecs.axis_iter_mut(Axis(1)))
+            .for_each(|((i, _), mut evec)| {
+                evec.assign(&a.slice(s![.., *i]));
+            });
+        let evals: Vec<f64> = index.into_iter().map(|(_, v)| v).take(n).collect();
+        Ok(Self { evecs, evals })
+    }
+    fn vecs(&self) -> ArrayView2<f64> {
+        self.evecs.view()
+    }
+    fn vals(&self) -> &[f64] {
+        &self.evals
+    }
+}
+
 impl LDA {
     /// Init an LDA with empty arrays
     pub fn new(nc: usize, p: usize, ns: usize) -> Self {
@@ -51,7 +157,7 @@ impl LDA {
     /// Fit the LDA with measurements to derive projection,means,covariance and psd.
     /// x: traces with shape (n,ns)
     /// y: random value realization (n,)
-    pub fn fit(&mut self, x: ArrayView2<i16>, y: ArrayView1<u16>) {
+    pub fn fit(&mut self, x: ArrayView2<i16>, y: ArrayView1<u16>, eigen_mode: u8) {
         let nc = self.nc;
         let p = self.p;
         let ns = self.ns;
@@ -136,40 +242,18 @@ impl LDA {
         // routine. Eigen vectors are stored inplace in sb.
         // See:
         // https://www.netlib.org/lapack/explore-html/d2/d8a/group__double_s_yeigen_ga912ae48bb1650b2c7174807ffa5456ca.html
-        let mut evals = vec![0.0; ns as usize];
-        unsafe {
-            let guard = LAPACK_MUTEX.lock().unwrap(); // keep this variable until end of use of lapack.
-            let itype = 1;
-            let i = lapacke::dsygvd(
-                lapacke::Layout::RowMajor,
-                itype,
-                b'V',
-                b'L',
-                ns as i32,
-                sb.as_slice_mut().unwrap(),
-                ns as i32,
-                sw.as_slice_mut().unwrap(),
-                ns as i32,
-                &mut evals,
-            );
-            std::mem::drop(guard);
-            if i != 0 {
-                panic!("dsygvd failed, i={}, n={}", i, ns as i32);
+        let projection = match eigen_mode {
+            0 => {
+                let solver = LapackGeigen::new(&sb.view(), &sw.view(), p).expect("failed to solve");
+                solver.vecs().t().to_owned()
             }
-        }
-
-        // Get the projection from eigen vectors and eigen values
-        let mut projection = Array2::<f64>::zeros((p, ns));
-        let mut index: Vec<(usize, f64)> = (0..evals.len()).zip(evals).collect();
-        let evecs = sb;
-        index.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
-        index.reverse();
-        index
-            .iter()
-            .zip(projection.axis_iter_mut(Axis(0)))
-            .for_each(|((i, _), mut proj)| {
-                proj.assign(&evecs.slice(s![.., *i]));
-            });
+            1 => {
+                let solver = CXXGeigen::new(&sb.view(), &sw.view(), p).expect("failed to solve");
+                solver.vecs().t().to_owned()
+            }
+            _ => unreachable!(),
+        };
+        assert_eq!(projection.shape(), [p, ns]);
 
         // ---- Step 2
         // means per class within the subspace by projecting means_ns
@@ -189,14 +273,13 @@ impl LDA {
         // This is a translation of _PSD in scipy.multivariate
         // ref: https://github.com/scipy/scipy/blob/5ab7426247900db9de856e790b8bea1bd71aec49/scipy/stats/_multivariate.py#L115
 
-        let cov_mat = DMatrix::from_iterator(p,p,cov.into_iter().map(|x| *x));
+        let cov_mat = DMatrix::from_iterator(p, p, cov.into_iter().map(|x| *x));
         let eigh = cov_mat.symmetric_eigen();
         let s = eigh.eigenvalues;
         let u = Array::from_iter(eigh.eigenvectors.iter().map(|x| *x)).to_owned();
-        let u = u.into_shape((p,p)).unwrap();
+        let u = u.into_shape((p, p)).unwrap();
         // threshold for eigen values
-        let cond =
-            (cov.len() as f64) * (s.fold(f64::MIN, |acc, x| acc.max(f64::abs(x)))) * 2.3E-16;
+        let cond = (cov.len() as f64) * (s.fold(f64::MIN, |acc, x| acc.max(f64::abs(x)))) * 2.3E-16;
 
         // Only eigen values larger than cond and their id
         // vec<(id,eigenval)>

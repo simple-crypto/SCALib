@@ -44,7 +44,7 @@ class LDAClassifier:
     >>> x = np.random.randint(0,256,(5000,10),dtype=np.int16)
     >>> y = np.random.randint(0,256,5000,dtype=np.uint16)
     >>> lda = LDAClassifier(256,3,10)
-    >>> lda.fit(x,y)
+    >>> lda.fit(x,y,1)
     >>> x = np.random.randint(0,256,(20,10),dtype=np.int16)
     >>> predicted_proba = lda.predict_proba(x)
 
@@ -76,7 +76,7 @@ class LDAClassifier:
         self.lda = _scalib_ext.LDA(nc, p, ns)
         assert p < nc
 
-    def fit(self, l, x):
+    def fit(self, l, x, mode):
         r"""Estimates the PDF parameters that is the projection matrix
         :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
         :math:`\mathbf{\Sigma}`.
@@ -96,7 +96,7 @@ class LDAClassifier:
         This method does not support updating the model: calling this method
         twice overrides the previous result.
         """
-        self.lda.fit(l, x)
+        self.lda.fit(l, x, mode)
 
     def predict_proba(self, l):
         r"""Computes the probability for each of the classes for the traces
