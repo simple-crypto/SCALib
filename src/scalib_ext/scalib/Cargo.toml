@@ -30,3 +30,6 @@ openblas-src = { version="0.10.4", features = ["static"]}
 name = "belief_propagation"
 harness = false
 
+[[bench]]
+name = "lda"
+harness = false
