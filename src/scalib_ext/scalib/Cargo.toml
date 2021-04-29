@@ -33,3 +33,7 @@ harness = false
 [[bench]]
 name = "lda"
 harness = false
+
+[[bench]]
+name = "lda_ntraces"
+harness = false

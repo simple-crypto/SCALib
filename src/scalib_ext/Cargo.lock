@@ -1263,6 +1263,7 @@ name = "scalib"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "geigen",
  "indicatif 0.16.0",
  "itertools 0.10.0",
  "lapacke",
