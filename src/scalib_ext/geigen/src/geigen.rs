@@ -21,7 +21,8 @@ mod ffi {
         col_stride: isize,
     }
     unsafe extern "C++" {
-        include!("geigen/include/geigen.h");
+        include!("geigen.h");
+        /// Full generalized symmetric eigensolver.
         type GEigenSolver;
         // SAFETY: a and b are required to live only for the duration of the call,
         // and a and b must be valid Matrix data.
@@ -31,6 +32,23 @@ mod ffi {
         fn get_eigenvecs<'a>(solver: &'a GEigenSolver) -> Matrix;
         // SAFETY: consequence of the properties of GEigenSolver
         fn get_eigenvals<'a>(solver: &'a GEigenSolver) -> &'a [f64];
+
+        /// Partial generalized symmetric eigensolver.
+        type GEigenPR;
+        // SAFETY: a and b are required to live only for the duration of the call,
+        // and a and b must be valid Matrix data.
+        unsafe fn solve_geigenp(
+            a: Matrix,
+            b: Matrix,
+            nev: u32,
+            ncv: u32,
+            err: &mut u32,
+        ) -> UniquePtr<GEigenPR>;
+        // Matrix return type implicit lifetime is 'a.
+        // SAFETY: consequence of the properties of GEigenSolver
+        fn get_eigenvecs_p<'a>(solver: &'a GEigenPR) -> Matrix;
+        // SAFETY: consequence of the properties of GEigenSolver
+        fn get_eigenvals_p<'a>(solver: &'a GEigenPR) -> &'a [f64];
     }
 }
 

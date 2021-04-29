@@ -19,7 +19,10 @@ def parallel_factor(x, y):
 
 # modes for LDA solver
 MODE_LAPACK=0
-MODE_CXX=1
+MODE_EIGEN=1
+MODE_SPECTRA=2
+
+MODE=MODE_SPECTRA
 
 def test_lda():
     np.set_printoptions(threshold=np.inf)  # for debug
@@ -34,7 +37,7 @@ def test_lda():
     traces += m[labels]
 
     lda = LDAClassifier(nc, n_components, ns)
-    lda.fit(traces, labels, MODE_CXX)
+    lda.fit(traces, labels, MODE)
 
     lda_ref = LDA_sklearn(solver="eigen")
     lda_ref.fit(traces, labels)

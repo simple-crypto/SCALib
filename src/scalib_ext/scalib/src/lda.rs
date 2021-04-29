@@ -35,57 +35,7 @@ lazy_static::lazy_static! {
     static ref LAPACK_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 }
 
-/// Generalized eigenvalues solver A*x = lambda*B*x
-/// A and B must be symmetric, B must be semipositive-definite.
-/// Solve for only the n largest eigenvalues and associated eigenvectors.
-trait Geigen: Sized {
-    type Error;
-    fn new(a: &ArrayView2<f64>, b: &ArrayView2<f64>, n: usize) -> Result<Self, Self::Error>;
-    fn vecs(&self) -> ArrayView2<f64>;
-    // no guarantee about order
-    fn vals(&self) -> &[f64];
-}
-
-struct CXXGeigen {
-    solver: geigen::GEigenSolver,
-    evecs: Array2<f64>,
-    evals: Vec<f64>,
-}
-
-impl Geigen for CXXGeigen {
-    type Error = ();
-    fn new(a: &ArrayView2<f64>, b: &ArrayView2<f64>, n: usize) -> Result<Self, Self::Error> {
-        let ns = a.shape()[0];
-        let solver = geigen::GEigenSolver::new(a, b);
-        let evals = solver.get_eigenvals();
-        let a = solver.get_eigenvecs();
-        let mut index: Vec<(usize, f64)> = evals.iter().cloned().enumerate().collect();
-        index.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
-        let mut evecs = Array2::<f64>::zeros((ns, n));
-        index
-            .iter()
-            .zip(evecs.axis_iter_mut(Axis(1)))
-            .for_each(|((i, _), mut evec)| {
-                evec.assign(&a.slice(s![.., *i]));
-            });
-        let evals: Vec<f64> = index.into_iter().map(|(_, v)| v).take(n).collect();
-        Ok(Self {
-            solver,
-            evecs,
-            evals,
-        })
-    }
-    fn vecs<'a>(&'a self) -> ArrayView2<'a, f64> {
-        //let evecs: ArrayView2<'a, f64> = self.solver.get_eigenvecs();
-        //evecs.clone().slice_move(s![.., -(self.n as isize)..; -1])
-        self.evecs.view()
-    }
-    fn vals(&self) -> &[f64] {
-        //let vals = self.solver.get_eigenvals();
-        //&vals[..vals.len() - self.n]
-        &self.evals
-    }
-}
+use geigen::Geigen;
 
 struct LapackGeigen {
     evecs: Array2<f64>,
@@ -136,8 +86,8 @@ impl Geigen for LapackGeigen {
     fn vecs(&self) -> ArrayView2<f64> {
         self.evecs.view()
     }
-    fn vals(&self) -> &[f64] {
-        &self.evals
+    fn vals(&self) -> ArrayView1<f64> {
+        self.evals.as_slice().into()
     }
 }
 
@@ -248,7 +198,13 @@ impl LDA {
                 solver.vecs().t().to_owned()
             }
             1 => {
-                let solver = CXXGeigen::new(&sb.view(), &sw.view(), p).expect("failed to solve");
+                let solver =
+                    geigen::GEigenSolver::new(&sb.view(), &sw.view(), p).expect("failed to solve");
+                solver.vecs().t().to_owned()
+            }
+            2 => {
+                let solver =
+                    geigen::GEigenSolverP::new(&sb.view(), &sw.view(), p).expect("failed to solve");
                 solver.vecs().t().to_owned()
             }
             _ => unreachable!(),
