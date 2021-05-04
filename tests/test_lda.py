@@ -24,7 +24,7 @@ MODE_SPECTRA=2
 
 MODE=MODE_SPECTRA
 
-COV_MODE=0
+COV_MODE=2
 
 def test_lda():
     np.set_printoptions(threshold=np.inf)  # for debug
@@ -33,7 +33,7 @@ def test_lda():
     nc = 4
     n = 5000
 
-    m = np.random.randint(0, 4, (nc, ns))
+    m = np.random.randint(0, 100, (nc, ns))
     traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
     labels = np.random.randint(0, nc, n, dtype=np.uint16)
     traces += m[labels]
@@ -56,10 +56,11 @@ def test_lda():
     # To correct if projection vectors are opposite.
     parallel_factors = np.array([parallel_factor(x, y) for x, y in
             zip(lda_projection.T, lda_ref_projection.T)])
+    
     print("parallel_factors")
     print(parallel_factors)
 
-    # check equivalence for means and cov in subspace
+    # generate means and cov in subspace
     traces_t = (lda_ref.scalings_[:, :n_components].T @ traces.T).T
     means_check = np.zeros((nc, n_components))
     for i in range(nc):
@@ -67,7 +68,16 @@ def test_lda():
         means_check[i, :] = np.mean(traces_t[I, :], axis=0)
     traces_t = traces_t - means_check[labels, :]
     cov_check = np.cov(traces_t.T)
-    assert np.allclose(means_check, lda.lda.get_means().T * parallel_factors)
+
+    #traces_t = (lda_projection[:, :].T @ traces.T).T
+    #means_check_rust = np.zeros((nc, n_components))
+    #for i in range(nc):
+    #    I = np.where(labels == i)[0]
+    #    means_check_rust[i, :] = np.mean(traces_t[I, :], axis=0)
+    #traces_t = traces_t - means_check_rust[labels, :]
+    #cov_check_rust = np.cov(traces_t.T)
+
+    #assert np.allclose(means_check_rust, lda.lda.get_means().T )
     #    assert(np.allclose(cov_check,lda.lda.get_cov()))
 
     traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
@@ -75,7 +85,6 @@ def test_lda():
     traces += m[labels]
 
     prs = lda.predict_proba(traces)
-
     traces_t = (lda_ref.scalings_[:, :n_components].T @ traces.T).T
     prs_ref = np.zeros((len(traces), nc))
     for x in range(nc):

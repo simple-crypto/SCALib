@@ -449,7 +449,8 @@ impl LDA {
         // cov= X^T * X
         // proj = (P*X^T)^T = X*P^T
         // cov_proj = (X*P^T)^T*(X*P^T) = P*X^T*X*P^T = P*cov*P^T
-        let cov = projection.dot(&sw.dot(&projection.t()));
+        let norm_sw = &sw / (n as f64);
+        let cov = projection.dot(&norm_sw.dot(&projection.t()));
 
         // ---- Step 3
         // Compute pseudo inverse of covariance matrix
