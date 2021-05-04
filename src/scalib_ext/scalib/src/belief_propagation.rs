@@ -394,7 +394,7 @@ pub fn run_bp(
     .on_finish(ProgressFinish::AndClear));
     pb.set_message("Calculating BP...");
 
-    for _ in (0..it).progress_with(pb) {
+    for _ in (0..it) {
         // This is a technique for runtime borrow-checking: we take reference on all the edges
         // at once, put them into options, then extract the references out of the options, one
         // at a time and out-of-order.
@@ -423,6 +423,7 @@ pub fn run_bp(
             .collect();
         update_variables(&mut edge_for_var, variables);
     }
+    pb.finish();
 
     Ok(())
 }

@@ -415,6 +415,22 @@ impl LDA {
                 acc.get_matrices()
             }
             2 => LdaAcc2::new(nc, x, y).get_matrices(),
+            3 => {
+                let mut acc = LdaAcc::new(nc, ns);
+                acc.fit_u(x, y);
+                let (sw, _, means_ns) = acc.get_matrices();
+
+                let (_, sb, _) = LdaAcc2::new(nc, x, y).get_matrices();
+                (sw, sb, means_ns)
+            }
+            4 => {
+                let mut acc = LdaAcc::new(nc, ns);
+                acc.fit_u(x, y);
+                let (_, sb, means_ns) = acc.get_matrices();
+
+                let (sw, _, _) = LdaAcc2::new(nc, x, y).get_matrices();
+                (sw, sb, means_ns)
+            }
             _ => unreachable!(),
         };
 
