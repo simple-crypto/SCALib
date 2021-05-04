@@ -39,7 +39,7 @@ def test_lda():
     traces += m[labels]
 
     lda = LDAClassifier(nc, n_components, ns)
-    lda.fit(traces, labels, MODE, COV_MODE, True)
+    lda.fit(traces, labels, MODE, COV_MODE, False)
 
     lda_ref = LDA_sklearn(solver="eigen")
     lda_ref.fit(traces, labels)

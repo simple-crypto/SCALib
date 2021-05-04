@@ -44,7 +44,7 @@ class LDAClassifier:
     >>> x = np.random.randint(0,256,(5000,10),dtype=np.int16)
     >>> y = np.random.randint(0,256,5000,dtype=np.uint16)
     >>> lda = LDAClassifier(256,3,10)
-    >>> lda.fit(x,y,1)
+    >>> lda.fit(x,y,2,2,True)
     >>> x = np.random.randint(0,256,(20,10),dtype=np.int16)
     >>> predicted_proba = lda.predict_proba(x)
 

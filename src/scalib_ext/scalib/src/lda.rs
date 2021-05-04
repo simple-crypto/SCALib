@@ -412,24 +412,12 @@ impl LDA {
             1 => {
                 let mut acc = LdaAcc::new(nc, ns);
                 acc.fit_u(x, y);
-                acc.get_matrices()
+                let (sw, sb, means_ns) = acc.get_matrices();
+                (&sw / (n as f64), &sb / (n as f64), means_ns)
             }
-            2 => LdaAcc2::new(nc, x, y).get_matrices(),
-            3 => {
-                let mut acc = LdaAcc::new(nc, ns);
-                acc.fit_u(x, y);
-                let (sw, _, means_ns) = acc.get_matrices();
-
-                let (_, sb, _) = LdaAcc2::new(nc, x, y).get_matrices();
-                (sw, sb, means_ns)
-            }
-            4 => {
-                let mut acc = LdaAcc::new(nc, ns);
-                acc.fit_u(x, y);
-                let (_, sb, means_ns) = acc.get_matrices();
-
-                let (sw, _, _) = LdaAcc2::new(nc, x, y).get_matrices();
-                (sw, sb, means_ns)
+            2 => {
+                let (sw, sb, means_ns) = LdaAcc2::new(nc, x, y).get_matrices();
+                (&sw / (n as f64), &sb / (n as f64), means_ns)
             }
             _ => unreachable!(),
         };
@@ -465,8 +453,7 @@ impl LDA {
         // cov= X^T * X
         // proj = (P*X^T)^T = X*P^T
         // cov_proj = (X*P^T)^T*(X*P^T) = P*X^T*X*P^T = P*cov*P^T
-        let norm_sw = &sw / (n as f64);
-        let cov = projection.dot(&norm_sw.dot(&projection.t()));
+        let cov = projection.dot(&sw.dot(&projection.t()));
 
         // ---- Step 3
         // Compute pseudo inverse of covariance matrix
