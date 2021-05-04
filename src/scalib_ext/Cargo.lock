@@ -1262,6 +1262,7 @@ dependencies = [
 name = "scalib"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "criterion",
  "geigen",
  "indicatif 0.16.0",

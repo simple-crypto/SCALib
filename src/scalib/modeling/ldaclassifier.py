@@ -76,7 +76,7 @@ class LDAClassifier:
         self.lda = _scalib_ext.LDA(nc, p, ns)
         assert p < nc
 
-    def fit(self, l, x, mode):
+    def fit(self, l, x, mode, cov_mode, test_cov):
         r"""Estimates the PDF parameters that is the projection matrix
         :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
         :math:`\mathbf{\Sigma}`.
@@ -96,7 +96,7 @@ class LDAClassifier:
         This method does not support updating the model: calling this method
         twice overrides the previous result.
         """
-        self.lda.fit(l, x, mode)
+        self.lda.fit(l, x, mode, cov_mode, test_cov)
 
     def predict_proba(self, l):
         r"""Computes the probability for each of the classes for the traces

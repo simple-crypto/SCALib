@@ -24,6 +24,8 @@ MODE_SPECTRA=2
 
 MODE=MODE_SPECTRA
 
+COV_MODE=0
+
 def test_lda():
     np.set_printoptions(threshold=np.inf)  # for debug
     ns = 10
@@ -37,7 +39,7 @@ def test_lda():
     traces += m[labels]
 
     lda = LDAClassifier(nc, n_components, ns)
-    lda.fit(traces, labels, MODE)
+    lda.fit(traces, labels, MODE, COV_MODE, True)
 
     lda_ref = LDA_sklearn(solver="eigen")
     lda_ref.fit(traces, labels)

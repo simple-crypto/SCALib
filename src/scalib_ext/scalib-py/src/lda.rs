@@ -25,10 +25,12 @@ impl LDA {
         x: PyReadonlyArray2<i16>,
         y: PyReadonlyArray1<u16>,
         eigen_mode: u8,
+        cov_mode: u8,
+        test_cov: bool,
     ) {
         let x = x.as_array();
         let y = y.as_array();
-        py.allow_threads(|| self.inner.fit(x, y, eigen_mode));
+        py.allow_threads(|| self.inner.fit(x, y, eigen_mode, cov_mode, test_cov));
     }
 
     /// return the probability of each of the possible value for leakage samples
