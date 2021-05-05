@@ -8,7 +8,7 @@
 //!
 //! The values on the factor graph are probability distribution of values in GF(2)^n.
 
-use indicatif::{ProgressBar, ProgressIterator, ProgressStyle};
+use indicatif::{ProgressBar, ProgressFinish, ProgressIterator, ProgressStyle};
 use ndarray::{s, Array1, Array2, Axis};
 use rayon::prelude::*;
 use std::convert::TryInto;
@@ -390,7 +390,8 @@ pub fn run_bp(
     let pb = ProgressBar::new(it as u64);
     pb.set_style(ProgressStyle::default_spinner().template(
         "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
-    ));
+    )
+    .on_finish(ProgressFinish::AndClear));
     pb.set_message("Calculating BP...");
 
     for _ in (0..it).progress_with(pb) {
