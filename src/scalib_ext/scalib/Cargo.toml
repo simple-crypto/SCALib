@@ -21,11 +21,12 @@ lazy_static = "1.4.0"
 nalgebra = "0.26.1"
 approx = "0.4.0"
 geigen = { path = "../geigen" }
+nshare = { git= "https://github.com/cassiersg/nshare", branch="rm_lt", features=["nalgebra", "ndarray", "std"] }
 
 [dev-dependencies]
 criterion = "0.3"
 ndarray-rand = "0.14.0"
-openblas-src = { version="0.10.4", features = ["static"]}
+#openblas-src = { version="0.10.4", features = ["static"]}
 
 [[bench]]
 name = "belief_propagation"

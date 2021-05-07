@@ -1,6 +1,6 @@
 //! Python binding of SCALib's LDA implementation.
 
-use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
+use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
 #[pyclass]
@@ -19,18 +19,10 @@ impl LDA {
     /// Fit the LDA with measurements to derive projection,means,covariance and psd.
     /// x: traces with shape (n,ns)
     /// y: random value realization (n,)
-    fn fit(
-        &mut self,
-        py: Python,
-        x: PyReadonlyArray2<i16>,
-        y: PyReadonlyArray1<u16>,
-        eigen_mode: u8,
-        cov_mode: u8,
-        test_cov: bool,
-    ) {
+    fn fit(&mut self, py: Python, x: PyReadonlyArray2<i16>, y: PyReadonlyArray1<u16>) {
         let x = x.as_array();
         let y = y.as_array();
-        py.allow_threads(|| self.inner.fit(x, y, eigen_mode, cov_mode, test_cov));
+        py.allow_threads(|| self.inner.fit(x, y));
     }
 
     /// return the probability of each of the possible value for leakage samples
@@ -49,34 +41,29 @@ impl LDA {
     fn set_state<'py>(
         &mut self,
         _py: Python<'py>,
-        cov: PyReadonlyArray2<f64>,
-        psd: PyReadonlyArray2<f64>,
-        means: PyReadonlyArray2<f64>,
         projection: PyReadonlyArray2<f64>,
-        nc: usize,
-        p: usize,
         ns: usize,
+        p: usize,
+        nc: usize,
+        omega: PyReadonlyArray2<f64>,
+        pk: PyReadonlyArray1<f64>,
     ) {
-        self.inner.cov.assign(&cov.as_array());
-        self.inner.psd.assign(&psd.as_array());
-        self.inner.means.assign(&means.as_array());
         self.inner.projection.assign(&projection.as_array());
-        self.inner.nc = nc;
-        self.inner.p = p;
         self.inner.ns = ns;
+        self.inner.p = p;
+        self.inner.nc = nc;
+        self.inner.omega.assign(&omega.as_array());
+        self.inner.pk.assign(&pk.as_array());
     }
 
     /// Get LDA internal data
-    fn get_cov<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
-        Ok(&self.inner.cov.to_pyarray(py))
+    fn get_omega<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
+        Ok(&self.inner.omega.to_pyarray(py))
     }
     fn get_projection<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
         Ok(&self.inner.projection.to_pyarray(py))
     }
-    fn get_means<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
-        Ok(&self.inner.means.to_pyarray(py))
-    }
-    fn get_psd<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
-        Ok(&self.inner.psd.to_pyarray(py))
+    fn get_pk<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray1<f64>> {
+        Ok(&self.inner.pk.to_pyarray(py))
     }
 }
