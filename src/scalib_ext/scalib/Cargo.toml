@@ -22,6 +22,8 @@ nalgebra = "0.26.1"
 approx = "0.4.0"
 geigen = { path = "../geigen" }
 nshare = { git= "https://github.com/cassiersg/nshare", branch="rm_lt", features=["nalgebra", "ndarray", "std"] }
+blis-src = { version = "0.2.1-alpha.0", default-features=false, features=["static", "pthreads"]}
+blis-sys = { git="https://github.com/cassiersg/blis-sys" }
 
 [dev-dependencies]
 criterion = "0.3"

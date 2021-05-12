@@ -1,13 +1,3 @@
-// Require this to link openblas_src in the final binary, as otherwise it appears to be not used
-// and cargo does not link it.
-// This seems to be a strange combination of not using explicitly functions declared by
-// openblas_src (as they are declared by blas-sys), and not requiring those symbols from a
-// "top-level" rust function (due to top-level re-writing of #[pymodule]).
-// To be reported/investigated.
-// Not required on windows, as we directly link openblas there from build.rs.
-#[cfg(not(windows))]
-extern crate openblas_src as _;
-
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Axis};
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};

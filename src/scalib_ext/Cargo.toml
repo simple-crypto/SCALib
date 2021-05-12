@@ -12,7 +12,8 @@ resolver = "2"
 numpy = { git = 'https://github.com/cassiersg/rust-numpy', branch = 'upgrade-ndarray' }
 #ndarray-stats = { git = 'https://github.com/cassiersg/ndarray-stats', branch = 'ndarray-0.15' }
 #ndarray-linalg = { git = 'https://github.com/cassiersg/ndarray-linalg', branch = 'upgrade-ndarray' }
-openblas-src = { git = 'https://github.com/cassiersg/openblas-src', branch = 'dyn_arch' }
+#openblas-src = { git = 'https://github.com/cassiersg/openblas-src', branch = 'dyn_arch' }
+blis-src = { git = 'https://github.com/cassiersg/blis-src', branch = 'include' }
 
 [profile.release]
 debug = true

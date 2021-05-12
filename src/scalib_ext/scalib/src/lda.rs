@@ -58,9 +58,9 @@ impl LdaAcc {
         }
     }
     /// Traces: shape (n, ns). Classes shape: (n,)
-    fn new(nc: usize, traces: ArrayView2<i16>, classes: ArrayView1<u16>) -> Self {
+    fn new(nc: usize, traces: ArrayView2<i16>, classes: ArrayView1<u16>, gemm_algo: u32) -> Self {
         let mut res = Self::from_dim(nc, traces.shape()[1], traces.shape()[0]);
-        res.update(traces, classes);
+        res.update(traces, classes, gemm_algo);
         return res;
     }
     fn merge(&mut self, other: &Self) {
@@ -77,7 +77,7 @@ impl LdaAcc {
         self.n_traces += &other.n_traces;
         self.n = n;
     }
-    fn update(&mut self, traces: ArrayView2<i16>, classes: ArrayView1<u16>) {
+    fn update(&mut self, traces: ArrayView2<i16>, classes: ArrayView1<u16>, gemm_algo: u32) {
         // Number of new traces
         let n = traces.shape()[0];
         assert_eq!(n, classes.shape()[0]);
@@ -104,7 +104,27 @@ impl LdaAcc {
         // new scatter matrix
         //let scatter = traces_buf.t().dot(&traces_buf);
         //self.scatter += &scatter;
-        ndarray::linalg::general_mat_mul(1.0, &traces_buf.t(), &traces_buf, 1.0, &mut self.scatter);
+        match gemm_algo {
+            0 => {
+                ndarray::linalg::general_mat_mul(
+                    1.0,
+                    &traces_buf.t(),
+                    &traces_buf,
+                    1.0,
+                    &mut self.scatter,
+                );
+            }
+            _ => {
+                crate::matrixmul::blis_dgemm(
+                    traces_buf.t(),
+                    traces_buf.view(),
+                    self.scatter.view_mut(),
+                    1.0,
+                    1.0,
+                    gemm_algo,
+                );
+            }
+        }
 
         let merged_n = self.n.checked_add(n).expect("too many traces in LDA");
         let delta_mu: Array1<f64> = mu - &self.mu;
@@ -187,7 +207,7 @@ impl LDA {
     /// Fit the LDA with measurements to derive projection,means,covariance and psd.
     /// x: traces with shape (n,ns)
     /// y: random value realization (n,)
-    pub fn fit(&mut self, x: ArrayView2<i16>, y: ArrayView1<u16>) {
+    pub fn fit(&mut self, x: ArrayView2<i16>, y: ArrayView1<u16>, gemm_algo: u32) {
         let nc = self.nc;
         let p = self.p;
         let ns = self.ns;
@@ -202,7 +222,7 @@ impl LDA {
         // compute the projection
         // This is similar to LDA in scikit-learn with "eigen" parameter
         // ref: https://github.com/scikit-learn/scikit-learn/blob/95119c13a/sklearn/discriminant_analysis.py#L365
-        let (sw, sb, means_ns) = LdaAcc::new(nc, x, y).get_matrices();
+        let (sw, sb, means_ns) = LdaAcc::new(nc, x, y, gemm_algo).get_matrices();
 
         // Partial generalized eigenvalue decomposition for sb and sw.
         let solver =

@@ -30,7 +30,7 @@ def test_lda():
     traces += m[labels]
 
     lda = LDAClassifier(nc, n_components, ns)
-    lda.fit(traces, labels)
+    lda.fit(traces, labels, 1)
 
     lda_ref = LDA_sklearn(solver="eigen")
     lda_ref.fit(traces, labels)
