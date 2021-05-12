@@ -15,5 +15,5 @@ realfft = "1.0"
 
 [build-dependencies]
 cc = "1.0"
-bindgen = "0.53"
+bindgen = "0.58"
 
