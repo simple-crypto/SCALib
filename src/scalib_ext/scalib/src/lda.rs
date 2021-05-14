@@ -153,23 +153,33 @@ impl LdaAcc {
         self.n = merged_n;
     }
 
-    fn get_matrices(&self) -> (Array2<f64>, Array2<f64>, Array2<f64>) {
-        let mus = ndarray::Zip::from(&self.traces_sum)
-            .and_broadcast(self.n_traces.slice(s![.., NewAxis]))
-            .map_collect(|t, n| t / (*n as f64));
-        let c_mus = mus.clone() - self.mu.slice(s![NewAxis, ..]);
-        let cmus_scaled = ndarray::Zip::from(&c_mus)
-            .and_broadcast(self.n_traces.slice(s![.., NewAxis]))
-            .map_collect(|m, n| m * (*n as f64));
-        let s_b = c_mus.t().dot(&cmus_scaled);
-        let s_w = &self.scatter - &s_b;
-        return (s_w, s_b, mus);
+    fn get_matrices(&self) -> Result<(Array2<f64>, Array2<f64>, Array2<f64>), ()> {
+        if self.n_traces.iter().any(|x| *x == 0) {
+            Err(())
+        } else {
+            let mus = ndarray::Zip::from(&self.traces_sum)
+                .and_broadcast(self.n_traces.slice(s![.., NewAxis]))
+                .map_collect(|t, n| t / (*n as f64));
+            let c_mus = mus.clone() - self.mu.slice(s![NewAxis, ..]);
+            let cmus_scaled = ndarray::Zip::from(&c_mus)
+                .and_broadcast(self.n_traces.slice(s![.., NewAxis]))
+                .map_collect(|m, n| m * (*n as f64));
+            let s_b = c_mus.t().dot(&cmus_scaled);
+            let s_w = &self.scatter - &s_b;
+            Ok((s_w, s_b, mus))
+        }
     }
 
     /// Compute the LDA with p dimensions in the projected space
-    pub fn lda(&self, p: usize) -> LDA {
-        let (sw, sb, means_ns) = self.get_matrices();
-        LDA::from_matrices(self.n, p, sw.view(), sb.view(), means_ns.view())
+    pub fn lda(&self, p: usize) -> Result<LDA, ()> {
+        let (sw, sb, means_ns) = self.get_matrices()?;
+        Ok(LDA::from_matrices(
+            self.n,
+            p,
+            sw.view(),
+            sb.view(),
+            means_ns.view(),
+        ))
     }
 }
 

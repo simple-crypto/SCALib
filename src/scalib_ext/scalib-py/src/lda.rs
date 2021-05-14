@@ -33,9 +33,12 @@ impl LdaAcc {
     }
 
     /// Compute the LDA with p dimensions in the projected space
-    fn lda(&self, py: Python, p: usize) -> LDA {
-        LDA {
-            inner: py.allow_threads(|| self.inner.lda(p)),
+    fn lda(&self, py: Python, p: usize) -> PyResult<LDA> {
+        match py.allow_threads(|| self.inner.lda(p)) {
+            Ok(inner) => Ok(LDA { inner }),
+            Err(()) => Err(pyo3::exceptions::PyZeroDivisionError::new_err(
+                "Class without traces.",
+            )),
         }
     }
 
