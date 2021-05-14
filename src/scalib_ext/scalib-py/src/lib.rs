@@ -32,6 +32,7 @@ fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
     m.add_class::<ttest::Ttest>()?;
     m.add_class::<lda::LDA>()?;
+    m.add_class::<lda::LdaAcc>()?;
 
     #[pyfn(m, "run_bp")]
     pub fn run_bp(

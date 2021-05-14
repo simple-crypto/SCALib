@@ -29,22 +29,26 @@ use std::ops::AddAssign;
 /// Comput Stat 31, 1305–1325 (2016). https://doi.org/10.1007/s00180-015-0637-z
 pub struct LdaAcc {
     /// Number of samples in trace
-    ns: usize,
+    pub ns: usize,
     /// Number of classes
-    nc: usize,
+    pub nc: usize,
     /// Total number of traces
-    n: usize,
-    scatter: Array2<f64>,
+    pub n: usize,
+    pub scatter: Array2<f64>,
     /// Sum traces for each each class. Shape (nc, ns).
-    traces_sum: Array2<f64>,
-    mu: Array1<f64>,
+    pub traces_sum: Array2<f64>,
+    pub mu: Array1<f64>,
     /// Number of traces in each class. Shape (nc,).
-    n_traces: Array1<usize>,
+    pub n_traces: Array1<usize>,
+    /// Buffer for traces converted to f64
     traces_buf: Array2<f64>,
+    /// Buffer sums of traces
     traces_sum_buf: Array2<f64>,
 }
 impl LdaAcc {
-    fn from_dim(nc: usize, ns: usize, n: usize) -> Self {
+    /// Creat a new Lda accumulator with nc classes, ns samples (POIs) and initial capacity n for
+    /// buffers (will be dynamically increased as needed).
+    pub fn from_dim(nc: usize, ns: usize, n: usize) -> Self {
         Self {
             ns,
             nc,
@@ -57,12 +61,14 @@ impl LdaAcc {
             traces_sum_buf: Array2::zeros((nc, ns)),
         }
     }
+
     /// Traces: shape (n, ns). Classes shape: (n,)
     fn new(nc: usize, traces: ArrayView2<i16>, classes: ArrayView1<u16>, gemm_algo: u32) -> Self {
         let mut res = Self::from_dim(nc, traces.shape()[1], traces.shape()[0]);
         res.update(traces, classes, gemm_algo);
         return res;
     }
+
     fn merge(&mut self, other: &Self) {
         assert_eq!(self.nc, other.nc);
         assert_eq!(self.traces_sum.shape()[1], other.traces_sum.shape()[1]);
@@ -77,7 +83,12 @@ impl LdaAcc {
         self.n_traces += &other.n_traces;
         self.n = n;
     }
-    fn update(&mut self, traces: ArrayView2<i16>, classes: ArrayView1<u16>, gemm_algo: u32) {
+
+    /// Add traces to the accumulator.
+    ///
+    /// traces has shape (n, ns), classes has shape (n, nc).
+    /// gemm_algo is 0 for ndarray gemm, x>0 for BLIS gemm with x threads.
+    pub fn update(&mut self, traces: ArrayView2<i16>, classes: ArrayView1<u16>, gemm_algo: u32) {
         // Number of new traces
         let n = traces.shape()[0];
         assert_eq!(n, classes.shape()[0]);
@@ -141,6 +152,7 @@ impl LdaAcc {
         self.mu = self.traces_sum.sum_axis(Axis(0)) / (merged_n as f64);
         self.n = merged_n;
     }
+
     fn get_matrices(&self) -> (Array2<f64>, Array2<f64>, Array2<f64>) {
         let mus = ndarray::Zip::from(&self.traces_sum)
             .and_broadcast(self.n_traces.slice(s![.., NewAxis]))
@@ -152,6 +164,12 @@ impl LdaAcc {
         let s_b = c_mus.t().dot(&cmus_scaled);
         let s_w = &self.scatter - &s_b;
         return (s_w, s_b, mus);
+    }
+
+    /// Compute the LDA with p dimensions in the projected space
+    pub fn lda(&self, p: usize) -> LDA {
+        let (sw, sb, means_ns) = self.get_matrices();
+        LDA::from_matrices(self.n, p, sw.view(), sb.view(), means_ns.view())
     }
 }
 
@@ -193,54 +211,36 @@ pub struct LDA {
 }
 
 impl LDA {
-    /// Init an LDA with empty arrays
-    pub fn new(nc: usize, p: usize, ns: usize) -> Self {
-        LDA {
-            projection: Array2::<f64>::zeros((ns, p)),
-            nc: nc,
-            p: p,
-            ns: ns,
-            omega: Array2::<f64>::zeros((p, nc)),
-            pk: Array1::<f64>::zeros((nc,)),
-        }
-    }
-    /// Fit the LDA with measurements to derive projection,means,covariance and psd.
-    /// x: traces with shape (n,ns)
-    /// y: random value realization (n,)
-    pub fn fit(&mut self, x: ArrayView2<i16>, y: ArrayView1<u16>, gemm_algo: u32) {
-        let nc = self.nc;
-        let p = self.p;
-        let ns = self.ns;
-        let n = x.shape()[0];
-
-        // The following goes in three steps
-        // 1. Compute the projection
-        // 2. Compute the means and cov in linear subspace
-        // 3. Compute omega_k and P_k
-
+    /// n: total number of traces
+    /// p: number of dimensions in reduced space
+    /// sw: intra-class covariance
+    /// sb: intra-class covariance
+    /// means_ns: means per class
+    fn from_matrices(
+        n: usize,
+        p: usize,
+        sw: ArrayView2<f64>,
+        sb: ArrayView2<f64>,
+        means_ns: ArrayView2<f64>,
+    ) -> Self {
+        let ns = sw.shape()[0];
+        let nc = means_ns.shape()[0];
         // ---- Step 1
         // compute the projection
-        // This is similar to LDA in scikit-learn with "eigen" parameter
-        // ref: https://github.com/scikit-learn/scikit-learn/blob/95119c13a/sklearn/discriminant_analysis.py#L365
-        let (sw, sb, means_ns) = LdaAcc::new(nc, x, y, gemm_algo).get_matrices();
-
         // Partial generalized eigenvalue decomposition for sb and sw.
         let solver =
             geigen::GEigenSolverP::new(&sb.view(), &sw.view(), p).expect("failed to solve");
-        self.projection.assign(&solver.vecs());
-        assert_eq!(self.projection.dim(), (ns, p));
+        let projection = solver.vecs().into_owned();
+        assert_eq!(projection.dim(), (ns, p));
 
         // ---- Step 2
         // means per class within the subspace by projecting means_ns
-        let means = self.projection.t().dot(&means_ns.t());
+        let means = projection.t().dot(&means_ns.t());
         // compute the noise covariance in the linear subspace
         // cov= X^T * X
         // proj = (P*X^T)^T = X*P^T
         // cov_proj = (X*P^T)^T*(X*P^T) = P*X^T*X*P^T = P*cov*P^T
-        let cov = self
-            .projection
-            .t()
-            .dot(&(sw / (n as f64)).dot(&self.projection));
+        let cov = projection.t().dot(&(&sw / (n as f64)).dot(&projection));
 
         // ---- Step 3
         // Compute the matrix (p, nc) of vectors \omega_k^T
@@ -250,8 +250,17 @@ impl LDA {
         for mut x in omega.column_iter_mut() {
             cholesky.solve_mut(&mut x);
         }
-        self.omega = omega.into_ndarray2();
-        self.pk = -0.5 * (&self.omega * &means).sum_axis(Axis(0));
+        let omega = omega.into_ndarray2();
+        let pk = -0.5 * (&omega * &means).sum_axis(Axis(0));
+
+        Self {
+            projection,
+            ns,
+            p,
+            nc,
+            omega,
+            pk,
+        }
     }
 
     /// return the probability of each of the possible value for leakage samples

@@ -4,21 +4,22 @@ use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
 #[pyclass]
-pub(crate) struct LDA {
-    inner: scalib::lda::LDA,
+pub(crate) struct LdaAcc {
+    inner: scalib::lda::LdaAcc,
 }
 #[pymethods]
-impl LDA {
+impl LdaAcc {
     #[new]
-    /// Init an LDA with empty arrays
-    fn new(nc: usize, p: usize, ns: usize) -> Self {
+    /// Init an LDA empty LDA accumulator
+    fn new(nc: usize, ns: usize) -> Self {
         Self {
-            inner: scalib::lda::LDA::new(nc, p, ns),
+            inner: scalib::lda::LdaAcc::from_dim(nc, ns, 0),
         }
     }
-    /// Fit the LDA with measurements to derive projection,means,covariance and psd.
+    /// Add measurements to the accumulator
     /// x: traces with shape (n,ns)
     /// y: random value realization (n,)
+    /// gemm_algo is 0 for ndarray gemm, x>0 for BLIS gemm with x threads.
     fn fit(
         &mut self,
         py: Python,
@@ -28,9 +29,66 @@ impl LDA {
     ) {
         let x = x.as_array();
         let y = y.as_array();
-        py.allow_threads(|| self.inner.fit(x, y, gemm_algo));
+        py.allow_threads(|| self.inner.update(x, y, gemm_algo));
     }
 
+    /// Compute the LDA with p dimensions in the projected space
+    fn lda(&self, py: Python, p: usize) -> LDA {
+        LDA {
+            inner: py.allow_threads(|| self.inner.lda(p)),
+        }
+    }
+
+    /// Get the state for serialization
+    fn get_state<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> (
+        usize,
+        usize,
+        usize,
+        &'py PyArray2<f64>,
+        &'py PyArray2<f64>,
+        &'py PyArray1<f64>,
+        &'py PyArray1<usize>,
+    ) {
+        (
+            self.inner.ns,
+            self.inner.nc,
+            self.inner.n,
+            self.inner.scatter.to_pyarray(py),
+            self.inner.traces_sum.to_pyarray(py),
+            self.inner.mu.to_pyarray(py),
+            self.inner.n_traces.to_pyarray(py),
+        )
+    }
+    /// Set the accumulator state
+    #[staticmethod]
+    fn from_state(
+        ns: usize,
+        nc: usize,
+        n: usize,
+        scatter: PyReadonlyArray2<f64>,
+        traces_sum: PyReadonlyArray2<f64>,
+        mu: PyReadonlyArray1<f64>,
+        n_traces: PyReadonlyArray1<usize>,
+    ) -> Self {
+        let mut inner = scalib::lda::LdaAcc::from_dim(nc, ns, 0);
+        inner.n = n;
+        inner.scatter.assign(&scatter.as_array());
+        inner.traces_sum.assign(&traces_sum.as_array());
+        inner.mu.assign(&mu.as_array());
+        inner.n_traces.assign(&n_traces.as_array());
+        Self { inner }
+    }
+}
+
+#[pyclass]
+pub(crate) struct LDA {
+    inner: scalib::lda::LDA,
+}
+#[pymethods]
+impl LDA {
     /// return the probability of each of the possible value for leakage samples
     /// x : traces with shape (n,ns)
     /// return prs with shape (n,nc). Every row corresponds to one probability distribution
@@ -43,33 +101,52 @@ impl LDA {
         Ok(&(prs.to_pyarray(py)))
     }
 
+    /// Get the lda state for serialization
+    fn get_state<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> (
+        &'py PyArray2<f64>,
+        usize,
+        usize,
+        usize,
+        &'py PyArray2<f64>,
+        &'py PyArray1<f64>,
+    ) {
+        (
+            self.inner.projection.to_pyarray(py),
+            self.inner.ns,
+            self.inner.p,
+            self.inner.nc,
+            self.inner.omega.to_pyarray(py),
+            self.inner.pk.to_pyarray(py),
+        )
+    }
+
+    /// Get the projection matrix
+    fn get_projection<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
+        self.inner.projection.to_pyarray(py)
+    }
+
     /// Set the LDA state based on all its parameters
-    fn set_state<'py>(
-        &mut self,
-        _py: Python<'py>,
+    #[staticmethod]
+    fn from_state(
         projection: PyReadonlyArray2<f64>,
         ns: usize,
         p: usize,
         nc: usize,
         omega: PyReadonlyArray2<f64>,
         pk: PyReadonlyArray1<f64>,
-    ) {
-        self.inner.projection.assign(&projection.as_array());
-        self.inner.ns = ns;
-        self.inner.p = p;
-        self.inner.nc = nc;
-        self.inner.omega.assign(&omega.as_array());
-        self.inner.pk.assign(&pk.as_array());
-    }
-
-    /// Get LDA internal data
-    fn get_omega<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
-        Ok(&self.inner.omega.to_pyarray(py))
-    }
-    fn get_projection<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
-        Ok(&self.inner.projection.to_pyarray(py))
-    }
-    fn get_pk<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray1<f64>> {
-        Ok(&self.inner.pk.to_pyarray(py))
+    ) -> Self {
+        Self {
+            inner: scalib::lda::LDA {
+                projection: projection.to_owned_array(),
+                ns,
+                p,
+                nc,
+                omega: omega.to_owned_array(),
+                pk: pk.to_owned_array(),
+            },
+        }
     }
 }

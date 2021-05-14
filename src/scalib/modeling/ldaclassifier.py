@@ -1,7 +1,6 @@
 import numpy as np
 from scalib import _scalib_ext
 
-
 class LDAClassifier:
     r"""Models the leakage :math:`\mathbf{l}` with :math:`n_s` dimensions using
     linear discriminant analysis dimentionality reduction and gaussian
@@ -44,15 +43,15 @@ class LDAClassifier:
     >>> x = np.random.randint(0,256,(5000,10),dtype=np.int16)
     >>> y = np.random.randint(0,256,5000,dtype=np.uint16)
     >>> lda = LDAClassifier(256,3,10)
-    >>> lda.fit(x,y, 0)
+    >>> lda.fit_u(x,y, 0)
+    >>> lda.solve()
     >>> x = np.random.randint(0,256,(20,10),dtype=np.int16)
     >>> predicted_proba = lda.predict_proba(x)
 
     Notes
     -----
-    This implementation uses custom implementation of
-    `sklearn.LDA(solver="eigen")` to compute the projection matrix and a custom
-    implementation of `scipy.stats.multivariate_normal.pdf()`.
+    This should have similar behavior as `sklearn.LDA`, but it has better
+    performance (and lower flexibility).
 
     .. [1] François-Xavier Standaert and Cédric Archambeau, "Using
        Subspace-Based Template Attacks to Compare and Combine Power and
@@ -70,17 +69,13 @@ class LDAClassifier:
     """
 
     def __init__(self, nc, p, ns):
-        self.p_ = p
-        self.nc_ = nc
-        self.ns_ = ns
-        self.lda = _scalib_ext.LDA(nc, p, ns)
+        self.is_solved = False
+        self.p = p
+        self.acc = _scalib_ext.LdaAcc(nc, ns)
         assert p < nc
 
-    def fit(self, l, x, gemm_mode):
-        r"""Estimates the PDF parameters that is the projection matrix
-        :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
-        :math:`\mathbf{\Sigma}`.
-
+    def fit_u(self, l, x, gemm_mode):
+        r"""Update statistical model estimates with fresh data.
 
         Parameters
         ----------
@@ -90,13 +85,21 @@ class LDAClassifier:
         x : array_like, uint16
             Labels for each trace. Must be of shape `(n)` and
             must be `uint16`.
+        """
+        self.acc.fit(l, x, gemm_mode)
+        self.solved = False
+
+    def solve(self):
+        r"""Estimates the PDF parameters that is the projection matrix
+        :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
+        :math:`\mathbf{\Sigma}`.
 
         Notes
         -----
-        This method does not support updating the model: calling this method
-        twice overrides the previous result.
+        Once this has been called, predictions can be performed.
         """
-        self.lda.fit(l, x, gemm_mode)
+        self.lda = self.acc.lda(self.p)
+        self.solved = True
 
     def predict_proba(self, l):
         r"""Computes the probability for each of the classes for the traces
@@ -113,33 +116,26 @@ class LDAClassifier:
         array_like, f64
             Probabilities. Shape `(n, nc)`.
         """
+        assert self.solved, "Call LDA.solve() before LDA.predict_proba() to compute the model."
         prs = self.lda.predict_proba(l)
         return prs
 
     def __getstate__(self):
-        lda = self.lda
         dic = {
-            "means": lda.get_means(),
-            "cov": lda.get_cov(),
-            "projection": lda.get_projection(),
-            "psd": lda.get_psd(),
-            "nc": self.nc_,
-            "p": self.p_,
-            "ns": self.ns_,
-        }
+                'solved': self.solved,
+                'p': self.p,
+                'acc': self.acc.get_state(),
+                }
+        try:
+            dic['lda']  = self.lda
+        except AttributeError:
+            pass
         return dic
 
     def __setstate__(self, state):
-        self.lda = _scalib_ext.LDA(state["nc"], state["p"], state["ns"])
-        self.lda.set_state(
-            state["cov"],
-            state["psd"],
-            state["means"],
-            state["projection"],
-            state["nc"],
-            state["p"],
-            state["ns"],
-        )
-        self.nc_ = state["nc"]
-        self.ns_ = state["ns"]
-        self.p_ = state["p"]
+        self.solved = state["solved"]
+        self.p = state["p"]
+        self.acc = _scalib_ext.LdaAcc.from_state(*state["acc"])
+        if "lda" in state:
+            self.lda = _scalib_ext.LDA.from_state(*state["lda"])
+
