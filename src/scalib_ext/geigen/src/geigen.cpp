@@ -75,13 +75,13 @@ static MatrixMap matrix2map(Matrix matrix) {
 }
 
 static Matrix m2m(const MatrixXd& matrix) {
-    return Matrix {
-        .data= matrix.data(),
-        .rows= matrix.rows(),
-        .cols= matrix.cols(),
-        .row_stride= matrix.rowStride(),
-        .col_stride= matrix.colStride()
-    };
+    Matrix res;
+    res.data= matrix.data();
+    res.rows= matrix.rows();
+    res.cols= matrix.cols();
+    res.row_stride= matrix.rowStride();
+    res.col_stride= matrix.colStride();
+    return res;
 }
 
 static rust::Slice<const double> v2s(const VectorXd& vec) {
