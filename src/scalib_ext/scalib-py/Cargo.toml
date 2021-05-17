@@ -14,10 +14,10 @@ crate-type = ["cdylib"]
 [features]
 ntl = ["ranklib/ntl"]
 hellib = ["ranklib/hellib"]
+blis = ["scalib/blis"]
 
 [dependencies]
 ndarray = { version = "0.15.1", features = ["rayon"] }
-#blas-src = { version = "0.8", default-features = false }
 numpy = "0.13.0"
 indicatif = "0.15.0"
 

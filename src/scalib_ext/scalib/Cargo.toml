@@ -8,6 +8,9 @@ edition = "2018"
 version = "0.13.2"
 features = ["extension-module"]
 
+[features]
+blis = ["blis-src", "blis-sys"]
+
 [dependencies]
 numpy = "0.13.0"
 rayon = "1.5.0"
@@ -22,13 +25,13 @@ nalgebra = "0.26.1"
 approx = "0.4.0"
 geigen = { path = "../geigen" }
 nshare = { git= "https://github.com/cassiersg/nshare", branch="rm_lt", features=["nalgebra", "ndarray", "std"] }
-blis-src = { version = "0.2.1-alpha.0", default-features=false, features=["static", "pthreads"]}
-blis-sys = { git="https://github.com/cassiersg/blis-sys" }
+blis-src = { version = "0.2.1-alpha.0", default-features=false, features=["static", "pthreads"], optional = true }
+blis-sys = { git="https://github.com/cassiersg/blis-sys", optional = true }
+matrixmultiply = "0.3.1"
 
 [dev-dependencies]
 criterion = "0.3"
 ndarray-rand = "0.14.0"
-#openblas-src = { version="0.10.4", features = ["static"]}
 
 [[bench]]
 name = "belief_propagation"

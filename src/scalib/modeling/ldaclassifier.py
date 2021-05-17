@@ -166,8 +166,10 @@ class MultiLDA:
         account multi-threading in a single LDA) match the number of
         available logial CPUs.
     gemm_mode: int
-        0: use matrixmultiply matrix multiplication
-        n>0: use n threads with BLIS matrix multiplication
+        0: use matrixmultiply matrix multiplication.
+        n>0: use n threads with BLIS matrix multiplication.
+        BLIS is only used on linux. Matrixmultiply is always used on other
+        OSes.
 
     Examples
     --------

@@ -115,27 +115,14 @@ impl LdaAcc {
         // new scatter matrix
         //let scatter = traces_buf.t().dot(&traces_buf);
         //self.scatter += &scatter;
-        match gemm_algo {
-            0 => {
-                ndarray::linalg::general_mat_mul(
-                    1.0,
-                    &traces_buf.t(),
-                    &traces_buf,
-                    1.0,
-                    &mut self.scatter,
-                );
-            }
-            _ => {
-                crate::matrixmul::blis_dgemm(
-                    traces_buf.t(),
-                    traces_buf.view(),
-                    self.scatter.view_mut(),
-                    1.0,
-                    1.0,
-                    gemm_algo,
-                );
-            }
-        }
+        crate::matrixmul::opt_dgemm(
+            traces_buf.t(),
+            traces_buf.view(),
+            self.scatter.view_mut(),
+            1.0,
+            1.0,
+            gemm_algo,
+        );
 
         let merged_n = self.n.checked_add(n).expect("too many traces in LDA");
         let delta_mu: Array1<f64> = mu - &self.mu;
