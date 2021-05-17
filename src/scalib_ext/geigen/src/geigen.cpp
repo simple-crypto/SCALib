@@ -76,11 +76,11 @@ static MatrixMap matrix2map(Matrix matrix) {
 
 static Matrix m2m(const MatrixXd& matrix) {
     return Matrix {
-        data: matrix.data(),
-        rows: matrix.rows(),
-        cols: matrix.cols(),
-        row_stride: matrix.rowStride(),
-        col_stride: matrix.colStride(),
+        .data= matrix.data(),
+        .rows= matrix.rows(),
+        .cols= matrix.cols(),
+        .row_stride= matrix.rowStride(),
+        .col_stride= matrix.colStride()
     };
 }
 
