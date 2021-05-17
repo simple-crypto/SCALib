@@ -196,7 +196,13 @@ class MultiLDA:
 
     def __init__(self, ncs, ps, pois, num_threads=None, gemm_mode=4):
         self.pois = pois
-        num_cpus = len(os.sched_getaffinity(0))
+        try:
+            num_cpus = len(os.sched_getaffinity(0))
+        except AttributeError:
+            num_cpus = os.cpu_count()
+            if num_cpus is None:
+                # default to one thread
+                num_cpus = 1
         if gemm_mode == 0:
             self.num_threads = num_cpus
         else:
