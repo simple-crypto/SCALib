@@ -195,7 +195,7 @@ class MultiLDA:
         if gemm_mode == 0:
             self.num_threads = num_cpus
         else:
-            self.num_threads = num_cpus // gemm_mode
+            self.num_threads = max(1, num_cpus // gemm_mode)
         self.gemm_mode = gemm_mode
         self.ldas = [LDAClassifier(nc, p, len(poi)) for nc, p, poi in zip(ncs, ps, pois)]
 
