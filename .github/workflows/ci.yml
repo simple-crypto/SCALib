@@ -50,7 +50,6 @@ jobs:
                   # work with only one command, so I use shell &&.
                   CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scalib
                   CIBW_TEST_EXTRAS: test
-                  CIBW_BEFORE_ALL: "yum install clang"
             - uses: actions/upload-artifact@v2
               with:
                   name: dist
@@ -75,6 +74,7 @@ jobs:
             # so I use shell &&.
             CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scalib
             CIBW_TEST_EXTRAS: test
+            CIBW_BEFORE_ALL: "yum install clang"
         steps:
             - uses: actions/checkout@v2
             - uses: actions/cache@v2
