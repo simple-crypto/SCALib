@@ -5,6 +5,7 @@ import numpy as np
 
 from scalib import _scalib_ext
 
+
 class LDAClassifier:
     r"""Models the leakage :math:`\mathbf{l}` with :math:`n_s` dimensions using
     linear discriminant analysis dimentionality reduction and gaussian
@@ -120,18 +121,20 @@ class LDAClassifier:
         array_like, f64
             Probabilities. Shape `(n, nc)`.
         """
-        assert self.solved, "Call LDA.solve() before LDA.predict_proba() to compute the model."
+        assert (
+            self.solved
+        ), "Call LDA.solve() before LDA.predict_proba() to compute the model."
         prs = self.lda.predict_proba(l)
         return prs
 
     def __getstate__(self):
         dic = {
-                'solved': self.solved,
-                'p': self.p,
-                'acc': self.acc.get_state(),
-                }
+            "solved": self.solved,
+            "p": self.p,
+            "acc": self.acc.get_state(),
+        }
         try:
-            dic['lda']  = self.lda
+            dic["lda"] = self.lda
         except AttributeError:
             pass
         return dic
@@ -142,6 +145,7 @@ class LDAClassifier:
         self.acc = _scalib_ext.LdaAcc.from_state(*state["acc"])
         if "lda" in state:
             self.lda = _scalib_ext.LDA.from_state(*state["lda"])
+
 
 class MultiLDA:
     """Perform LDA on `nv` distinct variables for the same leakage traces.
@@ -189,6 +193,7 @@ class MultiLDA:
     >>> x = np.random.randint(0, 256, (20, 50), dtype=np.int16)
     >>> predicted_proba = lda.predict_proba(x)
     """
+
     def __init__(self, ncs, ps, pois, num_threads=None, gemm_mode=4):
         self.pois = pois
         num_cpus = len(os.sched_getaffinity(0))
@@ -197,7 +202,9 @@ class MultiLDA:
         else:
             self.num_threads = max(1, num_cpus // gemm_mode)
         self.gemm_mode = gemm_mode
-        self.ldas = [LDAClassifier(nc, p, len(poi)) for nc, p, poi in zip(ncs, ps, pois)]
+        self.ldas = [
+            LDAClassifier(nc, p, len(poi)) for nc, p, poi in zip(ncs, ps, pois)
+        ]
 
     def fit_u(self, l, x):
         """Update the LDA estimates with new training data.
@@ -213,9 +220,11 @@ class MultiLDA:
         """
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             executor.map(
-                    lambda i: self.ldas[i].fit_u(l[:,self.pois[i]], x[:,i], self.gemm_mode),
-                    range(len(self.ldas))
-                    )
+                lambda i: self.ldas[i].fit_u(
+                    l[:, self.pois[i]], x[:, i], self.gemm_mode
+                ),
+                range(len(self.ldas)),
+            )
 
     def solve(self):
         """See `LDAClassifier.solve`."""
@@ -239,7 +248,6 @@ class MultiLDA:
         """
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             return executor.map(
-                    lambda i: self.ldas[i].predict_proba(l[:,self.pois[i]]),
-                    range(len(self.ldas))
-                    )
-
+                lambda i: self.ldas[i].predict_proba(l[:, self.pois[i]]),
+                range(len(self.ldas)),
+            )

@@ -4,18 +4,21 @@ from scalib.modeling import LDAClassifier
 import numpy as np
 import scipy.stats
 
+
 def is_parallel(x, y):
-    x = x/np.linalg.norm(x)
-    y = y/np.linalg.norm(y)
-    return np.allclose(x, y) or np.allclose(-1*x, y)
+    x = x / np.linalg.norm(x)
+    y = y / np.linalg.norm(y)
+    return np.allclose(x, y) or np.allclose(-1 * x, y)
+
 
 def parallel_factor(x, y):
     """Return 1 if x and y are parallel and in the same direction, and -1 is
     they are in opposite directions.
     """
-    x = x/np.linalg.norm(x)
-    y = y/np.linalg.norm(y)
+    x = x / np.linalg.norm(x)
+    y = y / np.linalg.norm(y)
     return np.dot(x, y)
+
 
 def test_lda():
     np.set_printoptions(threshold=np.inf)  # for debug
@@ -38,17 +41,19 @@ def test_lda():
 
     lda_projection = lda.lda.get_projection()
     lda_ref_projection = lda_ref.scalings_[:, :n_components]
-    projections_similar = all(is_parallel(x, y) for x, y in
-            zip(lda_projection.T, lda_ref_projection.T))
+    projections_similar = all(
+        is_parallel(x, y) for x, y in zip(lda_projection.T, lda_ref_projection.T)
+    )
     print("lda_projection")
     print(lda_projection)
     print("lda_ref_projection")
     print(lda_ref_projection)
     assert projections_similar, (lda_projection, lda_ref_projection)
     # To correct if projection vectors are opposite.
-    parallel_factors = np.array([parallel_factor(x, y) for x, y in
-            zip(lda_projection.T, lda_ref_projection.T)])
-    
+    parallel_factors = np.array(
+        [parallel_factor(x, y) for x, y in zip(lda_projection.T, lda_ref_projection.T)]
+    )
+
     print("parallel_factors")
     print(parallel_factors)
 
@@ -61,15 +66,15 @@ def test_lda():
     traces_t = traces_t - means_check[labels, :]
     cov_check = np.cov(traces_t.T)
 
-    #traces_t = (lda_projection[:, :].T @ traces.T).T
-    #means_check_rust = np.zeros((nc, n_components))
-    #for i in range(nc):
+    # traces_t = (lda_projection[:, :].T @ traces.T).T
+    # means_check_rust = np.zeros((nc, n_components))
+    # for i in range(nc):
     #    I = np.where(labels == i)[0]
     #    means_check_rust[i, :] = np.mean(traces_t[I, :], axis=0)
-    #traces_t = traces_t - means_check_rust[labels, :]
-    #cov_check_rust = np.cov(traces_t.T)
+    # traces_t = traces_t - means_check_rust[labels, :]
+    # cov_check_rust = np.cov(traces_t.T)
 
-    #assert np.allclose(means_check_rust, lda.lda.get_means().T )
+    # assert np.allclose(means_check_rust, lda.lda.get_means().T )
     #    assert(np.allclose(cov_check,lda.lda.get_cov()))
 
     traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
@@ -86,6 +91,7 @@ def test_lda():
     prs_ref = (prs_ref.T / np.sum(prs_ref, axis=1)).T
 
     assert np.allclose(prs, prs_ref, rtol=1e-2)
+
 
 if __name__ == "__main__":
     test_lda()
