@@ -29,97 +29,18 @@ jobs:
                 RUST_BACKTRACE: full
                 CARGO_TARGET_DIR: ${{ github.workspace }}/cargo_build
                 CARGO_HOME: ${{ github.workspace }}/cargo_home
-                # OpenBLAS build configuration
-                DYNAMIC_ARCH: ON
-                NUM_THREADS: 128
-                USE_THREAD: 1
-                FCOMMON_OPT: -static-libgfortran
-                NO_AVX512: 1
-
-    build_openblas_windows:
-        name: Build OpenBLAS on Windows
-        runs-on: windows-2019
-        steps:
-            - uses: actions/checkout@v2
-            - uses: actions/cache@v2
-              id: cache-openblas
-              with:
-                  path: |
-                      openblas/inst
-                      openblas/libs
-                  key: openblas-0.3.14-v3
-            - name: Download OpenBLAS source
-              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
-              shell: bash
-              run: |
-                  cd $GITHUB_WORKSPACE
-                  mkdir openblas
-                  cd openblas
-                  curl -L -O https://github.com/xianyi/OpenBLAS/releases/download/v0.3.14/OpenBLAS-0.3.14.tar.gz
-                  tar xzf OpenBLAS-0.3.14.tar.gz
-                  mkdir OpenBLAS-0.3.14/build
-            - name: Enable miniconda
-              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
-              uses: conda-incubator/setup-miniconda@v2
-              with:
-                  miniconda-version: "latest"
-                  channels: conda-forge
-                  activate-environment: buildenv
-            - name: Install openblas build dependencies (with conda)
-              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
-              shell: cmd /C CALL {0}
-              run: conda install -y cmake=3.19.7 flang=11.0.1 clangdev=11.0.1 perl=5.32.0.1 libflang=11.0.1 ninja=1.10.2
-            - name: Compile and install OpenBLAS
-              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
-              run: cmd /C CALL build_openblas.bat
-            - name: Copy flang libs
-              if: ${{ steps.cache-openblas.outputs.cache-hit != 'true' }}
-              shell: bash -l {0}
-              run: |
-                  mkdir -p openblas/libs
-                  cp C:/Miniconda3/envs/buildenv/Library/lib/lib*.lib openblas/libs/
-                  cp C:/Miniconda3/envs/buildenv/Library/lib/flang*.lib openblas/libs/
-            - name: Upload OpenBLAS build
-              uses: actions/upload-artifact@v2
-              with:
-                  name: openblas-windows-2019
-                  path: |
-                      openblas/inst
-                      openblas/libs
 
     build_wheel_windows:
         name: Build wheel on Windows
-        needs: [build_openblas_windows]
         runs-on: windows-2019
         steps:
             - uses: actions/checkout@v2
             - uses: actions/setup-python@v2
               with:
                   python-version: "3.6"
-            - name: Download OpenBLAS build
-              uses: actions/download-artifact@v2
-              with:
-                  name: openblas-windows-2019
-                  path: openblas
-            - name: Restore conda libs
-              shell: bash
-              run: |
-                  mkdir -p C:/Miniconda3/envs/buildenv/Library/lib
-                  cp openblas/libs/*.lib C:/Miniconda3/envs/buildenv/Library/lib/
-            - uses: actions/cache@v2
-              with:
-                  path: |
-                      ~/.cargo/registry
-                      ~/.cargo/git
-                      ${{ github.workspace }}/cargo_build
-                  key: cache-windows-cargo-v0-${{ runner.os }}-cargo-${{ hashFiles('src/scalib_ext/Cargo.lock') }}
-                  restore-keys: |
-                      ${{ runner.os }}-cargo-${{ hashFiles('src/scalib_ext/Cargo.lock') }}
-                      ${{ runner.os }}-cargo-
             - name: wheels Windows ${{ matrix.vers }}
               uses: joerick/cibuildwheel@v1.10.0
               env:
-                  SCALIB_OPENBLAS_LIB_DIR: ${{ github.workspace }}\openblas\inst\lib
                   CARGO_TARGET_DIR: ${{ github.workspace }}\cargo_build
                   CIBW_ARCHS_WINDOWS: native
                   CIBW_BUILD_VERBOSITY: "1"
@@ -146,8 +67,7 @@ jobs:
         env:
             CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/simple-crypto/manylinux2014_x86_64:rust-1.51.0"
             CIBW_BUILD_VERBOSITY: "1"
-            # Many vars are for OpenBLAS build.
-            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full CARGO_TARGET_DIR=/host${{ github.workspace }}/cargo_build CARGO_HOME=/host${{ github.workspace }}/cargo_home DYNAMIC_ARCH=ON NUM_THREADS=128 USE_THREAD=1 FCOMMON_OPT=-static-libgfortran NO_AVX512=1'
+            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full CARGO_TARGET_DIR=/host${{ github.workspace }}/cargo_build CARGO_HOME=/host${{ github.workspace }}/cargo_home'
             CIBW_BUILD: "cp36-*"
             CIBW_ARCHS_LINUX: ${{ matrix.vers }}
             # I don't know how to make both normal and doctring tests work with only one command,
