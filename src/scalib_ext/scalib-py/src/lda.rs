@@ -13,7 +13,7 @@ impl LdaAcc {
     /// Init an LDA empty LDA accumulator
     fn new(nc: usize, ns: usize) -> Self {
         Self {
-            inner: scalib::lda::LdaAcc::from_dim(nc, ns, 0),
+            inner: scalib::lda::LdaAcc::from_dim(nc, ns),
         }
     }
     /// Add measurements to the accumulator
@@ -76,7 +76,7 @@ impl LdaAcc {
         mu: PyReadonlyArray1<f64>,
         n_traces: PyReadonlyArray1<usize>,
     ) -> Self {
-        let mut inner = scalib::lda::LdaAcc::from_dim(nc, ns, 0);
+        let mut inner = scalib::lda::LdaAcc::from_dim(nc, ns);
         inner.n = n;
         inner.scatter.assign(&scatter.as_array());
         inner.traces_sum.assign(&traces_sum.as_array());

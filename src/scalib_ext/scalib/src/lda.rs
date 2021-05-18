@@ -40,15 +40,10 @@ pub struct LdaAcc {
     pub mu: Array1<f64>,
     /// Number of traces in each class. Shape (nc,).
     pub n_traces: Array1<usize>,
-    /// Buffer for traces converted to f64
-    traces_buf: Array2<f64>,
-    /// Buffer sums of traces
-    traces_sum_buf: Array2<f64>,
 }
 impl LdaAcc {
-    /// Creat a new Lda accumulator with nc classes, ns samples (POIs) and initial capacity n for
-    /// buffers (will be dynamically increased as needed).
-    pub fn from_dim(nc: usize, ns: usize, n: usize) -> Self {
+    /// Creat a new Lda accumulator with nc classes, ns samples (POIs).
+    pub fn from_dim(nc: usize, ns: usize) -> Self {
         Self {
             ns,
             nc,
@@ -57,14 +52,12 @@ impl LdaAcc {
             traces_sum: Array2::zeros((nc, ns)),
             mu: Array1::zeros((ns,)),
             n_traces: Array1::zeros((nc,)),
-            traces_buf: Array2::zeros((n, ns)),
-            traces_sum_buf: Array2::zeros((nc, ns)),
         }
     }
 
     /// Traces: shape (n, ns). Classes shape: (n,)
     fn new(nc: usize, traces: ArrayView2<i16>, classes: ArrayView1<u16>, gemm_algo: u32) -> Self {
-        let mut res = Self::from_dim(nc, traces.shape()[1], traces.shape()[0]);
+        let mut res = Self::from_dim(nc, traces.shape()[1]);
         res.update(traces, classes, gemm_algo);
         return res;
     }
@@ -94,21 +87,17 @@ impl LdaAcc {
         assert_eq!(n, classes.shape()[0]);
         assert!(n != 0);
         assert_eq!(traces.shape()[1], self.ns);
-        // Get a big enough buffer for centered traces.
-        if self.traces_buf.shape()[0] < n {
-            self.traces_buf = Array2::zeros((n, self.ns));
-        }
-        let mut traces_buf: ndarray::ArrayViewMut2<f64> = self.traces_buf.slice_mut(s![0..n, ..]);
-        traces_buf.zip_mut_with(&traces, |x, y| *x = *y as f64);
-        self.traces_sum_buf.fill(0.0);
+        // Buffer for centered traces.
+        let mut traces_buf = traces.mapv(|x| x as f64);
+        let mut traces_sum_buf = Array2::zeros((self.nc, self.ns));
         for (trace, class) in traces_buf.outer_iter().zip(classes.iter()) {
-            self.traces_sum_buf
+            traces_sum_buf
                 .slice_mut(s![Into::<usize>::into(*class), ..])
                 .add_assign(&trace);
             self.n_traces[Into::<usize>::into(*class)] += 1;
         }
         // new traces mean
-        let mu: Array1<f64> = self.traces_sum_buf.sum_axis(Axis(0)) / (n as f64);
+        let mu: Array1<f64> = traces_sum_buf.sum_axis(Axis(0)) / (n as f64);
         // center new traces
         traces_buf -= &mu.slice(s![NewAxis, ..]);
 
@@ -135,7 +124,7 @@ impl LdaAcc {
             1.0,
             &mut self.scatter,
         );
-        self.traces_sum += &self.traces_sum_buf;
+        self.traces_sum += &traces_sum_buf;
         self.mu = self.traces_sum.sum_axis(Axis(0)) / (merged_n as f64);
         self.n = merged_n;
     }
