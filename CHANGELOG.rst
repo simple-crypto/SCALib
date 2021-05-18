@@ -5,6 +5,9 @@ Changelog
 Not released
 ------------
 
+* Remove OpenBLAS and LAPACK, use Spectra and nalgebra instead.
+* Use BLIS for matrix multiplications (Linux-only for now).
+
 v0.1.1
 ------
 
