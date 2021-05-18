@@ -74,7 +74,7 @@ jobs:
             # so I use shell &&.
             CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scalib
             CIBW_TEST_EXTRAS: test
-            CIBW_BEFORE_ALL: "yum -y install clang"
+            CIBW_BEFORE_ALL: "yum -y install clang-devel"
         steps:
             - uses: actions/checkout@v2
             - uses: actions/cache@v2
