@@ -66,7 +66,7 @@ jobs:
                     #- vers: aarch64 # This is too slow on github CI
         env:
             #CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/simple-crypto/manylinux2014_x86_64:rust-1.51.0"
-            CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/simple-crypto/manylinux2014_x86_64-clang:rust-1.51.0"
+            CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/simple-crypto/manylinux2014_x86_64-clang:rust-1.52.1"
             CIBW_BUILD_VERBOSITY: "1"
             CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full CARGO_TARGET_DIR=/host${{ github.workspace }}/cargo_build CARGO_HOME=/host${{ github.workspace }}/cargo_home'
             CIBW_BUILD: "cp36-*"
