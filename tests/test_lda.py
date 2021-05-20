@@ -5,6 +5,7 @@ import numpy as np
 import scipy.stats
 import pickle
 
+
 def is_parallel(x, y):
     x = x / np.linalg.norm(x)
     y = y / np.linalg.norm(y)
@@ -18,6 +19,7 @@ def parallel_factor(x, y):
     x = x / np.linalg.norm(x)
     y = y / np.linalg.norm(y)
     return np.dot(x, y)
+
 
 def test_lda_pickle():
     np.set_printoptions(threshold=np.inf)  # for debug
