@@ -5,6 +5,9 @@ Changelog
 Not released
 ------------
 
+v0.2.0
+------
+
 * Remove OpenBLAS and LAPACK, use Spectra and nalgebra instead.
 * Use BLIS for matrix multiplications (Linux-only for now).
 * Make `modeling.LDAClassifier` incremental (breaking change).
