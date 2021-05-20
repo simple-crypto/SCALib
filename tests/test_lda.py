@@ -35,8 +35,8 @@ def test_lda_pickle():
     lda.fit_u(traces, labels, 1)
     lda.solve()
 
-    pickle.dump(lda,open("tmplda.pkl","wb"))
-    lda = pickle.load(open("tmplda.pkl","rb"))
+    dumped_lda = pickle.dumps(lda)
+    lda = pickle.loads(dumped_lda)
 
     lda_ref = LDA_sklearn(solver="eigen")
     lda_ref.fit(traces, labels)

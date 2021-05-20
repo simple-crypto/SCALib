@@ -134,7 +134,7 @@ class LDAClassifier:
             "acc": self.acc.get_state(),
         }
         try:
-            dic["lda"] = self.lda
+            dic["lda"] = self.lda.get_state()
         except AttributeError:
             pass
         return dic
