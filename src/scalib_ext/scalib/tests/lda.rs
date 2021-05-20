@@ -17,7 +17,7 @@ fn fit_lda() {
     let x = Array2::<i16>::random((n, ns), Uniform::new(0, 100));
     let y = Array1::<u16>::random(n, Uniform::new(0, nc as u16));
 
-    lda.fit(x.view(), y.view());
+    lda.fit(x.view(), y.view(), 0);
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn predict_lda() {
     let x = Array2::<i16>::random((n, ns), Uniform::new(0, 100));
     let y = Array1::<u16>::random(n, Uniform::new(0, nc as u16));
 
-    lda.fit(x.view(), y.view());
+    lda.fit(x.view(), y.view(), 0);
 
     lda.predict_proba(x.view());
 }
@@ -53,7 +53,7 @@ fn predict_lda_functional() {
         .for_each(|(mut s, y)| s.fill((y * 100) as i16));
     let x = &noise + signal;
 
-    lda.fit(x.view(), y.view());
+    lda.fit(x.view(), y.view(), 0);
     let prs = lda.predict_proba(x.view());
 
     prs.outer_iter().zip(y.iter()).for_each(|(prs, y)| {

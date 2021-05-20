@@ -1,1 +1,1 @@
-from .ldaclassifier import LDAClassifier
+from .ldaclassifier import LDAClassifier, MultiLDA

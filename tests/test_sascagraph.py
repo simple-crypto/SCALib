@@ -117,7 +117,6 @@ def test_xor():
     distri_a = np.random.randint(1, 10000000, (n, nc))
     distri_a = (distri_a.T / np.sum(distri_a, axis=1)).T
 
-
     graph = f"""
         # some comments
         NC {nc}
@@ -135,17 +134,16 @@ def test_xor():
     graph.set_init_distribution("a", distri_a)
     graph.set_init_distribution("b", distri_b)
 
-
     graph.run_bp(10)
     distri_z = graph.get_distribution("z")
 
     distri_z_ref = np.zeros(distri_z.shape)
     msg = np.zeros(distri_z.shape)
- 
+
     for a in range(nc):
         for b in range(nc):
             msg[:, a ^ b] += distri_a[:, a] * distri_b[:, b]
-    
+
     distri_x *= msg
     for x in range(nc):
         for y in range(nc):

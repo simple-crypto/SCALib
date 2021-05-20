@@ -10,6 +10,7 @@ include tox.ini
 include Makefile
 
 recursive-include src/scalib_ext/ranklib *
+recursive-include src/scalib_ext/geigen *
 recursive-include src/scalib_ext/scalib *
 recursive-include src/scalib_ext/scalib-py *
 include src/scalib_ext/Cargo.toml

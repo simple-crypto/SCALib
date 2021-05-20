@@ -14,19 +14,12 @@ crate-type = ["cdylib"]
 [features]
 ntl = ["ranklib/ntl"]
 hellib = ["ranklib/hellib"]
-openblas-system = ["openblas-src/system"]
+blis = ["scalib/blis"]
 
 [dependencies]
 ndarray = { version = "0.15.1", features = ["rayon"] }
-blas-src = { version = "0.8", default-features = false }
 numpy = "0.13.0"
 indicatif = "0.15.0"
-
-# We use our own link on windows.
-# The openblas-src install is based on vcpkg, which does not include LAPACK.
-[target.'cfg(not(windows))'.dependencies.openblas-src]
-version = "0.10.4"
-features = ["static", "dynamic_arch", "use_thread"]
 
 [dependencies.pyo3]
 version = "0.13"

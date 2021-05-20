@@ -1,5 +1,5 @@
 
-# Based on https://scikit-hep.org/developer/packaging
+import sys
 
 from setuptools import setup
 from setuptools_rust import Binding, RustExtension
@@ -9,6 +9,10 @@ from setuptools_rust import Binding, RustExtension
 import setuptools_scm
 import toml
 
+scalib_features = ["pyo3/abi3"]
+
+if sys.platform == "linux":
+    scalib_features.append("blis")
 
 setup(
     project_urls={
@@ -19,7 +23,7 @@ setup(
             "scalib._scalib_ext",
             path="src/scalib_ext/scalib-py/Cargo.toml",
             binding=Binding.PyO3,
-            features=["pyo3/abi3"],
+            features=scalib_features,
             py_limited_api=True,
         )
     ],

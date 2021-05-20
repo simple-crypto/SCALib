@@ -1,0 +1,15 @@
+[package]
+name = "geigen"
+version = "0.1.0"
+authors = ["Gaëtan Cassiers <gaetan.cassiers@uclouvain.be>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cxx = "1.0"
+ndarray = {version="0.15", features=["approx"]}
+ndarray-rand = "0.14"
+
+[build-dependencies]
+cxx-build = "1.0"

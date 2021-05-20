@@ -1,4 +1,8 @@
+import os
+from concurrent.futures import ThreadPoolExecutor
+
 import numpy as np
+
 from scalib import _scalib_ext
 
 
@@ -44,15 +48,15 @@ class LDAClassifier:
     >>> x = np.random.randint(0,256,(5000,10),dtype=np.int16)
     >>> y = np.random.randint(0,256,5000,dtype=np.uint16)
     >>> lda = LDAClassifier(256,3,10)
-    >>> lda.fit(x,y)
+    >>> lda.fit_u(x,y, 0)
+    >>> lda.solve()
     >>> x = np.random.randint(0,256,(20,10),dtype=np.int16)
     >>> predicted_proba = lda.predict_proba(x)
 
     Notes
     -----
-    This implementation uses custom implementation of
-    `sklearn.LDA(solver="eigen")` to compute the projection matrix and a custom
-    implementation of `scipy.stats.multivariate_normal.pdf()`.
+    This should have similar behavior as `sklearn.LDA`, but it has better
+    performance (and lower flexibility).
 
     .. [1] François-Xavier Standaert and Cédric Archambeau, "Using
        Subspace-Based Template Attacks to Compare and Combine Power and
@@ -70,17 +74,13 @@ class LDAClassifier:
     """
 
     def __init__(self, nc, p, ns):
-        self.p_ = p
-        self.nc_ = nc
-        self.ns_ = ns
-        self.lda = _scalib_ext.LDA(nc, p, ns)
+        self.is_solved = False
+        self.p = p
+        self.acc = _scalib_ext.LdaAcc(nc, ns)
         assert p < nc
 
-    def fit(self, l, x):
-        r"""Estimates the PDF parameters that is the projection matrix
-        :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
-        :math:`\mathbf{\Sigma}`.
-
+    def fit_u(self, l, x, gemm_mode):
+        r"""Update statistical model estimates with fresh data.
 
         Parameters
         ----------
@@ -90,13 +90,21 @@ class LDAClassifier:
         x : array_like, uint16
             Labels for each trace. Must be of shape `(n)` and
             must be `uint16`.
+        """
+        self.acc.fit(l, x, gemm_mode)
+        self.solved = False
+
+    def solve(self):
+        r"""Estimates the PDF parameters that is the projection matrix
+        :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
+        :math:`\mathbf{\Sigma}`.
 
         Notes
         -----
-        This method does not support updating the model: calling this method
-        twice overrides the previous result.
+        Once this has been called, predictions can be performed.
         """
-        self.lda.fit(l, x)
+        self.lda = self.acc.lda(self.p)
+        self.solved = True
 
     def predict_proba(self, l):
         r"""Computes the probability for each of the classes for the traces
@@ -113,33 +121,139 @@ class LDAClassifier:
         array_like, f64
             Probabilities. Shape `(n, nc)`.
         """
+        assert (
+            self.solved
+        ), "Call LDA.solve() before LDA.predict_proba() to compute the model."
         prs = self.lda.predict_proba(l)
         return prs
 
     def __getstate__(self):
-        lda = self.lda
         dic = {
-            "means": lda.get_means(),
-            "cov": lda.get_cov(),
-            "projection": lda.get_projection(),
-            "psd": lda.get_psd(),
-            "nc": self.nc_,
-            "p": self.p_,
-            "ns": self.ns_,
+            "solved": self.solved,
+            "p": self.p,
+            "acc": self.acc.get_state(),
         }
+        try:
+            dic["lda"] = self.lda.get_state()
+        except AttributeError:
+            pass
         return dic
 
     def __setstate__(self, state):
-        self.lda = _scalib_ext.LDA(state["nc"], state["p"], state["ns"])
-        self.lda.set_state(
-            state["cov"],
-            state["psd"],
-            state["means"],
-            state["projection"],
-            state["nc"],
-            state["p"],
-            state["ns"],
-        )
-        self.nc_ = state["nc"]
-        self.ns_ = state["ns"]
-        self.p_ = state["p"]
+        self.solved = state["solved"]
+        self.p = state["p"]
+        self.acc = _scalib_ext.LdaAcc.from_state(*state["acc"])
+        if "lda" in state:
+            self.lda = _scalib_ext.LDA.from_state(*state["lda"])
+
+
+class MultiLDA:
+    """Perform LDA on `nv` distinct variables for the same leakage traces.
+    While functionally similar to a simple for loop, this enables solving the
+    LDA problems in parallel in a simple fashion. This also enable easy
+    handling of Points Of Interest (POIs) in long traces.
+
+    Parameters
+    ----------
+    ncs: array_like, int
+        Number of classes for each variable. Shape `(nv,)`.
+    ps: array_like, int
+        Number of dimensions to keep after dimensionality reduction for each variable.
+        Shape `(nv,)`.
+    pois: list of array_like, int
+        Indices of the POIs in the traces for each variable. That is, for
+        variable `i`, and training trace `t`, `t[pois[i]]` is the input
+        datapoints for the LDA.
+    num_threads: int or None (default)
+        Number of python threads to use in parallel. If None, selects
+        automatically such that the total number of threads (taking into
+        account multi-threading in a single LDA) match the number of
+        available logial CPUs.
+    gemm_mode: int
+        0: use matrixmultiply matrix multiplication.
+        n>0: use n threads with BLIS matrix multiplication.
+        BLIS is only used on linux. Matrixmultiply is always used on other
+        OSes.
+
+    Examples
+    --------
+    >>> from scalib.modeling import MultiLDA
+    >>> import numpy as np
+    >>> # 5000 traces with 50 points each
+    >>> x = np.random.randint(0, 256, (5000,50),dtype=np.int16)
+    >>> # 5 variables (8-bit), and 5000 traces
+    >>> y = np.random.randint(0, 256, (5000, 5),dtype=np.uint16)
+    >>> # 10 POIs for each of the 5 variables
+    >>> pois = [list(range(7*i, 7*i+10)) for i in range(5)]
+    >>> # Keep 3 dimensions after dimensionality reduction
+    >>> lda = MultiLDA(5*[256], 5*[3], pois)
+    >>> lda.fit_u(x, y)
+    >>> lda.solve()
+    >>> # Predict the class for 20 traces.
+    >>> x = np.random.randint(0, 256, (20, 50), dtype=np.int16)
+    >>> predicted_proba = lda.predict_proba(x)
+    """
+
+    def __init__(self, ncs, ps, pois, num_threads=None, gemm_mode=4):
+        self.pois = pois
+        try:
+            num_cpus = len(os.sched_getaffinity(0))
+        except AttributeError:
+            num_cpus = os.cpu_count()
+            if num_cpus is None:
+                # default to one thread
+                num_cpus = 1
+        if gemm_mode == 0:
+            self.num_threads = num_cpus
+        else:
+            self.num_threads = max(1, num_cpus // gemm_mode)
+        self.gemm_mode = gemm_mode
+        self.ldas = [
+            LDAClassifier(nc, p, len(poi)) for nc, p, poi in zip(ncs, ps, pois)
+        ]
+
+    def fit_u(self, l, x):
+        """Update the LDA estimates with new training data.
+
+        Parameters
+        ----------
+        l : array_like, int16
+            Array that contains the traces. The array must
+            be of dimension `(n,ns)` and its type must be `int16`.
+        x : array_like, uint16
+            Labels for each trace. Must be of shape `(n, nv)` and
+            must be `uint16`.
+        """
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            executor.map(
+                lambda i: self.ldas[i].fit_u(
+                    l[:, self.pois[i]], x[:, i], self.gemm_mode
+                ),
+                range(len(self.ldas)),
+            )
+
+    def solve(self):
+        """See `LDAClassifier.solve`."""
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            executor.map(lambda lda: lda.solve(), self.ldas)
+
+    def predict_proba(self, l):
+        """Predict probabilities for all variables.
+
+        Parameters
+        ----------
+        l : array_like, int16
+            Array that contains the traces. The array must
+            be of dimension `(n,ns)`.
+
+        Returns
+        -------
+        list of array_like, f64
+            Probabilities. `nv` arrays of shape `(n, nc)`.
+        See `LDAClassifier.solve`.
+        """
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            return executor.map(
+                lambda i: self.ldas[i].predict_proba(l[:, self.pois[i]]),
+                range(len(self.ldas)),
+            )
