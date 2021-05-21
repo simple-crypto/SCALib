@@ -7,7 +7,8 @@
 //! The measurements are expected to be of length ns. The random variable values must be
 //! included in [0,nc[.
 
-use ndarray::{Array1, Array2, Array3, ArrayView2, Zip};
+use itertools::izip;
+use ndarray::{Array1, Array2, Array3, ArrayView2, Axis, Zip};
 use rayon::prelude::*;
 
 /// SNR state. stores the sum and the sum of squares of the leakage for each of the class.
@@ -114,38 +115,57 @@ impl SNR {
                 let mut cum_mean_of_mean = Array1::<f64>::zeros(self.ns);
                 let mut cum_var_of_mean = Array1::<f64>::zeros(self.ns);
 
-                // compute mean for each of the classes
-                n_samples_inv
-                    .iter()
-                    .zip(sum.outer_iter())
-                    .zip(sum_square.outer_iter())
-                    .enumerate()
-                    .for_each(|(i, ((n_samples_inv, sum), sum_square))| {
-                        let n_inv = 1.0 / ((i + 1) as f64);
-                        Zip::from(&mut cum_mean_of_var)
-                            .and(&mut cum_mean_of_mean)
-                            .and(&mut cum_var_of_mean)
-                            .and(&sum)
-                            .and(&sum_square)
-                            .for_each(
-                                |cum_mean_of_var,
-                                 cum_mean_of_mean,
-                                 cum_var_of_mean,
-                                 sum,
-                                 sum_square| {
-                                    inner_loop_get_snr(
-                                        cum_mean_of_var,
-                                        cum_mean_of_mean,
-                                        cum_var_of_mean,
-                                        sum,
-                                        sum_square,
-                                        *n_samples_inv,
-                                        n_inv,
+                izip!(
+                    cum_mean_of_var.axis_chunks_iter_mut(Axis(0), 1 << 12),
+                    cum_mean_of_mean.axis_chunks_iter_mut(Axis(0), 1 << 12),
+                    cum_var_of_mean.axis_chunks_iter_mut(Axis(0), 1 << 12),
+                    snr.axis_chunks_iter_mut(Axis(0), 1 << 12),
+                    sum.axis_chunks_iter(Axis(1), 1 << 12),
+                    sum_square.axis_chunks_iter(Axis(1), 1 << 12)
+                )
+                .for_each(
+                    |(
+                        mut cum_mean_of_var,
+                        mut cum_mean_of_mean,
+                        mut cum_var_of_mean,
+                        mut snr,
+                        sum,
+                        sum_square,
+                    )| {
+                        // compute mean for each of the classes
+                        n_samples_inv
+                            .iter()
+                            .zip(sum.outer_iter())
+                            .zip(sum_square.outer_iter())
+                            .enumerate()
+                            .for_each(|(i, ((n_samples_inv, sum), sum_square))| {
+                                let n_inv = 1.0 / ((i + 1) as f64);
+                                Zip::from(&mut cum_mean_of_var)
+                                    .and(&mut cum_mean_of_mean)
+                                    .and(&mut cum_var_of_mean)
+                                    .and(&sum)
+                                    .and(&sum_square)
+                                    .for_each(
+                                        |cum_mean_of_var,
+                                         cum_mean_of_mean,
+                                         cum_var_of_mean,
+                                         sum,
+                                         sum_square| {
+                                            inner_loop_get_snr(
+                                                cum_mean_of_var,
+                                                cum_mean_of_mean,
+                                                cum_var_of_mean,
+                                                sum,
+                                                sum_square,
+                                                *n_samples_inv,
+                                                n_inv,
+                                            );
+                                        },
                                     );
-                                },
-                            );
-                    });
-                snr.assign(&(&cum_var_of_mean / &cum_mean_of_var));
+                            });
+                        snr.assign(&(&cum_var_of_mean / &cum_mean_of_var));
+                    },
+                );
             });
         return snr;
     }
