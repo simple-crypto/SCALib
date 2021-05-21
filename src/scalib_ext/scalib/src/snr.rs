@@ -7,7 +7,7 @@
 //! The measurements are expected to be of length ns. The random variable values must be
 //! included in [0,nc[.
 
-use ndarray::{Array1, Array2, Array3, ArrayView2, Axis, Zip};
+use ndarray::{Array1, Array2, Array3, ArrayView2, Zip};
 use rayon::prelude::*;
 
 /// SNR state. stores the sum and the sum of squares of the leakage for each of the class.
@@ -102,7 +102,6 @@ impl SNR {
         let n_samples_inv = 1.0 / n_samples.mapv(|x| x as f64);
 
         // For each independent variable
-        // Note: no par_iter on the outer loop since the tmp array can be large
         (
             sum.outer_iter(),
             sum_square.outer_iter(),
@@ -134,25 +133,41 @@ impl SNR {
                                  cum_var_of_mean,
                                  sum,
                                  sum_square| {
-                                    let u = (*sum as f64) * n_samples_inv;
-                                    let v = (*sum_square as f64) * n_samples_inv - u * u;
-
-                                    // update the mean of variances estimate
-                                    let v_diff = v - *cum_mean_of_var;
-                                    *cum_mean_of_var += (v_diff) * n_inv;
-
-                                    // update the variance of means estimate
-                                    let u_diff = u - *cum_mean_of_mean;
-                                    *cum_mean_of_mean += u_diff * n_inv;
-                                    *cum_var_of_mean += ((u_diff * (u - *cum_mean_of_mean))
-                                        - *cum_var_of_mean)
-                                        * n_inv;
+                                    inner_loop_get_snr(
+                                        cum_mean_of_var,
+                                        cum_mean_of_mean,
+                                        cum_var_of_mean,
+                                        sum,
+                                        sum_square,
+                                        *n_samples_inv,
+                                        n_inv,
+                                    );
                                 },
                             );
                     });
                 snr.assign(&(&cum_var_of_mean / &cum_mean_of_var));
-                //snr.assign(&(&mean_var / &var_mean));
             });
         return snr;
     }
+}
+fn inner_loop_get_snr(
+    cum_mean_of_var: &mut f64,
+    cum_mean_of_mean: &mut f64,
+    cum_var_of_mean: &mut f64,
+    sum: &i64,
+    sum_square: &i64,
+    n_samples_inv: f64,
+    n_inv: f64,
+) {
+    let u = (*sum as f64) * n_samples_inv;
+    let v = (*sum_square as f64) * n_samples_inv - u * u;
+
+    // update the mean of variances estimate
+    let v_diff = v - *cum_mean_of_var;
+    *cum_mean_of_var += (v_diff) * n_inv;
+
+    // update the variance of means estimate
+    let u_diff = u - *cum_mean_of_mean;
+    *cum_mean_of_mean += u_diff * n_inv;
+    *cum_var_of_mean += ((u_diff * (u - *cum_mean_of_mean)) - *cum_var_of_mean) * n_inv;
 }
