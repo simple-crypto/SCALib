@@ -103,12 +103,14 @@ impl SNR {
 
         // For each independent variable
         // Note: no par_iter on the outer loop since the tmp array can be large
-        sum.outer_iter()
-            .into_iter()
-            .zip(sum_square.outer_iter())
-            .zip(n_samples_inv.outer_iter())
-            .zip(snr.outer_iter_mut())
-            .for_each(|(((sum, sum_square), n_samples_inv), mut snr)| {
+        (
+            sum.outer_iter(),
+            sum_square.outer_iter(),
+            n_samples_inv.outer_iter(),
+            snr.outer_iter_mut(),
+        )
+            .into_par_iter()
+            .for_each(|(sum, sum_square, n_samples_inv, mut snr)| {
                 let mut cum_mean_of_var = Array1::<f64>::zeros(self.ns);
                 let mut cum_mean_of_mean = Array1::<f64>::zeros(self.ns);
                 let mut cum_var_of_mean = Array1::<f64>::zeros(self.ns);
