@@ -7,7 +7,7 @@
 //! The measurements are expected to be of length ns. The random variable values must be
 //! included in [0,nc[.
 
-use ndarray::{Array2, Array3, ArrayView2, Axis, Zip};
+use ndarray::{Array1, Array2, Array3, ArrayView2, Axis, Zip};
 use rayon::prelude::*;
 
 /// SNR state. stores the sum and the sum of squares of the leakage for each of the class.
@@ -99,52 +99,57 @@ impl SNR {
         let sum = &self.sum;
         let sum_square = &self.sum_square;
         let n_samples = &self.n_samples;
+        let n_samples_inv = 1.0 / n_samples.mapv(|x| x as f64);
 
         // For each independent variable
         // Note: no par_iter on the outer loop since the tmp array can be large
         sum.outer_iter()
             .into_iter()
             .zip(sum_square.outer_iter())
-            .zip(n_samples.outer_iter())
+            .zip(n_samples_inv.outer_iter())
             .zip(snr.outer_iter_mut())
-            .for_each(|(((sum, sum_square), n_samples), mut snr)| {
-                let mut tmp = Array2::<f64>::zeros(sum.raw_dim());
+            .for_each(|(((sum, sum_square), n_samples_inv), mut snr)| {
+                let mut cum_mean_of_var = Array1::<f64>::zeros(self.ns);
+                let mut cum_mean_of_mean = Array1::<f64>::zeros(self.ns);
+                let mut cum_var_of_mean = Array1::<f64>::zeros(self.ns);
+
                 // compute mean for each of the classes
-                (
-                    tmp.outer_iter_mut(),
-                    n_samples.outer_iter(),
-                    sum.outer_iter(),
-                )
-                    .into_par_iter()
-                    .for_each(|(mut tmp, n_samples, sum)| {
-                        let n_samples = *n_samples.first().unwrap() as f64;
-                        tmp.zip_mut_with(&sum, |x, y| *x = (*y as f64) / n_samples);
-                    });
+                n_samples_inv
+                    .iter()
+                    .zip(sum.outer_iter())
+                    .zip(sum_square.outer_iter())
+                    .enumerate()
+                    .for_each(|(i, ((n_samples_inv, sum), sum_square))| {
+                        let n_inv = 1.0 / ((i + 1) as f64);
+                        Zip::from(&mut cum_mean_of_var)
+                            .and(&mut cum_mean_of_mean)
+                            .and(&mut cum_var_of_mean)
+                            .and(&sum)
+                            .and(&sum_square)
+                            .for_each(
+                                |cum_mean_of_var,
+                                 cum_mean_of_mean,
+                                 cum_var_of_mean,
+                                 sum,
+                                 sum_square| {
+                                    let u = (*sum as f64) * n_samples_inv;
+                                    let v = (*sum_square as f64) * n_samples_inv - u * u;
 
-                // variance of means (Signal)
-                let mean_var = tmp.var_axis(Axis(0), 0.0);
+                                    // update the mean of variances estimate
+                                    let v_diff = v - *cum_mean_of_var;
+                                    *cum_mean_of_var += (v_diff) * n_inv;
 
-                // compute var for each of the classes. Leverage already compute means.
-                (
-                    tmp.outer_iter_mut(),
-                    n_samples.outer_iter(),
-                    sum_square.outer_iter(),
-                )
-                    .into_par_iter()
-                    .for_each(|(mut tmp, n_samples, sum_square)| {
-                        let n_samples = *n_samples.first().unwrap() as f64;
-                        tmp.zip_mut_with(&sum_square, |x, y| {
-                            // TODO: why this instead of
-                            // - summing the y's as i64 (should not overflow)
-                            // - convert as f64, divide by n_samples as f64
-                            // - subtract x^2 (that could be done as a separate step
-                            // beforehand, which could optimize a bit).
-                            *x = ((*y as f64) / n_samples) - *x * *x
-                        });
+                                    // update the variance of means estimate
+                                    let u_diff = u - *cum_mean_of_mean;
+                                    *cum_mean_of_mean += u_diff * n_inv;
+                                    *cum_var_of_mean += ((u_diff * (u - *cum_mean_of_mean))
+                                        - *cum_var_of_mean)
+                                        * n_inv;
+                                },
+                            );
                     });
-                // mean of variance (Noise)
-                let var_mean = tmp.mean_axis(Axis(0)).unwrap();
-                snr.assign(&(&mean_var / &var_mean));
+                snr.assign(&(&cum_var_of_mean / &cum_mean_of_var));
+                //snr.assign(&(&mean_var / &var_mean));
             });
         return snr;
     }
