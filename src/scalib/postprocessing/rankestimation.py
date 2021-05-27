@@ -94,4 +94,5 @@ def _choose_merge_value(costs):
     accuracy at the expense of running time.
     Here we limit sub-histograms to 2**16 values.
     """
-    return max(1, int(16 / math.log2(max(len(c) for c in costs))))
+    return min(len(costs), max(1, int(16 / math.log2(max(len(c) for c in
+        costs)))))
