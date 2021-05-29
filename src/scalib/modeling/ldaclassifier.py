@@ -90,6 +90,10 @@ class LDAClassifier:
         x : array_like, uint16
             Labels for each trace. Must be of shape `(n)` and
             must be `uint16`.
+        gemm_mode: int
+            0: use matrixmultiply matrix multiplication.  n>0: use n threads
+            with BLIS matrix multiplication.  BLIS is only used on linux.
+            Matrixmultiply is always used on other OSes.
         """
         self.acc.fit(l, x, gemm_mode)
         self.solved = False
