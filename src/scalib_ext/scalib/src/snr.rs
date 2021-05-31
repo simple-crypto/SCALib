@@ -175,6 +175,9 @@ impl SNR {
         return snr;
     }
 }
+/// Incremental update of:
+/// - `cum_mean_of_var` and `cum_mean_of_mean`: incremental mean computation
+/// - `cum_var_of_mean`: incremental variance computation
 fn inner_loop_get_snr(
     cum_mean_of_var: &mut f64,
     cum_mean_of_mean: &mut f64,
