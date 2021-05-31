@@ -27,6 +27,11 @@ pub struct SNR {
     ns: usize,
 }
 
+/// Size of chunks of trace to handle in a single loop. This should be large enough to limit loop
+/// overhead costs, while being small enough to limit memory bandwidth usage by optimizing cache
+/// use.
+const GET_SNR_CHUNK_SIZE: usize = 1 << 12;
+
 impl SNR {
     /// Create a new SNR state.
     /// nc: random variables between [0,nc[
@@ -116,12 +121,12 @@ impl SNR {
                 let mut cum_var_of_mean = Array1::<f64>::zeros(self.ns);
 
                 izip!(
-                    cum_mean_of_var.axis_chunks_iter_mut(Axis(0), 1 << 12),
-                    cum_mean_of_mean.axis_chunks_iter_mut(Axis(0), 1 << 12),
-                    cum_var_of_mean.axis_chunks_iter_mut(Axis(0), 1 << 12),
-                    snr.axis_chunks_iter_mut(Axis(0), 1 << 12),
-                    sum.axis_chunks_iter(Axis(1), 1 << 12),
-                    sum_square.axis_chunks_iter(Axis(1), 1 << 12)
+                    cum_mean_of_var.axis_chunks_iter_mut(Axis(0), GET_SNR_CHUNK_SIZE),
+                    cum_mean_of_mean.axis_chunks_iter_mut(Axis(0), GET_SNR_CHUNK_SIZE),
+                    cum_var_of_mean.axis_chunks_iter_mut(Axis(0), GET_SNR_CHUNK_SIZE),
+                    snr.axis_chunks_iter_mut(Axis(0), GET_SNR_CHUNK_SIZE),
+                    sum.axis_chunks_iter(Axis(1), GET_SNR_CHUNK_SIZE),
+                    sum_square.axis_chunks_iter(Axis(1), GET_SNR_CHUNK_SIZE)
                 )
                 .for_each(
                     |(
