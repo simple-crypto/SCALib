@@ -100,6 +100,7 @@ def test_xor_public():
 
     assert np.allclose(distri_y_ref, distri_y)
 
+
 def test_AND():
     """
     Test AND between distributions
@@ -137,6 +138,8 @@ def test_AND():
 
     distri_z_ref = (distri_z_ref.T / np.sum(distri_z_ref, axis=1)).T
     assert np.allclose(distri_z_ref, distri_z)
+
+
 def test_xor():
     """
     Test XOR between distributions

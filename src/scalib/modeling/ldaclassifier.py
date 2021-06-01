@@ -231,12 +231,14 @@ class MultiLDA:
             must be `uint16`.
         """
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            list(executor.map(
-                lambda i: self.ldas[i].fit_u(
-                    l[:, self.pois[i]], x[:, i], self.gemm_mode
-                ),
-                range(len(self.ldas)),
-            ))
+            list(
+                executor.map(
+                    lambda i: self.ldas[i].fit_u(
+                        l[:, self.pois[i]], x[:, i], self.gemm_mode
+                    ),
+                    range(len(self.ldas)),
+                )
+            )
 
     def solve(self):
         """See `LDAClassifier.solve`."""
