@@ -5,6 +5,13 @@ Changelog
 Not released
 ------------
 
+v0.3.0
+------
+
+* Rename `num_threads` parameter of `modeling.MultiLDA` to `num_cpus`.
+* Fix rank estimation when there is only one key chunk.
+* Improve performance of `SNR.get_snr`.
+
 v0.2.0
 ------
 
