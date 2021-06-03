@@ -54,7 +54,7 @@ def rank_nbin(costs, key, nbins, method="hist"):
     return _scalib_ext.rank_nbin(costs, key, nbins, _choose_merge_value(costs), method)
 
 
-def rank_accuracy(costs, key, acc_bit=1.0, method="hist"):
+def rank_accuracy(costs, key, acc_bit=1.0, method="hist", max_nb_bin=2 ** 26):
     r"""Estimate the rank of the full keys based on scores based on histograms.
 
     Parameters
@@ -65,7 +65,7 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist"):
         sub-keys.
     key : array_like, int
         Correct full key split in sub-keys. Array must be of shape `(ns,)`.
-    acc_bit : f64
+    acc_bit : f64, default: 1.0
         Expected log2 accuracy for the key rank estimation. `acc_bit` must so be
         set to `log2(rank_max/rank_min)`.
     method : string
@@ -73,6 +73,9 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist"):
 
         * "hist": using histograms (default).
         * "ntl": using NTL library, allows better precision.
+    max_nb_bin : int, default: 2**26
+        Maximum number of bins to use (if too low, the requested accuracy might
+        not be reached).
 
     Returns
     -------
@@ -84,7 +87,7 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist"):
     """
 
     return _scalib_ext.rank_accuracy(
-        costs, key, 2.0 ** acc_bit, _choose_merge_value(costs), method
+        costs, key, 2.0 ** acc_bit, _choose_merge_value(costs), method, max_nb_bin
     )
 
 

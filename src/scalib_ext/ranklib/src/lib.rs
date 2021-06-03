@@ -108,9 +108,10 @@ impl RankingMethod {
         key: &[usize],
         acc: f64,
         merge: Option<usize>,
+        max_nb_bin: usize,
     ) -> Result<RankEstimation, RankError> {
         let problem = rank::RankProblem::new(costs, key)?;
-        for nb_bin in (4..28).map(|i| 1 << i) {
+        for nb_bin in (4..).map(|i| 1 << i).take_while(|x| *x < max_nb_bin) {
             let res = self.rank_inner(&problem, nb_bin, merge)?;
             if res.margin() <= acc {
                 return Ok(res);
@@ -118,7 +119,7 @@ impl RankingMethod {
         }
         // We do best-effort. If we cannot reach desired accuracy, we still return the best result
         // we can have.
-        return self.rank_inner(&problem, 1 << 28, merge);
+        return self.rank_inner(&problem, max_nb_bin, merge);
     }
 }
 

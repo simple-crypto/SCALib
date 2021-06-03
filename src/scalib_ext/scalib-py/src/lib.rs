@@ -74,9 +74,10 @@ fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
         acc: f64,
         merge: Option<usize>,
         method: String,
+        max_nb_bin: usize,
     ) -> PyResult<(f64, f64, f64)> {
         let res = str2method(&method).unwrap_or_else(|s| panic!("{}", s));
-        let res = res.rank_accuracy(&costs, &key, acc, merge);
+        let res = res.rank_accuracy(&costs, &key, acc, merge, max_nb_bin);
         match res {
             Ok(res) => Ok((res.min, res.est, res.max)),
             Err(s) => {
