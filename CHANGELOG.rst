@@ -5,6 +5,9 @@ Changelog
 Not released
 ------------
 
+v0.3.1
+------
+
 * Add `max_nb_bin` parameter to `postprocessing.rank_accuracy` (that was
   previously hard-coded).
 
