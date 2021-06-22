@@ -56,7 +56,8 @@ if __name__ == "__main__":
     for i in range(16):
         model = models[f"x{i}"]
         lda = LDAClassifier(nc=256, ns=npoi, p=1)
-        lda.fit(l=traces_p[:, model["poi"]], x=labels_p[f"x{i}"].astype(np.uint16))
+        lda.fit_u(l=traces_p[:, model["poi"]], x=labels_p[f"x{i}"].astype(np.uint16))
+        lda.solve()
         model["lda"] = lda
 
     print("3. Attack")
