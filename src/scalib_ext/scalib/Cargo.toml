@@ -38,13 +38,9 @@ name = "belief_propagation"
 harness = false
 
 [[bench]]
-name = "lda"
-harness = false
-
-[[bench]]
-name = "lda_ntraces"
-harness = false
-
-[[bench]]
 name = "get_snr"
+harness = false
+
+[[bench]]
+name = "snr_update"
 harness = false
