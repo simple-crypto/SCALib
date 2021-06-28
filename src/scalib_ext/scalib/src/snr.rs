@@ -39,13 +39,17 @@ impl SNR {
     /// ns: traces length
     /// np: number of independent random variable for which SNR must be estimated
     pub fn new(nc: usize, ns: usize, np: usize) -> Self {
-        SNR {
+        let mut snr = SNR {
             sum: Array3::<i64>::zeros((np, nc, ns)),
             sum_square: Array3::<i64>::zeros((np, nc, ns)),
             n_samples: Array2::<u64>::zeros((np, nc)),
             ns: ns,
             np: np,
-        }
+        };
+        //snr.sum.fill(0);
+        //snr.sum_square.fill(0);
+        //snr.n_samples.fill(0);
+        snr
     }
     /// Update the SNR state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
@@ -57,19 +61,21 @@ impl SNR {
         // in the trace.
         // For each of the independent variables
 
-        izip!(
+        (
             self.sum.outer_iter_mut(),
             self.sum_square.outer_iter_mut(),
             self.n_samples.outer_iter_mut(),
             y.outer_iter(),
         )
+            .into_par_iter()
             .for_each(|(mut sum, mut sum_square, mut n_samples, y)| {
                 // for each of the possible realization of y
-                izip!(
+                (
                     sum.outer_iter_mut(),
                     sum_square.outer_iter_mut(),
                     n_samples.outer_iter_mut(),
                 )
+                    .into_par_iter()
                     .enumerate()
                     .for_each(|(i, (mut sum, mut sum_square, mut n_samples))| {
                         x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
