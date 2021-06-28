@@ -7,9 +7,9 @@ use scalib::snr;
 fn bench_snr_update(c: &mut Criterion) {
     let mut group = c.benchmark_group("snr_update");
     let nc = 256;
-    let np = 16;
-    let n = 10000;
-    for ns in [1000, 10000, 50000, 100000, 200000].iter() {
+    let np = 8;
+    let n = 1000;
+    for ns in [250000,500000,1000000,2000000].iter() {
         let mut snr = snr::SNR::new(nc, *ns, np);
         let x = Array2::<i16>::random((n, *ns), Uniform::new(0, 10000));
         let y = Array2::<u16>::random((n, np), Uniform::new(0, nc as u16));
