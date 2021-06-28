@@ -13,7 +13,7 @@ fn bench_snr_update(c: &mut Criterion) {
         let x = Array2::<i16>::random((n, ns), Uniform::new(0, 10000));
         let y = Array2::<u16>::random((n, np), Uniform::new(0, nc as u16));
 
-        let mut snr = snr::SNR::new(nc, *ns, np);
+        let mut snr = snr::SNR::new(nc, ns, np);
         snr.update(x.view(), y.view());
 
         group.bench_with_input(BenchmarkId::new("snr_update", ns), &ns, |b, ns| {
