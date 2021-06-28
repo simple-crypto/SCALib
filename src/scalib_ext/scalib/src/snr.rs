@@ -31,6 +31,7 @@ pub struct SNR {
 /// overhead costs, while being small enough to limit memory bandwidth usage by optimizing cache
 /// use.
 const GET_SNR_CHUNK_SIZE: usize = 1 << 12;
+const UPDATE_SNR_CHUNK_SIZE: usize = 1 << 10;
 
 impl SNR {
     /// Create a new SNR state.
@@ -55,6 +56,7 @@ impl SNR {
         // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
         // in the trace.
         // For each of the independent variables
+
         (
             self.sum.outer_iter_mut(),
             self.sum_square.outer_iter_mut(),
