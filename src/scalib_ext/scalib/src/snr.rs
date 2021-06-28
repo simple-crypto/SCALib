@@ -57,21 +57,19 @@ impl SNR {
         // in the trace.
         // For each of the independent variables
 
-        (
+        izip!(
             self.sum.outer_iter_mut(),
             self.sum_square.outer_iter_mut(),
             self.n_samples.outer_iter_mut(),
             y.outer_iter(),
         )
-            .into_par_iter()
             .for_each(|(mut sum, mut sum_square, mut n_samples, y)| {
                 // for each of the possible realization of y
-                (
+                izip!(
                     sum.outer_iter_mut(),
                     sum_square.outer_iter_mut(),
                     n_samples.outer_iter_mut(),
                 )
-                    .into_par_iter()
                     .enumerate()
                     .for_each(|(i, (mut sum, mut sum_square, mut n_samples))| {
                         x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
