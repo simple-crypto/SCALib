@@ -7,13 +7,11 @@ use scalib::snr;
 
 fn bench_snr_update(c: &mut Criterion) {
     let mut group = c.benchmark_group("snr_update");
-    let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-    group.plot_config(plot_config);
 
     let nc = 16;
-    let np = 16;
+    let np = 4;
     let n = nc * 500;
-    for ns in (10..14).map(|x| 2.0_f64.powi(x) as usize) {
+    for ns in (10..15).map(|x| 2.0_f64.powi(x) as usize) {
         let x = Array2::<i16>::random((n, ns), Uniform::new(0, 10000));
         let y = Array2::<u16>::random((n, np), Uniform::new(0, nc as u16));
 
@@ -25,17 +23,17 @@ fn bench_snr_update(c: &mut Criterion) {
                 snr.update(x.view(), y.view(), 1 << 25);
             })
         });
-        /*        group.bench_with_input(BenchmarkId::new("chunks_8", ns), &ns, |b, ns| {
+    /*            group.bench_with_input(BenchmarkId::new("chunks_8", ns), &ns, |b, ns| {
             b.iter(|| {
                 snr.update(x.view(), y.view(), 1 << 8);
             })
-        });*/
+        });
         group.bench_with_input(BenchmarkId::new("chunks_10", ns), &ns, |b, ns| {
             b.iter(|| {
                 snr.update(x.view(), y.view(), 1 << 10);
             })
         });
-        /*        group.bench_with_input(BenchmarkId::new("chunks_12", ns), &ns, |b, ns| {
+        group.bench_with_input(BenchmarkId::new("chunks_12", ns), &ns, |b, ns| {
             b.iter(|| {
                 snr.update(x.view(), y.view(), 1 << 12);
             })
@@ -44,8 +42,7 @@ fn bench_snr_update(c: &mut Criterion) {
             b.iter(|| {
                 snr.update(x.view(), y.view(), 1 << 14);
             })
-        });
-        */
+        });*/
     }
     group.finish();
 }

@@ -30,7 +30,7 @@ blis-sys = { git="https://github.com/cassiersg/blis-sys", optional = true }
 matrixmultiply = "0.3.1"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.3.4"
 ndarray-rand = "0.14.0"
 
 [[bench]]
