@@ -6,12 +6,14 @@ use ndarray_rand::RandomExt;
 use scalib::snr;
 
 fn bench_snr_update(c: &mut Criterion) {
+    let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
     let mut group = c.benchmark_group("snr_update");
+    group.plot_config(plot_config);
 
     let nc = 16;
     let np = 4;
     let n = nc * 500;
-    for ns in (10..20).map(|x| 2.0_f64.powi(x) as usize) {
+    for ns in (10..21).map(|x| 2.0_f64.powi(x) as usize) {
         let x = Array2::<i16>::random((n, ns), Uniform::new(0, 10000));
         let y = Array2::<u16>::random((n, np), Uniform::new(0, nc as u16));
 
