@@ -11,11 +11,11 @@ fn bench_snr_update(c: &mut Criterion) {
     //group.plot_config(plot_config);
 
     let nc = 256;
-    let np = 4;
-    let n = nc * 100;
+    let np = 1;
+    let n = nc * 20;
     for ns in (10..21).map(|x| 2.0_f64.powi(x) as usize) {
         let x = Array2::<i16>::random((n, ns), Uniform::new(0, 10000));
-        let y = Array2::<u16>::random((n, np), Uniform::new(0, nc as u16));
+        let y = Array2::<u16>::random((np, n), Uniform::new(0, nc as u16));
 
         let mut snr = snr::SNR::new(nc, ns, np);
         snr.update(x.view(), y.view(), 1 << 10);

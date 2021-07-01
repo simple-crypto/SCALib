@@ -29,6 +29,9 @@ blis-src = { version = "0.2.1-alpha.0", default-features=false, features=["stati
 blis-sys = { git="https://github.com/cassiersg/blis-sys", optional = true }
 matrixmultiply = "0.3.1"
 
+[profile.release]
+debug = true
+
 [dev-dependencies]
 criterion = "0.3.4"
 ndarray-rand = "0.14.0"

@@ -8,7 +8,7 @@
 //! included in [0,nc[.
 
 use itertools::izip;
-use ndarray::{Array1, Array2, Array3, ArrayView2, Axis, Zip};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut1, Axis, Zip};
 use rayon::prelude::*;
 
 /// SNR state. stores the sum and the sum of squares of the leakage for each of the class.
@@ -58,10 +58,10 @@ impl SNR {
     ) {
         let x = traces;
         let nc = self.sum_square.shape()[1];
+        let chunk_x = 128;
         // Update sum, sum_square and n_samples
         // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
         // in the trace.
-
         izip!(
             self.sum
                 .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
@@ -80,18 +80,13 @@ impl SNR {
                 izip!(sum.outer_iter_mut(), sum_square.outer_iter_mut())
                     .enumerate()
                     .for_each(|(i, (mut sum, mut sum_square))| {
-                        x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
-                            // update sum and sum_square if the random value of y is i.
-                            if i == *y as usize {
-                                Zip::from(&mut sum).and(&mut sum_square).and(&x).for_each(
-                                    |sum, sum_square, x| {
-                                        let x = *x as i64;
-                                        *sum += x;
-                                        *sum_square += x * x;
-                                    },
-                                );
-                            }
-                        });
+                        inner_loop_update(
+                            sum.view_mut(),
+                            sum_square.view_mut(),
+                            x.view(),
+                            y.view(),
+                            i as u16,
+                        );
                     });
             });
         });
@@ -209,4 +204,30 @@ fn inner_loop_get_snr(
     let u_diff = u - *cum_mean_of_mean;
     *cum_mean_of_mean += u_diff * n_inv;
     *cum_var_of_mean += ((u_diff * (u - *cum_mean_of_mean)) - *cum_var_of_mean) * n_inv;
+}
+
+fn inner_loop_update(
+    sum: ArrayViewMut1<i64>,
+    sum_square: ArrayViewMut1<i64>,
+    x: ArrayView2<i16>,
+    y: ArrayView1<u16>,
+    i: u16,
+) {
+    let sum = sum.into_slice().unwrap();
+    let sum_square = sum_square.into_slice().unwrap();
+    let n = x.shape()[0];
+    let y = y.to_slice().unwrap();
+    for j in 0..n {
+        let x = x.slice(s![j, ..]).to_slice().unwrap();
+        let v = y[j];
+        if i == v {
+            izip!(sum.iter_mut(), sum_square.iter_mut(), x.iter()).for_each(
+                |(sum, sum_square, &x)| {
+                    let x = x as i64;
+                    *sum += x;
+                    *sum_square += x * x;
+                },
+            );
+        }
+    }
 }
