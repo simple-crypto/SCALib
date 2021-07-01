@@ -62,42 +62,39 @@ impl SNR {
         // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
         // in the trace.
 
-        (
+        izip!(
             self.sum
                 .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
             self.sum_square
                 .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
             x.axis_chunks_iter(Axis(1), UPDATE_SNR_CHUNK_SIZE),
         )
-            .into_par_iter()
-            .for_each(|(mut sum, mut sum_square, x)| {
-                (
-                    sum.outer_iter_mut(),
-                    sum_square.outer_iter_mut(),
-                    y.outer_iter(),
-                )
-                    .into_par_iter()
-                    .for_each(|(mut sum, mut sum_square, y)| {
-                        // for each of the possible realization of y
-                        (sum.outer_iter_mut(), sum_square.outer_iter_mut())
-                            .into_par_iter()
-                            .enumerate()
-                            .for_each(|(i, (mut sum, mut sum_square))| {
-                                x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
-                                    // update sum and sum_square if the random value of y is i.
-                                    if i == *y as usize {
-                                        Zip::from(&mut sum).and(&mut sum_square).and(&x).for_each(
-                                            |sum, sum_square, x| {
-                                                let x = *x as i64;
-                                                *sum += x;
-                                                *sum_square += x * x;
-                                            },
-                                        );
-                                    }
-                                });
-                            });
+        .for_each(|(mut sum, mut sum_square, x)| {
+            izip!(
+                sum.outer_iter_mut(),
+                sum_square.outer_iter_mut(),
+                y.outer_iter(),
+            )
+            .for_each(|(mut sum, mut sum_square, y)| {
+                // for each of the possible realization of y
+                izip!(sum.outer_iter_mut(), sum_square.outer_iter_mut())
+                    .enumerate()
+                    .for_each(|(i, (mut sum, mut sum_square))| {
+                        x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
+                            // update sum and sum_square if the random value of y is i.
+                            if i == *y as usize {
+                                Zip::from(&mut sum).and(&mut sum_square).and(&x).for_each(
+                                    |sum, sum_square, x| {
+                                        let x = *x as i64;
+                                        *sum += x;
+                                        *sum_square += x * x;
+                                    },
+                                );
+                            }
+                        });
                     });
             });
+        });
         izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).for_each(|(mut n_samples, y)| {
             y.into_iter().for_each(|y| n_samples[*y as usize] += 1);
         });
