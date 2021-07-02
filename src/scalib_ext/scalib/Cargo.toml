@@ -47,3 +47,8 @@ harness = false
 [[bench]]
 name = "snr_update"
 harness = false
+
+
+[[bench]]
+name = "snr_update_threads"
+harness = false

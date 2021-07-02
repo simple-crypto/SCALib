@@ -95,6 +95,140 @@ impl SNR {
         });
     }
 
+    /// Update the SNR state with n fresh traces
+    /// traces: the leakage traces with shape (n,ns)
+    /// y: realization of random variables with shape (np,n)
+    pub fn update_threads(
+        &mut self,
+        traces: ArrayView2<i16>,
+        y: ArrayView2<u16>,
+        UPDATE_SNR_CHUNK_SIZE: usize,
+    ) {
+        let x = traces;
+        let nc = self.sum_square.shape()[1];
+        let chunk_x = 128;
+        // Update sum, sum_square and n_samples
+        // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
+        // in the trace.
+        izip!(
+            self.sum
+                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
+            self.sum_square
+                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
+            x.axis_chunks_iter(Axis(1), UPDATE_SNR_CHUNK_SIZE),
+        )
+        .for_each(|(mut sum, mut sum_square, x)| {
+            (
+                sum.outer_iter_mut(),
+                sum_square.outer_iter_mut(),
+                y.outer_iter(),
+            )
+                .into_par_iter()
+                .for_each(|(mut sum, mut sum_square, y)| {
+                    // for each of the possible realization of y
+                    (sum.outer_iter_mut(), sum_square.outer_iter_mut())
+                        .into_par_iter()
+                        .enumerate()
+                        .for_each(|(i, (mut sum, mut sum_square))| {
+                            inner_loop_update(
+                                sum.view_mut(),
+                                sum_square.view_mut(),
+                                x.view(),
+                                y.view(),
+                                i as u16,
+                            );
+                        });
+                });
+        });
+        izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).for_each(|(mut n_samples, y)| {
+            y.into_iter().for_each(|y| n_samples[*y as usize] += 1);
+        });
+    }
+
+    /// Update the SNR state with n fresh traces
+    /// traces: the leakage traces with shape (n,ns)
+    /// y: realization of random variables with shape (np,n)
+    pub fn update_old_threads(&mut self, traces: ArrayView2<i16>, y: ArrayView2<u16>) {
+        let x = traces;
+        // Update sum, sum_square and n_samples
+        // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
+        // in the trace.
+        // For each of the independent variables
+        (
+            self.sum.outer_iter_mut(),
+            self.sum_square.outer_iter_mut(),
+            self.n_samples.outer_iter_mut(),
+            y.outer_iter(),
+        )
+            .into_par_iter()
+            .for_each(|(mut sum, mut sum_square, mut n_samples, y)| {
+                // for each of the possible realization of y
+                (
+                    sum.outer_iter_mut(),
+                    sum_square.outer_iter_mut(),
+                    n_samples.outer_iter_mut(),
+                )
+                    .into_par_iter()
+                    .enumerate()
+                    .for_each(|(i, (mut sum, mut sum_square, mut n_samples))| {
+                        x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
+                            // update sum and sum_square if the random value of y is i.
+                            if i == *y as usize {
+                                n_samples += 1;
+                                Zip::from(&mut sum).and(&mut sum_square).and(&x).for_each(
+                                    |sum, sum_square, x| {
+                                        let x = *x as i64;
+                                        *sum += x;
+                                        *sum_square += x * x;
+                                    },
+                                );
+                            }
+                        });
+                    });
+            });
+    }
+
+    /// Update the SNR state with n fresh traces
+    /// traces: the leakage traces with shape (n,ns)
+    /// y: realization of random variables with shape (np,n)
+    pub fn update_old(&mut self, traces: ArrayView2<i16>, y: ArrayView2<u16>) {
+        let x = traces;
+        // Update sum, sum_square and n_samples
+        // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
+        // in the trace.
+        // For each of the independent variables
+        izip!(
+            self.sum.outer_iter_mut(),
+            self.sum_square.outer_iter_mut(),
+            self.n_samples.outer_iter_mut(),
+            y.outer_iter(),
+        )
+        .for_each(|(mut sum, mut sum_square, mut n_samples, y)| {
+            // for each of the possible realization of y
+            izip!(
+                sum.outer_iter_mut(),
+                sum_square.outer_iter_mut(),
+                n_samples.outer_iter_mut(),
+            )
+            .enumerate()
+            .for_each(|(i, (mut sum, mut sum_square, mut n_samples))| {
+                x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
+                    // update sum and sum_square if the random value of y is i.
+                    if i == *y as usize {
+                        n_samples += 1;
+                        Zip::from(&mut sum).and(&mut sum_square).and(&x).for_each(
+                            |sum, sum_square, x| {
+                                let x = *x as i64;
+                                *sum += x;
+                                *sum_square += x * x;
+                            },
+                        );
+                    }
+                });
+            });
+        });
+    }
+
     /// Generate the actual SNR metric based on the current state.
     /// return array axes (variable, samples in trace)
     pub fn get_snr<'py>(&self) -> Array2<f64> {
@@ -215,12 +349,9 @@ fn inner_loop_update(
 ) {
     let sum = sum.into_slice().unwrap();
     let sum_square = sum_square.into_slice().unwrap();
-    let n = x.shape()[0];
-    let y = y.to_slice().unwrap();
-    for j in 0..n {
-        let x = x.slice(s![j, ..]).to_slice().unwrap();
-        let v = y[j];
-        if i == v {
+    izip!(x.outer_iter(), y.iter()).for_each(|(x, v)| {
+        if i == *v {
+            let x = x.to_slice().unwrap();
             izip!(sum.iter_mut(), sum_square.iter_mut(), x.iter()).for_each(
                 |(sum, sum_square, &x)| {
                     let x = x as i64;
@@ -229,5 +360,5 @@ fn inner_loop_update(
                 },
             );
         }
-    }
+    });
 }

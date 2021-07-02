@@ -11,40 +11,36 @@ fn bench_snr_update(c: &mut Criterion) {
     //group.plot_config(plot_config);
 
     let nc = 256;
-    let np = 1;
     let n = nc * 20;
-    for ns in (10..21).map(|x| 2.0_f64.powi(x) as usize) {
+
+    for ns in (8..18).map(|x| 2.0_f64.powi(x) as usize) {
         let x = Array2::<i16>::random((n, ns), Uniform::new(0, 10000));
-        let y = Array2::<u16>::random((np, n), Uniform::new(0, nc as u16));
+        for np in [1, 16].iter() {
+            let y = Array2::<u16>::random((*np, n), Uniform::new(0, nc as u16));
+            let mut snr = snr::SNR::new(nc, ns, *np);
+            snr.update(x.view(), y.view(), 1 << 25);
+            group.bench_with_input(
+                BenchmarkId::new(format!("old_{}", *np), ns),
+                &ns,
+                |b, ns| {
+                    b.iter(|| {
+                        snr.update_old(x.view(), y.view());
+                    })
+                },
+            );
 
-        let mut snr = snr::SNR::new(nc, ns, np);
-        snr.update(x.view(), y.view(), 1 << 10);
-
-        group.bench_with_input(BenchmarkId::new("chunks_25", ns), &ns, |b, ns| {
-            b.iter(|| {
-                snr.update(x.view(), y.view(), 1 << 25);
-            })
-        });
-        group.bench_with_input(BenchmarkId::new("chunks_8", ns), &ns, |b, ns| {
-            b.iter(|| {
-                snr.update(x.view(), y.view(), 1 << 8);
-            })
-        });
-        group.bench_with_input(BenchmarkId::new("chunks_10", ns), &ns, |b, ns| {
-            b.iter(|| {
-                snr.update(x.view(), y.view(), 1 << 10);
-            })
-        });
-        group.bench_with_input(BenchmarkId::new("chunks_12", ns), &ns, |b, ns| {
-            b.iter(|| {
-                snr.update(x.view(), y.view(), 1 << 12);
-            })
-        });
-        group.bench_with_input(BenchmarkId::new("chunks_14", ns), &ns, |b, ns| {
-            b.iter(|| {
-                snr.update(x.view(), y.view(), 1 << 14);
-            })
-        });
+            for chunk in [12, 13, 14, 25].iter() {
+                group.bench_with_input(
+                    BenchmarkId::new(format!("chunk_{}_{}", *chunk, *np), ns),
+                    &ns,
+                    |b, ns| {
+                        b.iter(|| {
+                            snr.update(x.view(), y.view(), 1 << *chunk);
+                        })
+                    },
+                );
+            }
+        }
     }
     group.finish();
 }
