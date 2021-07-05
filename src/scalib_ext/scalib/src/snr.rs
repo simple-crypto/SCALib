@@ -8,7 +8,7 @@
 //! included in [0,nc[.
 
 use itertools::izip;
-use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut1, Axis, Zip};
+use ndarray::{Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut1, Axis, Zip};
 use rayon::prelude::*;
 
 /// SNR state. stores the sum and the sum of squares of the leakage for each of the class.
@@ -31,7 +31,7 @@ pub struct SNR {
 /// overhead costs, while being small enough to limit memory bandwidth usage by optimizing cache
 /// use.
 const GET_SNR_CHUNK_SIZE: usize = 1 << 12;
-//const UPDATE_SNR_CHUNK_SIZE: usize = 1 << 25;
+const UPDATE_SNR_CHUNK_SIZE: usize = 1 << 13;
 
 impl SNR {
     /// Create a new SNR state.
@@ -47,185 +47,45 @@ impl SNR {
             np: np,
         }
     }
-    /// Update the SNR state with n fresh traces
-    /// traces: the leakage traces with shape (n,ns)
-    /// y: realization of random variables with shape (np,n)
-    pub fn update(
-        &mut self,
-        traces: ArrayView2<i16>,
-        y: ArrayView2<u16>,
-        UPDATE_SNR_CHUNK_SIZE: usize,
-    ) {
-        let x = traces;
-        let nc = self.sum_square.shape()[1];
-        let chunk_x = 128;
-        // Update sum, sum_square and n_samples
-        // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
-        // in the trace.
-        izip!(
-            self.sum
-                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
-            self.sum_square
-                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
-            x.axis_chunks_iter(Axis(1), UPDATE_SNR_CHUNK_SIZE),
-        )
-        .for_each(|(mut sum, mut sum_square, x)| {
-            izip!(
-                sum.outer_iter_mut(),
-                sum_square.outer_iter_mut(),
-                y.outer_iter(),
-            )
-            .for_each(|(mut sum, mut sum_square, y)| {
-                // for each of the possible realization of y
-                izip!(sum.outer_iter_mut(), sum_square.outer_iter_mut())
-                    .enumerate()
-                    .for_each(|(i, (mut sum, mut sum_square))| {
-                        inner_loop_update(
-                            sum.view_mut(),
-                            sum_square.view_mut(),
-                            x.view(),
-                            y.view(),
-                            i as u16,
-                        );
-                    });
-            });
-        });
-        izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).for_each(|(mut n_samples, y)| {
-            y.into_iter().for_each(|y| n_samples[*y as usize] += 1);
-        });
-    }
 
     /// Update the SNR state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
     /// y: realization of random variables with shape (np,n)
-    pub fn update_threads(
-        &mut self,
-        traces: ArrayView2<i16>,
-        y: ArrayView2<u16>,
-        UPDATE_SNR_CHUNK_SIZE: usize,
-    ) {
+    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView2<u16>) {
         let x = traces;
-        let nc = self.sum_square.shape()[1];
-        let chunk_x = 128;
-        // Update sum, sum_square and n_samples
-        // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
-        // in the trace.
-        izip!(
-            self.sum
-                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
-            self.sum_square
-                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
-            x.axis_chunks_iter(Axis(1), UPDATE_SNR_CHUNK_SIZE),
-        )
-        .for_each(|(mut sum, mut sum_square, x)| {
-            (
-                sum.outer_iter_mut(),
-                sum_square.outer_iter_mut(),
-                y.outer_iter(),
-            )
-                .into_par_iter()
-                .for_each(|(mut sum, mut sum_square, y)| {
-                    // for each of the possible realization of y
-                    (sum.outer_iter_mut(), sum_square.outer_iter_mut())
-                        .into_par_iter()
-                        .enumerate()
-                        .for_each(|(i, (mut sum, mut sum_square))| {
-                            inner_loop_update(
-                                sum.view_mut(),
-                                sum_square.view_mut(),
-                                x.view(),
-                                y.view(),
-                                i as u16,
-                            );
-                        });
-                });
-        });
-        izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).for_each(|(mut n_samples, y)| {
-            y.into_iter().for_each(|y| n_samples[*y as usize] += 1);
-        });
-    }
-
-    /// Update the SNR state with n fresh traces
-    /// traces: the leakage traces with shape (n,ns)
-    /// y: realization of random variables with shape (np,n)
-    pub fn update_old_threads(&mut self, traces: ArrayView2<i16>, y: ArrayView2<u16>) {
-        let x = traces;
-        // Update sum, sum_square and n_samples
-        // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
-        // in the trace.
-        // For each of the independent variables
         (
-            self.sum.outer_iter_mut(),
-            self.sum_square.outer_iter_mut(),
-            self.n_samples.outer_iter_mut(),
-            y.outer_iter(),
+            self.sum
+                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
+            self.sum_square
+                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
+            x.axis_chunks_iter(Axis(1), UPDATE_SNR_CHUNK_SIZE),
         )
             .into_par_iter()
-            .for_each(|(mut sum, mut sum_square, mut n_samples, y)| {
-                // for each of the possible realization of y
+            .for_each(|(mut sum, mut sum_square, x)| {
                 (
                     sum.outer_iter_mut(),
                     sum_square.outer_iter_mut(),
-                    n_samples.outer_iter_mut(),
+                    y.outer_iter(),
                 )
                     .into_par_iter()
-                    .enumerate()
-                    .for_each(|(i, (mut sum, mut sum_square, mut n_samples))| {
-                        x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
-                            // update sum and sum_square if the random value of y is i.
-                            if i == *y as usize {
-                                n_samples += 1;
-                                Zip::from(&mut sum).and(&mut sum_square).and(&x).for_each(
-                                    |sum, sum_square, x| {
-                                        let x = *x as i64;
-                                        *sum += x;
-                                        *sum_square += x * x;
-                                    },
+                    .for_each(|(mut sum, mut sum_square, y)| {
+                        // for each of the possible realization of y
+                        (sum.outer_iter_mut(), sum_square.outer_iter_mut())
+                            .into_par_iter()
+                            .enumerate()
+                            .for_each(|(i, (mut sum, mut sum_square))| {
+                                inner_loop_update(
+                                    sum.view_mut(),
+                                    sum_square.view_mut(),
+                                    x.view(),
+                                    y.view(),
+                                    i as u16,
                                 );
-                            }
-                        });
+                            });
                     });
             });
-    }
-
-    /// Update the SNR state with n fresh traces
-    /// traces: the leakage traces with shape (n,ns)
-    /// y: realization of random variables with shape (np,n)
-    pub fn update_old(&mut self, traces: ArrayView2<i16>, y: ArrayView2<u16>) {
-        let x = traces;
-        // Update sum, sum_square and n_samples
-        // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
-        // in the trace.
-        // For each of the independent variables
-        izip!(
-            self.sum.outer_iter_mut(),
-            self.sum_square.outer_iter_mut(),
-            self.n_samples.outer_iter_mut(),
-            y.outer_iter(),
-        )
-        .for_each(|(mut sum, mut sum_square, mut n_samples, y)| {
-            // for each of the possible realization of y
-            izip!(
-                sum.outer_iter_mut(),
-                sum_square.outer_iter_mut(),
-                n_samples.outer_iter_mut(),
-            )
-            .enumerate()
-            .for_each(|(i, (mut sum, mut sum_square, mut n_samples))| {
-                x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
-                    // update sum and sum_square if the random value of y is i.
-                    if i == *y as usize {
-                        n_samples += 1;
-                        Zip::from(&mut sum).and(&mut sum_square).and(&x).for_each(
-                            |sum, sum_square, x| {
-                                let x = *x as i64;
-                                *sum += x;
-                                *sum_square += x * x;
-                            },
-                        );
-                    }
-                });
-            });
+        izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).for_each(|(mut n_samples, y)| {
+            y.into_iter().for_each(|y| n_samples[*y as usize] += 1);
         });
     }
 
@@ -241,6 +101,7 @@ impl SNR {
         //                = 1/n_samples * Sum_traces (trace^2 + Mean_traces^2 - 2* trace * Mean_traces)
         //                = Sum_traces (trace^2/n_samples) -  Mean_traces^2
         // TODO check memory layout and algorithmic passes to optimize perf.
+
         let mut snr = Array2::<f64>::zeros((self.np, self.ns));
         let sum = &self.sum;
         let sum_square = &self.sum_square;
@@ -340,6 +201,7 @@ fn inner_loop_get_snr(
     *cum_var_of_mean += ((u_diff * (u - *cum_mean_of_mean)) - *cum_var_of_mean) * n_inv;
 }
 
+#[inline(always)]
 fn inner_loop_update(
     sum: ArrayViewMut1<i64>,
     sum_square: ArrayViewMut1<i64>,
