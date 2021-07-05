@@ -27,7 +27,7 @@ impl SNR {
         let inner = &mut self.inner;
         let x = traces.as_array();
         let y = y.as_array();
-        py.allow_threads(|| inner.update(x, y, 1 << 14));
+        py.allow_threads(|| inner.update(x, y));
     }
 
     /// Generate the actual SNR metric based on the current state.
