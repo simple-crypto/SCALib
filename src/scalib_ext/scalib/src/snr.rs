@@ -55,7 +55,7 @@ impl SNR {
         let x = traces;
 
         if self.n_samples.slice(s![0, ..]).sum() + x.shape()[0] as u64 >= (1 << 32) {
-            panic!("SNR can not be update with more than 2**32 traces.");
+            panic!("SNR can not be updated with more than 2**32 traces.");
         }
 
         // chunk the traces to keep one line of sum and sum_square in L2 cache
