@@ -8,7 +8,7 @@
 //! included in [0,nc[.
 
 use itertools::izip;
-use ndarray::{Array1, Array2, Array3, ArrayView2, Axis, Zip};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut1, Axis, Zip};
 use rayon::prelude::*;
 
 /// SNR state. stores the sum and the sum of squares of the leakage for each of the class.
@@ -31,6 +31,7 @@ pub struct SNR {
 /// overhead costs, while being small enough to limit memory bandwidth usage by optimizing cache
 /// use.
 const GET_SNR_CHUNK_SIZE: usize = 1 << 12;
+const UPDATE_SNR_CHUNK_SIZE: usize = 1 << 13;
 
 impl SNR {
     /// Create a new SNR state.
@@ -46,47 +47,54 @@ impl SNR {
             np: np,
         }
     }
+
     /// Update the SNR state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
     /// y: realization of random variables with shape (np,n)
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView2<u16>) {
         let x = traces;
-        // Update sum, sum_square and n_samples
-        // Note: iteration nesting is: variable - value of the variable - trace (then if) - value
-        // in the trace.
-        // For each of the independent variables
+
+        if self.n_samples.slice(s![0, ..]).sum() + x.shape()[0] as u64 >= (1 << 32) {
+            panic!("SNR can not be updated with more than 2**32 traces.");
+        }
+
+        // chunk the traces to keep one line of sum and sum_square in L2 cache
         (
-            self.sum.outer_iter_mut(),
-            self.sum_square.outer_iter_mut(),
-            self.n_samples.outer_iter_mut(),
-            y.outer_iter(),
+            self.sum
+                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
+            self.sum_square
+                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
+            x.axis_chunks_iter(Axis(1), UPDATE_SNR_CHUNK_SIZE),
         )
             .into_par_iter()
-            .for_each(|(mut sum, mut sum_square, mut n_samples, y)| {
-                // for each of the possible realization of y
+            .for_each(|(mut sum, mut sum_square, x)| {
+                // iter on each variable to update
                 (
                     sum.outer_iter_mut(),
                     sum_square.outer_iter_mut(),
-                    n_samples.outer_iter_mut(),
+                    y.outer_iter(),
                 )
                     .into_par_iter()
-                    .enumerate()
-                    .for_each(|(i, (mut sum, mut sum_square, mut n_samples))| {
-                        x.outer_iter().zip(y.iter()).for_each(|(x, y)| {
-                            // update sum and sum_square if the random value of y is i.
-                            if i == *y as usize {
-                                n_samples += 1;
-                                Zip::from(&mut sum).and(&mut sum_square).and(&x).for_each(
-                                    |sum, sum_square, x| {
-                                        let x = *x as i64;
-                                        *sum += x;
-                                        *sum_square += x * x;
-                                    },
+                    .for_each(|(mut sum, mut sum_square, y)| {
+                        // for each of the possible realization of y
+                        (sum.outer_iter_mut(), sum_square.outer_iter_mut())
+                            .into_par_iter()
+                            .enumerate()
+                            .for_each(|(i, (mut sum, mut sum_square))| {
+                                inner_loop_update(
+                                    sum.view_mut(),
+                                    sum_square.view_mut(),
+                                    x.view(),
+                                    y.view(),
+                                    i as u16,
                                 );
-                            }
-                        });
+                            });
                     });
             });
+        // update the number of samples for each classes.
+        izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).for_each(|(mut n_samples, y)| {
+            y.into_iter().for_each(|y| n_samples[*y as usize] += 1);
+        });
     }
 
     /// Generate the actual SNR metric based on the current state.
@@ -101,6 +109,7 @@ impl SNR {
         //                = 1/n_samples * Sum_traces (trace^2 + Mean_traces^2 - 2* trace * Mean_traces)
         //                = Sum_traces (trace^2/n_samples) -  Mean_traces^2
         // TODO check memory layout and algorithmic passes to optimize perf.
+
         let mut snr = Array2::<f64>::zeros((self.np, self.ns));
         let sum = &self.sum;
         let sum_square = &self.sum_square;
@@ -198,4 +207,28 @@ fn inner_loop_get_snr(
     let u_diff = u - *cum_mean_of_mean;
     *cum_mean_of_mean += u_diff * n_inv;
     *cum_var_of_mean += ((u_diff * (u - *cum_mean_of_mean)) - *cum_var_of_mean) * n_inv;
+}
+
+#[inline(always)]
+fn inner_loop_update(
+    sum: ArrayViewMut1<i64>,
+    sum_square: ArrayViewMut1<i64>,
+    x: ArrayView2<i16>,
+    y: ArrayView1<u16>,
+    i: u16,
+) {
+    let sum = sum.into_slice().unwrap();
+    let sum_square = sum_square.into_slice().unwrap();
+    izip!(x.outer_iter(), y.iter()).for_each(|(x, v)| {
+        if i == *v {
+            let x = x.to_slice().unwrap();
+            izip!(sum.iter_mut(), sum_square.iter_mut(), x.iter()).for_each(
+                |(sum, sum_square, &x)| {
+                    let x = x as i64;
+                    *sum += x;
+                    *sum_square += x * x;
+                },
+            );
+        }
+    });
 }

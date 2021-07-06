@@ -29,8 +29,11 @@ blis-src = { version = "0.2.1-alpha.0", default-features=false, features=["stati
 blis-sys = { git="https://github.com/cassiersg/blis-sys", optional = true }
 matrixmultiply = "0.3.1"
 
+[profile.release]
+debug = true
+
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.3.4"
 ndarray-rand = "0.14.0"
 
 [[bench]]
@@ -38,13 +41,9 @@ name = "belief_propagation"
 harness = false
 
 [[bench]]
-name = "lda"
-harness = false
-
-[[bench]]
-name = "lda_ntraces"
-harness = false
-
-[[bench]]
 name = "get_snr"
+harness = false
+
+[[bench]]
+name = "snr_update"
 harness = false
