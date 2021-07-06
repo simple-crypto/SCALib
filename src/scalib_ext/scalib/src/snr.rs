@@ -7,11 +7,13 @@
 //! The measurements are expected to be of length ns. The random variable values must be
 //! included in [0,nc[.
 
+use hytra::TrAcc;
 use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use itertools::izip;
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut1, Axis, Zip};
 use rayon::prelude::*;
-
+use std::thread;
+use std::time::Duration;
 /// SNR state. stores the sum and the sum of squares of the leakage for each of the class.
 /// This allows to estimate the mean and the variance for each of the classes which are
 /// needed for SNR.
@@ -59,15 +61,30 @@ impl SNR {
             panic!("SNR can not be updated with more than 2**32 traces.");
         }
 
-        let n_it = (self.ns as f64 / UPDATE_SNR_CHUNK_SIZE as f64).ceil() as usize
-            * self.n_samples.shape()[1];
-        let pb = ProgressBar::new((n_it * self.np) as u64);
-        pb.set_style(ProgressStyle::default_spinner().template(
-            "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
-        )
-        .on_finish(ProgressFinish::AndClear));
-        pb.set_message("Update SNR...");
+        let acc: TrAcc<u64, _> = TrAcc::new(|a, b| a + b, 1);
+        let acc_ref = &acc;
+        let n_it = self.np as u64
+            * (self.ns as f64 / UPDATE_SNR_CHUNK_SIZE as f64).ceil() as u64
+            * self.n_samples.shape()[1] as u64;
 
+        crossbeam_utils::thread::scope(|s| {
+            s.spawn(move |_| {
+                let pb = ProgressBar::new(n_it);
+                pb.set_style(ProgressStyle::default_spinner().template(
+                "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
+                )
+                    .on_finish(ProgressFinish::AndClear));
+                pb.set_message("Update SNR...");
+                let mut x = 0;
+                while x < n_it {
+                    pb.set_position(x);
+                    thread::sleep(Duration::from_micros(100));
+                    x = acc_ref.get();
+                }
+                pb.finish_and_clear();
+            });
+
+            s.spawn(move |_|{
         // chunk the traces to keep one line of sum and sum_square in L2 cache
         (
             self.sum
@@ -98,15 +115,18 @@ impl SNR {
                                     y.view(),
                                     i as u16,
                                 );
-                                pb.inc(1);
+                                acc_ref.acc(1);
                             });
                     });
             });
-        pb.finish_and_clear();
+
         // update the number of samples for each classes.
         izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).for_each(|(mut n_samples, y)| {
             y.into_iter().for_each(|y| n_samples[*y as usize] += 1);
         });
+
+        });
+        }).unwrap();
     }
 
     /// Generate the actual SNR metric based on the current state.
