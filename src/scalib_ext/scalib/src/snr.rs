@@ -8,7 +8,7 @@
 //! included in [0,nc[.
 
 use itertools::izip;
-use ndarray::{Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut1, Axis, Zip};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut1, Axis, Zip};
 use rayon::prelude::*;
 
 /// SNR state. stores the sum and the sum of squares of the leakage for each of the class.
@@ -53,6 +53,12 @@ impl SNR {
     /// y: realization of random variables with shape (np,n)
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView2<u16>) {
         let x = traces;
+
+        if self.n_samples.slice(s![0, ..]).sum() + x.shape()[0] as u64 >= (1 << 32) {
+            panic!("SNR can not be update with more than 2**32 traces.");
+        }
+
+        // chunk the traces to keep one line of sum and sum_square in L2 cache
         (
             self.sum
                 .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
@@ -62,6 +68,7 @@ impl SNR {
         )
             .into_par_iter()
             .for_each(|(mut sum, mut sum_square, x)| {
+                // iter on each variable to update
                 (
                     sum.outer_iter_mut(),
                     sum_square.outer_iter_mut(),
@@ -84,6 +91,7 @@ impl SNR {
                             });
                     });
             });
+        // update the number of samples for each classes.
         izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).for_each(|(mut n_samples, y)| {
             y.into_iter().for_each(|y| n_samples[*y as usize] += 1);
         });
