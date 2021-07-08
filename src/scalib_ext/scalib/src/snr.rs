@@ -7,7 +7,7 @@
 //! The measurements are expected to be of length ns. The random variable values must be
 //! included in [0,nc[.
 
-use hytra::TrAcc;
+use hytra::TrAdder;
 use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use itertools::izip;
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut1, Axis, Zip};
@@ -61,30 +61,51 @@ impl SNR {
             panic!("SNR can not be updated with more than 2**32 traces.");
         }
 
-        let acc: TrAcc<u64, _> = TrAcc::new(|a, b| a + b, 1);
+        let acc: TrAdder<u64> = TrAdder::new();
         let acc_ref = &acc;
-        let n_it = self.np as u64
-            * (self.ns as f64 / UPDATE_SNR_CHUNK_SIZE as f64).ceil() as u64
-            * self.n_samples.shape()[1] as u64;
 
-        crossbeam_utils::thread::scope(|s| {
-            s.spawn(move |_| {
-                let pb = ProgressBar::new(n_it);
-                pb.set_style(ProgressStyle::default_spinner().template(
-                "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
-                )
-                    .on_finish(ProgressFinish::AndClear));
-                pb.set_message("Update SNR...");
-                let mut x = 0;
-                while x < n_it {
-                    pb.set_position(x);
-                    thread::sleep(Duration::from_micros(100));
-                    x = acc_ref.get();
-                }
-                pb.finish_and_clear();
-            });
+        let n_chunks = (self.ns as f64 / UPDATE_SNR_CHUNK_SIZE as f64).ceil() as u64;
+        let n_it = n_chunks * self.np as u64 * self.n_samples.shape()[1] as u64;
+        let n_updates = x.shape()[0] as u64 * x.shape()[1] as u64 * self.np as u64;
 
-            s.spawn(move |_|{
+        if n_updates > (1 << 30) {
+            crossbeam_utils::thread::scope(|s| {
+                // spawn computing thread
+                s.spawn(move |_| {
+                    self.update_internal(traces, y, acc_ref);
+                });
+
+                // spawn progress bar thread
+                s.spawn(move |_| {
+                    let pb = ProgressBar::new(n_it);
+                    pb.set_style(
+                        ProgressStyle::default_spinner()
+                            .template("{msg} [{elapsed_precise}] [{bar:40.cyan/blue}] (ETA {eta})")
+                            .on_finish(ProgressFinish::AndClear),
+                    );
+                    pb.set_message("Update SNR...");
+                    let mut x = 0;
+                    while x < n_it {
+                        pb.set_position(x);
+                        thread::sleep(Duration::from_micros(500));
+                        x = acc_ref.get();
+                    }
+                    pb.finish_and_clear();
+                });
+            })
+            .unwrap();
+        } else {
+            self.update_internal(traces, y, acc_ref);
+        }
+    }
+
+    fn update_internal(
+        &mut self,
+        traces: ArrayView2<i16>,
+        y: ArrayView2<u16>,
+        acc_ref: &TrAdder<u64>,
+    ) {
+        let x = traces;
         // chunk the traces to keep one line of sum and sum_square in L2 cache
         (
             self.sum
@@ -115,7 +136,7 @@ impl SNR {
                                     y.view(),
                                     i as u16,
                                 );
-                                acc_ref.acc(1);
+                                acc_ref.inc(1);
                             });
                     });
             });
@@ -124,9 +145,6 @@ impl SNR {
         izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).for_each(|(mut n_samples, y)| {
             y.into_iter().for_each(|y| n_samples[*y as usize] += 1);
         });
-
-        });
-        }).unwrap();
     }
 
     /// Generate the actual SNR metric based on the current state.
