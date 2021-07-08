@@ -10,7 +10,7 @@ class SASCAGraph:
     relationships between those variables and information about the values of
     the variables.
 
-    Variables have value in a binary finite field of size `nc`, and are viewed
+    Variables have values in a binary finite field of size `nc`, and are viewed
     as bit vectors. Those values are represented as integers in [0, nc).
     Variables can be qualified as `SINGLE` or `MULTI`, which relates
     to the multiple-execution feature of `SASCAGraph`: when performing a
@@ -164,14 +164,14 @@ class SASCAGraph:
         -------
         distribution : array_like, f64
             Distribution of `var`. If `var` is SINGLE, distribution has shape
-            `(1,nc)` else, has shape `(n,nc)`.
+            `(1,nc)`. Else, it has shape `(n,nc)`.
         """
         if not self.solved_:
             raise Exception("SASCAGraph not solved yet")
         return self.var_[var]["current"]
 
     def set_public(self, var, values):
-        r"""Marks a variable `var` has public with provided `values`.
+        r"""Marks a variable `var` as public with provided `values`.
 
         Parameters
         ----------
@@ -200,7 +200,7 @@ class SASCAGraph:
         self.publics_[var] = values
 
     def set_table(self, table, values):
-        r"""Defines a `table` content.
+        r"""Defines a `table`'s content.
 
         Parameters
         ----------
