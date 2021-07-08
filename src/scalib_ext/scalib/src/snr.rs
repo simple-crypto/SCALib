@@ -68,7 +68,8 @@ impl SNR {
         let n_it = n_chunks * self.np as u64 * self.n_samples.shape()[1] as u64;
         let n_updates = x.shape()[0] as u64 * x.shape()[1] as u64 * self.np as u64;
 
-        if n_updates > (1 << 30) {
+        // Display bar if about 8E9 updates
+        if n_updates > (1 << 33) {
             crossbeam_utils::thread::scope(|s| {
                 // spawn computing thread
                 s.spawn(move |_| {
