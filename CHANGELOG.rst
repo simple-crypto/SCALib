@@ -4,7 +4,12 @@ Changelog
 
 Not released
 ------------
-* Chunk `SNR.fit_u` to maintain similar performances with long traces. 
+
+v0.3.2
+------
+
+* Chunk `SNR.fit_u` to maintain similar performances with long traces and
+  adding a progress bar 
 
 v0.3.1
 ------
