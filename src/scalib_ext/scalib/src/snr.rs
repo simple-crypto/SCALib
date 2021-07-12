@@ -88,7 +88,7 @@ impl SNR {
                     let mut x = 0;
                     while x < n_it {
                         pb.set_position(x);
-                        thread::sleep(Duration::from_micros(500));
+                        thread::sleep(Duration::from_millis(50));
                         x = acc_ref.get();
                     }
                     pb.finish_and_clear();
