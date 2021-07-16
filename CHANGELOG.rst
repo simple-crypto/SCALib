@@ -5,6 +5,12 @@ Changelog
 Not released
 ------------
 
+v0.3.3
+------
+
+* Solving minor issues in `MultiLDA` and `LDAClassifier`. Allowing multiple
+  threads in `predict_proba()` and add a `done` flag to `solve()`.
+
 v0.3.2
 ------
 
