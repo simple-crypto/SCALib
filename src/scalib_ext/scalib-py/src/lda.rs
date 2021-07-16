@@ -100,7 +100,8 @@ impl LDA {
         py: Python<'py>,
         x: PyReadonlyArray2<i16>,
     ) -> PyResult<&'py PyArray2<f64>> {
-        let prs = self.inner.predict_proba(x.as_array());
+        let x = x.as_array();
+        let prs = py.allow_threads(|| self.inner.predict_proba(x));
         Ok(&(prs.to_pyarray(py)))
     }
 
