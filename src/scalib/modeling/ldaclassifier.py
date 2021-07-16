@@ -75,6 +75,7 @@ class LDAClassifier:
 
     def __init__(self, nc, p, ns):
         self.solved = False
+        self.done = False
         self.p = p
         self.acc = _scalib_ext.LdaAcc(nc, ns)
         assert p < nc
@@ -99,17 +100,29 @@ class LDAClassifier:
         self.acc.fit(l, x, gemm_mode)
         self.solved = False
 
-    def solve(self):
+    def solve(self, done=False):
         r"""Estimates the PDF parameters that is the projection matrix
         :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
         :math:`\mathbf{\Sigma}`.
+
+        Parameters
+        ----------
+        done : bool
+            True if the object will not be futher updated.
 
         Notes
         -----
         Once this has been called, predictions can be performed.
         """
+        assert (
+            not self.done
+        ), "Calling LDA.solve() after done flag has been set is not allowed."
         self.lda = self.acc.lda(self.p)
         self.solved = True
+        self.done = done
+
+        if done:
+            del self.acc
 
     def predict_proba(self, l):
         r"""Computes the probability for each of the classes for the traces
@@ -136,8 +149,11 @@ class LDAClassifier:
         dic = {
             "solved": self.solved,
             "p": self.p,
-            "acc": self.acc.get_state(),
         }
+
+        if not self.done:
+            dic["acc"] = self.acc.get_state()
+
         try:
             dic["lda"] = self.lda.get_state()
         except AttributeError:
@@ -147,7 +163,10 @@ class LDAClassifier:
     def __setstate__(self, state):
         self.solved = state["solved"]
         self.p = state["p"]
-        self.acc = _scalib_ext.LdaAcc.from_state(*state["acc"])
+        self.done = not "acc" in state
+
+        if not self.done:
+            self.acc = _scalib_ext.LdaAcc.from_state(*state["acc"])
         if "lda" in state:
             self.lda = _scalib_ext.LDA.from_state(*state["lda"])
 
@@ -240,12 +259,12 @@ class MultiLDA:
                 )
             )
 
-    def solve(self):
+    def solve(self, done=False):
         """See `LDAClassifier.solve`."""
         # Use num_cpus instead of num_threads as there is not parallelism
         # inside of lda.solve.
         with ThreadPoolExecutor(max_workers=self.num_cpus) as executor:
-            list(executor.map(lambda lda: lda.solve(), self.ldas))
+            list(executor.map(lambda lda: lda.solve(done), self.ldas))
 
     def predict_proba(self, l):
         """Predict probabilities for all variables.
