@@ -106,16 +106,18 @@ pub fn run_bp(
         .map(|x| to_var(x.downcast::<PyDict>().unwrap()))
         .collect();
 
-    scalib::belief_propagation::run_bp(
-        &functions_rust,
-        &mut variables_rust,
-        it,
-        edge,
-        nc,
-        n,
-        progress,
-    )
-    .unwrap();
+    py.allow_threads(|| {
+        scalib::belief_propagation::run_bp(
+            &functions_rust,
+            &mut variables_rust,
+            it,
+            edge,
+            nc,
+            n,
+            progress,
+        )
+        .unwrap();
+    });
 
     variables_rust
         .iter()
