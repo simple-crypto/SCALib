@@ -43,8 +43,9 @@ fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
         vertex: usize,
         nc: usize,
         n: usize,
+        progress: bool,
     ) -> PyResult<()> {
-        belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n)
+        belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n, progress)
     }
 
     #[pyfn(m, "partial_cp")]

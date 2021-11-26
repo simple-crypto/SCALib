@@ -223,13 +223,15 @@ class SASCAGraph:
             )
         self.tables_[table] = values
 
-    def run_bp(self, it):
+    def run_bp(self, it, progress=False):
         r"""Runs belief propagation algorithm on the current state of the graph.
 
         Parameters
         ----------
         it : int
             Number of iterations of belief propagation.
+        progress: bool
+            Show a progress bar (default: False).
         """
         if self.solved_:
             raise Exception("Cannot run bp twice on a graph.")
@@ -241,6 +243,7 @@ class SASCAGraph:
             self.edge_,
             self.nc_,
             self.n_,
+            progress,
         )
         self.solved_ = True
 

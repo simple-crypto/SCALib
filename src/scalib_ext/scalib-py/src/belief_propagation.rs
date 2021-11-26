@@ -89,6 +89,8 @@ pub fn run_bp(
     nc: usize,
     // number of copies in the graph (n_runs)
     n: usize,
+    // show a progress bar
+    progress: bool,
 ) -> PyResult<()> {
     // map all python functions to rust ones + generate the mapping in vec_functs_id
     let functions_rust: Vec<Func> = functions
@@ -104,8 +106,16 @@ pub fn run_bp(
         .map(|x| to_var(x.downcast::<PyDict>().unwrap()))
         .collect();
 
-    scalib::belief_propagation::run_bp(&functions_rust, &mut variables_rust, it, edge, nc, n)
-        .unwrap();
+    scalib::belief_propagation::run_bp(
+        &functions_rust,
+        &mut variables_rust,
+        it,
+        edge,
+        nc,
+        n,
+        progress,
+    )
+    .unwrap();
 
     variables_rust
         .iter()
