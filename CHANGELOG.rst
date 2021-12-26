@@ -5,6 +5,15 @@ Changelog
 Not released
 ------------
 
+v0.3.4
+------
+
+* Release GC in SASCA's `run_bp` .
+* Release GC in `rank_accurary` and `rank_nbin`.
+* `LDA.predict_proba` is marked thread-safe.
+* Hide by default the progress bar of `SASCAGraph.run_bp` (can be re-enable
+  with the `progress` parameter).
+
 v0.3.3
 ------
 
