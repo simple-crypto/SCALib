@@ -96,7 +96,7 @@ impl LDA {
     /// x : traces with shape (n,ns)
     /// return prs with shape (n,nc). Every row corresponds to one probability distribution
     fn predict_proba<'py>(
-        &mut self,
+        &self,
         py: Python<'py>,
         x: PyReadonlyArray2<i16>,
     ) -> PyResult<&'py PyArray2<f64>> {

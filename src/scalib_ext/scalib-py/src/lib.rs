@@ -43,8 +43,9 @@ fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
         vertex: usize,
         nc: usize,
         n: usize,
+        progress: bool,
     ) -> PyResult<()> {
-        belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n)
+        belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n, progress)
     }
 
     #[pyfn(m, "partial_cp")]
@@ -69,6 +70,7 @@ fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
 
     #[pyfn(m, "rank_accuracy")]
     fn rank_accuracy(
+        py: Python,
         costs: Vec<Vec<f64>>,
         key: Vec<usize>,
         acc: f64,
@@ -76,32 +78,37 @@ fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
         method: String,
         max_nb_bin: usize,
     ) -> PyResult<(f64, f64, f64)> {
-        let res = str2method(&method).unwrap_or_else(|s| panic!("{}", s));
-        let res = res.rank_accuracy(&costs, &key, acc, merge, max_nb_bin);
-        match res {
-            Ok(res) => Ok((res.min, res.est, res.max)),
-            Err(s) => {
-                panic!("{}", s);
+        py.allow_threads(|| {
+            let res = str2method(&method).unwrap_or_else(|s| panic!("{}", s));
+            let res = res.rank_accuracy(&costs, &key, acc, merge, max_nb_bin);
+            match res {
+                Ok(res) => Ok((res.min, res.est, res.max)),
+                Err(s) => {
+                    panic!("{}", s);
+                }
             }
-        }
+        })
     }
 
     #[pyfn(m, "rank_nbin")]
     fn rank_nbin(
+        py: Python,
         costs: Vec<Vec<f64>>,
         key: Vec<usize>,
         nb_bin: usize,
         merge: Option<usize>,
         method: String,
     ) -> PyResult<(f64, f64, f64)> {
-        let res = str2method(&method).unwrap_or_else(|s| panic!("{}", s));
-        let res = res.rank_nbin(&costs, &key, nb_bin, merge);
-        match res {
-            Ok(res) => Ok((res.min, res.est, res.max)),
-            Err(s) => {
-                panic!("{}", s);
+        py.allow_threads(|| {
+            let res = str2method(&method).unwrap_or_else(|s| panic!("{}", s));
+            let res = res.rank_nbin(&costs, &key, nb_bin, merge);
+            match res {
+                Ok(res) => Ok((res.min, res.est, res.max)),
+                Err(s) => {
+                    panic!("{}", s);
+                }
             }
-        }
+        })
     }
 
     Ok(())

@@ -351,6 +351,8 @@ pub fn run_bp(
     nc: usize,
     // number of copies in the graph (n_runs)
     n: usize,
+    // show a progress bar
+    progress: bool,
 ) -> Result<(), ()> {
     // Scratch array containing all the edge's messages.
     let mut edges: Vec<Array2<f64>> = vec![Array2::<f64>::ones((n, nc)); edge];
@@ -386,15 +388,7 @@ pub fn run_bp(
         }
     }
 
-    // loading bar
-    let pb = ProgressBar::new(it as u64);
-    pb.set_style(ProgressStyle::default_spinner().template(
-        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
-    )
-    .on_finish(ProgressFinish::AndClear));
-    pb.set_message("Calculating BP...");
-
-    for _ in (0..it).progress_with(pb) {
+    let mut bp_iter = || {
         // This is a technique for runtime borrow-checking: we take reference on all the edges
         // at once, put them into options, then extract the references out of the options, one
         // at a time and out-of-order.
@@ -422,6 +416,23 @@ pub fn run_bp(
             })
             .collect();
         update_variables(&mut edge_for_var, variables);
+    };
+
+    if progress {
+        // loading bar
+        let pb = ProgressBar::new(it as u64);
+        pb.set_style(ProgressStyle::default_spinner().template(
+        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
+    )
+    .on_finish(ProgressFinish::AndClear));
+        pb.set_message("Calculating BP...");
+        for _ in (0..it).progress_with(pb) {
+            bp_iter();
+        }
+    } else {
+        for _ in 0..it {
+            bp_iter();
+        }
     }
 
     Ok(())
