@@ -57,6 +57,14 @@ pub enum FuncType {
     ANDCST(Array1<u32>),
     /// Lookup table function.
     LOOKUP(Array1<u32>),
+    /// Modular ADD of variables
+    ADD,
+    /// Modular ADD of variables, ADDing additionally a public variable.
+    ADDCST(Array1<u32>),
+    /// Modular MUL of variables
+    MUL,
+    /// Modular MUL of variables, ADDing additionally a public variable.
+    MULCST(Array1<u32>),
 }
 
 /// A function node in the graph.
@@ -189,6 +197,72 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
         .par_iter()
         .zip(edges.par_iter_mut())
         .for_each(|(function, edge)| match &function.functype {
+            FuncType::ADD => {
+                let [output_msg, input1_msg, input2_msg]: &mut [_; 3] =
+                    edge.as_mut_slice().try_into().unwrap();
+                let nc = input1_msg.shape()[1];
+                (
+                    input1_msg.outer_iter_mut(),
+                    input2_msg.outer_iter_mut(),
+                    output_msg.outer_iter_mut(),
+                )
+                    .into_par_iter()
+                    .for_each_init(
+                        || (Array1::zeros(nc), Array1::zeros(nc), Array1::zeros(nc)),
+                        |(in1_msg_scratch, in2_msg_scratch, out_msg_scratch),
+                        (mut input1_msg, mut input2_msg, mut output_msg)| {
+                            in1_msg_scratch.fill(0.0);
+                            in2_msg_scratch.fill(0.0);
+                            out_msg_scratch.fill(0.0);
+
+                            for i1 in 0..nc {
+                                for i2 in 0..nc {
+                                    // The following line is the core change w.r.t. AND
+                                    let o: usize = (((i1 + i2) as u32) % (nc as u32)) as usize;
+                                    in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
+                                    in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
+                                    out_msg_scratch[o] += input1_msg[i1] * input2_msg[i2];
+                                }
+                            }
+                            input1_msg.assign(in1_msg_scratch);
+                            input2_msg.assign(in2_msg_scratch);
+                            output_msg.assign(out_msg_scratch);
+                        },
+                    );
+            }
+            FuncType::MUL => {
+                let [output_msg, input1_msg, input2_msg]: &mut [_; 3] =
+                    edge.as_mut_slice().try_into().unwrap();
+                let nc = input1_msg.shape()[1];
+                (
+                    input1_msg.outer_iter_mut(),
+                    input2_msg.outer_iter_mut(),
+                    output_msg.outer_iter_mut(),
+                )
+                    .into_par_iter()
+                    .for_each_init(
+                        || (Array1::zeros(nc), Array1::zeros(nc), Array1::zeros(nc)),
+                        |(in1_msg_scratch, in2_msg_scratch, out_msg_scratch),
+                        (mut input1_msg, mut input2_msg, mut output_msg)| {
+                            in1_msg_scratch.fill(0.0);
+                            in2_msg_scratch.fill(0.0);
+                            out_msg_scratch.fill(0.0);
+
+                            for i1 in 0..nc {
+                                for i2 in 0..nc {
+                                    // The following line is the core change w.r.t. AND
+                                    let o: usize = (((i1 * i2) as u32) % (nc as u32)) as usize;
+                                    in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
+                                    in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
+                                    out_msg_scratch[o] += input1_msg[i1] * input2_msg[i2];
+                                }
+                            }
+                            input1_msg.assign(in1_msg_scratch);
+                            input2_msg.assign(in2_msg_scratch);
+                            output_msg.assign(out_msg_scratch);
+                        },
+                    );
+            }
             FuncType::AND => {
                 let [output_msg, input1_msg, input2_msg]: &mut [_; 3] =
                     edge.as_mut_slice().try_into().unwrap();
@@ -270,6 +344,58 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             let value = value.first().unwrap();
                             for i1 in 0..nc {
                                 let o: usize = ((i1 as u32) & value) as usize;
+                                in1_msg_scratch[i1] += output_msg[o];
+                                out_msg_scratch[o] += input1_msg[i1];
+                            }
+                            input1_msg.assign(in1_msg_scratch);
+                            output_msg.assign(out_msg_scratch);
+                        },
+                    );
+            }
+            FuncType::ADDCST(values) => {
+                let [output_msg, input1_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
+                let nc = input1_msg.shape()[1];
+                (
+                    input1_msg.outer_iter_mut(),
+                    output_msg.outer_iter_mut(),
+                    values.outer_iter(),
+                )
+                    .into_par_iter()
+                    .for_each_init(
+                        || (Array1::zeros(nc), Array1::zeros(nc)),
+                        |(in1_msg_scratch, out_msg_scratch),
+                         (mut input1_msg, mut output_msg, value)| {
+                            in1_msg_scratch.fill(0.0);
+                            out_msg_scratch.fill(0.0);
+                            let value = value.first().unwrap();
+                            for i1 in 0..nc {
+                                let o: usize = (((i1 as u32) + value) % (nc as u32)) as usize;
+                                in1_msg_scratch[i1] += output_msg[o];
+                                out_msg_scratch[o] += input1_msg[i1];
+                            }
+                            input1_msg.assign(in1_msg_scratch);
+                            output_msg.assign(out_msg_scratch);
+                        },
+                    );
+            }
+            FuncType::MULCST(values) => {
+                let [output_msg, input1_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
+                let nc = input1_msg.shape()[1];
+                (
+                    input1_msg.outer_iter_mut(),
+                    output_msg.outer_iter_mut(),
+                    values.outer_iter(),
+                )
+                    .into_par_iter()
+                    .for_each_init(
+                        || (Array1::zeros(nc), Array1::zeros(nc)),
+                        |(in1_msg_scratch, out_msg_scratch),
+                         (mut input1_msg, mut output_msg, value)| {
+                            in1_msg_scratch.fill(0.0);
+                            out_msg_scratch.fill(0.0);
+                            let value = value.first().unwrap();
+                            for i1 in 0..nc {
+                                let o: usize = (((i1 as u32) * value) % (nc as u32)) as usize;
                                 in1_msg_scratch[i1] += output_msg[o];
                                 out_msg_scratch[o] += input1_msg[i1];
                             }
