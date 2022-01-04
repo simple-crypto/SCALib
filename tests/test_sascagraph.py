@@ -101,6 +101,7 @@ def test_add_public():
 
     assert np.allclose(distri_y_ref, distri_y)
 
+
 def test_mul_public():
     """
     Test MUL with public data
@@ -132,6 +133,7 @@ def test_mul_public():
         distri_y_ref[np.arange(n), y] += distri_x[np.arange(n), x]
 
     assert np.allclose(distri_y_ref, distri_y)
+
 
 def test_xor_public():
     """
@@ -203,6 +205,7 @@ def test_AND():
     distri_z_ref = (distri_z_ref.T / np.sum(distri_z_ref, axis=1)).T
     assert np.allclose(distri_z_ref, distri_z)
 
+
 def test_ADD():
     """
     Test ADD between distributions
@@ -241,6 +244,7 @@ def test_ADD():
     distri_z_ref = (distri_z_ref.T / np.sum(distri_z_ref, axis=1)).T
     assert np.allclose(distri_z_ref, distri_z)
 
+
 def test_MUL():
     """
     Test MUL between distributions
@@ -278,6 +282,7 @@ def test_MUL():
 
     distri_z_ref = (distri_z_ref.T / np.sum(distri_z_ref, axis=1)).T
     assert np.allclose(distri_z_ref, distri_z)
+
 
 def test_xor():
     """

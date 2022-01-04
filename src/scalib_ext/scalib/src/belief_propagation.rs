@@ -210,7 +210,7 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                     .for_each_init(
                         || (Array1::zeros(nc), Array1::zeros(nc), Array1::zeros(nc)),
                         |(in1_msg_scratch, in2_msg_scratch, out_msg_scratch),
-                        (mut input1_msg, mut input2_msg, mut output_msg)| {
+                         (mut input1_msg, mut input2_msg, mut output_msg)| {
                             in1_msg_scratch.fill(0.0);
                             in2_msg_scratch.fill(0.0);
                             out_msg_scratch.fill(0.0);
@@ -243,7 +243,7 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                     .for_each_init(
                         || (Array1::zeros(nc), Array1::zeros(nc), Array1::zeros(nc)),
                         |(in1_msg_scratch, in2_msg_scratch, out_msg_scratch),
-                        (mut input1_msg, mut input2_msg, mut output_msg)| {
+                         (mut input1_msg, mut input2_msg, mut output_msg)| {
                             in1_msg_scratch.fill(0.0);
                             in2_msg_scratch.fill(0.0);
                             out_msg_scratch.fill(0.0);
