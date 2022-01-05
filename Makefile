@@ -25,4 +25,4 @@ fmt:
 	tox -e fmt
 
 wheel:
-	pip wheel .
+	CARGO_TARGET_DIR=.cargo_build pip wheel .
