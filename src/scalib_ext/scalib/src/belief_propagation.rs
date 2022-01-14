@@ -199,6 +199,8 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
         .par_iter()
         .zip(edges.par_iter_mut())
         .for_each(|(function, edge)| match &function.functype {
+            // TODO: if nc is prime, the update for MUL can be computed more efficiently by mapping
+            // classes to their discrete logarithm, and by applying FFT.
             FuncType::AND | FuncType::MUL => {
                 let [output_msg, input1_msg, input2_msg]: &mut [_; 3] =
                     edge.as_mut_slice().try_into().unwrap();
@@ -311,6 +313,7 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
         });
 }
 
+/// Compute an ADD function node between all edges.
 pub fn adds(inputs: &mut [&mut Array2<f64>]) {
     let n_runs = inputs[0].shape()[0];
     let nc = inputs[0].shape()[1];
