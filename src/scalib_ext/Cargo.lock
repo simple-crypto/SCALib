@@ -1125,7 +1125,7 @@ dependencies = [
  "bindgen",
  "cc",
  "itertools 0.10.0",
- "realfft",
+ "realfft 1.1.0",
 ]
 
 [[package]]
@@ -1165,7 +1165,16 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea97b8a9e985c85108699bf7884820cc90b8b8de6bbcbf4a8b44e5ae534ae0ce"
 dependencies = [
- "rustfft",
+ "rustfft 5.1.1",
+]
+
+[[package]]
+name = "realfft"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7695c87f31dc3644760f23fb59a3fed47659703abf76cf2d111f03b9e712342"
+dependencies = [
+ "rustfft 6.0.1",
 ]
 
 [[package]]
@@ -1233,6 +1242,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustfft"
+version = "6.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1d089e5c57521629a59f5f39bca7434849ff89bd6873b521afe389c1c602543"
+dependencies = [
+ "num-complex 0.4.0",
+ "num-integer",
+ "num-traits",
+ "primal-check",
+ "strength_reduce",
+ "transpose",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1268,10 +1291,13 @@ dependencies = [
  "ndarray-rand",
  "ndarray-stats",
  "nshare",
+ "num-complex 0.4.0",
  "num-integer",
  "numpy",
  "pyo3",
  "rayon",
+ "realfft 2.0.1",
+ "rustfft 6.0.1",
 ]
 
 [[package]]

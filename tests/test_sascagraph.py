@@ -140,6 +140,129 @@ def test_AND():
     assert np.allclose(distri_z_ref, distri_z)
 
 
+def test_ADD():
+    """
+    Test ADD between distributions
+    """
+    nc = 251
+    n = 4
+    distri_x = np.random.randint(1, 10000000, (n, nc))
+    distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
+    distri_y = np.random.randint(1, 10000000, (n, nc))
+    distri_y = (distri_y.T / np.sum(distri_y, axis=1)).T
+
+    graph = f"""
+        # some comments
+        NC {nc}
+        PROPERTY z = x+y
+        VAR MULTI z
+        VAR MULTI x
+        VAR MULTI y
+
+        """
+
+    graph = SASCAGraph(graph, n)
+    graph.set_init_distribution("x", distri_x)
+    graph.set_init_distribution("y", distri_y)
+
+    graph.run_bp(1)
+    distri_z = graph.get_distribution("z")
+
+    distri_z_ref = np.zeros(distri_z.shape)
+    msg = np.zeros(distri_z.shape)
+
+    for x in range(nc):
+        for y in range(nc):
+            distri_z_ref[:, (x + y) % nc] += distri_x[:, x] * distri_y[:, y]
+
+    distri_z_ref = (distri_z_ref.T / np.sum(distri_z_ref, axis=1)).T
+    assert np.allclose(distri_z_ref, distri_z)
+
+
+def test_ADD_multiple():
+    """
+    Test ADD between distributions
+    """
+    nc = 17
+    n = 4
+    distri_x = np.random.randint(1, 10000000, (n, nc))
+    distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
+    distri_y = np.random.randint(1, 10000000, (n, nc))
+    distri_y = (distri_y.T / np.sum(distri_y, axis=1)).T
+    distri_w = np.random.randint(1, 10000000, (n, nc))
+    distri_w = (distri_w.T / np.sum(distri_w, axis=1)).T
+
+    graph = f"""
+        # some comments
+        NC {nc}
+        PROPERTY z = x+y+w
+        VAR MULTI z
+        VAR MULTI x
+        VAR MULTI y
+        VAR MULTI w
+        """
+
+    graph = SASCAGraph(graph, n)
+    graph.set_init_distribution("x", distri_x)
+    graph.set_init_distribution("y", distri_y)
+    graph.set_init_distribution("w", distri_w)
+
+    graph.run_bp(1)
+    distri_z = graph.get_distribution("z")
+
+    distri_z_ref = np.zeros(distri_z.shape)
+    msg = np.zeros(distri_z.shape)
+
+    for x in range(nc):
+        for y in range(nc):
+            for w in range(nc):
+                distri_z_ref[:, (x + y + w) % nc] += (
+                    distri_x[:, x] * distri_y[:, y] * distri_w[:, w]
+                )
+
+    distri_z_ref = (distri_z_ref.T / np.sum(distri_z_ref, axis=1)).T
+    assert np.allclose(distri_z_ref, distri_z)
+
+
+def test_MUL():
+    """
+    Test MUL between distributions
+    """
+    nc = 251
+    n = 4
+    distri_x = np.random.randint(1, 10000000, (n, nc))
+    distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
+    distri_y = np.random.randint(1, 10000000, (n, nc))
+    distri_y = (distri_y.T / np.sum(distri_y, axis=1)).T
+
+    graph = f"""
+        # some comments
+        NC {nc}
+        PROPERTY z = x*y
+        VAR MULTI z
+        VAR MULTI x
+        VAR MULTI y
+
+        """
+
+    graph = SASCAGraph(graph, n)
+    graph.set_init_distribution("x", distri_x)
+    graph.set_init_distribution("y", distri_y)
+
+    graph.run_bp(1)
+    distri_z = graph.get_distribution("z")
+
+    distri_z_ref = np.zeros(distri_z.shape)
+    msg = np.zeros(distri_z.shape)
+
+    for x in range(nc):
+        for y in range(nc):
+            distri_z_ref[:, (x * y) % nc] += distri_x[:, x] * distri_y[:, y]
+
+    distri_z_ref = (distri_z_ref.T / np.sum(distri_z_ref, axis=1)).T
+    assert np.allclose(distri_z_ref, distri_z)
+
+
 def test_xor():
     """
     Test XOR between distributions
