@@ -62,6 +62,9 @@ pub fn to_func(function: &PyDict) -> Func {
     } else if func == 2 {
         let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
         f = FuncType::XORCST(values.as_array().to_owned());
+    } else if func == 3 {
+        let table: PyReadonlyArray1<u32> = function.get_item("table").unwrap().extract().unwrap();
+        f = FuncType::LOOKUP(table.as_array().to_owned());
     } else if func == 4 {
         let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
         f = FuncType::ANDCST(values.as_array().to_owned());

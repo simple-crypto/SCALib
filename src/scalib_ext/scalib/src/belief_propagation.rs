@@ -53,10 +53,18 @@ pub enum FuncType {
     AND,
     /// Bitwise XOR of variables
     XOR,
+    /// Modular ADD of variables
+    ADD,
+    /// Modular MUL of variables
+    MUL,
     /// Bitwise XOR of variables, XORing additionally a public variable.
     XORCST(Array1<u32>),
     /// Bitwise AND of variables, ANDing additionally a public variable.
     ANDCST(Array1<u32>),
+    /// Modular ADD of variables, ADDing additionally a public variable.
+    ADDCST(Array1<u32>),
+    /// Modular MUL of variables, MULing additionally a public variable.
+    MULCST(Array1<u32>),
     /// Lookup table function.
     LOOKUP(Array1<u32>),
 }
