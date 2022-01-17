@@ -11,6 +11,8 @@
 use indicatif::{ProgressBar, ProgressFinish, ProgressIterator, ProgressStyle};
 use ndarray::{s, Array1, Array2, Axis};
 use rayon::prelude::*;
+use realfft::RealFftPlanner;
+use rustfft::num_complex::Complex;
 use std::convert::TryInto;
 
 /// Statistical distribution of a Para node.
@@ -51,10 +53,18 @@ pub enum FuncType {
     AND,
     /// Bitwise XOR of variables
     XOR,
+    /// Modular ADD of variables
+    ADD,
+    /// Modular MUL of variables
+    MUL,
     /// Bitwise XOR of variables, XORing additionally a public variable.
     XORCST(Array1<u32>),
     /// Bitwise AND of variables, ANDing additionally a public variable.
     ANDCST(Array1<u32>),
+    /// Modular ADD of variables, ADDing additionally a public variable.
+    ADDCST(Array1<u32>),
+    /// Modular MUL of variables, MULing additionally a public variable.
+    MULCST(Array1<u32>),
     /// Lookup table function.
     LOOKUP(Array1<u32>),
 }
@@ -189,7 +199,9 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
         .par_iter()
         .zip(edges.par_iter_mut())
         .for_each(|(function, edge)| match &function.functype {
-            FuncType::AND => {
+            // TODO: if nc is prime, the update for MUL can be computed more efficiently by mapping
+            // classes to their discrete logarithm, and by applying FFT.
+            FuncType::AND | FuncType::MUL => {
                 let [output_msg, input1_msg, input2_msg]: &mut [_; 3] =
                     edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
@@ -211,7 +223,14 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
 
                             for i1 in 0..nc {
                                 for i2 in 0..nc {
-                                    let o: usize = i1 & i2;
+                                    // Unifies operators that can only be binary
+                                    let o = match &function.functype {
+                                        FuncType::AND => i1 & i2,
+                                        FuncType::MUL => {
+                                            (((i1 * i2) as u32) % (nc as u32)) as usize
+                                        }
+                                        _ => unreachable!(),
+                                    };
                                     in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
                                     in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
                                     out_msg_scratch[o] += input1_msg[i1] * input2_msg[i2];
@@ -223,10 +242,16 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                         },
                     );
             }
+            FuncType::ADD => {
+                adds(edge.as_mut());
+            }
             FuncType::XOR => {
                 xors(edge.as_mut());
             }
-            FuncType::XORCST(values) => {
+            FuncType::XORCST(values)
+            | FuncType::ANDCST(values)
+            | FuncType::ADDCST(values)
+            | FuncType::MULCST(values) => {
                 let [output_msg, input1_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
                 (
@@ -243,33 +268,17 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             out_msg_scratch.fill(0.0);
                             let value = value.first().unwrap();
                             for i1 in 0..nc {
-                                let o: usize = ((i1 as u32) ^ value) as usize;
-                                in1_msg_scratch[i1] += output_msg[o];
-                                out_msg_scratch[o] += input1_msg[i1];
-                            }
-                            input1_msg.assign(in1_msg_scratch);
-                            output_msg.assign(out_msg_scratch);
-                        },
-                    );
-            }
-            FuncType::ANDCST(values) => {
-                let [output_msg, input1_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
-                let nc = input1_msg.shape()[1];
-                (
-                    input1_msg.outer_iter_mut(),
-                    output_msg.outer_iter_mut(),
-                    values.outer_iter(),
-                )
-                    .into_par_iter()
-                    .for_each_init(
-                        || (Array1::zeros(nc), Array1::zeros(nc)),
-                        |(in1_msg_scratch, out_msg_scratch),
-                         (mut input1_msg, mut output_msg, value)| {
-                            in1_msg_scratch.fill(0.0);
-                            out_msg_scratch.fill(0.0);
-                            let value = value.first().unwrap();
-                            for i1 in 0..nc {
-                                let o: usize = ((i1 as u32) & value) as usize;
+                                let o: usize = match &function.functype {
+                                    FuncType::XORCST(values) => ((i1 as u32) ^ value) as usize,
+                                    FuncType::ANDCST(values) => ((i1 as u32) & value) as usize,
+                                    FuncType::ADDCST(values) => {
+                                        (((i1 as u32) + value) % (nc as u32)) as usize
+                                    }
+                                    FuncType::MULCST(values) => {
+                                        (((i1 as u32) * value) % (nc as u32)) as usize
+                                    }
+                                    _ => unreachable!(),
+                                };
                                 in1_msg_scratch[i1] += output_msg[o];
                                 out_msg_scratch[o] += input1_msg[i1];
                             }
@@ -302,6 +311,58 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                     );
             }
         });
+}
+
+/// Compute an ADD function node between all edges.
+pub fn adds(inputs: &mut [&mut Array2<f64>]) {
+    let n_runs = inputs[0].shape()[0];
+    let nc = inputs[0].shape()[1];
+
+    // Sets the FFT operator
+    let mut real_planner = RealFftPlanner::<f64>::new();
+    let r2c = real_planner.plan_fft_forward(nc);
+    let c2r = real_planner.plan_fft_inverse(nc);
+
+    for run in 0..n_runs {
+        let mut spectrums: Vec<Array1<Complex<f64>>> = Vec::new();
+        let mut acc = Array1::<Complex<f64>>::ones(nc / 2 + 1);
+        inputs.iter_mut().for_each(|input| {
+            let mut input = input.slice_mut(s![run, ..]);
+            let input_fft_s = input.as_slice_mut().unwrap();
+            let mut spectrum = Array1::<Complex<f64>>::zeros(nc / 2 + 1);
+            let spec = spectrum.as_slice_mut().unwrap();
+            // Computes the FFT
+            r2c.process(input_fft_s, spec).unwrap();
+            // Clips the transformed
+            spectrum.mapv_inplace(|x| {
+                if x.norm_sqr() == 0.0 {
+                    Complex::new(MIN_PROBA, MIN_PROBA)
+                } else {
+                    x
+                }
+            });
+            spectrums.push(spectrum);
+            // Accumulates through the operands
+            acc.zip_mut_with(&spectrums[spectrums.len() - 1], |x, y| *x = *x * y);
+            acc /= acc.sum();
+        });
+        assert_eq!(inputs.len(), spectrums.len());
+        // Invert accumulation input_wise and invert transform.
+        spectrums
+            .iter_mut()
+            .zip(inputs.iter_mut())
+            .for_each(|(spectrum, input)| {
+                let mut input = input.slice_mut(s![run, ..]);
+                spectrum.zip_mut_with(&acc, |x, y| *x = *y / *x);
+                let input_fft_s = input.as_slice_mut().unwrap();
+                let spec = spectrum.as_slice_mut().unwrap();
+                c2r.process(spec, input_fft_s).unwrap();
+                make_non_zero(&mut input);
+                let s = input.sum();
+                input /= s;
+                make_non_zero(&mut input);
+            });
+    }
 }
 
 /// Compute a XOR function node between all edges.
