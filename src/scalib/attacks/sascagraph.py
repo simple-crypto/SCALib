@@ -474,7 +474,7 @@ class SASCAGraphParser:
             self.errors.append("NC appears multiple times, can only appear once.")
         elif len(self.nc_decls) == 0:
             self.errors.append("NC not declared.")
-        elif self.nc_decls[0] not in range(1, 2 ** 16 + 1):
+        elif self.nc_decls[0] not in range(1, 2**16 + 1):
             self.errors.append("NC not in admissible range [1, 2^16].")
         else:
             self.nc = self.nc_decls[0]
