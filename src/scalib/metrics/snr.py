@@ -46,7 +46,7 @@ class SNR:
     """
 
     def __init__(self, nc, ns, np=1):
-        if nc not in range(1, 2 ** 16 + 1):
+        if nc not in range(1, 2**16 + 1):
             raise ValueError(
                 f"SNR can be computed on max 16 bit variable, nc={nc} given"
             )
