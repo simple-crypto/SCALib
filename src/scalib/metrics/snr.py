@@ -30,9 +30,11 @@ class SNR:
     --------
     >>> from scalib.metrics import SNR
     >>> import numpy as np
-    >>> traces = np.random.randint(0,256,(100,200),dtype=np.int16)
-    >>> X = np.random.randint(0,256,(100,10),dtype=np.uint16)
-    >>> snr = SNR(256,200,10)
+    >>> # 500 traces of 200 points, 8-bit samples
+    >>> traces = np.random.randint(0,256,(500,200),dtype=np.int16)
+    >>> # 10 variables on 4 bit (16 classes = 2^4)
+    >>> X = np.random.randint(0,16,(500,10),dtype=np.uint16)
+    >>> snr = SNR(16,200,10)
     >>> snr.fit_u(traces,X)
     >>> snr_val = snr.get_snr()
 
