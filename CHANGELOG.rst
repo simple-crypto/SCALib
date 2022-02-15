@@ -5,6 +5,8 @@ Changelog
 Not released
 ------------
 
+* SASCA: support modular ADD and MUL operations (#18)
+
 v0.3.4
 ------
 
