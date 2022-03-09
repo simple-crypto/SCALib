@@ -11,6 +11,7 @@
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, Axis};
 use num_integer::binomial;
 use rayon::prelude::*;
+use itertools::izip;
 
 pub struct Ttest {
     /// Central sums of order 1 up to order d*2 with shape (ns,2,2*d),
@@ -238,5 +239,64 @@ impl Ttest {
                     });
             });
         return ttest;
+    }
+}
+
+pub struct MTtest2 {
+    /// Central sums of order 1 up to order d*2 with shape (ns,2,2*d),
+    /// where central sums is sum((x-u_x)**i).
+    /// Axes are (class, trace sample, order).
+    /// cs[..,..,0] contains the current estimation of means instead of
+    /// the central sum (which would be zero).
+
+    /// number of samples per class (2,)
+    n_samples: Array1<u64>,
+    /// Number of samples per trace
+    ns: usize,
+    /// POIS
+    pois: Array2<u64>,
+    /// Central first of moments
+    M: Array3<f64>,
+}
+
+impl MTtest2 {
+    /// Create a new Ttest state.
+    /// ns: traces length
+    /// d: order of the Ttest
+    pub fn new(ns: usize, pois: Array2<u64>) -> Self {
+        let x = pois.shape()[1];
+        println!("Number of pois {}", x);
+        MTtest2 {
+            n_samples: Array1::<u64>::zeros((2,)),
+            ns: ns,
+            pois: pois,
+            M: Array3::<f64>::zeros((2, 2, x)),
+        }
+    }
+    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
+        let dims = traces.shape();
+
+        // compute the updates n_samples
+        let mut n_evol = Array1::<f64>::zeros((dims[0],));
+        n_evol.iter_mut().zip(y.iter()).for_each(|(evol,y)|{
+            let n = &mut self.n_samples[*y as usize];
+            *n += 1;
+            *evol = *n as f64;
+        });
+
+        let pois = &self.pois;
+        let M = &mut self.M;
+        println!("{}",n_evol);
+
+        izip!(pois.outer_iter(),M.outer_iter_mut(),n_evol.iter()).for_each(|(poi,mut M,n)| {
+            traces.outer_iter().zip(y.iter()).for_each(|(t, y)| {
+                let ordered_t = poi.mapv(|x| t[x as usize] as f64);
+                let mut m = M.slice_mut(s![*y as usize, ..]);
+                let delta = &ordered_t - &m;
+                m += &(&delta / (*n));
+            });
+        });
+
+        println!("n_samples {} {}", self.n_samples, self.M);
     }
 }
