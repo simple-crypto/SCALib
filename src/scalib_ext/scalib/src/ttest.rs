@@ -8,10 +8,10 @@
 //! This is based on the one-pass algorithm proposed in
 //! <https://eprint.iacr.org/2015/207>.
 
+use itertools::izip;
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, Axis};
 use num_integer::binomial;
 use rayon::prelude::*;
-use itertools::izip;
 
 pub struct Ttest {
     /// Central sums of order 1 up to order d*2 with shape (ns,2,2*d),
@@ -278,7 +278,7 @@ impl MTtest2 {
 
         // compute the updates n_samples
         let mut n_evol = Array1::<f64>::zeros((dims[0],));
-        n_evol.iter_mut().zip(y.iter()).for_each(|(evol,y)|{
+        n_evol.iter_mut().zip(y.iter()).for_each(|(evol, y)| {
             let n = &mut self.n_samples[*y as usize];
             *n += 1;
             *evol = *n as f64;
@@ -286,10 +286,10 @@ impl MTtest2 {
 
         let pois = &self.pois;
         let M = &mut self.M;
-        println!("{}",n_evol);
+        println!("{}", n_evol);
 
-        izip!(pois.outer_iter(),M.outer_iter_mut(),n_evol.iter()).for_each(|(poi,mut M,n)| {
-            traces.outer_iter().zip(y.iter()).for_each(|(t, y)| {
+        izip!(traces.outer_iter(),y.iter(),n_evol.iter()).for_each(|(t, y, n)| {
+        izip!(pois.outer_iter(), M.outer_iter_mut()).for_each(|(poi, mut M)| {
                 let ordered_t = poi.mapv(|x| t[x as usize] as f64);
                 let mut m = M.slice_mut(s![*y as usize, ..]);
                 let delta = &ordered_t - &m;
