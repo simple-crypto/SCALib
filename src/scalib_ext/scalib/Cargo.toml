@@ -35,9 +35,6 @@ rustfft = "6.0.0"
 num-complex = "0.4.0"
 
 
-[profile.release]
-debug = true
-
 [dev-dependencies]
 criterion = "0.3.4"
 ndarray-rand = "0.14.0"
