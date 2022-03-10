@@ -8,8 +8,8 @@
 //! This is based on the one-pass algorithm proposed in
 //! <https://eprint.iacr.org/2015/207>.
 
-use itertools::izip;
-use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, Axis};
+use itertools::{izip, Itertools};
+use ndarray::{s, Array, Array1, Array2, Array3, ArrayView1, ArrayView2, Axis};
 use num_integer::binomial;
 use rayon::prelude::*;
 
@@ -252,7 +252,7 @@ pub struct MTtest2 {
     /// number of samples per class (2,)
     n_samples: Array1<u64>,
     /// Number of samples per trace
-    ns: usize,
+    states: Vec<Vec<(Vec<usize>, Array2<f64>)>>,
     /// POIS
     pois: Array2<u64>,
     /// Central first of moments
@@ -262,15 +262,40 @@ pub struct MTtest2 {
 impl MTtest2 {
     /// Create a new Ttest state.
     /// ns: traces length
-    /// d: order of the Ttest
-    pub fn new(ns: usize, pois: Array2<u64>) -> Self {
-        let x = pois.shape()[1];
-        println!("Number of pois {}", x);
+    /// d: orde of the Ttest
+    pub fn new(pois: Array2<u64>) -> Self {
+        let ns = pois.shape()[1];
+        let d = 2;
+
+        // the set that must be computed
+        let sets = Array::range(0.0, 2.0 * d as f64, 1.0).map(|x| (*x as usize) % d);
+
+        // for all size of combinations, generate the all unique combinations. For each of them,
+        // initialize and array that will maintain the current estimate.
+        let states: Vec<Vec<(Vec<usize>, Array2<f64>)>> = (2..(2 * d))
+            .map(|l| {
+                let mut tmp: Vec<Vec<usize>> = sets.clone().into_iter().combinations(l).collect();
+
+                tmp.iter_mut().for_each(|x| x.sort());
+                let combi_single: Vec<Vec<usize>> = tmp.clone().into_iter().unique().collect();
+                /*                let count: Vec<usize> = combi_single
+                                    .iter()
+                                    .map(|combi| tmp.iter().filter(|x| *x == combi).count())
+                                    .collect();
+                */
+                combi_single
+                    .into_iter()
+                    .map(|x| (x, Array2::<f64>::zeros((2, ns))))
+                    .collect()
+            })
+            .collect();
+
+        println!("{:#?}", states);
         MTtest2 {
             n_samples: Array1::<u64>::zeros((2,)),
-            ns: ns,
             pois: pois,
-            M: Array3::<f64>::zeros((2, 2, x)),
+            states: states,
+            M: Array3::<f64>::zeros((2, 2, ns)),
         }
     }
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
@@ -288,8 +313,8 @@ impl MTtest2 {
         let M = &mut self.M;
         println!("{}", n_evol);
 
-        izip!(traces.outer_iter(),y.iter(),n_evol.iter()).for_each(|(t, y, n)| {
-        izip!(pois.outer_iter(), M.outer_iter_mut()).for_each(|(poi, mut M)| {
+        izip!(traces.outer_iter(), y.iter(), n_evol.iter()).for_each(|(t, y, n)| {
+            izip!(pois.outer_iter(), M.outer_iter_mut()).for_each(|(poi, mut M)| {
                 let ordered_t = poi.mapv(|x| t[x as usize] as f64);
                 let mut m = M.slice_mut(s![*y as usize, ..]);
                 let delta = &ordered_t - &m;
