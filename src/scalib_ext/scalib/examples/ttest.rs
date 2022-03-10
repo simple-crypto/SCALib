@@ -6,13 +6,20 @@ use scalib::ttest;
 fn main() {
     println!("Welcome to ttest example");
 
-    let d = 2;
-    let ns = 1000;
-    let pois = array![[0, 1, 2], [0, 2, 1]];
-    let traces = array![[0, 1, 2], [2, 2, 2], [1, 1, 0]];
-    let y = array![0, 1, 1];
+    let d = 3;
+    let ns = 3;
+    let pois = array![[0, 1, 2], [0, 1, 2], [0,1,2]];
+    //let pois = array![[0,1,2],[0,1,2]];
+    let traces = array![[-1, -1, -1], [1,1,1], [-1,-1,-1], [-2, -2, -2], [2, 2, 2],[-2,-2,-2]];
+    let y = array![0, 0, 0,1, 1,1];
 
-    let mut ttest = ttest::MTtest2::new(pois);
-    ttest.update(traces.view(), y.view());
-    ttest.get_ttest();
+    let mut ttest2 = ttest::MTtest2::new(d,pois);
+    ttest2.update(traces.view(), y.view());
+    let re2 = ttest2.get_ttest();
+    println!("ttest2 output {}",re2);
+
+    let mut ttest = ttest::Ttest::new(ns,d);
+    ttest.update(traces.view(),y.view());
+    let re = ttest.get_ttest();
+    println!("ttest output {}",re);
 }
