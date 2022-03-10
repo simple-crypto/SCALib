@@ -313,68 +313,122 @@ impl MTtest2 {
             *evol = *n as f64;
         });
 
-        let pois = &self.pois;
-        let m = &mut self.m;
-        //println!("sets {}",sets);
-        //println!("{}", n_evol);
-
-        // update the first mean estimates
         izip!(traces.outer_iter(), y.iter(), n_evol.iter()).for_each(|(t, y, n)| {
-            izip!(pois.outer_iter(), m.outer_iter_mut()).for_each(|(poi, mut m)| {
+            let d = self.d;
+            let pois = &self.pois;
+            let m = &mut self.m;
+            let ns = self.ns;
+            let mut delta = Array2::<f64>::zeros((d, ns));
+
+            // update the first mean estimates
+            izip!(
+                pois.outer_iter(),
+                m.outer_iter_mut(),
+                delta.outer_iter_mut()
+            )
+            .for_each(|(poi, mut m, mut delta)| {
                 let ordered_t = poi.mapv(|x| t[x as usize] as f64);
                 let mut m = m.slice_mut(s![*y as usize, ..]);
-                let delta = &ordered_t - &m;
+                delta.assign(&(&ordered_t - &m));
                 m += &(&delta / (*n));
             });
-        });
 
-        for size in 2..(2 * self.d + 1) {
-            // split between was will be used to update and what will update
-            let (as_input, to_updates) = self.states.split_at_mut(size - 2);
-            println!("as input {:#?}", as_input);
-            println!("to_updates {:#?}", to_updates);
+            for size in 2..(2 * d + 1) {
+                // split between was will be used to update and what will update
+                let (as_input, to_updates) = self.states.split_at_mut(size - 2);
+                println!("as input {:#?}", as_input);
+                println!("to_updates {:#?}", to_updates);
 
-            let to_updates = &mut to_updates[0];
-            // all the combinations to update with this size
-            to_updates.iter_mut().for_each(|(combi, vec)| {
-                assert!(combi.len() == size);
-                println!("Current combi {:#?}", combi);
+                let to_updates = &mut to_updates[0];
 
-                for l in 2..size {
-                    // the combinations with current size l
-                    let as_i = &as_input[l - 2];
+                // all the combinations to update with this size
+                to_updates.iter_mut().for_each(|(combi, vec)| {
+                    assert!(combi.len() == size);
+                    println!("Current combi {:#?}", combi);
 
-                    // all combinations to update the current set
-                    let mut tmp: Vec<Vec<usize>> =
-                        combi.clone().into_iter().combinations(l).collect();
+                    let vec = &mut vec.slice_mut(s![*y as usize, ..]);
+                    let mut acc_vec = Array1::<f64>::zeros((ns,));
 
-                    // get the unique ones and count their occurence
-                    tmp.iter_mut().for_each(|x| x.sort());
-                    let combi_single: Vec<Vec<usize>> = tmp.clone().into_iter().unique().collect();
-                    let count: Vec<usize> = combi_single
-                        .iter()
-                        .map(|combi| tmp.iter().filter(|x| *x == combi).count())
-                        .collect();
+                    // update with all the sub Cs
+                    for l in 2..size {
+                        // the combinations with current size l
+                        let as_i = &as_input[l - 2];
 
-                    // the associated c vector
-                    let c_vecs: Vec<&Array2<f64>> = combi_single
-                        .iter()
-                        .map(|c| {
-                            &(as_i.into_iter()
-                                .filter(|as_i| *as_i.0 == *c)
-                                .collect::<Vec<&(Vec<usize>, Array2<f64>)>>()[0]
-                                .1)
-                        })
-                        .collect();
+                        // all combinations to update the current set
+                        let mut tmp: Vec<Vec<usize>> =
+                            combi.clone().into_iter().combinations(l).collect();
 
-                    izip!(count.iter(), combi_single.iter(), c_vecs.iter()).for_each(|(n, current_combi,c_vec)| {
-                        println!("Will use {} times {:#?}", n, current_combi);
-                        println!("Its state is {:#?}",c_vec);
+                        // get the unique ones and count their occurence
+                        tmp.iter_mut().for_each(|x| x.sort());
+                        let combi_single: Vec<Vec<usize>> =
+                            tmp.clone().into_iter().unique().collect();
+                        let count: Vec<usize> = combi_single
+                            .iter()
+                            .map(|combi| tmp.iter().filter(|x| *x == combi).count())
+                            .collect();
+
+                        // the associated c vector
+                        let c_vecs: Vec<&Array2<f64>> = combi_single
+                            .iter()
+                            .map(|c| {
+                                &(as_i
+                                    .into_iter()
+                                    .filter(|as_i| *as_i.0 == *c)
+                                    .collect::<Vec<&(Vec<usize>, Array2<f64>)>>()[0]
+                                    .1)
+                            })
+                            .collect();
+
+                        izip!(count.iter(), combi_single.iter(), c_vecs.iter()).for_each(
+                            |(n, current_combi, c_vec)| {
+                                let c_vec = &c_vec.slice(s![*y as usize, ..]);
+                                acc_vec.assign(c_vec);
+                                acc_vec *= (-1.0_f64).powi(l as i32) * (*n as f64);
+
+                                // compute the missing ones to multiply the deltas
+                                let mut missing = combi.clone();
+                                current_combi.iter().for_each(|c| {
+                                    let posi = missing.iter().position(|x| *x == *c).unwrap();
+                                    missing.remove(posi);
+                                });
+
+                                missing.iter().for_each(|c| {
+                                    acc_vec /= *n as f64;
+                                    let x = delta.slice(s![*c as usize, ..]);
+                                    acc_vec *= &x;
+                                });
+
+                                *vec += &acc_vec;
+                                println!("\n\nWill use {} times {:#?}", n, current_combi);
+                                println!("Its state is {:#?}", c_vec);
+                                println!("Missing ones are {:#?}", missing);
+                            },
+                        );
+                    }
+
+                    // add the last terms with product of delta
+                    acc_vec.fill(
+                        ((-1.0_f64).powi(size as i32) * (*n as f64 - 1.0)
+                            + ((*n as f64 - 1.0).powi(size as i32)))
+                            / (*n as f64).powi(size as i32),
+                    );
+                    combi.iter().for_each(|c| {
+                        acc_vec *= &delta.slice(s![*c as usize, ..]);
                     });
-                }
-            });
-        }
+                    *vec += &acc_vec;
+                    println!("delta {}",delta);
+                });
+            }
+        });
         //println!("first order {:#?}", self.m);
-        //println!("state {:#?}", self.states);
+        println!("state {:#?}", self.states);
+    }
+
+    pub fn get_ttest(&self) -> Array1<f64> {
+        let mut ret = Array1::<f64>::zeros((self.ns,));
+        let n = self.states.len();
+        let s = &self.states[n-1][0].1;
+        println!("s {:#?}",s);
+        ret
     }
 }

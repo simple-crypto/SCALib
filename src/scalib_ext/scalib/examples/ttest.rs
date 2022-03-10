@@ -14,4 +14,5 @@ fn main() {
 
     let mut ttest = ttest::MTtest2::new(pois);
     ttest.update(traces.view(), y.view());
+    ttest.get_ttest();
 }
