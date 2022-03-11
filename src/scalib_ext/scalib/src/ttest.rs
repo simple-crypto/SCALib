@@ -242,7 +242,7 @@ impl Ttest {
     }
 }
 
-pub struct MTtest2 {
+pub struct MTtest {
     /// Central sums of order 1 up to order d*2 with shape (ns,2,2*d),
     /// where central sums is sum((x-u_x)**i).
     /// Axes are (class, trace sample, order).
@@ -261,11 +261,11 @@ pub struct MTtest2 {
     ns: usize,
 }
 
-impl MTtest2 {
+impl MTtest {
     /// Create a new Ttest state.
     /// ns: traces length
     /// d: orde of the Ttest
-    pub fn new(d : usize, pois: Array2<u64>) -> Self {
+    pub fn new(d: usize, pois: ArrayView2<u64>) -> Self {
         let ns = pois.shape()[1];
         assert!(d == pois.shape()[0]);
 
@@ -292,10 +292,10 @@ impl MTtest2 {
             })
             .collect();
 
-        println!("{:#?}", states);
-        MTtest2 {
+        //println!("{:#?}", states);
+        MTtest {
             n_samples: Array1::<u64>::zeros((2,)),
-            pois: pois,
+            pois: pois.to_owned(),
             states: states,
             m: Array3::<f64>::zeros((d, 2, ns)),
             d: d,
@@ -313,12 +313,12 @@ impl MTtest2 {
             *evol = *n as f64;
         });
 
+        let mut delta = Array2::<f64>::zeros((self.d, self.ns));
         izip!(traces.outer_iter(), y.iter(), n_evol.iter()).for_each(|(t, y, n)| {
             let d = self.d;
             let pois = &self.pois;
             let m = &mut self.m;
             let ns = self.ns;
-            let mut delta = Array2::<f64>::zeros((d, ns));
 
             // update the first mean estimates
             izip!(
@@ -334,7 +334,7 @@ impl MTtest2 {
             });
 
             for size in (2..(2 * d + 1)).rev() {
-                println!("\n Up sets of size {} input {}",size, y);
+         //       println!("\n Up sets of size {} input {}", size, y);
 
                 // split between was will be used to update and what will update
                 let (as_input, to_updates) = self.states.split_at_mut(size - 2);
@@ -391,15 +391,12 @@ impl MTtest2 {
                                 });
 
                                 missing.iter().for_each(|c| {
-                                    acc_vec /= -1.0* *n as f64;
+                                    acc_vec /= -1.0 * *n as f64;
                                     let x = delta.slice(s![*c as usize, ..]);
                                     acc_vec *= &x;
                                 });
 
                                 *vec += &acc_vec;
-                     //           println!("\n\nWill use {} times {:#?}", n, current_combi);
-                     //           println!("Its state is {:#?}", c_vec);
-                     //           println!("Missing ones are {:#?}", missing);
                             },
                         );
                     }
@@ -433,8 +430,7 @@ impl MTtest2 {
         let s = &self.states[n - 1][0].1;
         let expcted: Vec<usize> = (0..self.d).collect();
 
-
-        let u: Vec<&(Vec<usize>, Array2<f64>)> = (&self.states[self.d -2])
+        let u: Vec<&(Vec<usize>, Array2<f64>)> = (&self.states[self.d - 2])
             .into_iter()
             .filter(|(c, _)| {
                 izip!(c.iter(), expcted.iter())
@@ -443,25 +439,25 @@ impl MTtest2 {
                     == self.d
             })
             .collect();
-       
+
         assert!(u.len() == 1);
-        println!("u {:#?}",u);
+        //println!("u {:#?}", u);
 
         let u = &((u[0]).1);
-        let mut u0 : Array1<f64> = (u.slice(s![0 as usize,..])).to_owned();
+        let mut u0: Array1<f64> = (u.slice(s![0 as usize, ..])).to_owned();
         u0 /= n0 as f64;
-        let mut s0 : Array1<f64> = (s.slice(s![0 as usize,..])).to_owned();
+        let mut s0: Array1<f64> = (s.slice(s![0 as usize, ..])).to_owned();
         s0 /= n0 as f64;
-       
-        let mut u1 : Array1<f64> = (u.slice(s![1 as usize,..])).to_owned();
+
+        let mut u1: Array1<f64> = (u.slice(s![1 as usize, ..])).to_owned();
         u1 /= n1 as f64;
-        let mut s1 : Array1<f64> = (s.slice(s![1 as usize,..])).to_owned();
+        let mut s1: Array1<f64> = (s.slice(s![1 as usize, ..])).to_owned();
         s1 /= n1 as f64;
-   
-        println!("u0 {}",u0);
-        println!("u1 {}",u1);
+
+        //println!("u0 {}", u0);
+        //println!("u1 {}", u1);
         ret.assign(&(&u0 - &u1));
-        
+
         u0.mapv_inplace(|x| x.powi(2));
         s0 -= &u0;
         s0 /= n0 as f64;
@@ -470,10 +466,10 @@ impl MTtest2 {
         s1 /= n1 as f64;
 
         let mut den = &s1 + &s0;
-        println!("s0 {}",s0);
-        println!("s1 {}",s1);
+        //println!("s0 {}", s0);
+        //println!("s1 {}", s1);
         den.mapv_inplace(|x| f64::sqrt(x));
-        
+
         ret /= &den;
 
         ret
