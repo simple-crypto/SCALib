@@ -332,7 +332,7 @@ impl MTtest {
                 delta.assign(&(&ordered_t - &m));
                 m += &(&delta / (*n));
             });
-
+            
             for size in (2..(2 * d + 1)).rev() {
          //       println!("\n Up sets of size {} input {}", size, y);
 
@@ -381,7 +381,6 @@ impl MTtest {
                             |(count, current_combi, c_vec)| {
                                 let c_vec = &c_vec.slice(s![*y as usize, ..]);
                                 acc_vec.assign(c_vec);
-                                acc_vec *= *count as f64;
 
                                 // compute the missing ones to multiply the deltas
                                 let mut missing = combi.clone();
@@ -390,8 +389,8 @@ impl MTtest {
                                     missing.remove(posi);
                                 });
 
+                                acc_vec *= *count as f64 / (-1.0 * *n as f64).powi(missing.len() as i32);
                                 missing.iter().for_each(|c| {
-                                    acc_vec /= -1.0 * *n as f64;
                                     let x = delta.slice(s![*c as usize, ..]);
                                     acc_vec *= &x;
                                 });
