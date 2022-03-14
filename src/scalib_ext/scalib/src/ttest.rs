@@ -390,6 +390,8 @@ impl MTtest {
                                 });
 
                                 acc_vec *= *count as f64 / (-1.0 * *n as f64).powi(missing.len() as i32);
+
+                                // TODO This should be replaced thanks to pre-computation
                                 missing.iter().for_each(|c| {
                                     let x = delta.slice(s![*c as usize, ..]);
                                     acc_vec *= &x;
