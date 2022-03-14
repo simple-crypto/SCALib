@@ -333,7 +333,6 @@ impl MTtest {
             let d = self.d;
             let pois = &self.pois;
             let m = &mut self.m;
-            let ns = self.ns;
             let delta_prods = &mut self.delta_prods;
 
             // update the first mean estimates
@@ -343,10 +342,14 @@ impl MTtest {
                 (delta_prods[0]).iter_mut()
             )
             .for_each(|(poi, mut m, delta)| {
-                let ordered_t = poi.mapv(|x| t[x as usize] as f64);
-                let mut m = m.slice_mut(s![*y as usize, ..]);
-                delta.1.assign(&(&ordered_t - &m));
-                m += &(&delta.1 / (*n));
+                let m = m.slice_mut(s![*y as usize, ..]);
+                let m = m.into_slice().unwrap();
+                let d = delta.1.as_slice_mut().unwrap();
+                let poi = poi.as_slice().unwrap();
+                izip!(m.iter_mut(),d.iter_mut()).enumerate().for_each(|(i,(m,d))|{
+                    *d = t[poi[i as usize] as usize] as f64 - *m;
+                    *m += (*d)/(*n);
+                });
             });
 
             // update the delta_prods
