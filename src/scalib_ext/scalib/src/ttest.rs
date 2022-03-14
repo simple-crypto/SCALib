@@ -251,8 +251,9 @@ pub struct MTtest {
 
     /// number of samples per class (2,)
     n_samples: Array1<u64>,
-    /// Number of samples per trace
+    /// CS for all of the points combinations
     states: Vec<Vec<(Vec<usize>, Array2<f64>)>>,
+    delta_prods: Vec<Vec<(Vec<usize>, Array1<f64>)>>,
     /// POIS
     pois: Array2<u64>,
     /// Central first of moments
@@ -280,6 +281,7 @@ impl MTtest {
 
                 tmp.iter_mut().for_each(|x| x.sort());
                 let combi_single: Vec<Vec<usize>> = tmp.clone().into_iter().unique().collect();
+
                 /*                let count: Vec<usize> = combi_single
                                     .iter()
                                     .map(|combi| tmp.iter().filter(|x| *x == combi).count())
@@ -292,11 +294,25 @@ impl MTtest {
             })
             .collect();
 
-        //println!("{:#?}", states);
+        // for all size of combinations, generate the all unique combinations. For each of them,
+        // initialize and array that will maintain the current estimate.
+        let delta_prods: Vec<Vec<(Vec<usize>, Array1<f64>)>> = (1..(2 * d + 1))
+            .map(|l| {
+                let mut tmp: Vec<Vec<usize>> = sets.clone().into_iter().combinations(l).collect();
+                tmp.iter_mut().for_each(|x| x.sort());
+                let combi_single: Vec<Vec<usize>> = tmp.clone().into_iter().unique().collect();
+                combi_single
+                    .into_iter()
+                    .map(|x| (x, Array1::<f64>::zeros((ns,))))
+                    .collect()
+            })
+            .collect();
+
         MTtest {
             n_samples: Array1::<u64>::zeros((2,)),
             pois: pois.to_owned(),
             states: states,
+            delta_prods: delta_prods,
             m: Array3::<f64>::zeros((d, 2, ns)),
             d: d,
             ns: ns,
@@ -313,43 +329,69 @@ impl MTtest {
             *evol = *n as f64;
         });
 
-        let mut delta = Array2::<f64>::zeros((self.d, self.ns));
         izip!(traces.outer_iter(), y.iter(), n_evol.iter()).for_each(|(t, y, n)| {
             let d = self.d;
             let pois = &self.pois;
             let m = &mut self.m;
             let ns = self.ns;
+            let delta_prods = &mut self.delta_prods;
 
             // update the first mean estimates
             izip!(
                 pois.outer_iter(),
                 m.outer_iter_mut(),
-                delta.outer_iter_mut()
+                (delta_prods[0]).iter_mut()
             )
-            .for_each(|(poi, mut m, mut delta)| {
+            .for_each(|(poi, mut m, delta)| {
                 let ordered_t = poi.mapv(|x| t[x as usize] as f64);
                 let mut m = m.slice_mut(s![*y as usize, ..]);
-                delta.assign(&(&ordered_t - &m));
-                m += &(&delta / (*n));
+                delta.1.assign(&(&ordered_t - &m));
+                m += &(&delta.1 / (*n));
             });
-            
+
+            // update the delta_prods
+            for size in 2..(2 * d + 1) {
+                let (as_input, to_updates) = self.delta_prods.split_at_mut(size - 1);
+                to_updates[0].iter_mut().for_each(|to_update| {
+                    let combi = &to_update.0;
+                    let prod = &mut to_update.1;
+                    let (low, up) = combi.split_at(size / 2);
+                    //println!("Update {:#?} with {:#?} and {:#?}",combi,low,up);
+                    // get low vector
+                    let low_data: &Array1<f64> = as_input[low.len() - 1]
+                        .iter()
+                        .filter(|x| x.0 == low)
+                        .map(|x| &(x.1))
+                        .collect::<Vec<&Array1<f64>>>()[0];
+                    let up_data: &Array1<f64> = as_input[up.len() - 1]
+                        .iter()
+                        .filter(|x| x.0 == up)
+                        .map(|x| &(x.1))
+                        .collect::<Vec<&Array1<f64>>>()[0];
+
+                    prod.assign(&(low_data * up_data));
+                });
+            }
+
             for size in (2..(2 * d + 1)).rev() {
-         //       println!("\n Up sets of size {} input {}", size, y);
 
                 // split between was will be used to update and what will update
                 let (as_input, to_updates) = self.states.split_at_mut(size - 2);
+                let delta_prods = &self.delta_prods;
 
                 let to_updates = &mut to_updates[0];
 
                 // all the combinations to update with this size
                 to_updates.iter_mut().for_each(|(combi, vec)| {
                     assert!(combi.len() == size);
-
-                    let vec = &mut vec.slice_mut(s![*y as usize, ..]);
-                    let mut acc_vec = Array1::<f64>::zeros((ns,));
+                    let mut vec =  vec.slice_mut(s![*y as usize, ..]);
+                    let vec_m = vec.as_slice_mut().unwrap();
+                    
+                    //let vec = vec.as_slice().unwrap();
 
                     // update with all the sub Cs
                     for l in 2..size {
+
                         // the combinations with current size l
                         let as_i = &as_input[l - 2];
                         // all combinations to update the current set
@@ -379,9 +421,6 @@ impl MTtest {
 
                         izip!(count.iter(), combi_single.iter(), c_vecs.iter()).for_each(
                             |(count, current_combi, c_vec)| {
-                                let c_vec = &c_vec.slice(s![*y as usize, ..]);
-                                acc_vec.assign(c_vec);
-
                                 // compute the missing ones to multiply the deltas
                                 let mut missing = combi.clone();
                                 current_combi.iter().for_each(|c| {
@@ -389,36 +428,43 @@ impl MTtest {
                                     missing.remove(posi);
                                 });
 
-                                acc_vec *= *count as f64 / (-1.0 * *n as f64).powi(missing.len() as i32);
+                                let data: &Array1<f64> = delta_prods[missing.len() - 1]
+                                    .iter()
+                                    .filter(|x| x.0 == missing)
+                                    .map(|x| &(x.1))
+                                    .collect::<Vec<&Array1<f64>>>()[0];
 
-                                // TODO This should be replaced thanks to pre-computation
-                                missing.iter().for_each(|c| {
-                                    let x = delta.slice(s![*c as usize, ..]);
-                                    acc_vec *= &x;
-                                });
-
-                                *vec += &acc_vec;
+                                let c_vec = &c_vec.slice(s![*y as usize, ..]);
+                                let cst =
+                                    *count as f64 / (-1.0 * *n as f64).powi(missing.len() as i32);
+                                let data = data.as_slice().unwrap();
+                                izip!(vec_m.iter_mut(), c_vec.iter(), data.iter()).for_each(
+                                    |(vec, c_vec, data)| {
+                                        *vec += c_vec * data * cst;
+                                    },
+                                );
                             },
                         );
                     }
 
-                    // add the last terms with product of delta
-                    acc_vec.fill(
-                        ((-1.0_f64).powi(size as i32) * (*n as f64 - 1.0)
-                            + ((*n as f64 - 1.0).powi(size as i32)))
-                            / (*n as f64).powi(size as i32),
-                    );
+                    let data: &Array1<f64> = delta_prods[combi.len() - 1]
+                        .iter()
+                        .filter(|x| x.0 == *combi)
+                        .map(|x| &(x.1))
+                        .collect::<Vec<&Array1<f64>>>()[0];
 
-                    combi.iter().for_each(|c| {
-                        acc_vec *= &delta.slice(s![*c as usize, ..]);
+                    let cst = ((-1.0_f64).powi(size as i32) * (*n as f64 - 1.0)
+                            + ((*n as f64 - 1.0).powi(size as i32)))
+                            / (*n as f64).powi(size as i32);
+
+                    let data = data.as_slice().unwrap();
+                    izip!(vec_m.iter_mut(), data.iter()).for_each(|(vec, data)| {
+                        *vec += *data * cst;
                     });
-                    *vec += &acc_vec;
-                    //println!("delta {}", delta);
+
                 });
             }
         });
-        //println!("first order {:#?}", self.m);
-        //println!("state {:#?}", self.states);
     }
 
     pub fn get_ttest(&self) -> Array1<f64> {

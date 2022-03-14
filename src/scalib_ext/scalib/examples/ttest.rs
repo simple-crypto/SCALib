@@ -9,7 +9,7 @@ fn main() {
     let d = 2;
     let ns = 3;
     //let pois = array![[0, 1, 2], [0, 1, 2], [0, 1, 2]];
-    let pois = array![[0,1,2],[0,1,2]];
+    let pois = array![[0, 1, 2], [0, 1, 2]];
     let traces = array![
         [-1, -1, -1],
         [1, 1, 1],

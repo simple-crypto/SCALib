@@ -13,18 +13,22 @@ fn bench_mttest(c: &mut Criterion) {
     let traces = Array2::<i16>::random((n, traces_len), Uniform::new(0, 10000));
     let y = Array1::<u16>::random((n,), Uniform::new(0, 2));
 
-    for d in [2,3].iter(){
-    for npois in [1000, 5000, 10000, 20000, 50000, 100000].iter() {
-        let pois = Array2::<u64>::random((*d, *npois), Uniform::new(0,traces_len as u64));
-        
-        let mut mtt = ttest::MTtest::new(*d,pois.view());
-        mtt.update(traces.view(), y.view());
-        group.bench_with_input(BenchmarkId::new(format!("mttest_{}",*d), npois), npois, |b, npois| {
-            b.iter(|| {
-                mtt.update(traces.view(),y.view());
-            })
-        });
-    }
+    for d in [2, 3].iter() {
+        for npois in [1000, 5000, 10000, 20000, 50000, 100000].iter() {
+            let pois = Array2::<u64>::random((*d, *npois), Uniform::new(0, traces_len as u64));
+
+            let mut mtt = ttest::MTtest::new(*d, pois.view());
+            mtt.update(traces.view(), y.view());
+            group.bench_with_input(
+                BenchmarkId::new(format!("mttest_{}", *d), npois),
+                npois,
+                |b, npois| {
+                    b.iter(|| {
+                        mtt.update(traces.view(), y.view());
+                    })
+                },
+            );
+        }
     }
     group.finish();
 }
