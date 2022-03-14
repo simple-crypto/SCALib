@@ -371,8 +371,11 @@ impl MTtest {
                         .filter(|x| x.0 == up)
                         .map(|x| &(x.1))
                         .collect::<Vec<&Array1<f64>>>()[0];
-
-                    prod.assign(&(low_data * up_data));
+                
+                    let prod = prod.as_slice_mut().unwrap();
+                    let low_data = low_data.as_slice().unwrap();
+                    let up_data = up_data.as_slice().unwrap();
+                    izip!(prod.iter_mut(),low_data.iter(), up_data.iter()).for_each(|(a,x,y)|{*a = *x * *y;});
                 });
             }
 
