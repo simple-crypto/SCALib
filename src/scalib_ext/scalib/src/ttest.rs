@@ -262,8 +262,8 @@ pub struct MTtest {
     d: usize,
     /// Number of samples in traces
     ns: usize,
-    /// 
-    equations: Vec<Vec<(usize,Vec<Vec<(Vec<usize>, usize, Vec<usize>, usize,i64)>>)>>,
+    ///
+    equations: Vec<Vec<(usize, usize, Vec<(usize, usize, usize, usize, f64)>)>>,
 }
 
 impl MTtest {
@@ -307,13 +307,13 @@ impl MTtest {
             .collect();
 
         // for all the states to update, generate all the equations.
-        let equations: Vec<Vec<(usize,Vec<Vec<(Vec<usize>, usize, Vec<usize>, usize,i64)>>)>> = states
+        let equations: Vec<Vec<(usize, usize, Vec<(usize, usize, usize, usize, f64)>)>> = states
             .iter()
             .map(|state| {
                 state
                     .iter()
                     .map(|(combi, _)| {
-                        let mixed_eq : Vec<Vec<(Vec<usize>,usize,Vec<usize>,usize,i64)>>= (2..combi.len())
+                        let mixed_eq: Vec<(usize, usize, usize, usize, f64)> = (2..combi.len())
                             .map(|size| {
                                 let mut sub_combi: Vec<Vec<usize>> = combi
                                     .clone()
@@ -323,9 +323,13 @@ impl MTtest {
                                 sub_combi.iter_mut().for_each(|x| x.sort());
                                 let sub_combi_unique: Vec<Vec<usize>> =
                                     sub_combi.clone().into_iter().unique().collect();
-                                let counts : Vec<usize> = sub_combi_unique.clone().iter().map(|x|{
-                                    sub_combi.clone().into_iter().filter(|y| *x == *y).count()
-                                }).collect();
+                                let counts: Vec<usize> = sub_combi_unique
+                                    .clone()
+                                    .iter()
+                                    .map(|x| {
+                                        sub_combi.clone().into_iter().filter(|y| *x == *y).count()
+                                    })
+                                    .collect();
                                 let missing: Vec<Vec<usize>> = sub_combi_unique
                                     .clone()
                                     .into_iter()
@@ -338,31 +342,54 @@ impl MTtest {
                                         x
                                     })
                                     .collect();
-                                izip!(sub_combi_unique.into_iter(), missing.into_iter(),counts.into_iter())
-                                    .map(|(sc, c,count)|{
-                                        // position of sc in states
-                                        let posi_sc = states[sc.len()-2].iter().position(|x| x.0 == sc).unwrap();
-                                        // position in delta_prods
-                                        let posi_c = delta_prods[c.len()-1].iter().position(|x| x.0 == c).unwrap();
-                                        // occurence of sub_combi in combi
-                                        (sc, posi_sc, c, posi_c,count as i64 )
-                                    })
-                                    .collect::<Vec<(
-                                        Vec<usize>, // combination
-                                        usize,      // position in state
-                                        Vec<usize>, // missing
-                                        usize,      // combination in delta_prods
-                                        i64,
-                                    )>>()
+                                izip!(
+                                    sub_combi_unique.into_iter(),
+                                    missing.into_iter(),
+                                    counts.into_iter()
+                                )
+                                .map(|(sc, c, count)| {
+                                    // position of sc in states
+                                    let states_posi_0 = sc.len() - 2;
+                                    let states_posi_1 = states[states_posi_0]
+                                        .iter()
+                                        .position(|x| x.0 == sc)
+                                        .unwrap();
+                                    // position in delta_prods
+                                    let delta_posi_0 = c.len() - 1;
+                                    let delta_posi_1 = delta_prods[delta_posi_0]
+                                        .iter()
+                                        .position(|x| x.0 == c)
+                                        .unwrap();
+                                    // occurence of sub_combi in combi
+                                    (
+                                        states_posi_0,
+                                        states_posi_1,
+                                        delta_posi_0,
+                                        delta_posi_1,
+                                        (-1.0_f64).powi(c.len() as i32) * count as f64,
+                                    )
+                                })
+                                .collect::<Vec<(
+                                    usize,
+                                    usize, // position in state
+                                    usize, // combination in delta_prods
+                                    usize,
+                                    f64,
+                                )>>(
+                                )
                             })
+                            .flatten()
                             .collect();
-                        let posi_c = delta_prods[combi.len()-1].iter().position(|x| x.0 == *combi).unwrap();
-                        (posi_c,mixed_eq)
+                        let posi_c = delta_prods[combi.len() - 1]
+                            .iter()
+                            .position(|x| x.0 == *combi)
+                            .unwrap();
+                        (combi.len() - 1, posi_c, mixed_eq)
                     })
                     .collect()
             })
             .collect();
-        println!("Equations 0 {:#?}", equations[0]);
+        //println!("Equations 0 {:#?}", equations[0]);
 
         MTtest {
             n_samples: Array1::<u64>::zeros((2,)),
@@ -391,8 +418,6 @@ impl MTtest {
             let pois = &self.pois;
             let m = &mut self.m;
             let delta_prods = &mut self.delta_prods;
-            let equations = &self.equations;
-
             // update the first mean estimates
             izip!(
                 pois.outer_iter(),
@@ -443,96 +468,38 @@ impl MTtest {
                 });
             }
 
-            /*
-            for size in (2..(2 * d + 1)).rev() {
-                // split between was will be used to update and what will update
-                let (as_input, to_updates) = self.states.split_at_mut(size - 2);
+            izip!(2..(2 * d + 1)).rev().for_each(|eq_size| {
+                let eq = &self.equations[eq_size - 2];
+                let (as_input, to_updates) = self.states.split_at_mut(eq_size - 2);
                 let delta_prods = &self.delta_prods;
-
                 let to_updates = &mut to_updates[0];
 
-                // all the combinations to update with this size
-                to_updates.iter_mut().for_each(|(combi, vec)| {
-                    assert!(combi.len() == size);
-                    let mut vec = vec.slice_mut(s![*y as usize, ..]);
-                    let vec_m = vec.as_slice_mut().unwrap();
+                izip!(to_updates.iter_mut(), eq.iter()).for_each(
+                    |(to_update, (full_size, full_id, subs))| {
+                        let to_update = &mut to_update.1;
+                        let vec = to_update
+                            .slice_mut(s![*y as usize, ..])
+                            .into_slice()
+                            .unwrap();
+                        let size = eq_size;
+                        let cst = ((-1.0_f64).powi(size as i32) * (*n as f64 - 1.0)
+                            + ((*n as f64 - 1.0).powi(size as i32)))
+                            / (*n as f64).powi(size as i32);
 
-                    //let vec = vec.as_slice().unwrap();
+                        let d = (delta_prods[*full_size][*full_id].1).as_slice().unwrap();
+                        izip!(vec.iter_mut(), d.into_iter()).for_each(|(v, d)| *v += cst * *d);
 
-                    // update with all the sub Cs
-                    for l in 2..size {
-                        // the combinations with current size l
-                        let as_i = &as_input[l - 2];
-                        // all combinations to update the current set
-                        let mut tmp: Vec<Vec<usize>> =
-                            combi.clone().into_iter().combinations(l).collect();
-
-                        // get the unique ones and count their occurence
-                        tmp.iter_mut().for_each(|x| x.sort());
-                        let combi_single: Vec<Vec<usize>> =
-                            tmp.clone().into_iter().unique().collect();
-                        let count: Vec<usize> = combi_single
-                            .iter()
-                            .map(|combi| tmp.iter().filter(|x| *x == combi).count())
-                            .collect();
-
-                        // the associated c vector
-                        let c_vecs: Vec<&Array2<f64>> = combi_single
-                            .iter()
-                            .map(|c| {
-                                &(as_i
-                                    .into_iter()
-                                    .filter(|as_i| *as_i.0 == *c)
-                                    .collect::<Vec<&(Vec<usize>, Array2<f64>)>>()[0]
-                                    .1)
-                            })
-                            .collect();
-
-                        izip!(count.iter(), combi_single.iter(), c_vecs.iter()).for_each(
-                            |(count, current_combi, c_vec)| {
-                                // compute the missing ones to multiply the deltas
-                                let mut missing = combi.clone();
-                                current_combi.iter().for_each(|c| {
-                                    let posi = missing.iter().position(|x| *x == *c).unwrap();
-                                    missing.remove(posi);
-                                });
-
-                                let data: &Array1<f64> = delta_prods[missing.len() - 1]
-                                    .iter()
-                                    .filter(|x| x.0 == missing)
-                                    .map(|x| &(x.1))
-                                    .collect::<Vec<&Array1<f64>>>()[0];
-
-                                let c_vec = &c_vec.slice(s![*y as usize, ..]);
-                                let cst =
-                                    *count as f64 / (-1.0 * *n as f64).powi(missing.len() as i32);
-                                let data = data.as_slice().unwrap();
-                                izip!(vec_m.iter_mut(), c_vec.iter(), data.iter()).for_each(
-                                    |(vec, c_vec, data)| {
-                                        *vec += c_vec * data * cst;
-                                    },
-                                );
-                            },
-                        );
-                    }
-
-                    let data: &Array1<f64> = delta_prods[combi.len() - 1]
-                        .iter()
-                        .filter(|x| x.0 == *combi)
-                        .map(|x| &(x.1))
-                        .collect::<Vec<&Array1<f64>>>()[0];
-
-                    let cst = ((-1.0_f64).powi(size as i32) * (*n as f64 - 1.0)
-                        + ((*n as f64 - 1.0).powi(size as i32)))
-                        / (*n as f64).powi(size as i32);
-
-                    let data = data.as_slice().unwrap();
-                    izip!(vec_m.iter_mut(), data.iter()).for_each(|(vec, data)| {
-                        *vec += *data * cst;
-                    });
-                });
-            }
-            */
+                        subs.iter().for_each(|(p0, p1, d0, d1, cst)| {
+                            let p = &(as_input[*p0][*p1].1).slice(s![*y as usize, ..]);
+                            let pv = p.as_slice().unwrap();
+                            let d = &(delta_prods[*d0][*d1].1).as_slice().unwrap();
+                            let cst = cst * (1.0 / (*n as f64)).powi(*d0 as i32 + 1);
+                            izip!(vec.iter_mut(), pv.into_iter(), d.into_iter())
+                                .for_each(|(v, p, d)| *v += cst * *p * *d);
+                        });
+                    },
+                );
+            });
         });
     }
 
