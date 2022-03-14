@@ -3,6 +3,7 @@ use ndarray::{Array1, Array2};
 use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::RandomExt;
 use scalib::ttest;
+use std::time::Duration;
 
 fn bench_mttest(c: &mut Criterion) {
     let mut group = c.benchmark_group("ttest_update");
@@ -29,7 +30,7 @@ fn bench_mttest(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     // This can be any expression that returns a `Criterion` object.
-    config = Criterion::default().significance_level(0.1).sample_size(50);
+    config = Criterion::default().significance_level(0.1).sample_size(100).measurement_time(Duration::from_secs(20));
     targets = bench_mttest
 }
 criterion_main!(benches);
