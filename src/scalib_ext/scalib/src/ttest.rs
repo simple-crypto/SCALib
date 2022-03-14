@@ -262,6 +262,8 @@ pub struct MTtest {
     d: usize,
     /// Number of samples in traces
     ns: usize,
+    /// 
+    equations: Vec<Vec<(usize,Vec<Vec<(Vec<usize>, usize, Vec<usize>, usize,i64)>>)>>,
 }
 
 impl MTtest {
@@ -360,13 +362,14 @@ impl MTtest {
                     .collect()
             })
             .collect();
-        println!("Equations 0 {:#?}", equations[2]);
+        println!("Equations 0 {:#?}", equations[0]);
 
         MTtest {
             n_samples: Array1::<u64>::zeros((2,)),
             pois: pois.to_owned(),
             states: states,
             delta_prods: delta_prods,
+            equations: equations,
             m: Array3::<f64>::zeros((d, 2, ns)),
             d: d,
             ns: ns,
@@ -388,6 +391,7 @@ impl MTtest {
             let pois = &self.pois;
             let m = &mut self.m;
             let delta_prods = &mut self.delta_prods;
+            let equations = &self.equations;
 
             // update the first mean estimates
             izip!(
@@ -439,6 +443,7 @@ impl MTtest {
                 });
             }
 
+            /*
             for size in (2..(2 * d + 1)).rev() {
                 // split between was will be used to update and what will update
                 let (as_input, to_updates) = self.states.split_at_mut(size - 2);
@@ -527,6 +532,7 @@ impl MTtest {
                     });
                 });
             }
+            */
         });
     }
 
