@@ -419,6 +419,7 @@ impl MTtest {
             let m = &mut self.m;
             let delta_prods = &mut self.delta_prods;
             // update the first mean estimates
+            
             izip!(
                 pois.outer_iter(),
                 m.outer_iter_mut(),
@@ -436,7 +437,7 @@ impl MTtest {
                         *m += (*d) / (*n);
                     });
             });
-
+            
             // update the delta_prods
             for size in 2..(2 * d + 1) {
                 let (as_input, to_updates) = self.delta_prods.split_at_mut(size - 1);
@@ -460,14 +461,15 @@ impl MTtest {
                     let prod = prod.as_slice_mut().unwrap();
                     let low_data = low_data.as_slice().unwrap();
                     let up_data = up_data.as_slice().unwrap();
-                    izip!(prod.iter_mut(), low_data.iter(), up_data.iter()).for_each(
+                    prod_update_single(prod,low_data,up_data);
+                    /*izip!(prod.iter_mut(), low_data.iter(), up_data.iter()).for_each(
                         |(a, x, y)| {
                             *a = *x * *y;
                         },
-                    );
+                    );*/
                 });
             }
-
+            
             izip!(2..(2 * d + 1)).rev().for_each(|eq_size| {
                 let eq = &self.equations[eq_size - 2];
                 let (as_input, to_updates) = self.states.split_at_mut(eq_size - 2);
@@ -491,11 +493,11 @@ impl MTtest {
 
                         subs.iter().for_each(|(p0, p1, d0, d1, cst)| {
                             let p = &(as_input[*p0][*p1].1).slice(s![*y as usize, ..]);
+                            let cst = cst * (1.0 / (*n as f64)).powi(*d0 as i32 + 1);
+
                             let pv = p.as_slice().unwrap();
                             let d = &(delta_prods[*d0][*d1].1).as_slice().unwrap();
-                            let cst = cst * (1.0 / (*n as f64)).powi(*d0 as i32 + 1);
-                            izip!(vec.iter_mut(), pv.into_iter(), d.into_iter())
-                                .for_each(|(v, p, d)| *v += cst * *p * *d);
+                            prod_update(vec,pv,d,cst);
                         });
                     },
                 );
@@ -557,4 +559,15 @@ impl MTtest {
 
         ret
     }
+}
+#[inline(never)]
+pub fn prod_update(vec : &mut[f64], pv: &[f64], d: &[f64], cst : f64){
+    izip!(vec.iter_mut(), pv.into_iter(), d.into_iter())
+                                .for_each(|(v, p, d)| *v += cst * *p * *d);
+
+}
+#[inline(never)]
+pub fn prod_update_single(vec : &mut[f64], pv: &[f64], d: &[f64]){
+    izip!(vec.iter_mut(), pv.into_iter(), d.into_iter())
+                                .for_each(|(v, p, d)| *v =  *p * *d);
 }
