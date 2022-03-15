@@ -430,12 +430,16 @@ impl MTtest {
                 let m = m.into_slice().unwrap();
                 let d = delta.1.as_slice_mut().unwrap();
                 let poi = poi.as_slice().unwrap();
+                let t = t.as_slice().unwrap();
+                gen_delta(m,d,t,poi,*n as f64);
+                /*
                 izip!(m.iter_mut(), d.iter_mut())
                     .enumerate()
                     .for_each(|(i, (m, d))| {
                         *d = t[poi[i as usize] as usize] as f64 - *m;
                         *m += (*d) / (*n);
                     });
+                */
             });
             
             // update the delta_prods
@@ -487,9 +491,11 @@ impl MTtest {
                         let cst = ((-1.0_f64).powi(size as i32) * (*n as f64 - 1.0)
                             + ((*n as f64 - 1.0).powi(size as i32)))
                             / (*n as f64).powi(size as i32);
-
+                        
                         let d = (delta_prods[*full_size][*full_id].1).as_slice().unwrap();
-                        izip!(vec.iter_mut(), d.into_iter()).for_each(|(v, d)| *v += cst * *d);
+
+                        prod_update_add(vec,d,cst);
+                        //izip!(vec.iter_mut(), d.into_iter()).for_each(|(v, d)| *v += cst * *d);
 
                         subs.iter().for_each(|(p0, p1, d0, d1, cst)| {
                             let p = &(as_input[*p0][*p1].1).slice(s![*y as usize, ..]);
@@ -500,7 +506,7 @@ impl MTtest {
                             prod_update(vec,pv,d,cst);
                         });
                     },
-                );
+               );
             });
         });
     }
@@ -567,7 +573,23 @@ pub fn prod_update(vec : &mut[f64], pv: &[f64], d: &[f64], cst : f64){
 
 }
 #[inline(never)]
+pub fn prod_update_add(vec : &mut[f64], pv: &[f64], cst : f64){
+    izip!(vec.iter_mut(), pv.into_iter() )
+                                .for_each(|(v, p)| *v += cst * *p);
+
+}
+#[inline(never)]
 pub fn prod_update_single(vec : &mut[f64], pv: &[f64], d: &[f64]){
     izip!(vec.iter_mut(), pv.into_iter(), d.into_iter())
                                 .for_each(|(v, p, d)| *v =  *p * *d);
+}
+
+#[inline(never)]
+pub fn gen_delta(m : &mut[f64], d : &mut [f64], t : &[i16], poi : &[u64], n : f64){
+    izip!(m.iter_mut(), d.iter_mut())
+        .enumerate()
+        .for_each(|(i, (m, d))| {
+            *d = t[poi[i as usize] as usize] as f64 - *m;
+            *m += (*d) / (n);
+        });
 }
