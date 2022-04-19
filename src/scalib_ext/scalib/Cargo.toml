@@ -55,3 +55,5 @@ harness = false
 name = "mttest"
 harness = false
 
+[profile.release]
+debug = true
