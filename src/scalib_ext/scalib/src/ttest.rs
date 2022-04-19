@@ -254,6 +254,7 @@ pub struct MTtest {
     /// CS for all of the points combinations
     states: Vec<Vec<(Vec<usize>, Array2<f64>)>>,
     delta_prods: Vec<Vec<(Vec<usize>, Array1<f64>)>>,
+
     /// POIS
     pois: Array2<u64>,
     /// Central first of moments
@@ -389,7 +390,6 @@ impl MTtest {
                     .collect()
             })
             .collect();
-        //println!("Equations 0 {:#?}", equations[0]);
 
         MTtest {
             n_samples: Array1::<u64>::zeros((2,)),
@@ -418,8 +418,8 @@ impl MTtest {
             let pois = &self.pois;
             let m = &mut self.m;
             let delta_prods = &mut self.delta_prods;
+
             // update the first mean estimates
-            
             izip!(
                 pois.outer_iter(),
                 m.outer_iter_mut(),
@@ -432,24 +432,17 @@ impl MTtest {
                 let poi = poi.as_slice().unwrap();
                 let t = t.as_slice().unwrap();
                 gen_delta(m,d,t,poi,*n as f64);
-                /*
-                izip!(m.iter_mut(), d.iter_mut())
-                    .enumerate()
-                    .for_each(|(i, (m, d))| {
-                        *d = t[poi[i as usize] as usize] as f64 - *m;
-                        *m += (*d) / (*n);
-                    });
-                */
+
             });
             
             // update the delta_prods
-            for size in 2..(2 * d + 1) {
+            for size in 2..(2 * d + 1) { // size of the delta to update
                 let (as_input, to_updates) = self.delta_prods.split_at_mut(size - 1);
                 to_updates[0].iter_mut().for_each(|to_update| {
                     let combi = &to_update.0;
                     let prod = &mut to_update.1;
                     let (low, up) = combi.split_at(size / 2);
-                    //println!("Update {:#?} with {:#?} and {:#?}",combi,low,up);
+                    
                     // get low vector
                     let low_data: &Array1<f64> = as_input[low.len() - 1]
                         .iter()
@@ -466,11 +459,7 @@ impl MTtest {
                     let low_data = low_data.as_slice().unwrap();
                     let up_data = up_data.as_slice().unwrap();
                     prod_update_single(prod,low_data,up_data);
-                    /*izip!(prod.iter_mut(), low_data.iter(), up_data.iter()).for_each(
-                        |(a, x, y)| {
-                            *a = *x * *y;
-                        },
-                    );*/
+
                 });
             }
             
@@ -570,7 +559,6 @@ impl MTtest {
 pub fn prod_update(vec : &mut[f64], pv: &[f64], d: &[f64], cst : f64){
     izip!(vec.iter_mut(), pv.into_iter(), d.into_iter())
                                 .for_each(|(v, p, d)| *v += cst * *p * *d);
-
 }
 #[inline(never)]
 pub fn prod_update_add(vec : &mut[f64], pv: &[f64], cst : f64){
