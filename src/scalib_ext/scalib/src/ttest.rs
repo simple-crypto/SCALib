@@ -251,8 +251,10 @@ pub struct MTtest {
 
     /// number of samples per class (2,)
     n_samples: Array1<u64>,
-    /// CS for all of the points combinations
-    states: Vec<Vec<(Vec<usize>, Array2<f64>)>>,
+    /// Current state of all combinations of POIs
+    states: Vec<Vec<(Vec<usize>, Array2<f64>, usize)>>,
+    states_plain: Array3<f64>,
+    /// Vector containg the delta's for all combinations of POIS
     delta_prods: Vec<Vec<(Vec<usize>, Array1<f64>)>>,
 
     /// POIS
@@ -263,7 +265,7 @@ pub struct MTtest {
     d: usize,
     /// Number of samples in traces
     ns: usize,
-    ///
+    /// Represents all the equations that must be computed to update a state
     equations: Vec<Vec<(usize, usize, Vec<(usize, usize, usize, usize, f64)>)>>,
 }
 
@@ -280,7 +282,8 @@ impl MTtest {
 
         // for all size of combinations, generate the all unique combinations. For each of them,
         // initialize and array that will maintain the current estimate.
-        let states: Vec<Vec<(Vec<usize>, Array2<f64>)>> = (2..(2 * d + 1))
+        let mut states_cnt = 0;
+        let states: Vec<Vec<(Vec<usize>, Array2<f64>, usize)>> = (2..(2 * d + 1))
             .map(|l| {
                 let mut tmp: Vec<Vec<usize>> = sets.clone().into_iter().combinations(l).collect();
 
@@ -288,10 +291,15 @@ impl MTtest {
                 let combi_single: Vec<Vec<usize>> = tmp.clone().into_iter().unique().collect();
                 combi_single
                     .into_iter()
-                    .map(|x| (x, Array2::<f64>::zeros((2, ns))))
+                    .map(|x| {
+                        states_cnt = states_cnt + 1;
+                        (x, Array2::<f64>::zeros((2, ns)), states_cnt-1)
+                    })
                     .collect()
             })
             .collect();
+
+        let states_plain = Array3::<f64>::zeros((2, states_cnt, ns));
 
         // for all size of combinations, generate the all unique combinations. For each of them,
         // initialize and array that will maintain the current estimate.
@@ -313,7 +321,7 @@ impl MTtest {
             .map(|state| {
                 state
                     .iter()
-                    .map(|(combi, _)| {
+                    .map(|(combi, _, _)| {
                         let mixed_eq: Vec<(usize, usize, usize, usize, f64)> = (2..combi.len())
                             .map(|size| {
                                 let mut sub_combi: Vec<Vec<usize>> = combi
@@ -395,6 +403,7 @@ impl MTtest {
             n_samples: Array1::<u64>::zeros((2,)),
             pois: pois.to_owned(),
             states: states,
+            states_plain: states_plain,
             delta_prods: delta_prods,
             equations: equations,
             m: Array3::<f64>::zeros((d, 2, ns)),
@@ -431,18 +440,18 @@ impl MTtest {
                 let d = delta.1.as_slice_mut().unwrap();
                 let poi = poi.as_slice().unwrap();
                 let t = t.as_slice().unwrap();
-                gen_delta(m,d,t,poi,*n as f64);
-
+                gen_delta(m, d, t, poi, *n as f64);
             });
-            
+
             // update the delta_prods
-            for size in 2..(2 * d + 1) { // size of the delta to update
+            for size in 2..(2 * d + 1) {
+                // size of the delta to update
                 let (as_input, to_updates) = self.delta_prods.split_at_mut(size - 1);
                 to_updates[0].iter_mut().for_each(|to_update| {
                     let combi = &to_update.0;
                     let prod = &mut to_update.1;
                     let (low, up) = combi.split_at(size / 2);
-                    
+
                     // get low vector
                     let low_data: &Array1<f64> = as_input[low.len() - 1]
                         .iter()
@@ -458,44 +467,52 @@ impl MTtest {
                     let prod = prod.as_slice_mut().unwrap();
                     let low_data = low_data.as_slice().unwrap();
                     let up_data = up_data.as_slice().unwrap();
-                    prod_update_single(prod,low_data,up_data);
-
+                    prod_update_single(prod, low_data, up_data);
                 });
             }
-            
+
             izip!(2..(2 * d + 1)).rev().for_each(|eq_size| {
                 let eq = &self.equations[eq_size - 2];
                 let (as_input, to_updates) = self.states.split_at_mut(eq_size - 2);
                 let delta_prods = &self.delta_prods;
+                let mid_index = to_updates[0][0].2;
+                println!("states_plain shape {:#?}",self.states_plain.shape());
+                let mut tmp = self.states_plain.slice_mut(s![*y as usize, .., ..]);
+                let (states_asinput, mut states_to_update) =
+                    tmp.view_mut().split_at(Axis(0), mid_index);
                 let to_updates = &mut to_updates[0];
 
                 izip!(to_updates.iter_mut(), eq.iter()).for_each(
                     |(to_update, (full_size, full_id, subs))| {
-                        let to_update = &mut to_update.1;
-                        let vec = to_update
-                            .slice_mut(s![*y as usize, ..])
+                        println!("index mut {} {}",to_update.2, mid_index);
+                        println!("states_to_update shape {:#?}",states_to_update.shape());
+                        let vec = states_to_update
+                            .slice_mut(s![to_update.2 - mid_index , ..])
                             .into_slice()
                             .unwrap();
                         let size = eq_size;
                         let cst = ((-1.0_f64).powi(size as i32) * (*n as f64 - 1.0)
                             + ((*n as f64 - 1.0).powi(size as i32)))
                             / (*n as f64).powi(size as i32);
-                        
+
                         let d = (delta_prods[*full_size][*full_id].1).as_slice().unwrap();
 
-                        prod_update_add(vec,d,cst);
+                        prod_update_add(vec, d, cst);
                         //izip!(vec.iter_mut(), d.into_iter()).for_each(|(v, d)| *v += cst * *d);
 
                         subs.iter().for_each(|(p0, p1, d0, d1, cst)| {
-                            let p = &(as_input[*p0][*p1].1).slice(s![*y as usize, ..]);
+                            //let p = &(as_input[*p0][*p1].1).slice(s![*y as usize, ..]);
+                            println!("other {}",as_input[*p0][*p1].2);
+                            let p = states_asinput.slice(s![as_input[*p0][*p1].2, ..]);
+
                             let cst = cst * (1.0 / (*n as f64)).powi(*d0 as i32 + 1);
 
                             let pv = p.as_slice().unwrap();
                             let d = &(delta_prods[*d0][*d1].1).as_slice().unwrap();
-                            prod_update(vec,pv,d,cst);
+                            prod_update(vec, pv, d, cst);
                         });
                     },
-               );
+                );
             });
         });
     }
@@ -507,12 +524,12 @@ impl MTtest {
         let n1 = self.n_samples[1];
 
         // find the c that will contains the variances
-        let s = &self.states[n - 1][0].1;
+        let s = self.states_plain.slice(s![..,self.states[n-1][0].2,..]);
         let expcted: Vec<usize> = (0..self.d).collect();
 
-        let u: Vec<&(Vec<usize>, Array2<f64>)> = (&self.states[self.d - 2])
+        let u: Vec<&(Vec<usize>, Array2<f64>, usize)> = (&self.states[self.d - 2])
             .into_iter()
-            .filter(|(c, _)| {
+            .filter(|(c, _, _)| {
                 izip!(c.iter(), expcted.iter())
                     .filter(|(x, y)| x == y)
                     .count()
@@ -523,7 +540,7 @@ impl MTtest {
         assert!(u.len() == 1);
         //println!("u {:#?}", u);
 
-        let u = &((u[0]).1);
+        let u = self.states_plain.slice(s![..,(u[0]).2,..]);
         let mut u0: Array1<f64> = (u.slice(s![0 as usize, ..])).to_owned();
         u0 /= n0 as f64;
         let mut s0: Array1<f64> = (s.slice(s![0 as usize, ..])).to_owned();
@@ -534,8 +551,6 @@ impl MTtest {
         let mut s1: Array1<f64> = (s.slice(s![1 as usize, ..])).to_owned();
         s1 /= n1 as f64;
 
-        //println!("u0 {}", u0);
-        //println!("u1 {}", u1);
         ret.assign(&(&u0 - &u1));
 
         u0.mapv_inplace(|x| x.powi(2));
@@ -556,24 +571,20 @@ impl MTtest {
     }
 }
 #[inline(never)]
-pub fn prod_update(vec : &mut[f64], pv: &[f64], d: &[f64], cst : f64){
-    izip!(vec.iter_mut(), pv.into_iter(), d.into_iter())
-                                .for_each(|(v, p, d)| *v += cst * *p * *d);
+pub fn prod_update(vec: &mut [f64], pv: &[f64], d: &[f64], cst: f64) {
+    izip!(vec.iter_mut(), pv.into_iter(), d.into_iter()).for_each(|(v, p, d)| *v += cst * *p * *d);
 }
 #[inline(never)]
-pub fn prod_update_add(vec : &mut[f64], pv: &[f64], cst : f64){
-    izip!(vec.iter_mut(), pv.into_iter() )
-                                .for_each(|(v, p)| *v += cst * *p);
-
+pub fn prod_update_add(vec: &mut [f64], pv: &[f64], cst: f64) {
+    izip!(vec.iter_mut(), pv.into_iter()).for_each(|(v, p)| *v += cst * *p);
 }
 #[inline(never)]
-pub fn prod_update_single(vec : &mut[f64], pv: &[f64], d: &[f64]){
-    izip!(vec.iter_mut(), pv.into_iter(), d.into_iter())
-                                .for_each(|(v, p, d)| *v =  *p * *d);
+pub fn prod_update_single(vec: &mut [f64], pv: &[f64], d: &[f64]) {
+    izip!(vec.iter_mut(), pv.into_iter(), d.into_iter()).for_each(|(v, p, d)| *v = *p * *d);
 }
 
 #[inline(never)]
-pub fn gen_delta(m : &mut[f64], d : &mut [f64], t : &[i16], poi : &[u64], n : f64){
+pub fn gen_delta(m: &mut [f64], d: &mut [f64], t: &[i16], poi: &[u64], n: f64) {
     izip!(m.iter_mut(), d.iter_mut())
         .enumerate()
         .for_each(|(i, (m, d))| {

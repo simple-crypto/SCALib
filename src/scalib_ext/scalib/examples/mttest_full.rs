@@ -1,8 +1,8 @@
 use ndarray::array;
-use ndarray_rand::rand_distr::Uniform;
-use scalib::ttest;
-use ndarray_rand::RandomExt;
 use ndarray::{Array1, Array2};
+use ndarray_rand::rand_distr::Uniform;
+use ndarray_rand::RandomExt;
+use scalib::ttest;
 
 fn main() {
     let d = 2;
@@ -14,5 +14,4 @@ fn main() {
     let pois = Array2::<u64>::random((d, npois), Uniform::new(0, ns as u64));
     let mut mtt = ttest::MTtest::new(d, pois.view());
     mtt.update(traces.view(), y.view());
-
 }
