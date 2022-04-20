@@ -7,13 +7,15 @@ use std::time::Duration;
 
 fn bench_mttest(c: &mut Criterion) {
     let mut group = c.benchmark_group("ttest_update");
-    let traces_len = 5000;
+    let d = 2;
+    let traces_len = 50000;
     let n = 10;
-    let traces = Array2::<i16>::random((n, traces_len), Uniform::new(0, 10000));
+    let traces = Array2::<i16>::random((n, traces_len), Uniform::new(0, 1000));
     let y = Array1::<u16>::random((n,), Uniform::new(0, 2));
-    for csize in [1<<8,1<<10, 1<<12].iter(){
-        for d in [2, 3].iter() {
-            for npois in [20000, 50000, 100000].iter() {
+    let csize = 1 << 12;
+    for d in [3].iter() {
+        for npois in [50000, 100000, 200000, 500000 ].iter() {
+            for csize in [*npois, 1<<4, 1<<6, 1<<8,1<<10, 1<<12].iter(){
                 let pois = Array2::<u64>::random((*d, *npois), Uniform::new(0, traces_len as u64));
 
                 let mut mtt = ttest::MTtest::new(*d, pois.view());
