@@ -9,7 +9,9 @@
 //! <https://eprint.iacr.org/2015/207>.
 
 use itertools::{izip, Itertools};
-use ndarray::{s, Array, Array1, Array2, Array3, ArrayView1, ArrayView2, Axis}; // ArrayViewMut2, ArrayViewMut3};
+use ndarray::{
+    s, Array, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, ArrayViewMut3, Axis,
+};
 use num_integer::binomial;
 use rayon::prelude::*;
 
@@ -315,11 +317,10 @@ impl MTtest {
                         (x, delta_cnt - 1, 0, 0)
                     })
                     .collect()
-                
             })
             .collect();
 
-        // derive the index that are use to update deltas 
+        // derive the index that are use to update deltas
         for size in 2..(2 * d + 1) {
             // size of the delta to update
             let (as_input, to_updates) = delta_prods.split_at_mut(size - 1);
@@ -443,20 +444,6 @@ impl MTtest {
         }
     }
 
-    /*
-    pub fn update_internal(
-        traces: ArrayView2<i16>,
-        y: ArrayView1<u16>,
-        pois: ArrayView2<u64>,
-
-        n_evol: ArrayView1<f64>,
-        m: ArrayViewMut3<f64>,
-        delta_prods: &Vec<Vec<(Vec<usize>, usize)>>,
-        delta_prods_plain: ArrayViewMut2<f64>,
-    ) {
-        println!("lol");
-    }*/
-
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
         let dims = traces.shape();
 
@@ -468,97 +455,19 @@ impl MTtest {
             *evol = *n as f64;
         });
 
-        izip!(traces.outer_iter(), y.iter(), n_evol.iter()).for_each(|(t, y, n)| {
-            let d = self.d;
-            let pois = &self.pois;
-            let m = &mut self.m;
-            let delta_prods = &mut self.delta_prods;
-            let delta_prods_plain = &mut self.delta_prods_plain;
-
-            // update the first mean estimates
-            izip!(
-                pois.outer_iter(),
-                m.outer_iter_mut(),
-                (delta_prods[0]).iter_mut()
-            )
-            .for_each(|(poi, mut m, delta)| {
-                let m = m.slice_mut(s![*y as usize, ..]);
-                let m = m.into_slice().unwrap();
-                //let d = delta.1.as_slice_mut().unwrap();
-                let mut tmp = delta_prods_plain.slice_mut(s![delta.1, ..]);
-                let d = tmp.as_slice_mut().unwrap();
-                let poi = poi.as_slice().unwrap();
-                let t = t.as_slice().unwrap();
-                gen_delta(m, d, t, poi, *n as f64);
-            });
-
-            // update the delta_prods
-            for size in 2..(2 * d + 1) {
-                // size of the delta to update
-                let (_, to_updates) = self.delta_prods.split_at_mut(size - 1);
-                let mid_index = to_updates[0][0].1;
-                let (as_input_plain, mut to_updates_plain) =
-                    delta_prods_plain.view_mut().split_at(Axis(0), mid_index);
-
-                to_updates[0].iter_mut().for_each(|to_update| {
-                    let low_data = to_update.2;
-                    let up_data = to_update.3;
-
-                    let mut tmp_prod = to_updates_plain.slice_mut(s![to_update.1 - mid_index, ..]);
-                    let prod = tmp_prod.as_slice_mut().unwrap();
-
-                    let tmp_low_data = as_input_plain.slice(s![low_data, ..]);
-                    let low_data = tmp_low_data.as_slice().unwrap();
-
-                    let tmp_up_data = as_input_plain.slice(s![up_data, ..]);
-                    let up_data = tmp_up_data.as_slice().unwrap();
-
-                    prod_update_single(prod, low_data, up_data);
-                });
-            }
-
-            izip!(2..(2 * d + 1)).rev().for_each(|eq_size| {
-                let eq = &self.equations[eq_size - 2];
-                let (as_input, to_updates) = self.states.split_at_mut(eq_size - 2);
-                let delta_prods = &self.delta_prods;
-                let delta_prods_plain = &self.delta_prods_plain;
-                let mid_index = to_updates[0][0].1;
-                let mut tmp = self.states_plain.slice_mut(s![*y as usize, .., ..]);
-                let (states_asinput, mut states_to_update) =
-                    tmp.view_mut().split_at(Axis(0), mid_index);
-                let to_updates = &mut to_updates[0];
-
-                izip!(to_updates.iter_mut(), eq.iter()).for_each(
-                    |(to_update, (full_size, full_id, subs))| {
-                        let vec = states_to_update
-                            .slice_mut(s![to_update.1 - mid_index, ..])
-                            .into_slice()
-                            .unwrap();
-                        let size = eq_size;
-                        let cst = ((-1.0_f64).powi(size as i32) * (*n as f64 - 1.0)
-                            + ((*n as f64 - 1.0).powi(size as i32)))
-                            / (*n as f64).powi(size as i32);
-
-                        let id = delta_prods[*full_size][*full_id].1;
-                        let tmp = delta_prods_plain.slice(s![id, ..]);
-                        let d = tmp.as_slice().unwrap();
-                        prod_update_add(vec, d, cst);
-
-                        subs.iter().for_each(|(p0, p1, d0, d1, cst)| {
-                            let p = states_asinput.slice(s![as_input[*p0][*p1].1, ..]);
-
-                            let cst = cst * (1.0 / (*n as f64)).powi(*d0 as i32 + 1);
-
-                            let pv = p.as_slice().unwrap();
-                            let id = delta_prods[*d0][*d1].1;
-                            let tmp = delta_prods_plain.slice(s![id, ..]);
-                            let d = tmp.as_slice().unwrap();
-                            prod_update(vec, pv, d, cst);
-                        });
-                    },
-                );
-            });
-        });
+        update_internal_mttest(
+            self.d,
+            traces,
+            y,
+            self.pois.view(),
+            n_evol.view(),
+            self.m.view_mut(),
+            &self.delta_prods,
+            self.delta_prods_plain.view_mut(),
+            &self.states,
+            self.states_plain.view_mut(),
+            &self.equations,
+        );
     }
 
     pub fn get_ttest(&self) -> Array1<f64> {
@@ -632,4 +541,104 @@ pub fn gen_delta(m: &mut [f64], d: &mut [f64], t: &[i16], poi: &[u64], n: f64) {
             *d = t[poi[i as usize] as usize] as f64 - *m;
             *m += (*d) / (n);
         });
+}
+
+fn update_internal_mttest(
+    d: usize,
+    traces: ArrayView2<i16>,
+    y: ArrayView1<u16>,
+    pois: ArrayView2<u64>,
+
+    n_evol: ArrayView1<f64>,
+    mut m: ArrayViewMut3<f64>,
+    delta_prods: &Vec<Vec<(Vec<usize>, usize, usize, usize)>>,
+    mut delta_prods_plain: ArrayViewMut2<f64>,
+
+    states: &Vec<Vec<(Vec<usize>, usize)>>,
+    mut states_plain: ArrayViewMut3<f64>,
+    equations: &Vec<Vec<(usize, usize, Vec<(usize, usize, usize, usize, f64)>)>>,
+) {
+    izip!(traces.outer_iter(), y.iter(), n_evol.iter()).for_each(|(t, y, n)| {
+        // update the first mean estimates
+        izip!(
+            pois.outer_iter(),
+            m.outer_iter_mut(),
+            (delta_prods[0]).iter()
+        )
+        .for_each(|(poi, mut m, delta)| {
+            let m = m.slice_mut(s![*y as usize, ..]);
+            let m = m.into_slice().unwrap();
+            //let d = delta.1.as_slice_mut().unwrap();
+            let mut tmp = delta_prods_plain.slice_mut(s![delta.1, ..]);
+            let d = tmp.as_slice_mut().unwrap();
+            let poi = poi.as_slice().unwrap();
+            let t = t.as_slice().unwrap();
+            gen_delta(m, d, t, poi, *n as f64);
+        });
+
+        // update the delta_prods
+        for size in 2..(2 * d + 1) {
+            // size of the delta to update
+            let (_, to_updates) = delta_prods.split_at(size - 1);
+            let mid_index = to_updates[0][0].1;
+            let (as_input_plain, mut to_updates_plain) =
+                delta_prods_plain.view_mut().split_at(Axis(0), mid_index);
+
+            to_updates[0].iter().for_each(|to_update| {
+                let low_data = to_update.2;
+                let up_data = to_update.3;
+
+                let mut tmp_prod = to_updates_plain.slice_mut(s![to_update.1 - mid_index, ..]);
+                let prod = tmp_prod.as_slice_mut().unwrap();
+
+                let tmp_low_data = as_input_plain.slice(s![low_data, ..]);
+                let low_data = tmp_low_data.as_slice().unwrap();
+
+                let tmp_up_data = as_input_plain.slice(s![up_data, ..]);
+                let up_data = tmp_up_data.as_slice().unwrap();
+
+                prod_update_single(prod, low_data, up_data);
+            });
+        }
+
+        izip!(2..(2 * d + 1)).rev().for_each(|eq_size| {
+            let eq = &(equations[eq_size - 2]);
+            let (as_input, to_updates) = states.split_at(eq_size - 2);
+            let delta_prods = delta_prods;
+            let mid_index = to_updates[0][0].1;
+            let mut tmp = states_plain.slice_mut(s![*y as usize, .., ..]);
+            let (states_asinput, mut states_to_update) =
+                tmp.view_mut().split_at(Axis(0), mid_index);
+
+            izip!(to_updates[0].iter(), eq.iter()).for_each(
+                |(to_update, (full_size, full_id, subs))| {
+                    let vec = states_to_update
+                        .slice_mut(s![to_update.1 - mid_index, ..])
+                        .into_slice()
+                        .unwrap();
+                    let size = eq_size;
+                    let cst = ((-1.0_f64).powi(size as i32) * (*n as f64 - 1.0)
+                        + ((*n as f64 - 1.0).powi(size as i32)))
+                        / (*n as f64).powi(size as i32);
+
+                    let id = delta_prods[*full_size][*full_id].1;
+                    let tmp = delta_prods_plain.slice(s![id, ..]);
+                    let d = tmp.as_slice().unwrap();
+                    prod_update_add(vec, d, cst);
+
+                    subs.iter().for_each(|(p0, p1, d0, d1, cst)| {
+                        let p = states_asinput.slice(s![as_input[*p0][*p1].1, ..]);
+
+                        let cst = cst * (1.0 / (*n as f64)).powi(*d0 as i32 + 1);
+
+                        let pv = p.as_slice().unwrap();
+                        let id = delta_prods[*d0][*d1].1;
+                        let tmp = delta_prods_plain.slice(s![id, ..]);
+                        let d = tmp.as_slice().unwrap();
+                        prod_update(vec, pv, d, cst);
+                    });
+                },
+            );
+        });
+    });
 }
