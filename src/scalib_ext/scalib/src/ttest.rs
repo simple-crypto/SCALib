@@ -252,7 +252,7 @@ pub struct MTtest {
     /// number of samples per class (2,)
     n_samples: Array1<u64>,
     /// Current state of all combinations of POIs
-    states: Vec<Vec<(Vec<usize>, Array2<f64>, usize)>>,
+    states: Vec<Vec<(Vec<usize>, usize)>>,
     states_plain: Array3<f64>,
     /// Vector containg the delta's for all combinations of POIS
     delta_prods: Vec<Vec<(Vec<usize>, Array1<f64>)>>,
@@ -283,7 +283,7 @@ impl MTtest {
         // for all size of combinations, generate the all unique combinations. For each of them,
         // initialize and array that will maintain the current estimate.
         let mut states_cnt = 0;
-        let states: Vec<Vec<(Vec<usize>, Array2<f64>, usize)>> = (2..(2 * d + 1))
+        let states: Vec<Vec<(Vec<usize>, usize)>> = (2..(2 * d + 1))
             .map(|l| {
                 let mut tmp: Vec<Vec<usize>> = sets.clone().into_iter().combinations(l).collect();
 
@@ -293,7 +293,7 @@ impl MTtest {
                     .into_iter()
                     .map(|x| {
                         states_cnt = states_cnt + 1;
-                        (x, Array2::<f64>::zeros((2, ns)), states_cnt-1)
+                        (x, states_cnt-1)
                     })
                     .collect()
             })
@@ -321,7 +321,7 @@ impl MTtest {
             .map(|state| {
                 state
                     .iter()
-                    .map(|(combi, _, _)| {
+                    .map(|(combi, _)| {
                         let mixed_eq: Vec<(usize, usize, usize, usize, f64)> = (2..combi.len())
                             .map(|size| {
                                 let mut sub_combi: Vec<Vec<usize>> = combi
@@ -475,8 +475,7 @@ impl MTtest {
                 let eq = &self.equations[eq_size - 2];
                 let (as_input, to_updates) = self.states.split_at_mut(eq_size - 2);
                 let delta_prods = &self.delta_prods;
-                let mid_index = to_updates[0][0].2;
-                println!("states_plain shape {:#?}",self.states_plain.shape());
+                let mid_index = to_updates[0][0].1;
                 let mut tmp = self.states_plain.slice_mut(s![*y as usize, .., ..]);
                 let (states_asinput, mut states_to_update) =
                     tmp.view_mut().split_at(Axis(0), mid_index);
@@ -484,10 +483,8 @@ impl MTtest {
 
                 izip!(to_updates.iter_mut(), eq.iter()).for_each(
                     |(to_update, (full_size, full_id, subs))| {
-                        println!("index mut {} {}",to_update.2, mid_index);
-                        println!("states_to_update shape {:#?}",states_to_update.shape());
                         let vec = states_to_update
-                            .slice_mut(s![to_update.2 - mid_index , ..])
+                            .slice_mut(s![to_update.1 - mid_index , ..])
                             .into_slice()
                             .unwrap();
                         let size = eq_size;
@@ -502,8 +499,7 @@ impl MTtest {
 
                         subs.iter().for_each(|(p0, p1, d0, d1, cst)| {
                             //let p = &(as_input[*p0][*p1].1).slice(s![*y as usize, ..]);
-                            println!("other {}",as_input[*p0][*p1].2);
-                            let p = states_asinput.slice(s![as_input[*p0][*p1].2, ..]);
+                            let p = states_asinput.slice(s![as_input[*p0][*p1].1, ..]);
 
                             let cst = cst * (1.0 / (*n as f64)).powi(*d0 as i32 + 1);
 
@@ -524,12 +520,12 @@ impl MTtest {
         let n1 = self.n_samples[1];
 
         // find the c that will contains the variances
-        let s = self.states_plain.slice(s![..,self.states[n-1][0].2,..]);
+        let s = self.states_plain.slice(s![..,self.states[n-1][0].1,..]);
         let expcted: Vec<usize> = (0..self.d).collect();
 
-        let u: Vec<&(Vec<usize>, Array2<f64>, usize)> = (&self.states[self.d - 2])
+        let u: Vec<&(Vec<usize>,  usize)> = (&self.states[self.d - 2])
             .into_iter()
-            .filter(|(c, _, _)| {
+            .filter(|(c, _)| {
                 izip!(c.iter(), expcted.iter())
                     .filter(|(x, y)| x == y)
                     .count()
@@ -538,9 +534,8 @@ impl MTtest {
             .collect();
 
         assert!(u.len() == 1);
-        //println!("u {:#?}", u);
 
-        let u = self.states_plain.slice(s![..,(u[0]).2,..]);
+        let u = self.states_plain.slice(s![..,(u[0]).1,..]);
         let mut u0: Array1<f64> = (u.slice(s![0 as usize, ..])).to_owned();
         u0 /= n0 as f64;
         let mut s0: Array1<f64> = (s.slice(s![0 as usize, ..])).to_owned();
@@ -561,8 +556,6 @@ impl MTtest {
         s1 /= n1 as f64;
 
         let mut den = &s1 + &s0;
-        //println!("s0 {}", s0);
-        //println!("s1 {}", s1);
         den.mapv_inplace(|x| f64::sqrt(x));
 
         ret /= &den;
