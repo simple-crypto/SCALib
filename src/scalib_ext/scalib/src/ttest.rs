@@ -460,13 +460,13 @@ impl MTtest {
         let states = &self.states;
         let equations = &self.equations;
         let d = self.d;
-        izip!(
+        (
             self.pois.axis_chunks_iter(Axis(1), csize),
             self.delta_prods_plain.axis_chunks_iter_mut(Axis(1), csize),
             self.states_plain.axis_chunks_iter_mut(Axis(2), csize),
             self.m.axis_chunks_iter_mut(Axis(2),csize),
-        )
-        .for_each(|(pois, dpp, sp,m)| {
+        ).into_par_iter()
+        .for_each(|(pois, dpp, sp, m)| {
             update_internal_mttest(
                 d,
                 traces,
