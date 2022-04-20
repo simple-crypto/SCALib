@@ -12,7 +12,7 @@ fn main() {
 
     let traces = Array2::<i16>::random((100, 5), Uniform::<i16>::new(0, 10));
     let y = Array1::<u16>::random((100,), Uniform::<u16>::new(0, 2));
-    
+
     let mut ttest2 = ttest::MTtest::new(d, pois.view());
     ttest2.update(traces.view(), y.view());
     let re2 = ttest2.get_ttest();

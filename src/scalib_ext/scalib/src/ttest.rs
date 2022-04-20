@@ -444,7 +444,7 @@ impl MTtest {
         }
     }
 
-    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
+    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>, csize : usize) {
         let dims = traces.shape();
 
         // compute the updates n_samples
@@ -455,19 +455,32 @@ impl MTtest {
             *evol = *n as f64;
         });
 
-        update_internal_mttest(
-            self.d,
-            traces,
-            y,
-            self.pois.view(),
-            n_evol.view(),
-            self.m.view_mut(),
-            &self.delta_prods,
-            self.delta_prods_plain.view_mut(),
-            &self.states,
-            self.states_plain.view_mut(),
-            &self.equations,
-        );
+        //let csize = 1 << 1;
+        let delta_prods = &self.delta_prods;
+        let states = &self.states;
+        let equations = &self.equations;
+        let d = self.d;
+        izip!(
+            self.pois.axis_chunks_iter(Axis(1), csize),
+            self.delta_prods_plain.axis_chunks_iter_mut(Axis(1), csize),
+            self.states_plain.axis_chunks_iter_mut(Axis(2), csize),
+            self.m.axis_chunks_iter_mut(Axis(2),csize),
+        )
+        .for_each(|(pois, dpp, sp,m)| {
+            update_internal_mttest(
+                d,
+                traces,
+                y,
+                pois,
+                n_evol.view(),
+                m,
+                delta_prods,
+                dpp,
+                states,
+                sp,
+                equations,
+            );
+        });
     }
 
     pub fn get_ttest(&self) -> Array1<f64> {

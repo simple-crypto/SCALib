@@ -12,22 +12,24 @@ fn bench_mttest(c: &mut Criterion) {
     let n = 10;
     let traces = Array2::<i16>::random((n, traces_len), Uniform::new(0, 10000));
     let y = Array1::<u16>::random((n,), Uniform::new(0, 2));
+    let csize = 1 << 12;
+    for csize in [1<<8,1<<10, 1<<12].iter(){
+        for d in [2, 3].iter() {
+            for npois in [20000, 50000, 100000].iter() {
+                let pois = Array2::<u64>::random((*d, *npois), Uniform::new(0, traces_len as u64));
 
-    for d in [2, 3].iter() {
-        for npois in [1000, 5000, 10000, 20000, 50000, 100000].iter() {
-            let pois = Array2::<u64>::random((*d, *npois), Uniform::new(0, traces_len as u64));
-
-            let mut mtt = ttest::MTtest::new(*d, pois.view());
-            mtt.update(traces.view(), y.view());
-            group.bench_with_input(
-                BenchmarkId::new(format!("mttest_{}", *d), npois),
-                npois,
-                |b, npois| {
-                    b.iter(|| {
-                        mtt.update(traces.view(), y.view());
-                    })
-                },
-            );
+                let mut mtt = ttest::MTtest::new(*d, pois.view());
+                mtt.update(traces.view(), y.view(), *csize);
+                group.bench_with_input(
+                    BenchmarkId::new(format!("mttest_{}_{}", *d, *csize), npois),
+                    npois,
+                    |b, npois| {
+                        b.iter(|| {
+                            mtt.update(traces.view(), y.view(), *csize);
+                        })
+                    },
+                );
+            }
         }
     }
     group.finish();
