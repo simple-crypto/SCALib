@@ -9,7 +9,7 @@
 //! <https://eprint.iacr.org/2015/207>.
 
 use itertools::{izip, Itertools};
-use ndarray::{s, Array, Array1, Array2, Array3, ArrayView1, ArrayView2, Axis};
+use ndarray::{s, Array, Array1, Array2, Array3, ArrayView1, ArrayView2, Axis}; // ArrayViewMut2, ArrayViewMut3};
 use num_integer::binomial;
 use rayon::prelude::*;
 
@@ -255,7 +255,8 @@ pub struct MTtest {
     states: Vec<Vec<(Vec<usize>, usize)>>,
     states_plain: Array3<f64>,
     /// Vector containg the delta's for all combinations of POIS
-    delta_prods: Vec<Vec<(Vec<usize>, Array1<f64>)>>,
+    delta_prods: Vec<Vec<(Vec<usize>, usize, usize, usize)>>,
+    delta_prods_plain: Array2<f64>,
 
     /// POIS
     pois: Array2<u64>,
@@ -293,27 +294,56 @@ impl MTtest {
                     .into_iter()
                     .map(|x| {
                         states_cnt = states_cnt + 1;
-                        (x, states_cnt-1)
+                        (x, states_cnt - 1)
                     })
                     .collect()
             })
             .collect();
 
-        let states_plain = Array3::<f64>::zeros((2, states_cnt, ns));
-
         // for all size of combinations, generate the all unique combinations. For each of them,
         // initialize and array that will maintain the current estimate.
-        let delta_prods: Vec<Vec<(Vec<usize>, Array1<f64>)>> = (1..(2 * d + 1))
+        let mut delta_cnt = 0;
+        let mut delta_prods: Vec<Vec<(Vec<usize>, usize, usize, usize)>> = (1..(2 * d + 1))
             .map(|l| {
                 let mut tmp: Vec<Vec<usize>> = sets.clone().into_iter().combinations(l).collect();
                 tmp.iter_mut().for_each(|x| x.sort());
                 let combi_single: Vec<Vec<usize>> = tmp.clone().into_iter().unique().collect();
                 combi_single
                     .into_iter()
-                    .map(|x| (x, Array1::<f64>::zeros((ns,))))
+                    .map(|x| {
+                        delta_cnt += 1;
+                        (x, delta_cnt - 1, 0, 0)
+                    })
                     .collect()
+                
             })
             .collect();
+
+        // derive the index that are use to update deltas 
+        for size in 2..(2 * d + 1) {
+            // size of the delta to update
+            let (as_input, to_updates) = delta_prods.split_at_mut(size - 1);
+
+            to_updates[0].iter_mut().for_each(|to_update| {
+                let combi = &to_update.0;
+                let (low, up) = combi.split_at(size / 2);
+                let low_data: usize = as_input[low.len() - 1]
+                    .iter()
+                    .filter(|x| x.0 == low)
+                    .map(|x| x.1)
+                    .collect::<Vec<usize>>()[0];
+                let up_data: usize = as_input[up.len() - 1]
+                    .iter()
+                    .filter(|x| x.0 == up)
+                    .map(|x| x.1)
+                    .collect::<Vec<usize>>()[0];
+                to_update.2 = low_data;
+                to_update.3 = up_data;
+            });
+        }
+
+        let states_plain = Array3::<f64>::zeros((2, states_cnt, ns));
+        let delta_prods_plain = Array2::<f64>::zeros((delta_cnt, ns));
 
         // for all the states to update, generate all the equations.
         let equations: Vec<Vec<(usize, usize, Vec<(usize, usize, usize, usize, f64)>)>> = states
@@ -405,12 +435,28 @@ impl MTtest {
             states: states,
             states_plain: states_plain,
             delta_prods: delta_prods,
+            delta_prods_plain: delta_prods_plain,
             equations: equations,
             m: Array3::<f64>::zeros((d, 2, ns)),
             d: d,
             ns: ns,
         }
     }
+
+    /*
+    pub fn update_internal(
+        traces: ArrayView2<i16>,
+        y: ArrayView1<u16>,
+        pois: ArrayView2<u64>,
+
+        n_evol: ArrayView1<f64>,
+        m: ArrayViewMut3<f64>,
+        delta_prods: &Vec<Vec<(Vec<usize>, usize)>>,
+        delta_prods_plain: ArrayViewMut2<f64>,
+    ) {
+        println!("lol");
+    }*/
+
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
         let dims = traces.shape();
 
@@ -427,6 +473,7 @@ impl MTtest {
             let pois = &self.pois;
             let m = &mut self.m;
             let delta_prods = &mut self.delta_prods;
+            let delta_prods_plain = &mut self.delta_prods_plain;
 
             // update the first mean estimates
             izip!(
@@ -437,7 +484,9 @@ impl MTtest {
             .for_each(|(poi, mut m, delta)| {
                 let m = m.slice_mut(s![*y as usize, ..]);
                 let m = m.into_slice().unwrap();
-                let d = delta.1.as_slice_mut().unwrap();
+                //let d = delta.1.as_slice_mut().unwrap();
+                let mut tmp = delta_prods_plain.slice_mut(s![delta.1, ..]);
+                let d = tmp.as_slice_mut().unwrap();
                 let poi = poi.as_slice().unwrap();
                 let t = t.as_slice().unwrap();
                 gen_delta(m, d, t, poi, *n as f64);
@@ -446,27 +495,24 @@ impl MTtest {
             // update the delta_prods
             for size in 2..(2 * d + 1) {
                 // size of the delta to update
-                let (as_input, to_updates) = self.delta_prods.split_at_mut(size - 1);
+                let (_, to_updates) = self.delta_prods.split_at_mut(size - 1);
+                let mid_index = to_updates[0][0].1;
+                let (as_input_plain, mut to_updates_plain) =
+                    delta_prods_plain.view_mut().split_at(Axis(0), mid_index);
+
                 to_updates[0].iter_mut().for_each(|to_update| {
-                    let combi = &to_update.0;
-                    let prod = &mut to_update.1;
-                    let (low, up) = combi.split_at(size / 2);
+                    let low_data = to_update.2;
+                    let up_data = to_update.3;
 
-                    // get low vector
-                    let low_data: &Array1<f64> = as_input[low.len() - 1]
-                        .iter()
-                        .filter(|x| x.0 == low)
-                        .map(|x| &(x.1))
-                        .collect::<Vec<&Array1<f64>>>()[0];
-                    let up_data: &Array1<f64> = as_input[up.len() - 1]
-                        .iter()
-                        .filter(|x| x.0 == up)
-                        .map(|x| &(x.1))
-                        .collect::<Vec<&Array1<f64>>>()[0];
+                    let mut tmp_prod = to_updates_plain.slice_mut(s![to_update.1 - mid_index, ..]);
+                    let prod = tmp_prod.as_slice_mut().unwrap();
 
-                    let prod = prod.as_slice_mut().unwrap();
-                    let low_data = low_data.as_slice().unwrap();
-                    let up_data = up_data.as_slice().unwrap();
+                    let tmp_low_data = as_input_plain.slice(s![low_data, ..]);
+                    let low_data = tmp_low_data.as_slice().unwrap();
+
+                    let tmp_up_data = as_input_plain.slice(s![up_data, ..]);
+                    let up_data = tmp_up_data.as_slice().unwrap();
+
                     prod_update_single(prod, low_data, up_data);
                 });
             }
@@ -475,6 +521,7 @@ impl MTtest {
                 let eq = &self.equations[eq_size - 2];
                 let (as_input, to_updates) = self.states.split_at_mut(eq_size - 2);
                 let delta_prods = &self.delta_prods;
+                let delta_prods_plain = &self.delta_prods_plain;
                 let mid_index = to_updates[0][0].1;
                 let mut tmp = self.states_plain.slice_mut(s![*y as usize, .., ..]);
                 let (states_asinput, mut states_to_update) =
@@ -484,7 +531,7 @@ impl MTtest {
                 izip!(to_updates.iter_mut(), eq.iter()).for_each(
                     |(to_update, (full_size, full_id, subs))| {
                         let vec = states_to_update
-                            .slice_mut(s![to_update.1 - mid_index , ..])
+                            .slice_mut(s![to_update.1 - mid_index, ..])
                             .into_slice()
                             .unwrap();
                         let size = eq_size;
@@ -492,19 +539,20 @@ impl MTtest {
                             + ((*n as f64 - 1.0).powi(size as i32)))
                             / (*n as f64).powi(size as i32);
 
-                        let d = (delta_prods[*full_size][*full_id].1).as_slice().unwrap();
-
+                        let id = delta_prods[*full_size][*full_id].1;
+                        let tmp = delta_prods_plain.slice(s![id, ..]);
+                        let d = tmp.as_slice().unwrap();
                         prod_update_add(vec, d, cst);
-                        //izip!(vec.iter_mut(), d.into_iter()).for_each(|(v, d)| *v += cst * *d);
 
                         subs.iter().for_each(|(p0, p1, d0, d1, cst)| {
-                            //let p = &(as_input[*p0][*p1].1).slice(s![*y as usize, ..]);
                             let p = states_asinput.slice(s![as_input[*p0][*p1].1, ..]);
 
                             let cst = cst * (1.0 / (*n as f64)).powi(*d0 as i32 + 1);
 
                             let pv = p.as_slice().unwrap();
-                            let d = &(delta_prods[*d0][*d1].1).as_slice().unwrap();
+                            let id = delta_prods[*d0][*d1].1;
+                            let tmp = delta_prods_plain.slice(s![id, ..]);
+                            let d = tmp.as_slice().unwrap();
                             prod_update(vec, pv, d, cst);
                         });
                     },
@@ -520,10 +568,10 @@ impl MTtest {
         let n1 = self.n_samples[1];
 
         // find the c that will contains the variances
-        let s = self.states_plain.slice(s![..,self.states[n-1][0].1,..]);
+        let s = self.states_plain.slice(s![.., self.states[n - 1][0].1, ..]);
         let expcted: Vec<usize> = (0..self.d).collect();
 
-        let u: Vec<&(Vec<usize>,  usize)> = (&self.states[self.d - 2])
+        let u: Vec<&(Vec<usize>, usize)> = (&self.states[self.d - 2])
             .into_iter()
             .filter(|(c, _)| {
                 izip!(c.iter(), expcted.iter())
@@ -535,7 +583,7 @@ impl MTtest {
 
         assert!(u.len() == 1);
 
-        let u = self.states_plain.slice(s![..,(u[0]).1,..]);
+        let u = self.states_plain.slice(s![.., (u[0]).1, ..]);
         let mut u0: Array1<f64> = (u.slice(s![0 as usize, ..])).to_owned();
         u0 /= n0 as f64;
         let mut s0: Array1<f64> = (s.slice(s![0 as usize, ..])).to_owned();
