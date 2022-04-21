@@ -444,7 +444,7 @@ impl MTtest {
         }
     }
 
-    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>, csize : usize) {
+    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
         let dims = traces.shape();
 
         // compute the updates n_samples
@@ -455,7 +455,7 @@ impl MTtest {
             *evol = *n as f64;
         });
 
-        //let csize = 1 << 1;
+        let csize = 1 << 10;
         let delta_prods = &self.delta_prods;
         let states = &self.states;
         let equations = &self.equations;
