@@ -15,30 +15,35 @@ use ndarray::{
 use num_integer::binomial;
 use rayon::prelude::*;
 
-pub struct TtestAcc {
+pub struct UnivarMomentAcc {
     /// Number of samples in trace
     pub ns: usize,
+    /// pub Number of classes
+    pub nc: usize,
     /// Highest moment to estimate
     pub d: usize,
     /// Number of samples in sets
     pub n_traces: Array1<u64>,
+    /// Array containing the current estimation
     pub moments: Array3<f64>,
 }
 
-impl TtestAcc {
-    pub fn new(ns: usize, d: usize) -> Self {
-        TtestAcc {
+impl UnivarMomentAcc {
+    pub fn new(ns: usize, d: usize, nc: usize) -> Self {
+        UnivarMomentAcc {
             ns: ns,
             d: d,
-            n_traces: Array1::<u64>::zeros(2),
-            moments: Array3::<f64>::zeros((2, d, ns)),
+            nc: nc,
+            n_traces: Array1::<u64>::zeros(nc),
+            moments: Array3::<f64>::zeros((nc, d, ns)),
         }
     }
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
-        let mut sum = Array2::<u64>::zeros((2, self.ns));
-        let mut sum_square = Array2::<u64>::zeros((2, self.ns));
-        let mut moments_other = Array3::<f64>::zeros((2, self.d, self.ns));
-        let mut n_traces = Array1::<u64>::zeros(2);
+        let mut sum = Array2::<u64>::zeros((self.nc, self.ns));
+        let mut sum_square = Array2::<u64>::zeros((self.nc, self.ns));
+        let mut moments_other = Array3::<f64>::zeros((self.nc, self.d, self.ns));
+        let mut n_traces = Array1::<u64>::zeros(self.nc);
+
         // STEP 1: 2-passes algorithm to compute higher-order moments
 
         // sum and sum of square per class
@@ -110,8 +115,8 @@ impl TtestAcc {
                     for k in 1..(p - 1) {
                         let cst = binomial(p, k) as f64;
                         let mut tmp = &delta_pows.slice(s![k, ..]) * cst;
-                        let tmp2 = &as_input1.slice(s![p - k - 1, ..]) * ((-n1 / n).powi(k));
-                        let tmp3 = &as_input0.slice(s![p - k - 1, ..]) * ((n0 / n).powi(k));
+                        let tmp2 = &as_input0.slice(s![p - k - 1, ..]) * ((-n1 / n).powi(k));
+                        let tmp3 = &as_input1.slice(s![p - k - 1, ..]) * ((n0 / n).powi(k));
                         let x = tmp2 + tmp3;
                         tmp = &tmp * x;
                         to_update0 += &tmp;

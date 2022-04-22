@@ -10,11 +10,12 @@ fn ttestacc_simple() {
     let order = 3;
     let ns = 100;
     let n = 100;
+    let nc = 2;
 
     let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
-    let y = Array1::<u16>::random((n,), Uniform::new(0, 2));
+    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
 
-    let mut ttacc = ttest::TtestAcc::new(ns as usize, order);
+    let mut ttacc = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
     ttacc.update(traces.view(), y.view());
     let moments: Array3<f64> = ttacc.moments.to_owned();
 
@@ -24,21 +25,23 @@ fn ttestacc_simple() {
         moments.view(),
         order as usize,
         ns as usize,
+        nc as usize
     );
 }
 
 #[test]
 fn ttestacc_simple_chuncks() {
-    let order = 2;
+    let order = 5;
     let ns = 100;
     let n = 2000;
     let step = 10;
+    let nc = 2;
 
     let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
-    let y = Array1::<u16>::random((n,), Uniform::new(0, 2));
+    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
 
     // perform ttacc
-    let mut ttacc = ttest::TtestAcc::new(ns as usize, order);
+    let mut ttacc = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
     izip!(
         traces.axis_chunks_iter(Axis(0), step),
         y.axis_chunks_iter(Axis(0), step)
@@ -53,6 +56,7 @@ fn ttestacc_simple_chuncks() {
         moments.view(),
         order as usize,
         ns as usize,
+        nc as usize,
     );
 }
 
@@ -62,13 +66,14 @@ fn test_moments(
     moments: ArrayView3<f64>,
     order: usize,
     ns: usize,
+    nc: usize,
 ) {
     // Testing on set 0
     // t0
     let epsi = 1e-4;
-    for i in 0..2 {
+    for i in 0..nc {
         let traces_0: Vec<ArrayView1<i16>> = izip!(traces.outer_iter(), y.iter())
-            .filter(|(_, y)| **y == i)
+            .filter(|(_, y)| **y == i as u16)
             .map(|(t, _)| t)
             .collect();
         let mut t0 = Array2::<i16>::zeros((traces_0.len(), ns as usize));
@@ -98,7 +103,7 @@ fn test_moments(
             let mut dif = &reference - &test;
             dif.mapv_inplace(|x| x.abs());
             for d in dif.iter() {
-                assert!(*d < epsi, "failed on order {}", j);
+                assert!(*d < epsi, "failed on order {} {} {} {}", j , d, test[0], reference[0]);
             }
         }
     }
