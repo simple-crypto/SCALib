@@ -15,77 +15,115 @@ use ndarray::{
 use num_integer::binomial;
 use rayon::prelude::*;
 
-
-pub struct TtestAcc{
+pub struct TtestAcc {
     /// Number of samples in trace
     pub ns: usize,
     /// Highest moment to estimate
     pub d: usize,
     /// Number of samples in sets
     pub n_traces: Array1<u64>,
-    pub moments: Array3<f64>
+    pub moments: Array3<f64>,
 }
 
-impl TtestAcc{
-    pub fn new(ns: usize, d: usize)-> Self{
-        TtestAcc{
+impl TtestAcc {
+    pub fn new(ns: usize, d: usize) -> Self {
+        TtestAcc {
             ns: ns,
             d: d,
             n_traces: Array1::<u64>::zeros(2),
-            moments: Array3::<f64>::zeros((2,d,ns))
+            moments: Array3::<f64>::zeros((2, d, ns)),
         }
     }
-    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>){
-        let mut sum = Array2::<u64>::zeros((2,self.ns));
-        let mut sum_square = Array2::<u64>::zeros((2,self.ns));
-        let mut moments_other = Array3::<f64>::zeros((2,self.d,self.ns));
-        let mut n1 = Array1::<u64>::zeros(2);
+    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
+        let mut sum = Array2::<u64>::zeros((2, self.ns));
+        let mut sum_square = Array2::<u64>::zeros((2, self.ns));
+        let mut moments_other = Array3::<f64>::zeros((2, self.d, self.ns));
+        let mut n_traces = Array1::<u64>::zeros(2);
         // STEP 1: 2-passes algorithm to compute higher-order moments
-        
+
         // sum and sum of square per class
-        for (trace,class) in traces.outer_iter().zip(y.iter()){
-            n1[*class as usize] += 1;
-            let mut s = sum.slice_mut(s![*class as usize,..]);
-            let mut s_square = sum_square.slice_mut(s![*class as usize,..]);
+        for (trace, class) in traces.outer_iter().zip(y.iter()) {
+            n_traces[*class as usize] += 1;
+            let mut s = sum.slice_mut(s![*class as usize, ..]);
+            let mut s_square = sum_square.slice_mut(s![*class as usize, ..]);
             let s = s.as_slice_mut().unwrap();
             let s_square = s_square.as_slice_mut().unwrap();
             let t = trace.as_slice().unwrap();
-            izip!(s.iter_mut(),s_square.iter_mut(),t.iter()).
-                for_each(|(s,s_square,t)|{
-                    let t = *t as u64;
-                    *s += t;
-                    *s_square += t * t; 
-                });
+            izip!(s.iter_mut(), s_square.iter_mut(), t.iter()).for_each(|(s, s_square, t)| {
+                let t = *t as u64;
+                *s += t;
+                *s_square += t * t;
+            });
         }
         // assign mean and variance
-        let n1 = n1.mapv(|x| x as f64);
+        let n = n_traces.mapv(|x| x as f64);
         let mut mean = sum.mapv(|x| x as f64);
-        mean.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n1);
-        let mut variance = sum_square.mapv(|x| x as f64);
-        variance.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n1);
-        variance -= &(mean.mapv(|x| x * x));
+        mean.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n);
+        moments_other.slice_mut(s![.., 0, ..]).assign(&mean);
 
-        moments_other.slice_mut(s![..,0,..]).assign(&mean);
-        moments_other.slice_mut(s![..,1,..]).assign(&variance);
-        
-        for (trace,class) in traces.outer_iter().zip(y.iter()){
-            let mut m_full = moments_other.slice_mut(s![*class as usize,..,..]);
-            for d in 2..self.d{
-                //let mut m = m_full.slice_mut(s![d,..]);
-                let mut m = &trace.mapv(|x| x as f64) - &m_full.slice(s![0,..]);
-                m /= &m_full.slice(s![1,..]);
+        for (trace, class) in traces.outer_iter().zip(y.iter()) {
+            let mut m_full = moments_other.slice_mut(s![*class as usize, .., ..]);
+            for d in 2..(self.d + 1) {
+                // centering
+                let mut m = &trace.mapv(|x| x as f64) - &m_full.slice(s![0, ..]);
                 m.mapv_inplace(|x| x.powi(d as i32));
-                let mut dest = m_full.slice_mut(s![d,..]);
+                let mut dest = m_full.slice_mut(s![d - 1, ..]);
                 dest += &m;
             }
         }
 
-        
         // STEP 2: apply merging
-        let n2 = &self.n_traces; 
-        self.moments.assign(&moments_other);
+        let delta = &moments_other.slice(s![.., 0, ..]) - &self.moments.slice(s![.., 0, ..]);
+        let d = self.d;
+        let ns = self.ns;
+        izip!(
+            &mut self.moments.outer_iter_mut(),
+            self.n_traces.iter(),
+            moments_other.outer_iter(),
+            n_traces.iter(),
+            delta.outer_iter()
+        )
+        .for_each(|(mut cs0, n0, cs1, n1, delta)| {
+            let n = (*n0 + *n1) as f64;
+            let n0 = *n0 as f64;
+            let n1 = *n1 as f64;
+            if n0 == 0.0 {
+                cs0.assign(&cs1);
+            } else if n1 != 0.0 {
+                let mut delta_pows = Array2::<f64>::zeros((d + 1, ns));
+                delta_pows
+                    .axis_iter_mut(Axis(0))
+                    .enumerate()
+                    .for_each(|(i, mut x)| x.assign(&delta.mapv(|t| t.powi(i as i32))));
+                for p in (2..d + 1).rev() {
+                    let p = p as i32;
+                    let (as_input0, mut to_update0) =
+                        cs0.view_mut().split_at(Axis(0), (p - 1) as usize);
+                    let (as_input1, to_update1) = cs1.view().split_at(Axis(0), (p - 1) as usize);
+                    let mut to_update0 = to_update0.slice_mut(s![0, ..]);
+                    let to_update1 = to_update1.slice(s![0, ..]);
+                    to_update0 += &to_update1;
+
+                    let mut cst = (1.0 / n1).powi(p - 1) - (-1.0 / n0).powi(p - 1);
+                    cst *= (n1 * n0 / n).powi(p);
+                    to_update0 += &(&delta_pows.slice(s![p, ..]) * cst);
+                    for k in 1..(p - 1) {
+                        let cst = binomial(p, k) as f64;
+                        let mut tmp = &delta_pows.slice(s![k, ..]) * cst;
+                        let tmp2 = &as_input1.slice(s![p - k - 1, ..]) * ((-n1 / n).powi(k));
+                        let tmp3 = &as_input0.slice(s![p - k - 1, ..]) * ((n0 / n).powi(k));
+                        let x = tmp2 + tmp3;
+                        tmp = &tmp * x;
+                        to_update0 += &tmp;
+                    }
+                }
+                let mut u0 = cs0.slice_mut(s![0, ..]);
+                u0 += &(&delta * (n1 / n));
+            }
+        });
+        self.n_traces += &n_traces;
     }
-    pub fn get_moments(&self) -> Array3<f64>{
+    pub fn get_moments(&self) -> Array3<f64> {
         self.moments.to_owned()
     }
 }
@@ -538,23 +576,24 @@ impl MTtest {
             self.pois.axis_chunks_iter(Axis(1), csize),
             self.delta_prods_plain.axis_chunks_iter_mut(Axis(1), csize),
             self.states_plain.axis_chunks_iter_mut(Axis(2), csize),
-            self.m.axis_chunks_iter_mut(Axis(2),csize),
-        ).into_par_iter()
-        .for_each(|(pois, dpp, sp, m)| {
-            update_internal_mttest(
-                d,
-                traces,
-                y,
-                pois,
-                n_evol.view(),
-                m,
-                delta_prods,
-                dpp,
-                states,
-                sp,
-                equations,
-            );
-        });
+            self.m.axis_chunks_iter_mut(Axis(2), csize),
+        )
+            .into_par_iter()
+            .for_each(|(pois, dpp, sp, m)| {
+                update_internal_mttest(
+                    d,
+                    traces,
+                    y,
+                    pois,
+                    n_evol.view(),
+                    m,
+                    delta_prods,
+                    dpp,
+                    states,
+                    sp,
+                    equations,
+                );
+            });
     }
 
     pub fn get_ttest(&self) -> Array1<f64> {
