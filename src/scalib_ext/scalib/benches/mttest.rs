@@ -14,8 +14,8 @@ fn bench_mttest(c: &mut Criterion) {
     let y = Array1::<u16>::random((n,), Uniform::new(0, 2));
     let csize = 1 << 12;
     for d in [3].iter() {
-        for npois in [50000, 100000, 200000, 500000 ].iter() {
-            for csize in [*npois, 1<<4, 1<<6, 1<<8,1<<10, 1<<12].iter(){
+        for npois in [50000, 100000, 200000, 500000].iter() {
+            for csize in [*npois, 1 << 4, 1 << 6, 1 << 8, 1 << 10, 1 << 12].iter() {
                 let pois = Array2::<u64>::random((*d, *npois), Uniform::new(0, traces_len as u64));
 
                 let mut mtt = ttest::MTtest::new(*d, pois.view());

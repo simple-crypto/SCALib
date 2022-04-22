@@ -15,6 +15,80 @@ use ndarray::{
 use num_integer::binomial;
 use rayon::prelude::*;
 
+
+pub struct TtestAcc{
+    /// Number of samples in trace
+    pub ns: usize,
+    /// Highest moment to estimate
+    pub d: usize,
+    /// Number of samples in sets
+    pub n_traces: Array1<u64>,
+    pub moments: Array3<f64>
+}
+
+impl TtestAcc{
+    pub fn new(ns: usize, d: usize)-> Self{
+        TtestAcc{
+            ns: ns,
+            d: d,
+            n_traces: Array1::<u64>::zeros(2),
+            moments: Array3::<f64>::zeros((2,d,ns))
+        }
+    }
+    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>){
+        let mut sum = Array2::<u64>::zeros((2,self.ns));
+        let mut sum_square = Array2::<u64>::zeros((2,self.ns));
+        let mut moments_other = Array3::<f64>::zeros((2,self.d,self.ns));
+        let mut n1 = Array1::<u64>::zeros(2);
+        // STEP 1: 2-passes algorithm to compute higher-order moments
+        
+        // sum and sum of square per class
+        for (trace,class) in traces.outer_iter().zip(y.iter()){
+            n1[*class as usize] += 1;
+            let mut s = sum.slice_mut(s![*class as usize,..]);
+            let mut s_square = sum_square.slice_mut(s![*class as usize,..]);
+            let s = s.as_slice_mut().unwrap();
+            let s_square = s_square.as_slice_mut().unwrap();
+            let t = trace.as_slice().unwrap();
+            izip!(s.iter_mut(),s_square.iter_mut(),t.iter()).
+                for_each(|(s,s_square,t)|{
+                    let t = *t as u64;
+                    *s += t;
+                    *s_square += t * t; 
+                });
+        }
+        // assign mean and variance
+        let n1 = n1.mapv(|x| x as f64);
+        let mut mean = sum.mapv(|x| x as f64);
+        mean.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n1);
+        let mut variance = sum_square.mapv(|x| x as f64);
+        variance.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n1);
+        variance -= &(mean.mapv(|x| x * x));
+
+        moments_other.slice_mut(s![..,0,..]).assign(&mean);
+        moments_other.slice_mut(s![..,1,..]).assign(&variance);
+        
+        for (trace,class) in traces.outer_iter().zip(y.iter()){
+            let mut m_full = moments_other.slice_mut(s![*class as usize,..,..]);
+            for d in 2..self.d{
+                //let mut m = m_full.slice_mut(s![d,..]);
+                let mut m = &trace.mapv(|x| x as f64) - &m_full.slice(s![0,..]);
+                m /= &m_full.slice(s![1,..]);
+                m.mapv_inplace(|x| x.powi(d as i32));
+                let mut dest = m_full.slice_mut(s![d,..]);
+                dest += &m;
+            }
+        }
+
+        
+        // STEP 2: apply merging
+        let n2 = &self.n_traces; 
+        self.moments.assign(&moments_other);
+    }
+    pub fn get_moments(&self) -> Array3<f64>{
+        self.moments.to_owned()
+    }
+}
 pub struct Ttest {
     /// Central sums of order 1 up to order d*2 with shape (ns,2,2*d),
     /// where central sums is sum((x-u_x)**i).
