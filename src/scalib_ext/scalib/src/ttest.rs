@@ -237,11 +237,9 @@ impl Ttest {
             })
             .collect();
 
-        (traces.axis_iter(Axis(1)), self.cs.axis_iter_mut(Axis(0)))
-            .into_par_iter()
-            .for_each_init(
-                || Array1::<f64>::zeros(2 * d),
-                |ref mut delta_pows, (traces, mut cs)| {
+        let mut delta_pows = Array1::<f64>::zeros(2 * d);
+        izip!(traces.axis_iter(Axis(1)), self.cs.axis_iter_mut(Axis(0)))
+            .for_each( |(traces, mut cs)| {
                     traces
                         .iter()
                         .zip(shared_data.iter())

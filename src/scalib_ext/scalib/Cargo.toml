@@ -54,3 +54,7 @@ harness = false
 [[bench]]
 name = "mttest"
 harness = false
+
+[[bench]]
+name = "ttest"
+harness = false
