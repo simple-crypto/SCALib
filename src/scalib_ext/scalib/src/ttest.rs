@@ -10,7 +10,8 @@
 
 use itertools::{izip, Itertools};
 use ndarray::{
-    s, Array, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, ArrayViewMut3, Axis,
+    s, Array, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut2,
+    ArrayViewMut3, Axis,
 };
 use num_integer::binomial;
 use rayon::prelude::*;
@@ -38,46 +39,7 @@ impl UnivarMomentAcc {
             moments: Array3::<f64>::zeros((nc, d, ns)),
         }
     }
-    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
-        let mut sum = Array2::<u64>::zeros((self.nc, self.ns));
-        let mut sum_square = Array2::<u64>::zeros((self.nc, self.ns));
-        let mut moments_other = Array3::<f64>::zeros((self.nc, self.d, self.ns));
-        let mut n_traces = Array1::<u64>::zeros(self.nc);
-
-        // STEP 1: 2-passes algorithm to compute higher-order moments
-
-        // sum and sum of square per class
-        for (trace, class) in traces.outer_iter().zip(y.iter()) {
-            n_traces[*class as usize] += 1;
-            let mut s = sum.slice_mut(s![*class as usize, ..]);
-            let mut s_square = sum_square.slice_mut(s![*class as usize, ..]);
-            let s = s.as_slice_mut().unwrap();
-            let s_square = s_square.as_slice_mut().unwrap();
-            let t = trace.as_slice().unwrap();
-            izip!(s.iter_mut(), s_square.iter_mut(), t.iter()).for_each(|(s, s_square, t)| {
-                let t = *t as u64;
-                *s += t;
-                *s_square += t * t;
-            });
-        }
-        // assign mean and variance
-        let n = n_traces.mapv(|x| x as f64);
-        let mut mean = sum.mapv(|x| x as f64);
-        mean.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n);
-        moments_other.slice_mut(s![.., 0, ..]).assign(&mean);
-
-        for (trace, class) in traces.outer_iter().zip(y.iter()) {
-            let mut m_full = moments_other.slice_mut(s![*class as usize, .., ..]);
-            for d in 2..(self.d + 1) {
-                // centering
-                let mut m = &trace.mapv(|x| x as f64) - &m_full.slice(s![0, ..]);
-                m.mapv_inplace(|x| x.powi(d as i32));
-                let mut dest = m_full.slice_mut(s![d - 1, ..]);
-                dest += &m;
-            }
-        }
-
-        // STEP 2: apply merging
+    pub fn merge_from_state(&mut self, moments_other: ArrayView3<f64>, n_traces: ArrayView1<u64>) {
         let delta = &moments_other.slice(s![.., 0, ..]) - &self.moments.slice(s![.., 0, ..]);
         let d = self.d;
         let ns = self.ns;
@@ -128,8 +90,49 @@ impl UnivarMomentAcc {
         });
         self.n_traces += &n_traces;
     }
-    pub fn get_moments(&self) -> Array3<f64> {
-        self.moments.to_owned()
+    pub fn merge(&mut self, other: &Self) {
+        self.merge_from_state(other.moments.view(), other.n_traces.view());
+    }
+    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
+        let mut sum = Array2::<u64>::zeros((self.nc, self.ns));
+        let mut moments_other = Array3::<f64>::zeros((self.nc, self.d, self.ns));
+        let mut n_traces = Array1::<u64>::zeros(self.nc);
+
+        // STEP 1: 2-passes algorithm to compute higher-order moments
+        // sum and sum of square per class
+        for (trace, class) in traces.outer_iter().zip(y.iter()) {
+            n_traces[*class as usize] += 1;
+            let mut s = sum.slice_mut(s![*class as usize, ..]);
+            s.zip_mut_with(&trace, |s, t| {
+                *s += *t as u64;
+            });
+        }
+
+        // assign mean
+        let n = n_traces.mapv(|x| x as f64);
+        let mut mean = sum.mapv(|x| x as f64);
+        mean.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n);
+        moments_other.slice_mut(s![.., 0, ..]).assign(&mean);
+
+        // compute centered sums
+        for (trace, class) in traces.outer_iter().zip(y.iter()) {
+            let mut m_full = moments_other.slice_mut(s![*class as usize, .., ..]);
+            for d in 2..(self.d + 1) {
+                // centering
+                let mut m = &trace.mapv(|x| x as f64) - &m_full.slice(s![0, ..]);
+                m.mapv_inplace(|x| x.powi(d as i32));
+                let mut dest = m_full.slice_mut(s![d - 1, ..]);
+                dest += &m;
+            }
+        }
+
+        // STEP 2 merge in current state
+        self.merge_from_state(moments_other.view(), n_traces.view());
+    }
+
+    pub fn reset(&mut self) {
+        self.n_traces.fill(0);
+        self.moments.fill(0.0);
     }
 }
 pub struct Ttest {
@@ -243,45 +246,45 @@ impl Ttest {
             .collect();
 
         let mut delta_pows = Array1::<f64>::zeros(2 * d);
-        izip!(traces.axis_iter(Axis(1)), self.cs.axis_iter_mut(Axis(0)))
-            .for_each( |(traces, mut cs)| {
-                    traces
-                        .iter()
-                        .zip(shared_data.iter())
-                        .for_each(|(trace, (n, y, mults))| {
-                            let mut cs_s = cs.slice_mut(s![*y, ..]);
-                            let cs = cs_s.as_slice_mut().unwrap();
+        izip!(traces.axis_iter(Axis(1)), self.cs.axis_iter_mut(Axis(0))).for_each(
+            |(traces, mut cs)| {
+                traces
+                    .iter()
+                    .zip(shared_data.iter())
+                    .for_each(|(trace, (n, y, mults))| {
+                        let mut cs_s = cs.slice_mut(s![*y, ..]);
+                        let cs = cs_s.as_slice_mut().unwrap();
 
-                            // compute the delta
-                            let delta = ((*trace as f64) - cs[0]) / (*n as f64);
+                        // compute the delta
+                        let delta = ((*trace as f64) - cs[0]) / (*n as f64);
 
-                            // delta_pows[i] = delta ** (i+1)
-                            // We will need all of them next
-                            delta_pows.iter_mut().fold(delta, |acc, x| {
-                                *x = acc;
-                                acc * delta
-                            });
-
-                            // apply the one-pass update rule
-                            cbs.iter().zip(mults.iter()).for_each(|((j, vec), mult)| {
-                                if *n > 1.0 {
-                                    cs[*j - 1] += delta_pows[*j - 1] * mult;
-                                }
-                                vec.iter().for_each(|(cb, k)| {
-                                    let a = cs[*j - *k - 1];
-                                    if (k & 0x1) == 1 {
-                                        // k is not pair
-                                        cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
-                                    } else {
-                                        // k is pair
-                                        cs[*j - 1] += cb * delta_pows[*k - 1] * a;
-                                    }
-                                });
-                            });
-                            cs[0] += delta;
+                        // delta_pows[i] = delta ** (i+1)
+                        // We will need all of them next
+                        delta_pows.iter_mut().fold(delta, |acc, x| {
+                            *x = acc;
+                            acc * delta
                         });
-                },
-            );
+
+                        // apply the one-pass update rule
+                        cbs.iter().zip(mults.iter()).for_each(|((j, vec), mult)| {
+                            if *n > 1.0 {
+                                cs[*j - 1] += delta_pows[*j - 1] * mult;
+                            }
+                            vec.iter().for_each(|(cb, k)| {
+                                let a = cs[*j - *k - 1];
+                                if (k & 0x1) == 1 {
+                                    // k is not pair
+                                    cs[*j - 1] -= cb * delta_pows[*k - 1] * a;
+                                } else {
+                                    // k is pair
+                                    cs[*j - 1] += cb * delta_pows[*k - 1] * a;
+                                }
+                            });
+                        });
+                        cs[0] += delta;
+                    });
+            },
+        );
     }
 
     /// Generate the actual Ttest metric based on the current state.

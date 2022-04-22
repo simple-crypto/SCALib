@@ -25,7 +25,7 @@ fn ttestacc_simple() {
         moments.view(),
         order as usize,
         ns as usize,
-        nc as usize
+        nc as usize,
     );
 }
 
@@ -60,6 +60,73 @@ fn ttestacc_simple_chuncks() {
     );
 }
 
+#[test]
+fn ttestacc_merge_and_reset_chuncks() {
+    let order = 5;
+    let ns = 100;
+    let n = 2000;
+    let step = 10;
+    let nc = 2;
+
+    let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
+    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
+
+    // perform ttacc
+    let mut ttacc = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
+    let mut tmp = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
+    izip!(
+        traces.axis_chunks_iter(Axis(0), step),
+        y.axis_chunks_iter(Axis(0), step)
+    )
+    .for_each(|(traces, y)| {
+        tmp.update(traces, y);
+        ttacc.merge(&tmp);
+        tmp.reset();
+    });
+
+    let moments: Array3<f64> = ttacc.moments.to_owned();
+    test_moments(
+        traces.view(),
+        y.view(),
+        moments.view(),
+        order as usize,
+        ns as usize,
+        nc as usize,
+    );
+}
+#[test]
+fn ttestacc_merge_chuncks() {
+    let order = 5;
+    let ns = 100;
+    let n = 2000;
+    let step = 10;
+    let nc = 2;
+
+    let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
+    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
+
+    // perform ttacc
+    let mut ttacc = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
+    izip!(
+        traces.axis_chunks_iter(Axis(0), step),
+        y.axis_chunks_iter(Axis(0), step)
+    )
+    .for_each(|(traces, y)| {
+        let mut tmp = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
+        tmp.update(traces, y);
+        ttacc.merge(&tmp);
+    });
+
+    let moments: Array3<f64> = ttacc.moments.to_owned();
+    test_moments(
+        traces.view(),
+        y.view(),
+        moments.view(),
+        order as usize,
+        ns as usize,
+        nc as usize,
+    );
+}
 fn test_moments(
     traces: ArrayView2<i16>,
     y: ArrayView1<u16>,
@@ -103,7 +170,14 @@ fn test_moments(
             let mut dif = &reference - &test;
             dif.mapv_inplace(|x| x.abs());
             for d in dif.iter() {
-                assert!(*d < epsi, "failed on order {} {} {} {}", j , d, test[0], reference[0]);
+                assert!(
+                    *d < epsi,
+                    "failed on order {} {} {} {}",
+                    j,
+                    d,
+                    test[0],
+                    reference[0]
+                );
             }
         }
     }
