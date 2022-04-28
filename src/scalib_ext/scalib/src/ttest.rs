@@ -16,7 +16,9 @@ use ndarray::{
 use num_integer::binomial;
 use rayon::prelude::*;
 
-const NS_BATCH: usize = 1 << 8;
+const NS_BATCH: usize = 1 << 9;
+const Y_BATCH: usize = 1 << 9;
+
 pub struct UnivarMomentAcc {
     /// Number of samples in trace
     pub ns: usize,
@@ -120,8 +122,8 @@ impl UnivarMomentAcc {
                         cs0.view_mut().split_at(Axis(0), (p - 1) as usize);
                     let (as_input1, to_update1) = cs1.view().split_at(Axis(0), (p - 1) as usize);
 
-                    let mut to_update0 =
-                        &to_update0.slice_mut(s![0, ..]) + &to_update1.slice(s![0, ..]);
+                    let mut to_update0 = to_update0.slice_mut(s![0, ..]);
+                    to_update0 += &to_update1.slice(s![0, ..]);
 
                     for k in 1..(p - 1) {
                         let cst = binomial(p, k) as f64;
@@ -174,14 +176,16 @@ impl UnivarMomentAcc {
         moments_other.slice_mut(s![.., 0, ..]).assign(&mean);
 
         // compute centered sums
+        let mut pow = Array1::<f64>::zeros((self.ns,));
         for (trace, class) in traces.outer_iter().zip(y.iter()) {
             let mut m_full = moments_other.slice_mut(s![*class as usize, .., ..]);
+            let t = &trace.mapv(|x| x as f64) - &m_full.slice(s![0, ..]);
+            pow.assign(&t);
             for d in 2..(self.d + 1) {
                 // centering
-                let mut m = &trace.mapv(|x| x as f64) - &m_full.slice(s![0, ..]);
-                m.mapv_inplace(|x| x.powi(d as i32));
+                pow *= &t;
                 let mut dest = m_full.slice_mut(s![d - 1, ..]);
-                dest += &m;
+                dest += &pow;
             }
         }
 
@@ -232,12 +236,19 @@ impl Ttest {
             traces.axis_chunks_iter(Axis(1), NS_BATCH),
             self.accumulators.iter_mut()
         )
-        .for_each(|(traces, acc)| acc.update(traces, y));
+        .for_each(|(traces, acc)|{
+            izip!(
+                traces.axis_chunks_iter(Axis(0), Y_BATCH),
+                y.axis_chunks_iter(Axis(0),Y_BATCH)
+            )
+                .for_each(|(traces,y)|{
+                    acc.update(traces,y)
+                });
+        });
     }
 
     /// Generate the actual Ttest metric based on the current state.
     /// return array axes (d,ns)
-    //
     // with central moment defined as:
     //   CM_{i,Q} = CS_{i,Q}/n
     //
