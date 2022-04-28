@@ -33,11 +33,10 @@ pub struct UnivarMomentAcc {
 }
 
 impl UnivarMomentAcc {
-
     /// Creates an UnivarMomentAcc
     /// ns : number of point in traces
     /// d : higher power to estimate
-    /// nc: number of classes to estimate the CS for. 
+    /// nc: number of classes to estimate the CS for.
     pub fn new(ns: usize, d: usize, nc: usize) -> Self {
         UnivarMomentAcc {
             ns: ns,
@@ -236,14 +235,12 @@ impl Ttest {
             traces.axis_chunks_iter(Axis(1), NS_BATCH),
             self.accumulators.iter_mut()
         )
-        .for_each(|(traces, acc)|{
+        .for_each(|(traces, acc)| {
             izip!(
                 traces.axis_chunks_iter(Axis(0), Y_BATCH),
-                y.axis_chunks_iter(Axis(0),Y_BATCH)
+                y.axis_chunks_iter(Axis(0), Y_BATCH)
             )
-                .for_each(|(traces,y)|{
-                    acc.update(traces,y)
-                });
+            .for_each(|(traces, y)| acc.update(traces, y));
         });
     }
 

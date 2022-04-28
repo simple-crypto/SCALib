@@ -82,6 +82,7 @@ class Ttest:
         r"""Return the current Ttest estimation with an array of shape `(d,ns)`."""
         return self._ttest.get_ttest()
 
+
 class MTtest:
     r"""Computes the univariate :math:`t`-test at arbitrary order :math:`d`
     between two sets :math:`i` of traces. Informally, it allows to highlight a
@@ -133,7 +134,7 @@ class MTtest:
     def __init__(self, d, pois):
         self._pois = pois
         self._d = d
-        self._ns = len(pois[0,:])
+        self._ns = len(pois[0, :])
 
         self._mttest = _scalib_ext.MTtest(d, self._pois)
 
@@ -154,7 +155,7 @@ class MTtest:
         nx = x.shape[0]
         if not (nx == nl):
             raise ValueError(f"Expected x with shape ({nl},)")
-        #if not (nsl == self._ns):
+        # if not (nsl == self._ns):
         #    raise Exception(f"Expected second dim of l to have size {self._ns}.")
 
         self._mttest.update(l, x)

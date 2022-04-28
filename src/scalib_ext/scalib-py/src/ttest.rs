@@ -1,6 +1,6 @@
 //! Python wrapper for SCALib's Ttest
 
-use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray, PyArray1};
+use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
 #[pyclass]
@@ -46,7 +46,7 @@ impl MTtest {
     #[new]
     /// Create a new Ttest state.
     /// d: order of the Ttest
-    /// pois: points of interest 
+    /// pois: points of interest
     fn new(d: usize, pois: PyReadonlyArray2<u64>) -> Self {
         let pois = pois.as_array();
         Self {
