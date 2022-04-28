@@ -79,7 +79,7 @@ def test_ttest_d2():
 
 
 def test_ttest_d6_multiple_fit():
-    ns = 100
+    ns = 1043
     d = 6
     nc = 2
     n = 200
@@ -98,7 +98,7 @@ def test_ttest_d6_multiple_fit():
 
 
 def test_ttest_d6():
-    ns = 100
+    ns = 942
     d = 6
     nc = 2
     n = 200
