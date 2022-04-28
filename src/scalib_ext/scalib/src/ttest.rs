@@ -16,7 +16,7 @@ use ndarray::{
 use num_integer::binomial;
 use rayon::prelude::*;
 
-const NS_BATCH : usize = 1 << 8;
+const NS_BATCH: usize = 1 << 8;
 pub struct UnivarMomentAcc {
     /// Number of samples in trace
     pub ns: usize,
@@ -31,6 +31,11 @@ pub struct UnivarMomentAcc {
 }
 
 impl UnivarMomentAcc {
+
+    /// Creates an UnivarMomentAcc
+    /// ns : number of point in traces
+    /// d : higher power to estimate
+    /// nc: number of classes to estimate the CS for. 
     pub fn new(ns: usize, d: usize, nc: usize) -> Self {
         UnivarMomentAcc {
             ns: ns,
@@ -40,44 +45,50 @@ impl UnivarMomentAcc {
             moments: Array3::<f64>::zeros((nc, d, ns)),
         }
     }
+    /// Merges the current accumulator with anoter sum of
+    /// centered products
+    /// moments_other : (nc,d,ns) matrix
+    /// n_traces : (nc,) matrix
+    // See
+    // [1]: https://www.osti.gov/biblio/1028931-formulas-robust-one-pass-parallel-computation-covariances-arbitrary-order-statistical-moments
+    // [2]: https://eprint.iacr.org/2015/207.pdf
+    // for additional details about the merging algorithm.
+    //
+    // Q0 set of all the traces in current estimation
+    // Q1 set of all the traces in the estiamation to merge
+    // Q = Q0 U Q1 is the merge of all traces
+    //
+    // Definitions:
+    //      M_d,Qi = sum_{Qi} (l - u_i) ^ d
+    //      u_Qi = 1/(|Qi|) * sum_{Qi} l
+    //      delta_1,0 = u_0 - u_1
+    //      ni = |Qi|
+    //      n = n0 + n1
+    //
+    // Update equation (Eq. 2.1 in [1]):
+    //
+    // M_Q_d = M_Q0_d + M_Q1_d +
+    //      sum_{k=1}_{p-2}(
+    //           binomial(k,p) *
+    //
+    //              delta_1,0 ^ d *
+    //              (
+    //                  ((-n1/n) ^ k * M_p-k,0) +
+    //                   (n0/n) ^ k * M_p-k,1))
+    //              )
+    //      )
+    //      + ((n0 * n1) / n ) *( delta_1,0 ^ p)
+    //              * ( 1 / (n1 ^ (p-1)) - (-1 / n0)^(p-1))
     pub fn merge_from_state(&mut self, moments_other: ArrayView3<f64>, n_traces: ArrayView1<u64>) {
-        // Q set of all previous traces
-        //
-        // Initial values, |Q| = n-1
-        // mu = (1/(n-1)) * sum(Q)
-        // if d>=2:
-        //      CS_{d,Q} = 1/(n-1) sum((Q-mu)**d)
-        // else:
-        //      CS_{1,Q'} = mu'
-        //
-        // Updated with a single measurement t, Q' = Q U t, |Q'| = n
-        // mu' = (1/(n-1)) * sum(Q')
-        //
-        // if d >=2:
-        //      CS_{d,Q'} = (1/n) sum((Q-mu')**d)
-        // else:
-        //      CS_{1,Q'} = mu'
-        //
-        // Update rules is given by:
-        //
-        // delta = (t - mu)/n
-        //
-        // CS_{d,Q'} = CS_{d,Q}
-        //      + sum_{k=1,d-2}(
-        //         binomial(k,d)
-        //         * CS_{d-k,Q}
-        //         * (-delta)**d
-        //         )
-        //      + (
-        //          (delta * (n-1))**d
-        //          *(1 - (-1/(n-1)))**(d-1)
-        //        )
-        //
-        // mu' = mu+delta
-
+        // compute the deltas u1 - u0 for all the classes
         let delta = &moments_other.slice(s![.., 0, ..]) - &self.moments.slice(s![.., 0, ..]);
         let d = self.d;
         let ns = self.ns;
+
+        // each row will contain one power of deltas
+        let mut delta_pows = Array2::<f64>::zeros((d + 1, ns));
+
+        // Update all the classes estimated independently
         izip!(
             &mut self.moments.outer_iter_mut(),
             self.n_traces.iter(),
@@ -89,26 +100,29 @@ impl UnivarMomentAcc {
             let n = (*n0 + *n1) as f64;
             let n0 = *n0 as f64;
             let n1 = *n1 as f64;
+
             if n0 == 0.0 {
+                // if current estimate has no sample, simply assign from the other estimate.
                 cs0.assign(&cs1);
             } else if n1 != 0.0 {
-                let mut delta_pows = Array2::<f64>::zeros((d + 1, ns));
+                // compute powers of deltas
                 delta_pows
                     .axis_iter_mut(Axis(0))
                     .enumerate()
                     .for_each(|(i, mut x)| x.assign(&delta.mapv(|t| t.powi(i as i32))));
+
+                // first update the higher powers since their update rules
+                // is based on the one of smaller powers.
                 for p in (2..d + 1).rev() {
                     let p = p as i32;
+
                     let (as_input0, mut to_update0) =
                         cs0.view_mut().split_at(Axis(0), (p - 1) as usize);
                     let (as_input1, to_update1) = cs1.view().split_at(Axis(0), (p - 1) as usize);
-                    let mut to_update0 = to_update0.slice_mut(s![0, ..]);
-                    let to_update1 = to_update1.slice(s![0, ..]);
-                    to_update0 += &to_update1;
 
-                    let mut cst = (1.0 / n1).powi(p - 1) - (-1.0 / n0).powi(p - 1);
-                    cst *= (n1 * n0 / n).powi(p);
-                    to_update0 += &(&delta_pows.slice(s![p, ..]) * cst);
+                    let mut to_update0 =
+                        &to_update0.slice_mut(s![0, ..]) + &to_update1.slice(s![0, ..]);
+
                     for k in 1..(p - 1) {
                         let cst = binomial(p, k) as f64;
                         let mut tmp = &delta_pows.slice(s![k, ..]) * cst;
@@ -118,23 +132,33 @@ impl UnivarMomentAcc {
                         tmp = &tmp * x;
                         to_update0 += &tmp;
                     }
+
+                    let mut cst = (1.0 / n1).powi(p - 1) - (-1.0 / n0).powi(p - 1);
+                    cst *= (n1 * n0 / n).powi(p);
+                    to_update0 += &(&delta_pows.slice(s![p, ..]) * cst);
                 }
+
+                // update the mean
                 let mut u0 = cs0.slice_mut(s![0, ..]);
                 u0 += &(&delta * (n1 / n));
             }
         });
         self.n_traces += &n_traces;
     }
+
+    /// Merges to different CS estimations.
     pub fn merge(&mut self, other: &Self) {
         self.merge_from_state(other.moments.view(), other.n_traces.view());
     }
+
+    /// Updates the current estimation with fresh traces.
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
         let mut sum = Array2::<u64>::zeros((self.nc, self.ns));
         let mut moments_other = Array3::<f64>::zeros((self.nc, self.d, self.ns));
         let mut n_traces = Array1::<u64>::zeros(self.nc);
 
-        // STEP 1: 2-passes algorithm to compute higher-order moments
-        // sum and sum of square per class
+        // STEP 1: 2-passes algorithm to compute center sum of powers
+        // sum per class,
         for (trace, class) in traces.outer_iter().zip(y.iter()) {
             n_traces[*class as usize] += 1;
             let mut s = sum.slice_mut(s![*class as usize, ..]);
@@ -161,10 +185,11 @@ impl UnivarMomentAcc {
             }
         }
 
-        // STEP 2 merge in current state
+        // STEP 2 merge the two pass estimation with the current state of the accumulator
         self.merge_from_state(moments_other.view(), n_traces.view());
     }
 
+    /// Reset the current accumulator
     pub fn reset(&mut self) {
         self.n_traces.fill(0);
         self.moments.fill(0.0);
@@ -175,8 +200,8 @@ pub struct Ttest {
     d: usize,
     /// Number of samples per trace
     ns: usize,
-    /// Vector of Moment accumulators 
-    accumulators: Vec<UnivarMomentAcc>
+    /// Vector of Moment accumulators
+    accumulators: Vec<UnivarMomentAcc>,
 }
 
 impl Ttest {
@@ -184,17 +209,19 @@ impl Ttest {
     /// ns: traces length
     /// d: order of the Ttest
     pub fn new(ns: usize, d: usize) -> Self {
+        // number of required accumulators
         let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
-        println!("{}",n_batches);
-        let accumulators : Vec<UnivarMomentAcc> = (0..n_batches).map(|x|{
-            let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH); 
-            println!("l {}",l);
-            UnivarMomentAcc::new(l,2*d,2)
-        }).collect();
+        let accumulators: Vec<UnivarMomentAcc> = (0..n_batches)
+            .map(|x| {
+                let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
+                UnivarMomentAcc::new(l, 2 * d, 2)
+            })
+            .collect();
+
         Ttest {
             d: d,
             ns: ns,
-            accumulators : accumulators
+            accumulators: accumulators,
         }
     }
     /// Update the Ttest state with n fresh traces
@@ -202,11 +229,10 @@ impl Ttest {
     /// y: realization of random variables with shape (n,)
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
         izip!(
-            traces.axis_chunks_iter(Axis(1),NS_BATCH),
+            traces.axis_chunks_iter(Axis(1), NS_BATCH),
             self.accumulators.iter_mut()
-        ).for_each(|(traces, acc)|{
-            acc.update(traces,y)
-        });
+        )
+        .for_each(|(traces, acc)| acc.update(traces, y));
     }
 
     /// Generate the actual Ttest metric based on the current state.
@@ -227,7 +253,6 @@ impl Ttest {
     // d > 2:
     //      ui = CM_{d,Q} / CM_{2,Q}**(d/2)
     //      vi = (CM_{2*d,Q} - CM_{d,Q}**2) / CM{2,Q}**d
-
     pub fn get_ttest(&self) -> Array2<f64> {
         let mut ttest = Array2::<f64>::zeros((self.d, self.ns));
         let n_samples = &self.accumulators[0].n_traces;
@@ -239,51 +264,72 @@ impl Ttest {
             ttest.axis_chunks_iter_mut(Axis(1), NS_BATCH),
             self.accumulators.iter()
         )
-            .for_each(|(mut ttest, acc)| {
-                ttest.axis_iter_mut(Axis(0)).enumerate()
-                    .for_each(|(d,mut ttest)| {
-                        let d = d + 1;
+        .for_each(|(mut ttest, acc)| {
+            ttest
+                .axis_iter_mut(Axis(0))
+                .enumerate()
+                .for_each(|(d, mut ttest)| {
+                    let d = d + 1;
 
-                        if d == 1 {
-                            let u0 = acc.moments.slice(s![0,0,..]);
-                            let u1 = acc.moments.slice(s![1,0,..]);
-                            let v0 = acc.moments.slice(s![0,1,..]);
-                            let v0 = &v0 / n0;
-                            let v1 = acc.moments.slice(s![1,1,..]);
-                            let v1 = &v1 / n1;
-                            let t = (&u0 - &u1) / (&v0.mapv(|x| x / n0) + &v1.mapv(|x| x / n1)).mapv(|x| f64::sqrt(x));
-                            ttest.assign(&t);
+                    if d == 1 {
+                        let u0 = acc.moments.slice(s![0, 0, ..]);
+                        let u1 = acc.moments.slice(s![1, 0, ..]);
+                        let v0 = acc.moments.slice(s![0, 1, ..]);
+                        let v0 = &v0 / n0;
+                        let v1 = acc.moments.slice(s![1, 1, ..]);
+                        let v1 = &v1 / n1;
+                        let t = (&u0 - &u1)
+                            / (&v0.mapv(|x| x / n0) + &v1.mapv(|x| x / n1)).mapv(|x| f64::sqrt(x));
+                        ttest.assign(&t);
+                    } else if d == 2 {
+                        let u0 = acc.moments.slice(s![0, 1, ..]).mapv(|x| x / n0);
+                        let u1 = acc.moments.slice(s![1, 1, ..]).mapv(|x| x / n1);
 
-                        } else if d == 2 {
-                            let u0 = acc.moments.slice(s![0,1,..]).mapv(|x| x / n0);
-                            let u1 = acc.moments.slice(s![1,1,..]).mapv(|x| x / n1);
-                            
-                            let v0 = acc.moments.slice(s![0,3,..]).mapv(|x| x / n0);
-                            let v1 = acc.moments.slice(s![1,3,..]).mapv(|x| x / n1);
-                            let v0 = &v0 - &u0.mapv(|x| x.powi(2));
-                            let v1 = &v1 - &u1.mapv(|x| x.powi(2));
-                            let t = (&u0 - &u1) / (&v0.mapv(|x| x / n0) + &v1.mapv(|x| x / n1)).mapv(|x| f64::sqrt(x));
-                            ttest.assign(&t);
-                        }
-                        else {
-                            let u0 = &(acc.moments.slice(s![0,d-1,..])).mapv(|x| x / n0)
-                                / &(acc.moments.slice(s![0,1,..]).mapv(|x| (x/n0).powf(d as f64 / 2.0)));
-                            let u1 = &(acc.moments.slice(s![1,d-1,..])).mapv(|x| x / n1)
-                                / &(acc.moments.slice(s![1,1,..]).mapv(|x| (x/n1).powf(d as f64 / 2.0)));
-                            
-                            let v0 = (&acc.moments.slice(s![0,(2*d)-1,..]).mapv(|x| x / n0)
-                                        - &acc.moments.slice(s![0,d-1,..]).mapv(|x| (x/n0).powi(2)))
-                                / &(acc.moments.slice(s![0,1,..]).mapv(|x| (x/n0).powi(d as i32)));
+                        let v0 = acc.moments.slice(s![0, 3, ..]).mapv(|x| x / n0);
+                        let v1 = acc.moments.slice(s![1, 3, ..]).mapv(|x| x / n1);
+                        let v0 = &v0 - &u0.mapv(|x| x.powi(2));
+                        let v1 = &v1 - &u1.mapv(|x| x.powi(2));
+                        let t = (&u0 - &u1)
+                            / (&v0.mapv(|x| x / n0) + &v1.mapv(|x| x / n1)).mapv(|x| f64::sqrt(x));
+                        ttest.assign(&t);
+                    } else {
+                        let u0 = &(acc.moments.slice(s![0, d - 1, ..])).mapv(|x| x / n0)
+                            / &(acc
+                                .moments
+                                .slice(s![0, 1, ..])
+                                .mapv(|x| (x / n0).powf(d as f64 / 2.0)));
 
-                            let v1 = (&acc.moments.slice(s![1,(2*d)-1,..]).mapv(|x| x / n1)
-                                        - &acc.moments.slice(s![1,d-1,..]).mapv(|x| (x/n1).powi(2)))
-                                / &(acc.moments.slice(s![1,1,..]).mapv(|x| (x/n1).powi(d as i32)));
-                            let t = (&u0 - &u1) / (&v0.mapv(|x| x / n0) + &v1.mapv(|x| x / n1)).mapv(|x| f64::sqrt(x));
-                            ttest.assign(&t);
-                        }
+                        let u1 = &(acc.moments.slice(s![1, d - 1, ..])).mapv(|x| x / n1)
+                            / &(acc
+                                .moments
+                                .slice(s![1, 1, ..])
+                                .mapv(|x| (x / n1).powf(d as f64 / 2.0)));
 
-                    });
-            });
+                        let v0 = (&acc.moments.slice(s![0, (2 * d) - 1, ..]).mapv(|x| x / n0)
+                            - &acc
+                                .moments
+                                .slice(s![0, d - 1, ..])
+                                .mapv(|x| (x / n0).powi(2)))
+                            / &(acc
+                                .moments
+                                .slice(s![0, 1, ..])
+                                .mapv(|x| (x / n0).powi(d as i32)));
+
+                        let v1 = (&acc.moments.slice(s![1, (2 * d) - 1, ..]).mapv(|x| x / n1)
+                            - &acc
+                                .moments
+                                .slice(s![1, d - 1, ..])
+                                .mapv(|x| (x / n1).powi(2)))
+                            / &(acc
+                                .moments
+                                .slice(s![1, 1, ..])
+                                .mapv(|x| (x / n1).powi(d as i32)));
+                        let t = (&u0 - &u1)
+                            / (&v0.mapv(|x| x / n0) + &v1.mapv(|x| x / n1)).mapv(|x| f64::sqrt(x));
+                        ttest.assign(&t);
+                    }
+                });
+        });
         return ttest;
     }
 }
