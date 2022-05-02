@@ -1,4 +1,4 @@
-//! Estimation for higher-order T-test.
+//! Estimation for higher-order Univariate T-test.
 //!
 //! An estimation of Ttest is represented with a Ttest struct. Calling update allows
 //! to update the Ttest state with fresh measurements. get_ttest returns the current value
