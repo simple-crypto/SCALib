@@ -68,12 +68,12 @@ impl MultivarMomentAcc {
         izip!(
             self.moments.outer_iter_mut(),
             self.mean.outer_iter_mut(),
+            self.n_traces.iter(),
             moments_other.outer_iter(),
             means.outer_iter(),
-            self.n_traces.iter(),
             n_traces.iter()
         )
-        .for_each(|(mut cs1, mut u1, cs2, u2, n1, n2)| {
+        .for_each(|(mut cs1, mut u1, n1, cs2, u2, n2)| {
             let n1 = *n1 as f64;
             let n2 = *n2 as f64;
             let n = n1 + n2;
@@ -82,51 +82,52 @@ impl MultivarMomentAcc {
                 u1.assign(&u2);
             } else {
                 let delta = &u2 - &u1;
-
                 let mut prod1 = Array1::<f64>::ones((ns,));
                 let mut prod2 = Array1::<f64>::ones((ns,));
 
                 // update all the combinations one by one.
-                for (i, combi) in combis.iter().enumerate() {
+                for (i, combi) in combis.iter().enumerate().rev() {
                     // split cs between the inputs and the outputs
                     let (cs1_smaller, mut cs1_larger) = cs1.view_mut().split_at(Axis(0), i);
                     let (cs2_smaller, cs2_larger) = cs2.view().split_at(Axis(0), i);
-                    let mut cs1_larger = cs1_larger.slice_mut(s![0 as usize, ..]);
+                    let mut cs1_larger = cs1_larger.slice_mut(s![0, ..]);
 
                     cs1_larger += &cs2_larger.slice(s![0, ..]);
 
                     for k in 2..combi.len() {
-                        for set in combi.into_iter().combinations(k) {
-                            let mut set: Vec<usize> = set.into_iter().map(|x| *x).collect();
+                        for set in combi.iter().combinations(k) {
+                            let set: Vec<usize> = set.into_iter().map(|x| *x).collect();
                             let id = combis.iter().position(|x| *x == set).unwrap();
 
-                            prod1.fill(1.0);
-                            prod2.fill(1.0);
-                            // product of missing values in set.
-                            for x in combi.iter() {
-                                if set.contains(x) {
-                                    set.remove(set.iter().position(|y| *x == *y).unwrap());
-                                } else {
-                                    prod1 *= &(&delta.slice(s![*x, ..]) * (-n2 / n));
-                                    prod2 *= &(&delta.slice(s![*x, ..]) * (-n1 / n));
-                                }
+                            let mut to_multiply: Vec<usize> = combi.into_iter().map(|x| *x).collect();
+                            for x in set{
+                                to_multiply.remove(to_multiply.iter().position(|y| x == *y).unwrap());
                             }
-                            prod1 *= &cs1_smaller.slice(s![id, ..]);
-                            prod2 *= &cs2_smaller.slice(s![id, ..]);
+                            
+                            prod1.assign(&cs1_smaller.slice(s![id,..]));
+                            prod2.assign(&cs2_smaller.slice(s![id,..]));
+                            for i in to_multiply{
+                                prod1 *= &(&delta.slice(s![i,..]) * (-n2 / n));
+                                prod2 *= &(&delta.slice(s![i,..]) * (n1 / n));
+                            }
                             cs1_larger += &prod1;
                             cs1_larger += &prod2;
                         }
                     }
+                    
                     prod1.fill((-n2 / n).powi(combi.len() as i32) * n1);
-                    prod2.fill((-n1 / n).powi(combi.len() as i32) * n2);
+                    prod2.fill((n1 / n).powi(combi.len() as i32) * n2);
                     for x in combi.into_iter() {
                         prod1 *= &delta.slice(s![*x, ..]);
                         prod2 *= &delta.slice(s![*x, ..]);
                     }
                     cs1_larger += &prod1;
                     cs1_larger += &prod2;
+                    if combi.len() == 1{
+                        cs1_larger.fill(0.0);
+                    }
                 }
-                u1 += &((&u2 - &u1) * (n1 / n));
+                u1 += &((&u2 - &u1) * (n2 / n));
             }
         });
         self.n_traces += &n_traces;
@@ -144,6 +145,8 @@ impl MultivarMomentAcc {
         // Compute the mean per class on the all traces
         let mut sum = Array2::<u64>::zeros((self.nc, traces.shape()[1]));
         let mut n_traces = Array1::<u64>::zeros(self.nc);
+
+        // TODO handel the case where there is no trace in a class
         for (trace, class) in traces.outer_iter().zip(y.iter()) {
             n_traces[*class as usize] += 1;
             let mut s = sum.slice_mut(s![*class as usize, ..]);
