@@ -45,6 +45,40 @@ fn ttestacc_simple_chuncks() {
     let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
     let pois = Array2::<u32>::random((order, npois), Uniform::new(0, ns as u32));
     let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
+
+    let mut ttacc = mttest::MultivarMomentAcc::new(pois.view(), order);
+
+    izip!(
+        traces.axis_chunks_iter(Axis(0), step),
+        y.axis_chunks_iter(Axis(0), step)
+    )
+    .for_each(|(traces, y)| {
+        ttacc.update(traces, y);
+    });
+
+    let moments: Array3<f64> = ttacc.moments.to_owned();
+    test_cs(
+        traces.view(),
+        y.view(),
+        moments.view(),
+        ttacc.mean.view(),
+        pois.view(),
+        ttacc.combis,
+        ns as usize,
+        nc as usize,
+    );
+}
+#[test]
+fn ttestacc_simple_chuncks_step1() {
+    let order = 2;
+    let ns = 100;
+    let n = 40;
+    let nc = 2;
+    let npois = 20;
+    let step = 1;
+
+    let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
+    let pois = Array2::<u32>::random((order, npois), Uniform::new(0, ns as u32));
     let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
 
     let mut ttacc = mttest::MultivarMomentAcc::new(pois.view(), order);

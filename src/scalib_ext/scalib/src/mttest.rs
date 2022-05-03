@@ -80,7 +80,7 @@ impl MultivarMomentAcc {
             if n1 == 0.0 {
                 cs1.assign(&cs2);
                 u1.assign(&u2);
-            } else {
+            } else if n2 != 0.0{
                 let delta = &u2 - &u1;
                 let mut prod1 = Array1::<f64>::ones((ns,));
                 let mut prod2 = Array1::<f64>::ones((ns,));
@@ -189,7 +189,6 @@ impl MultivarMomentAcc {
         });
 
         // STEP 2: merge this batch
-
         let pois = &self.pois;
         let mut mapped_means = Array3::<f64>::zeros((self.nc, self.d, self.ns));
         izip!(mapped_means.outer_iter_mut(), mean.outer_iter()).for_each(
