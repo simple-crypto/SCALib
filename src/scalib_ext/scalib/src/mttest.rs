@@ -1,5 +1,5 @@
 use itertools::{izip, Itertools};
-use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, Axis};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis};
 
 pub struct MultivarMomentAcc {
     /// Number of tuples to evaluate.
@@ -56,9 +56,83 @@ impl MultivarMomentAcc {
         }
     }
 
+    pub fn merge_from_state(
+        &mut self,
+        moments_other: ArrayView3<f64>,
+        means: ArrayView3<f64>,
+        n_traces: ArrayView1<u64>,
+    ) {
+        // each row will contain one power of deltas
+        let combis = &self.combis;
+        let ns = self.ns;
+        izip!(
+            self.moments.outer_iter_mut(),
+            self.mean.outer_iter_mut(),
+            moments_other.outer_iter(),
+            means.outer_iter(),
+            self.n_traces.iter(),
+            n_traces.iter()
+        )
+        .for_each(|(mut cs1, mut u1, cs2, u2, n1, n2)| {
+            let n1 = *n1 as f64;
+            let n2 = *n2 as f64;
+            let n = n1 + n2;
+            if n1 == 0.0 {
+                cs1.assign(&cs2);
+                u1.assign(&u2);
+            } else {
+                let delta = &u2 - &u1;
+
+                let mut prod1 = Array1::<f64>::ones((ns,));
+                let mut prod2 = Array1::<f64>::ones((ns,));
+
+                // update all the combinations one by one.
+                for (i, combi) in combis.iter().enumerate() {
+                    // split cs between the inputs and the outputs
+                    let (cs1_smaller, mut cs1_larger) = cs1.view_mut().split_at(Axis(0), i);
+                    let (cs2_smaller, cs2_larger) = cs2.view().split_at(Axis(0), i);
+                    let mut cs1_larger = cs1_larger.slice_mut(s![0 as usize, ..]);
+
+                    cs1_larger += &cs2_larger.slice(s![0, ..]);
+
+                    for k in 2..combi.len() {
+                        for set in combi.into_iter().combinations(k) {
+                            let mut set: Vec<usize> = set.into_iter().map(|x| *x).collect();
+                            let id = combis.iter().position(|x| *x == set).unwrap();
+
+                            prod1.fill(1.0);
+                            prod2.fill(1.0);
+                            // product of missing values in set.
+                            for x in combi.iter() {
+                                if set.contains(x) {
+                                    set.remove(set.iter().position(|y| *x == *y).unwrap());
+                                } else {
+                                    prod1 *= &(&delta.slice(s![*x, ..]) * (-n2 / n));
+                                    prod2 *= &(&delta.slice(s![*x, ..]) * (-n1 / n));
+                                }
+                            }
+                            prod1 *= &cs1_smaller.slice(s![id, ..]);
+                            prod2 *= &cs2_smaller.slice(s![id, ..]);
+                            cs1_larger += &prod1;
+                            cs1_larger += &prod2;
+                        }
+                    }
+                    prod1.fill((-n2 / n).powi(combi.len() as i32) * n1);
+                    prod2.fill((-n1 / n).powi(combi.len() as i32) * n2);
+                    for x in combi.into_iter() {
+                        prod1 *= &delta.slice(s![*x, ..]);
+                        prod2 *= &delta.slice(s![*x, ..]);
+                    }
+                    cs1_larger += &prod1;
+                    cs1_larger += &prod2;
+                }
+                u1 += &((&u2 - &u1) * (n1 / n));
+            }
+        });
+        self.n_traces += &n_traces;
+    }
     /// Updates the current estimation with fresh traces.
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
-        println!("Welcome to update");
         let d = self.d;
         let mut moments_other = Array3::<f64>::zeros((self.nc, self.combis.len(), self.ns));
         let mut prod = Array2::<f64>::zeros((self.combis.len(), self.ns));
@@ -112,15 +186,18 @@ impl MultivarMomentAcc {
         });
 
         // STEP 2: merge this batch
-        self.moments.assign(&moments_other);
+
         let pois = &self.pois;
-        izip!(self.mean.outer_iter_mut(),
-                mean.outer_iter()
-        ).for_each(|(mut to_update,mean)|{
-                izip!(to_update.outer_iter_mut(),pois.outer_iter())
-                    .for_each(|(mut to_update, pois)|{
-            to_update.zip_mut_with(&pois,|x,p| *x = mean[*p as usize]);
-                    });
-        });
+        let mut mapped_means = Array3::<f64>::zeros((self.nc, self.d, self.ns));
+        izip!(mapped_means.outer_iter_mut(), mean.outer_iter()).for_each(
+            |(mut to_update, mean)| {
+                izip!(to_update.outer_iter_mut(), pois.outer_iter()).for_each(
+                    |(mut to_update, pois)| {
+                        to_update.zip_mut_with(&pois, |x, p| *x = mean[*p as usize]);
+                    },
+                );
+            },
+        );
+        self.merge_from_state(moments_other.view(), mapped_means.view(), n_traces.view());
     }
 }
