@@ -78,7 +78,7 @@ def test_ttest_d2():
 
 
 def test_ttest_d6_multiple_fit():
-    ns = 1043
+    ns = 12300
     d = 6
     nc = 2
     n = 200
