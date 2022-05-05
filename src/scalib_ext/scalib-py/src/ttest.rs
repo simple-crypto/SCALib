@@ -38,7 +38,7 @@ impl Ttest {
 
 #[pyclass]
 pub(crate) struct MTtest {
-    inner: scalib::ttest::MTtest,
+    inner: scalib::mttest::MTtest,
 }
 
 #[pymethods]
@@ -47,10 +47,10 @@ impl MTtest {
     /// Create a new Ttest state.
     /// d: order of the Ttest
     /// pois: points of interest
-    fn new(d: usize, pois: PyReadonlyArray2<u64>) -> Self {
+    fn new(d: usize, pois: PyReadonlyArray2<u32>) -> Self {
         let pois = pois.as_array();
         Self {
-            inner: scalib::ttest::MTtest::new(d, pois),
+            inner: scalib::mttest::MTtest::new(d, pois.view()),
         }
     }
     /// Update the Ttest state with n fresh traces

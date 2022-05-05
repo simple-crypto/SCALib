@@ -150,13 +150,13 @@ fn test_cs(
             combi.iter()
         )
         .for_each(|(m, combi)| {
-            println!("New Combi {:#?}",combi); 
+            println!("New Combi {:#?}", combi);
             izip!(m.iter(), pois.axis_iter(Axis(1))).for_each(|(m, poi)| {
                 let mut test = Array1::<f64>::ones((n_traces,));
                 for c in combi.iter() {
                     test = &test * &t0.slice(s![.., poi[*c] as usize]);
                 }
-                println!("{} {}",test.sum(),m);
+                println!("{} {}", test.sum(), m);
                 assert!((test.sum() - m).abs() < epsi);
                 tests += 1;
             });

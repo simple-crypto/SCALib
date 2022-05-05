@@ -1,5 +1,6 @@
 use itertools::{izip, Itertools};
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis};
+const NS_BATCH: usize = 1 << 9;
 
 pub struct MultivarMomentAcc {
     /// Number of tuples to evaluate.
@@ -80,7 +81,7 @@ impl MultivarMomentAcc {
             if n1 == 0.0 {
                 cs1.assign(&cs2);
                 u1.assign(&u2);
-            } else if n2 != 0.0{
+            } else if n2 != 0.0 {
                 let delta = &u2 - &u1;
                 let mut prod1 = Array1::<f64>::ones((ns,));
                 let mut prod2 = Array1::<f64>::ones((ns,));
@@ -99,22 +100,24 @@ impl MultivarMomentAcc {
                             let set: Vec<usize> = set.into_iter().map(|x| *x).collect();
                             let id = combis.iter().position(|x| *x == set).unwrap();
 
-                            let mut to_multiply: Vec<usize> = combi.into_iter().map(|x| *x).collect();
-                            for x in set{
-                                to_multiply.remove(to_multiply.iter().position(|y| x == *y).unwrap());
+                            let mut to_multiply: Vec<usize> =
+                                combi.into_iter().map(|x| *x).collect();
+                            for x in set {
+                                to_multiply
+                                    .remove(to_multiply.iter().position(|y| x == *y).unwrap());
                             }
-                            
-                            prod1.assign(&cs1_smaller.slice(s![id,..]));
-                            prod2.assign(&cs2_smaller.slice(s![id,..]));
-                            for i in to_multiply{
-                                prod1 *= &(&delta.slice(s![i,..]) * (-n2 / n));
-                                prod2 *= &(&delta.slice(s![i,..]) * (n1 / n));
+
+                            prod1.assign(&cs1_smaller.slice(s![id, ..]));
+                            prod2.assign(&cs2_smaller.slice(s![id, ..]));
+                            for i in to_multiply {
+                                prod1 *= &(&delta.slice(s![i, ..]) * (-n2 / n));
+                                prod2 *= &(&delta.slice(s![i, ..]) * (n1 / n));
                             }
                             cs1_larger += &prod1;
                             cs1_larger += &prod2;
                         }
                     }
-                    
+
                     prod1.fill((-n2 / n).powi(combi.len() as i32) * n1);
                     prod2.fill((n1 / n).powi(combi.len() as i32) * n2);
                     for x in combi.into_iter() {
@@ -123,7 +126,7 @@ impl MultivarMomentAcc {
                     }
                     cs1_larger += &prod1;
                     cs1_larger += &prod2;
-                    if combi.len() == 1{
+                    if combi.len() == 1 {
                         cs1_larger.fill(0.0);
                     }
                 }
@@ -146,7 +149,6 @@ impl MultivarMomentAcc {
         let mut sum = Array2::<u64>::zeros((self.nc, traces.shape()[1]));
         let mut n_traces = Array1::<u64>::zeros(self.nc);
 
-        // TODO handel the case where there is no trace in a class
         for (trace, class) in traces.outer_iter().zip(y.iter()) {
             n_traces[*class as usize] += 1;
             let mut s = sum.slice_mut(s![*class as usize, ..]);
@@ -201,5 +203,103 @@ impl MultivarMomentAcc {
             },
         );
         self.merge_from_state(moments_other.view(), mapped_means.view(), n_traces.view());
+    }
+}
+
+pub struct MTtest {
+    /// order of the test
+    d: usize,
+    /// Number of samples per trace
+    ns: usize,
+    /// Vector of Moment accumulators
+    accumulators: Vec<MultivarMomentAcc>,
+}
+impl MTtest {
+    /// Create a new Ttest state.
+    /// ns: traces length
+    /// d: order of the Ttest
+    pub fn new(d: usize, pois: ArrayView2<u32>) -> Self {
+        assert!(d == pois.shape()[0]);
+        assert!(
+            d > 1,
+            "Order of Multivariate T-test should be larger than 1, provided d = {}",
+            d
+        );
+
+        let ns = pois.shape()[1];
+        // number of required accumulators
+        let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
+        let accumulators: Vec<MultivarMomentAcc> = (0..n_batches)
+            .map(|x| {
+                let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
+                MultivarMomentAcc::new(pois.slice(s![.., (NS_BATCH * x)..(NS_BATCH * x + l)]), 2)
+            })
+            .collect();
+
+        MTtest {
+            d: d,
+            ns: ns,
+            accumulators: accumulators,
+        }
+    }
+    /// Update the Ttest state with n fresh traces
+    /// traces: the leakage traces with shape (n,ns)
+    /// y: realization of random variables with shape (n,)
+    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
+        for acc in &mut self.accumulators {
+            acc.update(traces, y);
+        }
+    }
+
+    pub fn get_ttest(&self) -> Array1<f64> {
+        let mut t = Array1::<f64>::zeros((self.ns,));
+        izip!(
+            t.axis_chunks_iter_mut(Axis(0), NS_BATCH),
+            self.accumulators.iter()
+        )
+        .for_each(|(mut t, acc)| {
+            t.fill(1.0);
+            let n1 = acc.n_traces[0] as f64;
+            let n2 = acc.n_traces[1] as f64;
+
+            let mut mu1 = Array1::<f64>::zeros((t.shape()[0],));
+            let mut var1 = Array1::<f64>::zeros((t.shape()[0],));
+            let mut mu2 = Array1::<f64>::zeros((t.shape()[0],));
+            let mut var2 = Array1::<f64>::zeros((t.shape()[0],));
+
+            // assign means
+            let combi: Vec<usize> = (0..self.d).collect();
+            let id = acc.combis.iter().position(|x| *x == combi).unwrap();
+            let mus = acc.moments.slice(s![.., id, ..]);
+            mu1.assign(&(&mus.slice(s![0, ..]) / n1));
+            mu2.assign(&(&mus.slice(s![1, ..]) / n2));
+
+            let mut combi: Vec<usize> = (0..self.d).chain(0..self.d).collect();
+            combi.sort();
+            let id = acc.combis.iter().position(|x| *x == combi).unwrap();
+            let vars = acc.moments.slice(s![.., id, ..]);
+            var1.assign(&(&vars.slice(s![0, ..]) / n1));
+            var2.assign(&(&vars.slice(s![1, ..]) / n2));
+
+            if self.d > 2 {
+                for j in 0..self.d{
+                    let combi: Vec<usize> = vec![j,j]; 
+                    let id = acc.combis.iter().position(|x| *x == combi).unwrap();
+                    let mus = acc.moments.slice(s![.., id, ..]);
+                    mu1 /= &(mus.slice(s![0,..]).mapv(|x| (x / n1).sqrt()));
+                    mu2 /= &(mus.slice(s![1,..]).mapv(|x| (x / n2).sqrt()));
+                    
+                    var1 /= &(mus.slice(s![0,..]).mapv(|x| (x / n1)));
+                    var2 /= &(mus.slice(s![1,..]).mapv(|x| (x / n2)));
+                }
+            }
+            var1 -= &(&mu1 * &mu1);
+            var2 -= &(&mu2 * &mu2);
+            
+            t.assign(&(&mu1 - &mu2));
+
+            t /= &((&var1  / n1) + (&var2 / n2)).mapv(|x| x.sqrt());
+        });
+        t
     }
 }

@@ -5,7 +5,6 @@ import scipy.stats
 
 
 def reference(traces, x, D):
-
     CM0 = np.zeros((D * 2, traces.shape[1]))
     I0 = np.where(x == 0)[0]
     u0 = np.mean(traces[I0, :], axis=0)
