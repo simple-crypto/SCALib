@@ -122,7 +122,7 @@ def test_ttest_d2_multiple_fit():
     n = 40
 
     m = np.random.randint(0, 2, (nc, ns))
-    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
+    traces = np.random.randint(-4231, 4214, (n, ns), dtype=np.int16)
     labels = np.random.randint(0, nc, n, dtype=np.uint16)
     pois = np.random.randint(0,ns,(d,npois),dtype=np.uint32)
 

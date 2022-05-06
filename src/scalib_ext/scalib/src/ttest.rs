@@ -9,10 +9,10 @@
 //! <https://eprint.iacr.org/2015/207>.
 
 use itertools::izip;
-use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis, ArrayViewMut1};
 use num_integer::binomial;
 
-const NS_BATCH: usize = 1 << 9;
+const NS_BATCH: usize = 1 << 10;
 const Y_BATCH: usize = 1 << 9;
 
 pub struct UnivarMomentAcc {
@@ -150,7 +150,7 @@ impl UnivarMomentAcc {
 
     /// Updates the current estimation with fresh traces.
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
-        let mut sum = Array2::<u64>::zeros((self.nc, self.ns));
+        let mut sum = Array2::<i64>::zeros((self.nc, self.ns));
         let mut moments_other = Array3::<f64>::zeros((self.nc, self.d, self.ns));
         let mut n_traces = Array1::<u64>::zeros(self.nc);
 
@@ -159,9 +159,7 @@ impl UnivarMomentAcc {
         for (trace, class) in traces.outer_iter().zip(y.iter()) {
             n_traces[*class as usize] += 1;
             let mut s = sum.slice_mut(s![*class as usize, ..]);
-            s.zip_mut_with(&trace, |s, t| {
-                *s += *t as u64;
-            });
+            acc_sum(&mut s.view_mut(),&trace); 
         }
 
         // assign mean
@@ -172,15 +170,20 @@ impl UnivarMomentAcc {
 
         // compute centered sums
         let mut pow = Array1::<f64>::zeros((self.ns,));
+        let mut t = Array1::<f64>::zeros((self.ns,));
         for (trace, class) in traces.outer_iter().zip(y.iter()) {
             let mut m_full = moments_other.slice_mut(s![*class as usize, .., ..]);
-            let t = &trace.mapv(|x| x as f64) - &m_full.slice(s![0, ..]);
-            pow.assign(&t);
+            izip!(t.view_mut().into_slice().unwrap().iter_mut(),
+                    pow.view_mut().into_slice().unwrap().iter_mut(),
+                    m_full.slice(s![0,..]).view().to_slice().unwrap().iter(),
+                    trace.view().to_slice().unwrap().iter()
+                ).for_each(|(t,pow,m_full,trace)|{
+                *t = *trace as f64 - m_full;
+                *pow = *t;
+            });
             for d in 2..(self.d + 1) {
-                // centering
-                pow *= &t;
-                let mut dest = m_full.slice_mut(s![d - 1, ..]);
-                dest += &pow;
+                let dest = m_full.slice_mut(s![d - 1, ..]);
+                pow_and_sum(dest, pow.view_mut(), t.view());
             }
         }
 
@@ -359,4 +362,23 @@ pub fn gen_delta(m: &mut [f64], d: &mut [f64], t: &[i16], poi: &[u64], n: f64) {
             *d = t[poi[i as usize] as usize] as f64 - *m;
             *m += (*d) / (n);
         });
+}
+
+#[inline(never)]
+pub fn acc_sum(m: &mut ArrayViewMut1<i64>, t: &ArrayView1<i16>){
+    m.zip_mut_with(t,|m,t| *m += *t as i64);
+}
+
+#[inline(always)]
+pub fn pow_and_sum(m: ArrayViewMut1<f64>, pow: ArrayViewMut1<f64>, t: ArrayView1<f64>){
+    let m = m.into_slice().unwrap();
+    let pow = pow.into_slice().unwrap();
+    let t = t.to_slice().unwrap();
+    izip!(m.iter_mut(),
+        pow.iter_mut(),
+        t.iter()
+    ).for_each(|(m, pow,t)|{
+        *pow *= *t;
+        *m += *pow;
+    });
 }

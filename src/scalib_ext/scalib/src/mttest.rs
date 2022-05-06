@@ -146,14 +146,14 @@ impl MultivarMomentAcc {
 
         // STEP 1.1: process the all traces.
         // Compute the mean per class on the all traces
-        let mut sum = Array2::<u64>::zeros((self.nc, traces.shape()[1]));
+        let mut sum = Array2::<i64>::zeros((self.nc, traces.shape()[1]));
         let mut n_traces = Array1::<u64>::zeros(self.nc);
 
         for (trace, class) in traces.outer_iter().zip(y.iter()) {
             n_traces[*class as usize] += 1;
             let mut s = sum.slice_mut(s![*class as usize, ..]);
             s.zip_mut_with(&trace, |s, t| {
-                *s += *t as u64;
+                *s += *t as i64;
             });
         }
         let n = n_traces.mapv(|x| x as f64);
