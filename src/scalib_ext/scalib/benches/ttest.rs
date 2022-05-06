@@ -32,7 +32,7 @@ fn bench_mttest(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     // This can be any expression that returns a `Criterion` object.
-    config = Criterion::default().significance_level(0.1).sample_size(100).measurement_time(Duration::from_secs(10));
+    config = Criterion::default().significance_level(0.01).sample_size(500).measurement_time(Duration::from_secs(30));
     targets = bench_mttest
 }
 criterion_main!(benches);
