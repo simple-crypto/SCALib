@@ -9,7 +9,7 @@
 //! <https://eprint.iacr.org/2015/207>.
 
 use itertools::izip;
-use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis, ArrayViewMut1};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
 use num_integer::binomial;
 
 const NS_BATCH: usize = 1 << 10;
@@ -159,7 +159,7 @@ impl UnivarMomentAcc {
         for (trace, class) in traces.outer_iter().zip(y.iter()) {
             n_traces[*class as usize] += 1;
             let mut s = sum.slice_mut(s![*class as usize, ..]);
-            acc_sum(&mut s.view_mut(),&trace); 
+            acc_sum(&mut s.view_mut(), &trace);
         }
 
         // assign mean
@@ -173,11 +173,13 @@ impl UnivarMomentAcc {
         let mut t = Array1::<f64>::zeros((self.ns,));
         for (trace, class) in traces.outer_iter().zip(y.iter()) {
             let mut m_full = moments_other.slice_mut(s![*class as usize, .., ..]);
-            izip!(t.view_mut().into_slice().unwrap().iter_mut(),
-                    pow.view_mut().into_slice().unwrap().iter_mut(),
-                    m_full.slice(s![0,..]).view().to_slice().unwrap().iter(),
-                    trace.view().to_slice().unwrap().iter()
-                ).for_each(|(t,pow,m_full,trace)|{
+            izip!(
+                t.view_mut().into_slice().unwrap().iter_mut(),
+                pow.view_mut().into_slice().unwrap().iter_mut(),
+                m_full.slice(s![0, ..]).view().to_slice().unwrap().iter(),
+                trace.view().to_slice().unwrap().iter()
+            )
+            .for_each(|(t, pow, m_full, trace)| {
                 *t = *trace as f64 - m_full;
                 *pow = *t;
             });
@@ -206,20 +208,23 @@ pub struct Ttest {
     accumulators: Vec<UnivarMomentAcc>,
 }
 
+pub fn build_accumulator(ns: usize, d: usize) -> Vec<UnivarMomentAcc> {
+    let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
+    let accumulators: Vec<UnivarMomentAcc> = (0..n_batches)
+        .map(|x| {
+            let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
+            UnivarMomentAcc::new(l, 2 * d, 2)
+        })
+        .collect();
+    accumulators
+}
 impl Ttest {
     /// Create a new Ttest state.
     /// ns: traces length
     /// d: order of the Ttest
     pub fn new(ns: usize, d: usize) -> Self {
         // number of required accumulators
-        let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
-        let accumulators: Vec<UnivarMomentAcc> = (0..n_batches)
-            .map(|x| {
-                let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
-                UnivarMomentAcc::new(l, 2 * d, 2)
-            })
-            .collect();
-
+        let accumulators = build_accumulator(ns, d);
         Ttest {
             d: d,
             ns: ns,
@@ -230,16 +235,32 @@ impl Ttest {
     /// traces: the leakage traces with shape (n,ns)
     /// y: realization of random variables with shape (n,)
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
+        let d = self.d;
+        let ns = self.ns;
         izip!(
-            traces.axis_chunks_iter(Axis(1), NS_BATCH),
-            self.accumulators.iter_mut()
+            traces.axis_chunks_iter(Axis(0), Y_BATCH * 5),
+            y.axis_chunks_iter(Axis(0), Y_BATCH * 5)
         )
-        .for_each(|(traces, acc)| {
+        .map(|(traces, y)| { // chunck different traces for more threads
+            let mut accumulators = build_accumulator(ns, d);
             izip!(
-                traces.axis_chunks_iter(Axis(0), Y_BATCH),
-                y.axis_chunks_iter(Axis(0), Y_BATCH)
+                traces.axis_chunks_iter(Axis(1), NS_BATCH),
+                accumulators.iter_mut()
             )
-            .for_each(|(traces, y)| acc.update(traces, y));
+            .for_each(|(traces, acc)| { // chunck the traces with their lenght
+                izip!(
+                    traces.axis_chunks_iter(Axis(0), Y_BATCH),
+                    y.axis_chunks_iter(Axis(0), Y_BATCH)
+                )
+                .for_each(|(traces, y)| acc.update(traces, y));
+            });
+            accumulators
+        })
+        .for_each(|acc| { // accumulate all to the self accumulator
+            self.accumulators
+                .iter_mut()
+                .zip(acc.iter())
+                .for_each(|(x, y)| x.merge(y))
         });
     }
 
@@ -365,19 +386,16 @@ pub fn gen_delta(m: &mut [f64], d: &mut [f64], t: &[i16], poi: &[u64], n: f64) {
 }
 
 #[inline(never)]
-pub fn acc_sum(m: &mut ArrayViewMut1<i64>, t: &ArrayView1<i16>){
-    m.zip_mut_with(t,|m,t| *m += *t as i64);
+pub fn acc_sum(m: &mut ArrayViewMut1<i64>, t: &ArrayView1<i16>) {
+    m.zip_mut_with(t, |m, t| *m += *t as i64);
 }
 
 #[inline(always)]
-pub fn pow_and_sum(m: ArrayViewMut1<f64>, pow: ArrayViewMut1<f64>, t: ArrayView1<f64>){
+pub fn pow_and_sum(m: ArrayViewMut1<f64>, pow: ArrayViewMut1<f64>, t: ArrayView1<f64>) {
     let m = m.into_slice().unwrap();
     let pow = pow.into_slice().unwrap();
     let t = t.to_slice().unwrap();
-    izip!(m.iter_mut(),
-        pow.iter_mut(),
-        t.iter()
-    ).for_each(|(m, pow,t)|{
+    izip!(m.iter_mut(), pow.iter_mut(), t.iter()).for_each(|(m, pow, t)| {
         *pow *= *t;
         *m += *pow;
     });

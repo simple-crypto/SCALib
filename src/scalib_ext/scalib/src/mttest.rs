@@ -282,23 +282,23 @@ impl MTtest {
             var2.assign(&(&vars.slice(s![1, ..]) / n2));
 
             if self.d > 2 {
-                for j in 0..self.d{
-                    let combi: Vec<usize> = vec![j,j]; 
+                for j in 0..self.d {
+                    let combi: Vec<usize> = vec![j, j];
                     let id = acc.combis.iter().position(|x| *x == combi).unwrap();
                     let mus = acc.moments.slice(s![.., id, ..]);
-                    mu1 /= &(mus.slice(s![0,..]).mapv(|x| (x / n1).sqrt()));
-                    mu2 /= &(mus.slice(s![1,..]).mapv(|x| (x / n2).sqrt()));
-                    
-                    var1 /= &(mus.slice(s![0,..]).mapv(|x| (x / n1)));
-                    var2 /= &(mus.slice(s![1,..]).mapv(|x| (x / n2)));
+                    mu1 /= &(mus.slice(s![0, ..]).mapv(|x| (x / n1).sqrt()));
+                    mu2 /= &(mus.slice(s![1, ..]).mapv(|x| (x / n2).sqrt()));
+
+                    var1 /= &(mus.slice(s![0, ..]).mapv(|x| (x / n1)));
+                    var2 /= &(mus.slice(s![1, ..]).mapv(|x| (x / n2)));
                 }
             }
             var1 -= &(&mu1 * &mu1);
             var2 -= &(&mu2 * &mu2);
-            
+
             t.assign(&(&mu1 - &mu2));
 
-            t /= &((&var1  / n1) + (&var2 / n2)).mapv(|x| x.sqrt());
+            t /= &((&var1 / n1) + (&var2 / n2)).mapv(|x| x.sqrt());
         });
         t
     }
