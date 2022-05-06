@@ -7,11 +7,11 @@
 //!
 //! This is based on the one-pass algorithm proposed in
 //! <https://eprint.iacr.org/2015/207>.
-
 use itertools::izip;
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
 use num_integer::binomial;
-
+use rayon::prelude::*;
+use std::cmp;
 const NS_BATCH: usize = 1 << 10;
 const Y_BATCH: usize = 1 << 9;
 
@@ -237,31 +237,51 @@ impl Ttest {
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
         let d = self.d;
         let ns = self.ns;
-        izip!(
-            traces.axis_chunks_iter(Axis(0), Y_BATCH * 5),
-            y.axis_chunks_iter(Axis(0), Y_BATCH * 5)
+        let n_traces = traces.shape()[0];
+        let ns_chuncks = cmp::max(1, ns / NS_BATCH);
+        let min_desired_chuncks = 8 * rayon::current_num_threads();
+
+        let y_chunck_size = if min_desired_chuncks < ns_chuncks {
+            n_traces
+        } else {
+            let tmp = cmp::min(
+                rayon::current_num_threads(),
+                min_desired_chuncks / ns_chuncks,
+            ); // ensure that we do not split in more than available threads.
+            n_traces / tmp
+        };
+
+        let res = (
+            traces.axis_chunks_iter(Axis(0), y_chunck_size),
+            y.axis_chunks_iter(Axis(0), y_chunck_size),
         )
-        .map(|(traces, y)| { // chunck different traces for more threads
-            let mut accumulators = build_accumulator(ns, d);
-            izip!(
-                traces.axis_chunks_iter(Axis(1), NS_BATCH),
-                accumulators.iter_mut()
-            )
-            .for_each(|(traces, acc)| { // chunck the traces with their lenght
-                izip!(
-                    traces.axis_chunks_iter(Axis(0), Y_BATCH),
-                    y.axis_chunks_iter(Axis(0), Y_BATCH)
-                )
-                .for_each(|(traces, y)| acc.update(traces, y));
-            });
-            accumulators
-        })
-        .for_each(|acc| { // accumulate all to the self accumulator
-            self.accumulators
-                .iter_mut()
-                .zip(acc.iter())
-                .for_each(|(x, y)| x.merge(y))
-        });
+            .into_par_iter()
+            .map(|(traces, y)| {
+                // chunck different traces for more threads
+                let mut accumulators = build_accumulator(ns, d);
+                (
+                    traces.axis_chunks_iter(Axis(1), NS_BATCH),
+                    &mut accumulators
+                ).into_par_iter()
+                .for_each(|(traces, acc)| {
+                    // chunck the traces with their lenght
+                    izip!(
+                        traces.axis_chunks_iter(Axis(0), Y_BATCH),
+                        y.axis_chunks_iter(Axis(0), Y_BATCH)
+                    )
+                    .for_each(|(traces, y)| acc.update(traces, y));
+                });
+                accumulators
+            })
+            .reduce(
+                || build_accumulator(ns, d),
+                |mut x, y| {
+                    // accumulate all to the self accumulator
+                    x.iter_mut().zip(y.iter()).for_each(|(x, y)| x.merge(y));
+                    x
+                },
+            );
+        izip!(self.accumulators.iter_mut(), res.iter()).for_each(|(x, y)| x.merge(y));
     }
 
     /// Generate the actual Ttest metric based on the current state.
