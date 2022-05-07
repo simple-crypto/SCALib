@@ -45,7 +45,7 @@ class SNR:
 
     """
 
-    def __init__(self, nc, ns, np=1):
+    def __init__(self, nc, ns, np=1, use_newer=False):
         if nc not in range(1, 2**16 + 1):
             raise ValueError(
                 f"SNR can be computed on max 16 bit variable, nc={nc} given"
@@ -53,7 +53,10 @@ class SNR:
 
         self._ns = ns
         self._np = np
-        self._snr = _scalib_ext.SNR(nc, ns, np)
+        if use_newer:
+            self._snr = _scalib_ext.SNR2(nc, ns, np)
+        else:
+            self._snr = _scalib_ext.SNR(nc, ns, np)
 
     def fit_u(self, l, x):
         r"""Updates the SNR estimation with samples of `l` for the classes `x`.

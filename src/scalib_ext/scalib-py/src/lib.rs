@@ -30,6 +30,7 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
 #[pymodule]
 fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
+    m.add_class::<snr::SNR2>()?;
     m.add_class::<ttest::Ttest>()?;
     m.add_class::<ttest::MTtest>()?;
     m.add_class::<lda::LDA>()?;
