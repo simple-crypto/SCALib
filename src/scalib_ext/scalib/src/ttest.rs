@@ -248,9 +248,8 @@ impl Ttest {
                 rayon::current_num_threads(),
                 min_desired_chuncks / ns_chuncks,
             ); // ensure that we do not split in more than available threads.
-            cmp::max(256,n_traces / tmp)
+            cmp::max(256, n_traces / tmp)
         };
-        
 
         let res = (
             traces.axis_chunks_iter(Axis(0), y_chunck_size),
@@ -262,16 +261,17 @@ impl Ttest {
                 let mut accumulators = build_accumulator(ns, d);
                 (
                     traces.axis_chunks_iter(Axis(1), NS_BATCH),
-                    &mut accumulators
-                ).into_par_iter()
-                .for_each(|(traces, acc)| {
-                    // chunck the traces with their lenght
-                    izip!(
-                        traces.axis_chunks_iter(Axis(0), Y_BATCH),
-                        y.axis_chunks_iter(Axis(0), Y_BATCH)
-                    )
-                    .for_each(|(traces, y)| acc.update(traces, y));
-                });
+                    &mut accumulators,
+                )
+                    .into_par_iter()
+                    .for_each(|(traces, acc)| {
+                        // chunck the traces with their lenght
+                        izip!(
+                            traces.axis_chunks_iter(Axis(0), Y_BATCH),
+                            y.axis_chunks_iter(Axis(0), Y_BATCH)
+                        )
+                        .for_each(|(traces, y)| acc.update(traces, y));
+                    });
                 accumulators
             })
             .reduce(

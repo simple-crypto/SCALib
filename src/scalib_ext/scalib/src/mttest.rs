@@ -1,5 +1,5 @@
 use itertools::{izip, Itertools};
-use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis, ArrayViewMut1};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
 const NS_BATCH: usize = 1 << 9;
 
 pub struct MultivarMomentAcc {
@@ -140,6 +140,20 @@ impl MultivarMomentAcc {
         let d = self.d;
         let mut moments_other = Array3::<f64>::zeros((self.nc, self.combis.len(), self.ns));
         let mut prod = Array2::<f64>::zeros((self.combis.len(), self.ns));
+        let precomp_loc: Vec<usize> = self
+            .combis
+            .iter()
+            .filter(|x| x.len() > 1)
+            .map(|x| {
+                if x.len() == 2 {
+                    0
+                } else {
+                    let mut tmp = x.clone();
+                    tmp.remove(0);
+                    self.combis.iter().position(|y| tmp == *y).unwrap() - self.d
+                }
+            })
+            .collect();
         //
         // STEP 1: 2-passes algorithm to compute center sum of powers
         //
@@ -159,37 +173,45 @@ impl MultivarMomentAcc {
         let n = n_traces.mapv(|x| x as f64);
         let mut mean = sum.mapv(|x| x as f64);
         mean.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n);
-        
+
         // for each trace:
         //  1. center it (t - mu)
         //  2. re-order the traces for each of the pois
         let mut ct = Array1::<f64>::zeros((traces.shape()[1],));
         izip!(traces.axis_iter(Axis(0)), y.iter()).for_each(|(t, y)| {
             // prod according to poi for first (t-mu)
-            center_trace(ct.view_mut(),t.view(),mean.slice(s![*y as usize,..]));
+            center_trace(ct.view_mut(), t.view(), mean.slice(s![*y as usize, ..]));
+            let mut to_update = moments_other.slice_mut(s![*y as usize, .., ..]);
 
             // re-order according to pois.
             for i in 0..d {
                 let mut c = prod.slice_mut(s![i, ..]);
+                let mut tmp = to_update.slice_mut(s![i,..]);
                 c.zip_mut_with(&self.pois.slice(s![i, ..]), |c, p| *c = ct[*p as usize]);
+                tmp += &c;
             }
-            
 
             // compute the product for all the higher order combinations
             let (ct, mut higher_order) = prod.view_mut().split_at(Axis(0), self.d);
+            let (_, mut to_update) = to_update.view_mut().split_at(Axis(0), self.d);
             let (_, higher_combi) = self.combis.split_at(self.d);
-            izip!(higher_order.axis_iter_mut(Axis(0)), higher_combi.iter()).for_each(
-                |(mut h, combi)| {
-                    h.fill(1.0);
-                    for c in combi.iter() {
-                        h *= &ct.slice(s![*c, ..]);
-                    }
-                },
-            );
-            
+            izip!(
+                (0..higher_order.len()),
+                higher_combi.iter(),
+                precomp_loc.iter(),
+                to_update.axis_iter_mut(Axis(0)),
+            )
+            .for_each(|(i, combi, precomp_loc,to_update)| {
+                let (tmp,mut hf) = higher_order.view_mut().split_at(Axis(0),i);
+                let h = hf.slice_mut(s![0,..]);
+                if combi.len() == 2 {
+                    add_prod(to_update,h,ct.slice(s![combi[0], ..]),ct.slice(s![combi[1], ..]));
+                } else {
+                    add_prod(to_update,h,ct.slice(s![combi[0], ..]),tmp.slice(s![*precomp_loc, ..]));
+                }
+            });
+
             // add this combination
-            let mut to_update = moments_other.slice_mut(s![*y as usize, .., ..]);
-            to_update += &prod;
         });
 
         // STEP 2: merge this batch
@@ -313,5 +335,17 @@ pub fn center_trace(to: ArrayViewMut1<f64>, ti: ArrayView1<i16>, m: ArrayView1<f
     let m = m.to_slice().unwrap();
     izip!(to.iter_mut(), ti.iter(), m.iter()).for_each(|(to, ti, m)| {
         *to = *ti as f64 - *m;
+    });
+}
+
+#[inline(always)]
+pub fn add_prod(to1: ArrayViewMut1<f64>,to2: ArrayViewMut1<f64>, v1: ArrayView1<f64>, v2: ArrayView1<f64>) {
+    let to1 = to1.into_slice().unwrap();
+    let to2 = to2.into_slice().unwrap();
+    let v1 = v1.to_slice().unwrap();
+    let v2 = v2.to_slice().unwrap();
+    izip!(to1.iter_mut(), to2.iter_mut(), v1.iter(), v2.iter()).for_each(|(to1, to2, v1, v2)| {
+        *to2 = *v1 * *v2;
+        *to1 += *to2;     
     });
 }
