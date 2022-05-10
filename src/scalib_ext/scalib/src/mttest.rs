@@ -1,6 +1,9 @@
 use itertools::{izip, Itertools};
+use rayon::prelude::*;
+use std::cmp;
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
 const NS_BATCH: usize = 1 << 9;
+const Y_BATCH: usize = 1 << 9;
 
 pub struct MultivarMomentAcc {
     /// Number of tuples to evaluate.
@@ -135,84 +138,24 @@ impl MultivarMomentAcc {
         });
         self.n_traces += &n_traces;
     }
+
     /// Updates the current estimation with fresh traces.
-    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
-        let d = self.d;
-        let mut moments_other = Array3::<f64>::zeros((self.nc, self.combis.len(), self.ns));
-        let mut prod = Array2::<f64>::zeros((self.combis.len(), self.ns));
-        let precomp_loc: Vec<usize> = self
-            .combis
-            .iter()
-            .filter(|x| x.len() > 1)
-            .map(|x| {
-                if x.len() == 2 {
-                    0
-                } else {
-                    let mut tmp = x.clone();
-                    tmp.remove(0);
-                    self.combis.iter().position(|y| tmp == *y).unwrap() - self.d
-                }
-            })
-            .collect();
-        //
-        // STEP 1: 2-passes algorithm to compute center sum of powers
-        //
-
-        // STEP 1.1: process the all traces.
-        // Compute the mean per class on the all traces
-        let mut sum = Array2::<i64>::zeros((self.nc, traces.shape()[1]));
-        let mut n_traces = Array1::<u64>::zeros(self.nc);
-
-        for (trace, class) in traces.outer_iter().zip(y.iter()) {
-            n_traces[*class as usize] += 1;
-            let mut s = sum.slice_mut(s![*class as usize, ..]);
-            s.zip_mut_with(&trace, |s, t| {
-                *s += *t as i64;
-            });
-        }
-        let n = n_traces.mapv(|x| x as f64);
-        let mut mean = sum.mapv(|x| x as f64);
-        mean.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n);
-
-        // for each trace:
-        //  1. center it (t - mu)
-        //  2. re-order the traces for each of the pois
-        let mut ct = Array1::<f64>::zeros((traces.shape()[1],));
-        izip!(traces.axis_iter(Axis(0)), y.iter()).for_each(|(t, y)| {
-            // prod according to poi for first (t-mu)
-            center_trace(ct.view_mut(), t.view(), mean.slice(s![*y as usize, ..]));
-            let mut to_update = moments_other.slice_mut(s![*y as usize, .., ..]);
-
-            // re-order according to pois.
-            for i in 0..d {
-                let mut c = prod.slice_mut(s![i, ..]);
-                let mut tmp = to_update.slice_mut(s![i,..]);
-                c.zip_mut_with(&self.pois.slice(s![i, ..]), |c, p| *c = ct[*p as usize]);
-                tmp += &c;
-            }
-
-            // compute the product for all the higher order combinations
-            let (ct, mut higher_order) = prod.view_mut().split_at(Axis(0), self.d);
-            let (_, mut to_update) = to_update.view_mut().split_at(Axis(0), self.d);
-            let (_, higher_combi) = self.combis.split_at(self.d);
-            izip!(
-                (0..higher_order.len()),
-                higher_combi.iter(),
-                precomp_loc.iter(),
-                to_update.axis_iter_mut(Axis(0)),
-            )
-            .for_each(|(i, combi, precomp_loc,to_update)| {
-                let (tmp,mut hf) = higher_order.view_mut().split_at(Axis(0),i);
-                let h = hf.slice_mut(s![0,..]);
-                if combi.len() == 2 {
-                    add_prod(to_update,h,ct.slice(s![combi[0], ..]),ct.slice(s![combi[1], ..]));
-                } else {
-                    add_prod(to_update,h,ct.slice(s![combi[0], ..]),tmp.slice(s![*precomp_loc, ..]));
-                }
-            });
-
-            // add this combination
-        });
+    pub fn update_with_centered(
+        &mut self,
+        traces: ArrayView2<i16>,
+        y: ArrayView1<u16>,
+        mean: ArrayView2<f64>,
+        n_traces: ArrayView1<u64>,
+    ) {
+        // compute centered powers.
+        let moments_other = centered_products(
+            traces,
+            y,
+            mean.view(),
+            self.pois.view(),
+            self.nc,
+            &self.combis,
+        );
 
         // STEP 2: merge this batch
         let pois = &self.pois;
@@ -228,6 +171,16 @@ impl MultivarMomentAcc {
         );
         self.merge_from_state(moments_other.view(), mapped_means.view(), n_traces.view());
     }
+
+    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
+        let (mean, n_traces) = means_per_class(traces, y, self.nc);
+        self.update_with_centered(traces, y, mean.view(), n_traces.view());
+    }
+    
+    /// Merges to different CS estimations.
+    pub fn merge(&mut self, other: &Self) {
+        self.merge_from_state(other.moments.view(), other.mean.view(),other.n_traces.view());
+    }
 }
 
 pub struct MTtest {
@@ -237,6 +190,21 @@ pub struct MTtest {
     ns: usize,
     /// Vector of Moment accumulators
     accumulators: Vec<MultivarMomentAcc>,
+    pois: Array2<u32>,
+}
+
+pub fn build_accumulator(pois: ArrayView2<u32>) -> Vec<MultivarMomentAcc>{
+        // number of required accumulators
+        let ns = pois.shape()[1];
+        let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
+        let accumulators: Vec<MultivarMomentAcc> = (0..n_batches)
+            .map(|x| {
+                let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
+                MultivarMomentAcc::new(pois.slice(s![.., (NS_BATCH * x)..(NS_BATCH * x + l)]), 2)
+            })
+            .collect();
+
+        accumulators
 }
 impl MTtest {
     /// Create a new Ttest state.
@@ -251,30 +219,67 @@ impl MTtest {
         );
 
         let ns = pois.shape()[1];
-        // number of required accumulators
-        let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
-        let accumulators: Vec<MultivarMomentAcc> = (0..n_batches)
-            .map(|x| {
-                let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
-                MultivarMomentAcc::new(pois.slice(s![.., (NS_BATCH * x)..(NS_BATCH * x + l)]), 2)
-            })
-            .collect();
 
+        let accumulators = build_accumulator(pois);
         MTtest {
             d: d,
             ns: ns,
             accumulators: accumulators,
+            pois: pois.to_owned(),
         }
     }
     /// Update the Ttest state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
     /// y: realization of random variables with shape (n,)
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
-        for acc in &mut self.accumulators {
-            acc.update(traces, y);
-        }
-    }
+        let ns = self.ns;
+        let n_traces = traces.shape()[0];
+        let ns_chuncks = cmp::max(1, ns / NS_BATCH);
+        let min_desired_chuncks = 4 * rayon::current_num_threads();
 
+        let y_chunck_size = if min_desired_chuncks < ns_chuncks {
+            n_traces
+        } else {
+            let tmp = cmp::min(
+                rayon::current_num_threads(),
+                min_desired_chuncks / ns_chuncks,
+            ); // ensure that we do not split in more than available threads.
+            cmp::max(256, n_traces / tmp)
+        };
+
+        let res = (
+            traces.axis_chunks_iter(Axis(0), y_chunck_size),
+            y.axis_chunks_iter(Axis(0), y_chunck_size),
+        )
+            .into_par_iter()
+            .map(|(traces, y)| {
+                // chunck different traces for more threads
+                let mut accumulators = build_accumulator(self.pois.view());
+                (
+                    self.pois.axis_chunks_iter(Axis(1), NS_BATCH),
+                    &mut accumulators,
+                )
+                    .into_par_iter()
+                    .for_each(|(_, acc)| {
+                        // chunck the traces with their lenght
+                        izip!(
+                            traces.axis_chunks_iter(Axis(0), Y_BATCH),
+                            y.axis_chunks_iter(Axis(0), Y_BATCH)
+                        )
+                        .for_each(|(traces, y)| acc.update(traces, y));
+                    });
+                accumulators
+            })
+            .reduce(
+                || build_accumulator(self.pois.view()),
+                |mut x, y| {
+                    // accumulate all to the self accumulator
+                    x.iter_mut().zip(y.iter()).for_each(|(x, y)| x.merge(y));
+                    x
+                },
+            );
+        izip!(self.accumulators.iter_mut(), res.iter()).for_each(|(x, y)| x.merge(y));
+    }
     pub fn get_ttest(&self) -> Array1<f64> {
         let mut t = Array1::<f64>::zeros((self.ns,));
         izip!(
@@ -339,13 +344,124 @@ pub fn center_trace(to: ArrayViewMut1<f64>, ti: ArrayView1<i16>, m: ArrayView1<f
 }
 
 #[inline(always)]
-pub fn add_prod(to1: ArrayViewMut1<f64>,to2: ArrayViewMut1<f64>, v1: ArrayView1<f64>, v2: ArrayView1<f64>) {
+pub fn add_prod(
+    to1: ArrayViewMut1<f64>,
+    to2: ArrayViewMut1<f64>,
+    v1: ArrayView1<f64>,
+    v2: ArrayView1<f64>,
+) {
     let to1 = to1.into_slice().unwrap();
     let to2 = to2.into_slice().unwrap();
     let v1 = v1.to_slice().unwrap();
     let v2 = v2.to_slice().unwrap();
     izip!(to1.iter_mut(), to2.iter_mut(), v1.iter(), v2.iter()).for_each(|(to1, to2, v1, v2)| {
         *to2 = *v1 * *v2;
-        *to1 += *to2;     
+        *to1 += *to2;
     });
+}
+
+pub fn means_per_class(
+    traces: ArrayView2<i16>,
+    y: ArrayView1<u16>,
+    nc: usize,
+) -> (Array2<f64>, Array1<u64>) {
+    let mut sum = Array2::<i32>::zeros((nc, traces.shape()[1]));
+    let mut sum64 = Array2::<i64>::zeros((nc, traces.shape()[1]));
+    let mut n_traces = Array1::<u64>::zeros(nc);
+
+    for (trace, class) in traces.outer_iter().zip(y.iter()) {
+        n_traces[*class as usize] += 1;
+        let mut s = sum.slice_mut(s![*class as usize, ..]);
+        if (n_traces[*class as usize] % (1 << 16)) == ((1 << 16) - 1) {
+            let mut s64 = sum64.slice_mut(s![*class as usize, ..]);
+            s64 += &s.mapv(|x| x as i64);
+            s.fill(0);
+        }
+        s.zip_mut_with(&trace, |s, t| {
+            *s += *t as i32;
+        });
+    }
+    sum64 += &sum.mapv(|x| x as i64);
+    let n = n_traces.mapv(|x| x as f64);
+    let mut mean = sum64.mapv(|x| x as f64);
+    mean.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n);
+
+    (mean, n_traces)
+}
+
+pub fn centered_products(
+    traces: ArrayView2<i16>,
+    y: ArrayView1<u16>,
+    mean: ArrayView2<f64>,
+    pois: ArrayView2<u32>,
+    nc: usize,
+    combis: &Vec<Vec<usize>>,
+) -> Array3<f64> {
+    let ns = pois.shape()[1];
+    let d = pois.shape()[0];
+    let mut moments_other = Array3::<f64>::zeros((nc, combis.len(), ns));
+    let mut prod = Array2::<f64>::zeros((combis.len(), ns));
+
+    let precomp_loc: Vec<usize> = combis
+        .iter()
+        .filter(|x| x.len() > 1)
+        .map(|x| {
+            if x.len() == 2 {
+                0
+            } else {
+                let mut tmp = x.clone();
+                tmp.remove(0);
+                combis.iter().position(|y| tmp == *y).unwrap() - d
+            }
+        })
+        .collect();
+
+    // for each trace:
+    //  1. center it (t - mu)
+    //  2. re-order the traces for each of the pois
+    let mut ct = Array1::<f64>::zeros((traces.shape()[1],));
+    izip!(traces.axis_iter(Axis(0)), y.iter()).for_each(|(t, y)| {
+        // prod according to poi for first (t-mu)
+        center_trace(ct.view_mut(), t.view(), mean.slice(s![*y as usize, ..]));
+        let mut to_update = moments_other.slice_mut(s![*y as usize, .., ..]);
+
+        // re-order according to pois.
+        for i in 0..d {
+            let mut c = prod.slice_mut(s![i, ..]);
+            let mut tmp = to_update.slice_mut(s![i, ..]);
+            c.zip_mut_with(&pois.slice(s![i, ..]), |c, p| *c = ct[*p as usize]);
+            tmp += &c;
+        }
+
+        // compute the product for all the higher order combinations
+        let (ct, mut higher_order) = prod.view_mut().split_at(Axis(0), d);
+        let (_, mut to_update) = to_update.view_mut().split_at(Axis(0), d);
+        let (_, higher_combi) = combis.split_at(d);
+        izip!(
+            (0..higher_order.len()),
+            higher_combi.iter(),
+            precomp_loc.iter(),
+            to_update.axis_iter_mut(Axis(0)),
+        )
+        .for_each(|(i, combi, precomp_loc, to_update)| {
+            let (tmp, mut hf) = higher_order.view_mut().split_at(Axis(0), i);
+            let h = hf.slice_mut(s![0, ..]);
+            if combi.len() == 2 {
+                add_prod(
+                    to_update,
+                    h,
+                    ct.slice(s![combi[0], ..]),
+                    ct.slice(s![combi[1], ..]),
+                );
+            } else {
+                add_prod(
+                    to_update,
+                    h,
+                    ct.slice(s![combi[0], ..]),
+                    tmp.slice(s![*precomp_loc, ..]),
+                );
+            }
+        });
+    });
+    moments_other
 }

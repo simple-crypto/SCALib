@@ -34,6 +34,26 @@ def reference(traces, x, d, pois):
 
     return (u0 - u1) / np.sqrt((v0 / n0) + (v1 / n1))
 
+def test_ttest_d2_many():
+    ns = 10
+    npois = 6
+    d = 2
+    nc = 2
+    n = 1 << 17
+
+    m = np.random.randint(0, 2, (nc, ns))
+    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
+    labels = np.random.randint(0, nc, n, dtype=np.uint16)
+    pois = np.random.randint(0, ns, (d, npois), dtype=np.uint32)
+    traces += m[labels]
+
+    t_ref = reference(traces, labels, d, pois)
+    ttest = MTtest(d, pois)
+    ttest.fit_u(traces, labels)
+    t = ttest.get_ttest()
+    assert np.allclose(t_ref, t, rtol=1e-3)
+
+
 
 def test_ttest_d2():
     ns = 100
