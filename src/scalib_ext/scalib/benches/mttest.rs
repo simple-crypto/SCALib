@@ -8,13 +8,13 @@ use std::time::Duration;
 fn bench_mttest(c: &mut Criterion) {
     let mut group = c.benchmark_group("ttest_update");
     let d = 2;
-    let traces_len = 50000;
-    let n = 10;
+    let traces_len = 5000;
+    let n = 512;
     let traces = Array2::<i16>::random((n, traces_len), Uniform::new(0, 1000));
     let y = Array1::<u16>::random((n,), Uniform::new(0, 2));
     let csize = 1 << 12;
     for d in [2].iter() {
-        for npois in [50000, 100000, 200000, 500000].iter() {
+        for npois in [10000].iter() {
             let pois = Array2::<u32>::random((*d, *npois), Uniform::new(0, traces_len as u32));
 
             let mut mtt = mttest::MTtest::new(*d, pois.view());
@@ -36,7 +36,7 @@ fn bench_mttest(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     // This can be any expression that returns a `Criterion` object.
-    config = Criterion::default().significance_level(0.1).sample_size(100).measurement_time(Duration::from_secs(10));
+    config = Criterion::default().significance_level(0.01).sample_size(500).measurement_time(Duration::from_secs(120));
     targets = bench_mttest
 }
 criterion_main!(benches);

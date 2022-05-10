@@ -1,5 +1,5 @@
 use itertools::{izip, Itertools};
-use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis, ArrayViewMut1};
 const NS_BATCH: usize = 1 << 9;
 
 pub struct MultivarMomentAcc {
@@ -159,20 +159,21 @@ impl MultivarMomentAcc {
         let n = n_traces.mapv(|x| x as f64);
         let mut mean = sum.mapv(|x| x as f64);
         mean.axis_iter_mut(Axis(1)).for_each(|mut m| m /= &n);
-
+        
         // for each trace:
         //  1. center it (t - mu)
         //  2. re-order the traces for each of the pois
+        let mut ct = Array1::<f64>::zeros((traces.shape()[1],));
         izip!(traces.axis_iter(Axis(0)), y.iter()).for_each(|(t, y)| {
             // prod according to poi for first (t-mu)
-            let ct = t.mapv(|x| x as f64) - &mean.slice(s![*y as usize, ..]);
+            center_trace(ct.view_mut(),t.view(),mean.slice(s![*y as usize,..]));
 
             // re-order according to pois.
             for i in 0..d {
                 let mut c = prod.slice_mut(s![i, ..]);
                 c.zip_mut_with(&self.pois.slice(s![i, ..]), |c, p| *c = ct[*p as usize]);
             }
-
+            /*
             // compute the product for all the higher order combinations
             let (ct, mut higher_order) = prod.view_mut().split_at(Axis(0), self.d);
             let (_, higher_combi) = self.combis.split_at(self.d);
@@ -184,7 +185,7 @@ impl MultivarMomentAcc {
                     }
                 },
             );
-
+            */
             // add this combination
             let mut to_update = moments_other.slice_mut(s![*y as usize, .., ..]);
             to_update += &prod;
@@ -302,4 +303,14 @@ impl MTtest {
         });
         t
     }
+}
+
+#[inline(always)]
+pub fn center_trace(to: ArrayViewMut1<f64>, ti: ArrayView1<i16>, m: ArrayView1<f64>) {
+    let to = to.into_slice().unwrap();
+    let ti = ti.to_slice().unwrap();
+    let m = m.to_slice().unwrap();
+    izip!(to.iter_mut(), ti.iter(), m.iter()).for_each(|(to, ti, m)| {
+        *to = *ti as f64 - *m;
+    });
 }
