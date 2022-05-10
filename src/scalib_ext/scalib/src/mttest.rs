@@ -173,7 +173,8 @@ impl MultivarMomentAcc {
                 let mut c = prod.slice_mut(s![i, ..]);
                 c.zip_mut_with(&self.pois.slice(s![i, ..]), |c, p| *c = ct[*p as usize]);
             }
-            /*
+            
+
             // compute the product for all the higher order combinations
             let (ct, mut higher_order) = prod.view_mut().split_at(Axis(0), self.d);
             let (_, higher_combi) = self.combis.split_at(self.d);
@@ -185,7 +186,7 @@ impl MultivarMomentAcc {
                     }
                 },
             );
-            */
+            
             // add this combination
             let mut to_update = moments_other.slice_mut(s![*y as usize, .., ..]);
             to_update += &prod;

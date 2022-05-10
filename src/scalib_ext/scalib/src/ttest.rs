@@ -239,7 +239,7 @@ impl Ttest {
         let ns = self.ns;
         let n_traces = traces.shape()[0];
         let ns_chuncks = cmp::max(1, ns / NS_BATCH);
-        let min_desired_chuncks = 8 * rayon::current_num_threads();
+        let min_desired_chuncks = 4 * rayon::current_num_threads();
 
         let y_chunck_size = if min_desired_chuncks < ns_chuncks {
             n_traces
@@ -248,8 +248,9 @@ impl Ttest {
                 rayon::current_num_threads(),
                 min_desired_chuncks / ns_chuncks,
             ); // ensure that we do not split in more than available threads.
-            n_traces / tmp
+            cmp::max(256,n_traces / tmp)
         };
+        
 
         let res = (
             traces.axis_chunks_iter(Axis(0), y_chunck_size),
