@@ -34,6 +34,7 @@ def reference(traces, x, d, pois):
 
     return (u0 - u1) / np.sqrt((v0 / n0) + (v1 / n1))
 
+
 def test_ttest_d2_many_3():
     ns = 10230
     npois = 12342
@@ -54,8 +55,6 @@ def test_ttest_d2_many_3():
     assert np.allclose(t_ref, t, rtol=1e-3)
 
 
-
-
 def test_ttest_d2_many_2():
     ns = 100
     npois = 12342
@@ -74,7 +73,6 @@ def test_ttest_d2_many_2():
     ttest.fit_u(traces, labels)
     t = ttest.get_ttest()
     assert np.allclose(t_ref, t, rtol=1e-3)
-
 
 
 def test_ttest_d2_many():
