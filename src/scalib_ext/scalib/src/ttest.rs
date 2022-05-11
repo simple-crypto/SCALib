@@ -12,7 +12,7 @@ use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Arr
 use num_integer::binomial;
 use rayon::prelude::*;
 use std::cmp;
-const NS_BATCH: usize = 1 << 10;
+const NS_BATCH: usize = 1 << 12;
 const Y_BATCH: usize = 1 << 9;
 
 pub struct UnivarMomentAcc {

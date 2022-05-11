@@ -1,9 +1,8 @@
 use itertools::{izip, Itertools};
+use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
 use rayon::prelude::*;
 use std::cmp;
-use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
-const NS_BATCH: usize = 1 << 9;
-const Y_BATCH: usize = 1 << 9;
+const NS_BATCH: usize = 1 << 10;
 
 pub struct MultivarMomentAcc {
     /// Number of tuples to evaluate.
@@ -176,10 +175,14 @@ impl MultivarMomentAcc {
         let (mean, n_traces) = means_per_class(traces, y, self.nc);
         self.update_with_centered(traces, y, mean.view(), n_traces.view());
     }
-    
+
     /// Merges to different CS estimations.
     pub fn merge(&mut self, other: &Self) {
-        self.merge_from_state(other.moments.view(), other.mean.view(),other.n_traces.view());
+        self.merge_from_state(
+            other.moments.view(),
+            other.mean.view(),
+            other.n_traces.view(),
+        );
     }
 }
 
@@ -193,18 +196,18 @@ pub struct MTtest {
     pois: Array2<u32>,
 }
 
-pub fn build_accumulator(pois: ArrayView2<u32>) -> Vec<MultivarMomentAcc>{
-        // number of required accumulators
-        let ns = pois.shape()[1];
-        let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
-        let accumulators: Vec<MultivarMomentAcc> = (0..n_batches)
-            .map(|x| {
-                let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
-                MultivarMomentAcc::new(pois.slice(s![.., (NS_BATCH * x)..(NS_BATCH * x + l)]), 2)
-            })
-            .collect();
+pub fn build_accumulator(pois: ArrayView2<u32>) -> Vec<MultivarMomentAcc> {
+    // number of required accumulators
+    let ns = pois.shape()[1];
+    let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
+    let accumulators: Vec<MultivarMomentAcc> = (0..n_batches)
+        .map(|x| {
+            let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
+            MultivarMomentAcc::new(pois.slice(s![.., (NS_BATCH * x)..(NS_BATCH * x + l)]), 2)
+        })
+        .collect();
 
-        accumulators
+    accumulators
 }
 impl MTtest {
     /// Create a new Ttest state.
@@ -254,6 +257,7 @@ impl MTtest {
             .into_par_iter()
             .map(|(traces, y)| {
                 // chunck different traces for more threads
+                let (mean,n_traces) = means_per_class(traces,y,2); 
                 let mut accumulators = build_accumulator(self.pois.view());
                 (
                     self.pois.axis_chunks_iter(Axis(1), NS_BATCH),
@@ -262,11 +266,7 @@ impl MTtest {
                     .into_par_iter()
                     .for_each(|(_, acc)| {
                         // chunck the traces with their lenght
-                        izip!(
-                            traces.axis_chunks_iter(Axis(0), Y_BATCH),
-                            y.axis_chunks_iter(Axis(0), Y_BATCH)
-                        )
-                        .for_each(|(traces, y)| acc.update(traces, y));
+                        acc.update_with_centered(traces, y, mean.view(),n_traces.view())
                     });
                 accumulators
             })
