@@ -2,7 +2,7 @@ use itertools::{izip, Itertools};
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
 use rayon::prelude::*;
 use std::cmp;
-const NS_BATCH: usize = 1 << 10;
+const NS_BATCH: usize = 1 << 13;
 
 pub struct MultivarMomentAcc {
     /// Number of tuples to evaluate.
@@ -257,7 +257,7 @@ impl MTtest {
             .into_par_iter()
             .map(|(traces, y)| {
                 // chunck different traces for more threads
-                let (mean,n_traces) = means_per_class(traces,y,2); 
+                let (mean, n_traces) = means_per_class(traces, y, 2);
                 let mut accumulators = build_accumulator(self.pois.view());
                 (
                     self.pois.axis_chunks_iter(Axis(1), NS_BATCH),
@@ -266,7 +266,7 @@ impl MTtest {
                     .into_par_iter()
                     .for_each(|(_, acc)| {
                         // chunck the traces with their lenght
-                        acc.update_with_centered(traces, y, mean.view(),n_traces.view())
+                        acc.update_with_centered(traces, y, mean.view(), n_traces.view())
                     });
                 accumulators
             })
@@ -420,48 +420,53 @@ pub fn centered_products(
     //  1. center it (t - mu)
     //  2. re-order the traces for each of the pois
     let mut ct = Array1::<f64>::zeros((traces.shape()[1],));
-    izip!(traces.axis_iter(Axis(0)), y.iter()).for_each(|(t, y)| {
-        // prod according to poi for first (t-mu)
-        center_trace(ct.view_mut(), t.view(), mean.slice(s![*y as usize, ..]));
-        let mut to_update = moments_other.slice_mut(s![*y as usize, .., ..]);
+    for c in 0..nc {
+        izip!(traces.axis_iter(Axis(0)), y.iter())
+            .filter(|(_, y)| **y as usize == c)
+            .for_each(|(t, y)| {
+                // prod according to poi for first (t-mu)
+                center_trace(ct.view_mut(), t.view(), mean.slice(s![*y as usize, ..]));
+                let mut to_update = moments_other.slice_mut(s![*y as usize, .., ..]);
 
-        // re-order according to pois.
-        for i in 0..d {
-            let mut c = prod.slice_mut(s![i, ..]);
-            let mut tmp = to_update.slice_mut(s![i, ..]);
-            c.zip_mut_with(&pois.slice(s![i, ..]), |c, p| *c = ct[*p as usize]);
-            tmp += &c;
-        }
+                // re-order according to pois.
+                for i in 0..d {
+                    let mut c = prod.slice_mut(s![i, ..]);
+                    let mut tmp = to_update.slice_mut(s![i, ..]);
+                    c.zip_mut_with(&pois.slice(s![i, ..]), |c, p| *c = ct[*p as usize]);
+                    tmp += &c;
+                }
 
-        // compute the product for all the higher order combinations
-        let (ct, mut higher_order) = prod.view_mut().split_at(Axis(0), d);
-        let (_, mut to_update) = to_update.view_mut().split_at(Axis(0), d);
-        let (_, higher_combi) = combis.split_at(d);
-        izip!(
-            (0..higher_order.len()),
-            higher_combi.iter(),
-            precomp_loc.iter(),
-            to_update.axis_iter_mut(Axis(0)),
-        )
-        .for_each(|(i, combi, precomp_loc, to_update)| {
-            let (tmp, mut hf) = higher_order.view_mut().split_at(Axis(0), i);
-            let h = hf.slice_mut(s![0, ..]);
-            if combi.len() == 2 {
-                add_prod(
-                    to_update,
-                    h,
-                    ct.slice(s![combi[0], ..]),
-                    ct.slice(s![combi[1], ..]),
-                );
-            } else {
-                add_prod(
-                    to_update,
-                    h,
-                    ct.slice(s![combi[0], ..]),
-                    tmp.slice(s![*precomp_loc, ..]),
-                );
-            }
-        });
-    });
+                // compute the product for all the higher order combinations
+                let (ct, mut higher_order) = prod.view_mut().split_at(Axis(0), d);
+                let (_, mut to_update) = to_update.view_mut().split_at(Axis(0), d);
+                let (_, higher_combi) = combis.split_at(d);
+                izip!(
+                    (0..higher_order.len()),
+                    higher_combi.iter(),
+                    precomp_loc.iter(),
+                    to_update.axis_iter_mut(Axis(0)),
+                )
+                .for_each(|(i, combi, precomp_loc, to_update)| {
+                    let (tmp, mut hf) = higher_order.view_mut().split_at(Axis(0), i);
+                    let h = hf.slice_mut(s![0, ..]);
+
+                    if combi.len() == 2 {
+                        add_prod(
+                            to_update,
+                            h,
+                            ct.slice(s![combi[0], ..]),
+                            ct.slice(s![combi[1], ..]),
+                        );
+                    } else {
+                        add_prod(
+                            to_update,
+                            h,
+                            ct.slice(s![combi[0], ..]),
+                            tmp.slice(s![*precomp_loc, ..]),
+                        );
+                    }
+                });
+            });
+    }
     moments_other
 }
