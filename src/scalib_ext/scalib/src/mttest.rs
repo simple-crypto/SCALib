@@ -253,7 +253,11 @@ impl MTtest {
 
         let y_chunck_size_level1 = cmp::max(
             1024,
-            traces.shape()[0] / (4 * rayon::current_num_threads() / self.accumulators.len()),
+            traces.shape()[0]
+                / (cmp::max(
+                    1,
+                    4 * rayon::current_num_threads() / self.accumulators.len(),
+                )),
         );
         let level1_accs = (
             traces.axis_chunks_iter(Axis(0), y_chunck_size_level1),
@@ -283,7 +287,9 @@ impl MTtest {
                     x
                 },
             );
-        (&mut self.accumulators, level1_accs).into_par_iter().for_each(|(x, y)| x.merge(&y));
+        (&mut self.accumulators, level1_accs)
+            .into_par_iter()
+            .for_each(|(x, y)| x.merge(&y));
     }
     pub fn get_ttest(&self) -> Array1<f64> {
         let mut t = Array1::<f64>::zeros((self.ns,));
@@ -394,7 +400,6 @@ fn means_per_class(
 
     (mean, n_traces)
 }
-
 
 fn centered_products(
     traces: ArrayView2<i16>,
