@@ -84,37 +84,32 @@ class Ttest:
 
 
 class MTtest:
-    r"""Computes the univariate :math:`t`-test at arbitrary order :math:`d`
+    r"""Computes the multivariate :math:`t`-test at arbitrary order :math:`d`
     between two sets :math:`i` of traces. Informally, it allows to highlight a
     difference in statistical moments of order :math:`d` between the two sets.
     The metric is defined with:
 
-    .. math::
-        t = \frac{x_0 - x_1}{\sqrt{(v_0/n_0)+(v_1/n_1)}}
-
-    where the both :math:`x_i` and :math:`v_i` are defined independently for
-    each of the two sets and :math:`n_i` the number of available samples in the
-    set :math:`i`.
-
-    The expressions of :math:`x_i` and :math:`v_i` depend on the order `d` and relies on
-    estimation of central and standardized moments. See [1]_ for full details.
+    This is similar to `Ttest` but allows to perform point recombination thanks
+    to the `pois` input to `MTtest` (see details Section 5 in [1]_).
 
     Parameters
     ----------
-    ns : int
-        Number of samples in a single trace.
     d : int
         Maximal statistical order of the :math:`t`-test.
+    pois : array_like, uint32
+        Array of share `(d,n_pois)`. Each column in `pois` will result in a
+        :math:`t`-test of the product of the traces at these $d$ indexes.
 
     Examples
     --------
-    >>> from scalib.metrics import Ttest
+    >>> from scalib.metrics import MTtest
     >>> import numpy as np
     >>> traces = np.random.randint(0,256,(100,200),dtype=np.int16)
+    >>> pois = np.random.randint(0,200,(2,5000),dtype=np.uint32)
     >>> X = np.random.randint(0,2,100,dtype=np.uint16)
-    >>> ttest = Ttest(200,d=3)
-    >>> ttest.fit_u(traces,X)
-    >>> t = ttest.get_ttest()
+    >>> mttest = MTtest(d=2,pois=pois)
+    >>> mttest.fit_u(traces,X)
+    >>> t = mttest.get_ttest()
 
     Notes
     -----
@@ -139,7 +134,7 @@ class MTtest:
         self._mttest = _scalib_ext.MTtest(d, self._pois)
 
     def fit_u(self, l, x):
-        r"""Updates the Ttest estimation with samples of `l` for the sets `x`.
+        r"""Updates the MTtest estimation with samples of `l` for the sets `x`.
         This method may be called multiple times.
 
         Parameters
@@ -161,5 +156,9 @@ class MTtest:
         self._mttest.update(l, x)
 
     def get_ttest(self):
-        r"""Return the current Ttest estimation with an array of shape `(d,ns)`."""
+        r"""Return the current MTtest estimation with an array of shape
+        `(n_pois,)`. Each element in that array corresponds to a test defined by
+        `pois`.
+
+        """
         return self._mttest.get_ttest()
