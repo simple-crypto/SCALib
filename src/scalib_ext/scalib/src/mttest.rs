@@ -2,6 +2,7 @@ use itertools::{izip, Itertools};
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
 use rayon::prelude::*;
 use std::cmp;
+// Length of chunck for traces
 const NS_BATCH: usize = 1 << 13;
 
 pub struct MultivarMomentAcc {
@@ -23,12 +24,16 @@ pub struct MultivarMomentAcc {
 }
 
 impl MultivarMomentAcc {
+    /// Creates an MultivarMomentAcc
+    /// pois : (d,ns) array where each line corresponds to a poi
+    /// nc : Number of classes to estimate the higher order moments
     pub fn new(pois: ArrayView2<u32>, nc: usize) -> Self {
         let ns = pois.shape()[1];
         let d = pois.shape()[0];
         let max_set: Vec<usize> = (0..d).chain(0..d).collect();
 
-        // generate all the unique subsets
+        // generate all the unique subsets of (0..d, 0..d)
+        // each of them will maintain a state to be updated
         let combis: Vec<Vec<usize>> = (1..(2 * d + 1))
             .map(|l| {
                 max_set
@@ -59,6 +64,9 @@ impl MultivarMomentAcc {
         }
     }
 
+    /// Merges two MutlivarMomentAcc
+    /// moments_other : Estimated moments from the other state
+    /// n_traces : Number of traces in each of the classes
     pub fn merge_from_state(
         &mut self,
         moments_other: ArrayView3<f64>,
@@ -138,15 +146,28 @@ impl MultivarMomentAcc {
         self.n_traces += &n_traces;
     }
 
-    /// Updates the current estimation with fresh traces.
-    pub fn update_with_centered(
+    /// Merges to different CS estimations.
+    pub fn merge(&mut self, other: &Self) {
+        self.merge_from_state(
+            other.moments.view(),
+            other.mean.view(),
+            other.n_traces.view(),
+        );
+    }
+
+    /// Updates the current CS estimation with fresh traces and its means per class
+    /// traces : fresh traces
+    /// y : class corresponding to each traces
+    /// mean : mean per class of the all traces
+    /// n_traces : count per classes in traces
+    pub fn update_with_means(
         &mut self,
         traces: ArrayView2<i16>,
         y: ArrayView1<u16>,
         mean: ArrayView2<f64>,
         n_traces: ArrayView1<u64>,
     ) {
-        // compute centered powers.
+        // Computes CS on the traces with a 2 passes algorithm.
         let moments_other = centered_products(
             traces,
             y,
@@ -156,7 +177,7 @@ impl MultivarMomentAcc {
             &self.combis,
         );
 
-        // STEP 2: merge this batch
+        // Genereted the means according to the pois
         let pois = &self.pois;
         let mut mapped_means = Array3::<f64>::zeros((self.nc, self.d, self.ns));
         izip!(mapped_means.outer_iter_mut(), mean.outer_iter()).for_each(
@@ -168,21 +189,17 @@ impl MultivarMomentAcc {
                 );
             },
         );
+
+        // Merge CS of the inputs with self.
         self.merge_from_state(moments_other.view(), mapped_means.view(), n_traces.view());
     }
 
+    /// Updates the current CS estimation with fresh traces
+    /// traces : fresh traces
+    /// y : class corresponding to each traces
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
         let (mean, n_traces) = means_per_class(traces, y, self.nc);
-        self.update_with_centered(traces, y, mean.view(), n_traces.view());
-    }
-
-    /// Merges to different CS estimations.
-    pub fn merge(&mut self, other: &Self) {
-        self.merge_from_state(
-            other.moments.view(),
-            other.mean.view(),
-            other.n_traces.view(),
-        );
+        self.update_with_means(traces, y, mean.view(), n_traces.view());
     }
 }
 
@@ -193,22 +210,10 @@ pub struct MTtest {
     ns: usize,
     /// Vector of Moment accumulators
     accumulators: Vec<MultivarMomentAcc>,
+    /// Pois to combine in the multivariate T-test (d,ns)
     pois: Array2<u32>,
 }
 
-pub fn build_accumulator(pois: ArrayView2<u32>) -> Vec<MultivarMomentAcc> {
-    // number of required accumulators
-    let ns = pois.shape()[1];
-    let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
-    let accumulators: Vec<MultivarMomentAcc> = (0..n_batches)
-        .map(|x| {
-            let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
-            MultivarMomentAcc::new(pois.slice(s![.., (NS_BATCH * x)..(NS_BATCH * x + l)]), 2)
-        })
-        .collect();
-
-    accumulators
-}
 impl MTtest {
     /// Create a new Ttest state.
     /// ns: traces length
@@ -221,38 +226,38 @@ impl MTtest {
             d
         );
 
-        let ns = pois.shape()[1];
-
-        let accumulators = build_accumulator(pois);
+        // generates the MultivarMomentAcc underlying MTtest.
+        let accumulators = build_accumulator(pois.view());
         MTtest {
             d: d,
-            ns: ns,
+            ns: pois.shape()[1],
             accumulators: accumulators,
             pois: pois.to_owned(),
         }
     }
-    /// Update the Ttest state with n fresh traces
+
+    /// Update the MTtest state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
     /// y: realization of random variables with shape (n,)
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
-        let ns = self.ns;
-        let n_traces = traces.shape()[0];
-        let ns_chuncks = cmp::max(1, ns / NS_BATCH);
-        let min_desired_chuncks = 4 * rayon::current_num_threads();
+        // The traces are chuncks with:
+        // _____________________________
+        // |    |    |    |    |    |  |
+        // _____________________________
+        // |    |    |    |    |    |  |
+        // _____________________________
+        // |    |    |    |    |    |  |
+        // _____________________________
+        //
+        // Each chunck above is updated with an accumulator.
 
-        let y_chunck_size = if min_desired_chuncks < ns_chuncks {
-            n_traces
-        } else {
-            let tmp = cmp::min(
-                rayon::current_num_threads(),
-                min_desired_chuncks / ns_chuncks,
-            ); // ensure that we do not split in more than available threads.
-            cmp::max(256, n_traces / tmp)
-        };
-
-        let res = (
-            traces.axis_chunks_iter(Axis(0), y_chunck_size),
-            y.axis_chunks_iter(Axis(0), y_chunck_size),
+        let y_chunck_size_level1 = cmp::max(
+            1024,
+            traces.shape()[0] / (4 * rayon::current_num_threads() / self.accumulators.len()),
+        );
+        let level1_accs = (
+            traces.axis_chunks_iter(Axis(0), y_chunck_size_level1),
+            y.axis_chunks_iter(Axis(0), y_chunck_size_level1),
         )
             .into_par_iter()
             .map(|(traces, y)| {
@@ -266,7 +271,7 @@ impl MTtest {
                     .into_par_iter()
                     .for_each(|(_, acc)| {
                         // chunck the traces with their lenght
-                        acc.update_with_centered(traces, y, mean.view(), n_traces.view())
+                        acc.update_with_means(traces, y, mean.view(), n_traces.view())
                     });
                 accumulators
             })
@@ -278,7 +283,7 @@ impl MTtest {
                     x
                 },
             );
-        izip!(self.accumulators.iter_mut(), res.iter()).for_each(|(x, y)| x.merge(y));
+        (&mut self.accumulators, level1_accs).into_par_iter().for_each(|(x, y)| x.merge(&y));
     }
     pub fn get_ttest(&self) -> Array1<f64> {
         let mut t = Array1::<f64>::zeros((self.ns,));
@@ -333,8 +338,8 @@ impl MTtest {
     }
 }
 
-#[inline(always)]
-pub fn center_trace(to: ArrayViewMut1<f64>, ti: ArrayView1<i16>, m: ArrayView1<f64>) {
+/// Applies to = ti - m
+fn center_trace(to: ArrayViewMut1<f64>, ti: ArrayView1<i16>, m: ArrayView1<f64>) {
     let to = to.into_slice().unwrap();
     let ti = ti.to_slice().unwrap();
     let m = m.to_slice().unwrap();
@@ -343,8 +348,8 @@ pub fn center_trace(to: ArrayViewMut1<f64>, ti: ArrayView1<i16>, m: ArrayView1<f
     });
 }
 
-#[inline(always)]
-pub fn add_prod(
+/// Applies to2 = v1 * v1; to1 += to2
+fn add_prod(
     to1: ArrayViewMut1<f64>,
     to2: ArrayViewMut1<f64>,
     v1: ArrayView1<f64>,
@@ -360,7 +365,8 @@ pub fn add_prod(
     });
 }
 
-pub fn means_per_class(
+/// Computes the means per class
+fn means_per_class(
     traces: ArrayView2<i16>,
     y: ArrayView1<u16>,
     nc: usize,
@@ -389,7 +395,8 @@ pub fn means_per_class(
     (mean, n_traces)
 }
 
-pub fn centered_products(
+
+fn centered_products(
     traces: ArrayView2<i16>,
     y: ArrayView1<u16>,
     mean: ArrayView2<f64>,
@@ -469,4 +476,18 @@ pub fn centered_products(
             });
     }
     moments_other
+}
+
+fn build_accumulator(pois: ArrayView2<u32>) -> Vec<MultivarMomentAcc> {
+    // number of required accumulators
+    let ns = pois.shape()[1];
+    let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
+    let accumulators: Vec<MultivarMomentAcc> = (0..n_batches)
+        .map(|x| {
+            let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
+            MultivarMomentAcc::new(pois.slice(s![.., (NS_BATCH * x)..(NS_BATCH * x + l)]), 2)
+        })
+        .collect();
+
+    accumulators
 }
