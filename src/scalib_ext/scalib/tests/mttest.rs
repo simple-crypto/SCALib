@@ -19,12 +19,12 @@ fn ttestacc_simple() {
 
     let mut ttacc = mttest::MultivarCSAcc::new(pois.view(), order);
     ttacc.update(traces.view(), y.view());
-    let moments: Array3<f64> = ttacc.moments.to_owned();
+    let cs: Array3<f64> = ttacc.cs.to_owned();
 
     test_cs(
         traces.view(),
         y.view(),
-        moments.view(),
+        cs.view(),
         ttacc.mean.view(),
         pois.view(),
         ttacc.combis,
@@ -56,11 +56,11 @@ fn ttestacc_simple_chuncks() {
         ttacc.update(traces, y);
     });
 
-    let moments: Array3<f64> = ttacc.moments.to_owned();
+    let cs: Array3<f64> = ttacc.cs.to_owned();
     test_cs(
         traces.view(),
         y.view(),
-        moments.view(),
+        cs.view(),
         ttacc.mean.view(),
         pois.view(),
         ttacc.combis,
@@ -91,11 +91,11 @@ fn ttestacc_simple_chuncks_step1() {
         ttacc.update(traces, y);
     });
 
-    let moments: Array3<f64> = ttacc.moments.to_owned();
+    let cs: Array3<f64> = ttacc.cs.to_owned();
     test_cs(
         traces.view(),
         y.view(),
-        moments.view(),
+        cs.view(),
         ttacc.mean.view(),
         pois.view(),
         ttacc.combis,
@@ -106,7 +106,7 @@ fn ttestacc_simple_chuncks_step1() {
 fn test_cs(
     traces: ArrayView2<i16>,
     y: ArrayView1<u16>,
-    moments: ArrayView3<f64>,
+    cs: ArrayView3<f64>,
     mean_ref: ArrayView3<f64>,
     pois: ArrayView2<u32>,
     combi: Vec<Vec<usize>>,
@@ -146,7 +146,7 @@ fn test_cs(
         // test centered sums
         let mut tests = 0;
         izip!(
-            moments.slice(s![i as usize, .., ..]).outer_iter(),
+            cs.slice(s![i as usize, .., ..]).outer_iter(),
             combi.iter()
         )
         .for_each(|(m, combi)| {
