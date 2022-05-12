@@ -23,7 +23,7 @@ pub struct MultivarCSAcc {
     pub d: usize,
     /// Number of samples in each sets. shape (nc,)
     pub n_traces: Array1<u64>,
-    /// Current estimation of centered sums at higher order. 
+    /// Current estimation of centered sums at higher order.
     /// shape of (nc, combis.len(), d)
     pub cs: Array3<f64>,
     /// Current means estimates
@@ -94,9 +94,9 @@ impl MultivarCSAcc {
     //  cs_{Q}_J = cs_{Q_1}_{J} + cs_{Q_2}_{J} + (1) + (2)
     //  with
     //  (1) = sum_{k=2}^{|J|-1}
-    //              \sum_{s \ in J_|k|} cs_{Q_1}_{s} 
+    //              \sum_{s \ in J_|k|} cs_{Q_1}_{s}
     //                  \prod_{j \in J \ s} (-n_1 / n) * delta^j_2_1
-    //          + ((-n_2 / n ) ** |J|) n_1 
+    //          + ((-n_2 / n ) ** |J|) n_1
     //                  \prod_{j \in J) delta^j_2_1
     //
     //  (2) is the symmetry of 1.
@@ -196,7 +196,6 @@ impl MultivarCSAcc {
         mean: ArrayView2<f64>,
         n_traces: ArrayView1<u64>,
     ) {
-
         // Computes CS on the traces with a 2 passes algorithm.
         let cs_other = centered_products(
             traces,
