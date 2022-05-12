@@ -15,7 +15,7 @@ use std::cmp;
 const NS_BATCH: usize = 1 << 12;
 const Y_BATCH: usize = 1 << 9;
 
-pub struct UnivarMomentAcc {
+pub struct UniCSAcc {
     /// Number of samples in trace
     pub ns: usize,
     /// pub Number of classes
@@ -28,13 +28,13 @@ pub struct UnivarMomentAcc {
     pub moments: Array3<f64>,
 }
 
-impl UnivarMomentAcc {
-    /// Creates an UnivarMomentAcc
+impl UniCSAcc {
+    /// Creates an UniCSAcc
     /// ns : number of point in traces
     /// d : higher power to estimate
     /// nc: number of classes to estimate the CS for.
     pub fn new(ns: usize, d: usize, nc: usize) -> Self {
-        UnivarMomentAcc {
+        UniCSAcc {
             ns: ns,
             d: d,
             nc: nc,
@@ -205,15 +205,15 @@ pub struct Ttest {
     /// Number of samples per trace
     ns: usize,
     /// Vector of Moment accumulators
-    accumulators: Vec<UnivarMomentAcc>,
+    accumulators: Vec<UniCSAcc>,
 }
 
-pub fn build_accumulator(ns: usize, d: usize) -> Vec<UnivarMomentAcc> {
+pub fn build_accumulator(ns: usize, d: usize) -> Vec<UniCSAcc> {
     let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
-    let accumulators: Vec<UnivarMomentAcc> = (0..n_batches)
+    let accumulators: Vec<UniCSAcc> = (0..n_batches)
         .map(|x| {
             let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
-            UnivarMomentAcc::new(l, 2 * d, 2)
+            UniCSAcc::new(l, 2 * d, 2)
         })
         .collect();
     accumulators

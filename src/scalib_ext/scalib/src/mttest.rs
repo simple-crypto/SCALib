@@ -1,3 +1,11 @@
+//! Estimation for higher-order Multivariate T-test.
+//!
+//! An estimation of MTtest is represented with a MTtest struct. Calling update allows
+//! to update the Ttest state with fresh measurements. get_ttest returns the current value
+//! of the estimate.
+//!
+//! This is based on the one-pass algorithm proposed in
+//! <https://eprint.iacr.org/2015/207>.
 use itertools::{izip, Itertools};
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
 use rayon::prelude::*;
@@ -5,7 +13,7 @@ use std::cmp;
 // Length of chunck for traces
 const NS_BATCH: usize = 1 << 13;
 
-pub struct MultivarMomentAcc {
+pub struct MultivarCSAcc {
     /// Number of tuples to evaluate.
     pub ns: usize,
     /// pois matrix of size (d,ns)
@@ -13,20 +21,23 @@ pub struct MultivarMomentAcc {
     /// Number of classes
     pub nc: usize,
     pub d: usize,
-    /// Number of samples in each sets
+    /// Number of samples in each sets. shape (nc,)
     pub n_traces: Array1<u64>,
-    /// Current estimation
-    pub moments: Array3<f64>,
+    /// Current estimation of centered sums at higher order. 
+    /// shape of (nc, combis.len(), d)
+    pub cs: Array3<f64>,
     /// Current means estimates
     pub mean: Array3<f64>,
-    /// List of all the combinations
+    /// List of all the points combinations to compute the centered product sum.
+    /// This contains all the unique combinations on the set (0..d) U (0..d).
+    /// The combinations are ordered by size.
     pub combis: Vec<Vec<usize>>,
 }
 
-impl MultivarMomentAcc {
-    /// Creates an MultivarMomentAcc
+impl MultivarCSAcc {
+    /// Creates an MultivarCSAcc
     /// pois : (d,ns) array where each line corresponds to a poi
-    /// nc : Number of classes to estimate the higher order moments
+    /// nc : Number of classes to estimate the higher order cs
     pub fn new(pois: ArrayView2<u32>, nc: usize) -> Self {
         let ns = pois.shape()[1];
         let d = pois.shape()[0];
@@ -52,24 +63,46 @@ impl MultivarMomentAcc {
             .flatten()
             .collect();
 
-        MultivarMomentAcc {
+        MultivarCSAcc {
             ns: ns,
             pois: pois.to_owned(),
             nc: nc,
             d: d,
             n_traces: Array1::<u64>::zeros((nc,)),
-            moments: Array3::<f64>::zeros((nc, combis.len(), ns)),
+            cs: Array3::<f64>::zeros((nc, combis.len(), ns)),
             mean: Array3::<f64>::zeros((nc, d, ns)),
             combis: combis,
         }
     }
 
-    /// Merges two MutlivarMomentAcc
-    /// moments_other : Estimated moments from the other state
-    /// n_traces : Number of traces in each of the classes
+    /// Merges two MutlivarCSAcc
+    /// cs_other : Estimated cs to merge (nc,combis.len(),ns)
+    /// means : mean per class (nc,d,ns)
+    /// n_traces : Number of traces in each of the classes (nc,)
+    // We next describe the merge rule for a single class.
+    //
+    // Definitions:
+    //  Q_1 and Q_2 are the set of traces used to build the two CS's to merge.
+    //  Q = Q_1 U Q_2
+    //  x^j = leakage at index j
+    //  n_i = |Q_i|
+    //  u^j_i = n_i sum_{Q_i} x^j_i
+    //  delta^j_2,1 = u^j_2 - u^j_1
+    //  cs_{Q_i}_J = \sum_{Q_i} \prod_{j \in J} (x^j - u^j_i)
+    //
+    //  Update rule:
+    //  cs_{Q}_J = cs_{Q_1}_{J} + cs_{Q_2}_{J} + (1) + (2)
+    //  with
+    //  (1) = sum_{k=2}^{|J|-1}
+    //              \sum_{s \ in J_|k|} cs_{Q_1}_{s} 
+    //                  \prod_{j \in J \ s} (-n_1 / n) * delta^j_2_1
+    //          + ((-n_2 / n ) ** |J|) n_1 
+    //                  \prod_{j \in J) delta^j_2_1
+    //
+    //  (2) is the symmetry of 1.
     pub fn merge_from_state(
         &mut self,
-        moments_other: ArrayView3<f64>,
+        cs_other: ArrayView3<f64>,
         means: ArrayView3<f64>,
         n_traces: ArrayView1<u64>,
     ) {
@@ -77,10 +110,10 @@ impl MultivarMomentAcc {
         let combis = &self.combis;
         let ns = self.ns;
         izip!(
-            self.moments.outer_iter_mut(),
+            self.cs.outer_iter_mut(),
             self.mean.outer_iter_mut(),
             self.n_traces.iter(),
-            moments_other.outer_iter(),
+            cs_other.outer_iter(),
             means.outer_iter(),
             n_traces.iter()
         )
@@ -148,11 +181,7 @@ impl MultivarMomentAcc {
 
     /// Merges to different CS estimations.
     pub fn merge(&mut self, other: &Self) {
-        self.merge_from_state(
-            other.moments.view(),
-            other.mean.view(),
-            other.n_traces.view(),
-        );
+        self.merge_from_state(other.cs.view(), other.mean.view(), other.n_traces.view());
     }
 
     /// Updates the current CS estimation with fresh traces and its means per class
@@ -167,8 +196,9 @@ impl MultivarMomentAcc {
         mean: ArrayView2<f64>,
         n_traces: ArrayView1<u64>,
     ) {
+
         // Computes CS on the traces with a 2 passes algorithm.
-        let moments_other = centered_products(
+        let cs_other = centered_products(
             traces,
             y,
             mean.view(),
@@ -191,7 +221,7 @@ impl MultivarMomentAcc {
         );
 
         // Merge CS of the inputs with self.
-        self.merge_from_state(moments_other.view(), mapped_means.view(), n_traces.view());
+        self.merge_from_state(cs_other.view(), mapped_means.view(), n_traces.view());
     }
 
     /// Updates the current CS estimation with fresh traces
@@ -209,7 +239,7 @@ pub struct MTtest {
     /// Number of samples per trace
     ns: usize,
     /// Vector of Moment accumulators
-    accumulators: Vec<MultivarMomentAcc>,
+    accumulators: Vec<MultivarCSAcc>,
     /// Pois to combine in the multivariate T-test (d,ns)
     pois: Array2<u32>,
 }
@@ -226,7 +256,7 @@ impl MTtest {
             d
         );
 
-        // generates the MultivarMomentAcc underlying MTtest.
+        // generates the MultivarCSAcc underlying MTtest.
         let accumulators = build_accumulator(pois.view());
         MTtest {
             d: d,
@@ -291,6 +321,7 @@ impl MTtest {
             .into_par_iter()
             .for_each(|(x, y)| x.merge(&y));
     }
+
     pub fn get_ttest(&self) -> Array1<f64> {
         let mut t = Array1::<f64>::zeros((self.ns,));
         izip!(
@@ -310,14 +341,14 @@ impl MTtest {
             // assign means
             let combi: Vec<usize> = (0..self.d).collect();
             let id = acc.combis.iter().position(|x| *x == combi).unwrap();
-            let mus = acc.moments.slice(s![.., id, ..]);
+            let mus = acc.cs.slice(s![.., id, ..]);
             mu1.assign(&(&mus.slice(s![0, ..]) / n1));
             mu2.assign(&(&mus.slice(s![1, ..]) / n2));
 
             let mut combi: Vec<usize> = (0..self.d).chain(0..self.d).collect();
             combi.sort();
             let id = acc.combis.iter().position(|x| *x == combi).unwrap();
-            let vars = acc.moments.slice(s![.., id, ..]);
+            let vars = acc.cs.slice(s![.., id, ..]);
             var1.assign(&(&vars.slice(s![0, ..]) / n1));
             var2.assign(&(&vars.slice(s![1, ..]) / n2));
 
@@ -325,7 +356,7 @@ impl MTtest {
                 for j in 0..self.d {
                     let combi: Vec<usize> = vec![j, j];
                     let id = acc.combis.iter().position(|x| *x == combi).unwrap();
-                    let mus = acc.moments.slice(s![.., id, ..]);
+                    let mus = acc.cs.slice(s![.., id, ..]);
                     mu1 /= &(mus.slice(s![0, ..]).mapv(|x| (x / n1).sqrt()));
                     mu2 /= &(mus.slice(s![1, ..]).mapv(|x| (x / n2).sqrt()));
 
@@ -411,7 +442,7 @@ fn centered_products(
 ) -> Array3<f64> {
     let ns = pois.shape()[1];
     let d = pois.shape()[0];
-    let mut moments_other = Array3::<f64>::zeros((nc, combis.len(), ns));
+    let mut cs_other = Array3::<f64>::zeros((nc, combis.len(), ns));
     let mut prod = Array2::<f64>::zeros((combis.len(), ns));
 
     let precomp_loc: Vec<usize> = combis
@@ -438,7 +469,7 @@ fn centered_products(
             .for_each(|(t, y)| {
                 // prod according to poi for first (t-mu)
                 center_trace(ct.view_mut(), t.view(), mean.slice(s![*y as usize, ..]));
-                let mut to_update = moments_other.slice_mut(s![*y as usize, .., ..]);
+                let mut to_update = cs_other.slice_mut(s![*y as usize, .., ..]);
 
                 // re-order according to pois.
                 for i in 0..d {
@@ -480,17 +511,17 @@ fn centered_products(
                 });
             });
     }
-    moments_other
+    cs_other
 }
 
-fn build_accumulator(pois: ArrayView2<u32>) -> Vec<MultivarMomentAcc> {
+fn build_accumulator(pois: ArrayView2<u32>) -> Vec<MultivarCSAcc> {
     // number of required accumulators
     let ns = pois.shape()[1];
     let n_batches = ((ns as f64) / (NS_BATCH as f64)).ceil() as usize;
-    let accumulators: Vec<MultivarMomentAcc> = (0..n_batches)
+    let accumulators: Vec<MultivarCSAcc> = (0..n_batches)
         .map(|x| {
             let l = std::cmp::min(ns - (x * NS_BATCH), NS_BATCH);
-            MultivarMomentAcc::new(pois.slice(s![.., (NS_BATCH * x)..(NS_BATCH * x + l)]), 2)
+            MultivarCSAcc::new(pois.slice(s![.., (NS_BATCH * x)..(NS_BATCH * x + l)]), 2)
         })
         .collect();
 

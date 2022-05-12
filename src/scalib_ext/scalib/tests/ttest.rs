@@ -15,7 +15,7 @@ fn ttestacc_simple() {
     let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
     let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
 
-    let mut ttacc = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
+    let mut ttacc = ttest::UniCSAcc::new(ns as usize, order, nc as usize);
     ttacc.update(traces.view(), y.view());
     let moments: Array3<f64> = ttacc.moments.to_owned();
 
@@ -41,7 +41,7 @@ fn ttestacc_simple_chuncks() {
     let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
 
     // perform ttacc
-    let mut ttacc = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
+    let mut ttacc = ttest::UniCSAcc::new(ns as usize, order, nc as usize);
     izip!(
         traces.axis_chunks_iter(Axis(0), step),
         y.axis_chunks_iter(Axis(0), step)
@@ -72,8 +72,8 @@ fn ttestacc_merge_and_reset_chuncks() {
     let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
 
     // perform ttacc
-    let mut ttacc = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
-    let mut tmp = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
+    let mut ttacc = ttest::UniCSAcc::new(ns as usize, order, nc as usize);
+    let mut tmp = ttest::UniCSAcc::new(ns as usize, order, nc as usize);
     izip!(
         traces.axis_chunks_iter(Axis(0), step),
         y.axis_chunks_iter(Axis(0), step)
@@ -106,13 +106,13 @@ fn ttestacc_merge_chuncks() {
     let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
 
     // perform ttacc
-    let mut ttacc = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
+    let mut ttacc = ttest::UniCSAcc::new(ns as usize, order, nc as usize);
     izip!(
         traces.axis_chunks_iter(Axis(0), step),
         y.axis_chunks_iter(Axis(0), step)
     )
     .for_each(|(traces, y)| {
-        let mut tmp = ttest::UnivarMomentAcc::new(ns as usize, order, nc as usize);
+        let mut tmp = ttest::UniCSAcc::new(ns as usize, order, nc as usize);
         tmp.update(traces, y);
         ttacc.merge(&tmp);
     });
