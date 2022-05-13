@@ -531,8 +531,6 @@ fn centered_products(
         let mut t0 = Array1::<Af64>::from_elem((nt/4,),Af64{x:[0.0,0.0,0.0,0.0]});
         let mut t1 = Array1::<Af64>::from_elem((nt/4,),Af64{x:[0.0,0.0,0.0,0.0]});
         
-        let t0 = t0.view().to_slice().unwrap();
-        let t1 = t1.view().to_slice().unwrap();
         let mut acc00 = Af64{x:[0.0;4]};
         let mut acc01 = Af64{x:[0.0;4]};
         let mut acc11 = Af64{x:[0.0;4]};
@@ -542,6 +540,12 @@ fn centered_products(
 
         for c in 0..nc {
             for i in 0..ns{
+
+                t0.fill(Af64{x:[(c * i) as f64,0.0,(i*7) as f64,c as f64]});
+                t1.fill(Af64{x:[(c * i) as f64,0.0,0.1,i as f64]});
+                let t0 = t0.view().to_slice().unwrap();
+                let t1 = t1.view().to_slice().unwrap();
+
                 inner_prod(&mut acc00,
                     &mut acc01,
                     &mut acc11,
