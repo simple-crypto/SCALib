@@ -526,13 +526,10 @@ fn centered_products(
                 });
         }
     } else {
-        let mut ct = Array1::<f64>::zeros((traces.shape()[1],));
-        let nt = y.iter().filter(|x| **x as usize == 0).count();
-        let mut t0 = Array1::<Af64>::from_elem((nt/4,),Af64{x:[0.0,0.0,0.0,0.0]});
-        let mut t1 = Array1::<Af64>::from_elem((nt/4,),Af64{x:[0.0,0.0,0.0,0.0]});
-        
-
         for c in 0..nc {
+            let mut t0 = Array1::<Af64>::from_elem((traces.shape()[0] / 4,),Af64{x:[0.0,0.0,0.0,0.0]});
+            let mut t1 = Array1::<Af64>::from_elem((traces.shape()[0] / 4,),Af64{x:[0.0,0.0,0.0,0.0]});
+ 
             for i in 0..ns{
                 let mut acc00 = Af64{x:[0.0;4]};
                 let mut acc01 = Af64{x:[0.0;4]};
@@ -540,9 +537,34 @@ fn centered_products(
                 let mut acc001 = Af64{x:[0.0;4]};
                 let mut acc011 = Af64{x:[0.0;4]};
                 let mut acc0011 = Af64{x:[0.0;4]};
+                
+                let p0 = pois[[0,i]] as usize;
+                let p1 = pois[[1,i]] as usize;
 
-                t0.fill(Af64{x:[(c * i) as f64,0.0,(i*7) as f64,c as f64]});
-                t1.fill(Af64{x:[(c * i) as f64,0.0,0.1,i as f64]});
+                let x0 = traces.slice(s![..,p0]);
+                let x1 = traces.slice(s![..,p1]);
+                let u0 = mean[[c,p0]];
+                let u1 = mean[[c,p1]];
+                izip!(x0.exact_chunks((4,)).into_iter(),
+                        t0.iter_mut(),
+                        y.exact_chunks((4,)).into_iter(),
+                ).for_each(|(x0,mut t0,y)|{
+                    t0.x[0] = ((x0[0] as f64) - u0) * (((y[0] == c as u16) as i32) as f64);
+                    t0.x[1] = ((x0[1] as f64) - u0) * (((y[1] == c as u16) as i32) as f64);
+                    t0.x[2] = ((x0[2] as f64) - u0) * (((y[2] == c as u16) as i32) as f64);
+                    t0.x[3] = ((x0[3] as f64) - u0) * (((y[3] == c as u16) as i32) as f64);
+                });
+ 
+                izip!(x1.exact_chunks((4,)).into_iter(),
+                        t1.iter_mut(),
+                        y.exact_chunks((4,)).into_iter(),
+                ).for_each(|(x1,mut t1,y)|{
+                    t1.x[0] = ((x1[0] as f64) - u1) * (((y[0] == c as u16) as i32) as f64);
+                    t1.x[1] = ((x1[1] as f64) - u1) * (((y[1] == c as u16) as i32) as f64);
+                    t1.x[2] = ((x1[2] as f64) - u1) * (((y[2] == c as u16) as i32) as f64);
+                    t1.x[3] = ((x1[3] as f64) - u1) * (((y[3] == c as u16) as i32) as f64);
+                });
+                               
                 let t0 = t0.view().to_slice().unwrap();
                 let t1 = t1.view().to_slice().unwrap();
 
