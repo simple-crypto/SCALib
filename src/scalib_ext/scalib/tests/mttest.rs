@@ -145,21 +145,19 @@ fn test_cs(
 
         // test centered sums
         let mut tests = 0;
-        izip!(
-            cs.slice(s![i as usize, .., ..]).outer_iter(),
-            combi.iter()
-        )
-        .for_each(|(m, combi)| {
-            println!("New Combi {:#?}", combi);
-            izip!(m.iter(), pois.axis_iter(Axis(1))).for_each(|(m, poi)| {
-                let mut test = Array1::<f64>::ones((n_traces,));
-                for c in combi.iter() {
-                    test = &test * &t0.slice(s![.., poi[*c] as usize]);
-                }
-                println!("{} {}", test.sum(), m);
-                assert!((test.sum() - m).abs() < epsi);
-                tests += 1;
-            });
-        });
+        izip!(cs.slice(s![i as usize, .., ..]).outer_iter(), combi.iter()).for_each(
+            |(m, combi)| {
+                println!("New Combi {:#?}", combi);
+                izip!(m.iter(), pois.axis_iter(Axis(1))).for_each(|(m, poi)| {
+                    let mut test = Array1::<f64>::ones((n_traces,));
+                    for c in combi.iter() {
+                        test = &test * &t0.slice(s![.., poi[*c] as usize]);
+                    }
+                    println!("{} {}", test.sum(), m);
+                    assert!((test.sum() - m).abs() < epsi);
+                    tests += 1;
+                });
+            },
+        );
     }
 }
