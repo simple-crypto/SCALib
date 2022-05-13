@@ -528,30 +528,30 @@ fn centered_products(
     } else {
         let mut ct = Array1::<f64>::zeros((traces.shape()[1],));
         let nt = y.iter().filter(|x| **x as usize == 0).count();
-        let mut rt = Array3::<Af64>::from_elem(( ns, 2 , nt/4),Af64{x:[0.0,0.0,0.0,0.0]});
+        let mut t0 = Array1::<Af64>::from_elem((nt/4,),Af64{x:[0.0,0.0,0.0,0.0]});
+        let mut t1 = Array1::<Af64>::from_elem((nt/4,),Af64{x:[0.0,0.0,0.0,0.0]});
+        
+        let t0 = t0.view().to_slice().unwrap();
+        let t1 = t1.view().to_slice().unwrap();
+        let mut acc00 = Af64{x:[0.0;4]};
+        let mut acc01 = Af64{x:[0.0;4]};
+        let mut acc11 = Af64{x:[0.0;4]};
+        let mut acc001 = Af64{x:[0.0;4]};
+        let mut acc011 = Af64{x:[0.0;4]};
+        let mut acc0011 = Af64{x:[0.0;4]};
+
         for c in 0..nc {
+            for i in 0..ns{
+                inner_prod(&mut acc00,
+                    &mut acc01,
+                    &mut acc11,
+                    &mut acc001,
+                    &mut acc011,
+                    &mut acc0011,
 
-/*            izip!(traces.axis_iter(Axis(0)), y.iter())
-                .filter(|(_, y)| **y as usize == c)
-                .enumerate()
-                .for_each(|(j, (t, y))| {
-                    // prod according to poi for first (t-mu)
-                    center_trace(ct.view_mut(), t.view(), mean.slice(s![*y as usize, ..]));
-
-                    // re-order according to pois.
-                    for i in 0..d {
-                        let mut reorder = rt.slice_mut(s![j, i, ..]);
-                        let mut tmp = cs_other.slice_mut(s![c, i, ..]);
-                        reorder.zip_mut_with(&pois.slice(s![i, ..]), |c, p| *c = ct[*p as usize]);
-                        tmp += &reorder;
-                    }
-                });
-*/
-            let acc = center_prod_2(rt.view());
-            for i in 0..6 {
-                let mut cs = cs_other.slice_mut(s![c, 2 + i, ..]);
-                cs.zip_mut_with(&acc, |cs, acc| *cs = acc[i]);
+                    t0,t1);
             }
+             
         }
     }
     cs_other
@@ -578,97 +578,45 @@ pub struct Af64 {
 }
 
 #[inline(never)]
-pub fn center_prod_2(t: ArrayView3<Af64>) -> Array1<[f64; 6]> {
-    let ns = t.shape()[0];
-    let mut acc = Array1::<[f64; 6]>::from_elem((ns,), [0.0; 6]); //
-    izip!(
-        t.exact_chunks((1, 2, t.shape()[2])).into_iter(),
-        acc.exact_chunks_mut(1).into_iter()
-    )
-    .for_each(|(t, mut acc)| {
-        let mut acc00 = Af64{x:[0.0;4]};
-        let mut acc01 = Af64{x:[0.0;4]};
-        let mut acc11 = Af64{x:[0.0;4]};
-        let mut acc001 = Af64{x:[0.0;4]};
-        let mut acc011 = Af64{x:[0.0;4]};
-        let mut acc0011 = Af64{x:[0.0;4]};
-        
-        let mut x0 = Af64{x:[0.0;4]}; 
-        let mut x1 = Af64{x:[0.0;4]}; 
-        t.axis_iter(Axis(1)).for_each(|t| {
-            x0.x[0] = t[[0,0]].x[0];
-            x0.x[1] = t[[0,0]].x[1];
-            x0.x[2] = t[[0,0]].x[2];
-            x0.x[3] = t[[0,0]].x[3];
-
-            x1.x[0] = t[[0,1]].x[0];
-            x1.x[1] = t[[0,1]].x[1];
-            x1.x[2] = t[[0,1]].x[2];
-            x1.x[3] = t[[0,1]].x[3];
-
-            inner(&mut acc00,
-                &mut acc01,
-                &mut acc11,
-                &mut acc001,
-                &mut acc011,
-                &mut acc0011,
-                
-                &x0,
-                &x1,
-            );
-        });
-        for i in 0..4 {
-            acc[0][0] += acc00.x[i];
-            acc[0][1] += acc01.x[i];
-            acc[0][2] += acc11.x[i];
-            acc[0][3] += acc001.x[i];
-            acc[0][4] += acc011.x[i];
-            acc[0][5] += acc0011.x[i];
-        }
-    });
-    acc
-}
-
-#[inline]
-pub fn inner(acc00: &mut Af64,
+pub fn inner_prod(acc00: &mut Af64,
             acc01: &mut Af64,
             acc11: &mut Af64,
             acc001: &mut Af64,
             acc011: &mut Af64,
             acc0011: &mut Af64,
 
-    t0: &Af64,
-    t1: &Af64){
+    t0: &[Af64],
+    t1: &[Af64]){
+    
+    izip!(t0.iter(),t1.iter()).for_each(|(t0,t1)|{
+        acc00.x[0] += t0.x[0] * t0.x[0];
+        acc00.x[1] += t0.x[1] * t0.x[1];
+        acc00.x[2] += t0.x[2] * t0.x[2];
+        acc00.x[3] += t0.x[3] * t0.x[3];
 
-    acc00.x[0] += t0.x[0] * t0.x[0];
-    acc00.x[1] += t0.x[1] * t0.x[1];
-    acc00.x[2] += t0.x[2] * t0.x[2];
-    acc00.x[3] += t0.x[3] * t0.x[3];
+        acc01.x[0] += t0.x[0] * t1.x[0];
+        acc01.x[1] += t0.x[1] * t1.x[1];
+        acc01.x[2] += t0.x[2] * t1.x[2];
+        acc01.x[3] += t0.x[3] * t1.x[3];
+     
+        acc11.x[0] += t1.x[0] * t1.x[0];
+        acc11.x[1] += t1.x[1] * t1.x[1];
+        acc11.x[2] += t1.x[2] * t1.x[2];
+        acc11.x[3] += t1.x[3] * t1.x[3];
+       
+        acc001.x[0] += t0.x[0] * t0.x[0] * t1.x[0];
+        acc001.x[1] += t0.x[1] * t0.x[1] * t1.x[1];
+        acc001.x[2] += t0.x[2] * t0.x[2] * t1.x[2];
+        acc001.x[3] += t0.x[3] * t0.x[3] * t1.x[3];
 
-    acc01.x[0] += t0.x[0] * t1.x[0];
-    acc01.x[1] += t0.x[1] * t1.x[1];
-    acc01.x[2] += t0.x[2] * t1.x[2];
-    acc01.x[3] += t0.x[3] * t1.x[3];
- 
-    acc11.x[0] += t1.x[0] * t1.x[0];
-    acc11.x[1] += t1.x[1] * t1.x[1];
-    acc11.x[2] += t1.x[2] * t1.x[2];
-    acc11.x[3] += t1.x[3] * t1.x[3];
-   
-    acc001.x[0] += t0.x[0] * t0.x[0] * t1.x[0];
-    acc001.x[1] += t0.x[1] * t0.x[1] * t1.x[1];
-    acc001.x[2] += t0.x[2] * t0.x[2] * t1.x[2];
-    acc001.x[3] += t0.x[3] * t0.x[3] * t1.x[3];
+        acc011.x[0] += t0.x[0] * t1.x[0] * t1.x[0];
+        acc011.x[1] += t0.x[1] * t1.x[1] * t1.x[1];
+        acc011.x[2] += t0.x[2] * t1.x[2] * t1.x[2];
+        acc011.x[3] += t0.x[3] * t1.x[3] * t1.x[3];
 
-    acc011.x[0] += t0.x[0] * t1.x[0] * t1.x[0];
-    acc011.x[1] += t0.x[1] * t1.x[1] * t1.x[1];
-    acc011.x[2] += t0.x[2] * t1.x[2] * t1.x[2];
-    acc011.x[3] += t0.x[3] * t1.x[3] * t1.x[3];
-
-    acc0011.x[0] += t0.x[0] * t0.x[0] * t1.x[0] * t1.x[0];
-    acc0011.x[1] += t0.x[1] * t0.x[1] * t1.x[1] * t1.x[1];
-    acc0011.x[2] += t0.x[2] * t0.x[2] * t1.x[2] * t1.x[2];
-    acc0011.x[3] += t0.x[3] * t0.x[3] * t1.x[3] * t1.x[3];
-
-
+        acc0011.x[0] += t0.x[0] * t0.x[0] * t1.x[0] * t1.x[0];
+        acc0011.x[1] += t0.x[1] * t0.x[1] * t1.x[1] * t1.x[1];
+        acc0011.x[2] += t0.x[2] * t0.x[2] * t1.x[2] * t1.x[2];
+        acc0011.x[3] += t0.x[3] * t0.x[3] * t1.x[3] * t1.x[3];
+    });
 }
