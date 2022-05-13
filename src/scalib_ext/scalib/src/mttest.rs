@@ -531,15 +531,15 @@ fn centered_products(
         let mut t0 = Array1::<Af64>::from_elem((nt/4,),Af64{x:[0.0,0.0,0.0,0.0]});
         let mut t1 = Array1::<Af64>::from_elem((nt/4,),Af64{x:[0.0,0.0,0.0,0.0]});
         
-        let mut acc00 = Af64{x:[0.0;4]};
-        let mut acc01 = Af64{x:[0.0;4]};
-        let mut acc11 = Af64{x:[0.0;4]};
-        let mut acc001 = Af64{x:[0.0;4]};
-        let mut acc011 = Af64{x:[0.0;4]};
-        let mut acc0011 = Af64{x:[0.0;4]};
 
         for c in 0..nc {
             for i in 0..ns{
+                let mut acc00 = Af64{x:[0.0;4]};
+                let mut acc01 = Af64{x:[0.0;4]};
+                let mut acc11 = Af64{x:[0.0;4]};
+                let mut acc001 = Af64{x:[0.0;4]};
+                let mut acc011 = Af64{x:[0.0;4]};
+                let mut acc0011 = Af64{x:[0.0;4]};
 
                 t0.fill(Af64{x:[(c * i) as f64,0.0,(i*7) as f64,c as f64]});
                 t1.fill(Af64{x:[(c * i) as f64,0.0,0.1,i as f64]});
@@ -554,6 +554,15 @@ fn centered_products(
                     &mut acc0011,
 
                     t0,t1);
+                
+                for j in 0..4{
+                    cs_other[[c,0,i]] += acc00.x[j]; 
+                    cs_other[[c,1,i]] += acc01.x[j]; 
+                    cs_other[[c,2,i]] += acc11.x[j]; 
+                    cs_other[[c,3,i]] += acc001.x[j]; 
+                    cs_other[[c,4,i]] += acc011.x[j]; 
+                    cs_other[[c,5,i]] += acc0011.x[j]; 
+                }
             }
              
         }
