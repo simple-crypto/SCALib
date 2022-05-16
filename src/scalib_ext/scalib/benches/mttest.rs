@@ -8,11 +8,10 @@ use std::time::Duration;
 fn bench_mttest(c: &mut Criterion) {
     let mut group = c.benchmark_group("ttest_update");
     let d = 2;
-    let traces_len = 5000;
-    let n = 512;
+    let traces_len = 500;
+    let n = 2048;
     let traces = Array2::<i16>::random((n, traces_len), Uniform::new(0, 1000));
     let y = Array1::<u16>::random((n,), Uniform::new(0, 2));
-    let csize = 1 << 12;
     for d in [2].iter() {
         for npois in [10000].iter() {
             let pois = Array2::<u32>::random((*d, *npois), Uniform::new(0, traces_len as u32));
