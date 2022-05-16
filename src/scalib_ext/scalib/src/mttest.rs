@@ -723,7 +723,6 @@ pub fn center_transpose_aline(
             x: [0.0, 0.0, 0.0, 0.0],
         },
     );
-    println!("t1.shape() {:#?}", t1.shape());
     for i in 0..ns {
         let mu0 = means[[0, i]];
         let mu1 = means[[1, i]];
@@ -741,9 +740,6 @@ pub fn center_transpose_aline(
                 }
             }
         });
-    println!("means {} {}",mu0,mu1);
     }
-    println!("traces {:#?}",traces);
-    println!("t0 {:#?}",t0);
     (t0, t1)
 }
