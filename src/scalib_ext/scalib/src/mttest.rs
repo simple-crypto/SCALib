@@ -210,7 +210,7 @@ impl MultivarCSAcc {
         n_traces: ArrayView1<u64>,
     ) {
         // Computes CS on the traces with a 2 passes algorithm.
-        let cs_other = centered_products(
+        let cs_other = centered_products_generic(
             traces,
             y,
             mean.view(),
@@ -236,12 +236,104 @@ impl MultivarCSAcc {
         self.merge_from_state(cs_other.view(), mapped_means.view(), n_traces.view());
     }
 
+    /// Updates the current CS estimation with fresh traces and its means per class
+    /// traces : fresh traces
+    /// y : class corresponding to each traces
+    /// mean : mean per class of the all traces
+    /// n_traces : count per classes in traces
+    pub fn update_with_means_d2(
+        &mut self,
+        t0: ArrayView2<Af64>,
+        t1: ArrayView2<Af64>,
+        mean: ArrayView2<f64>,
+        n_traces: ArrayView1<u64>,
+    ) {
+        // Computes CS on the traces with a 2 passes algorithm.
+        let mut cs_other = Array3::<f64>::zeros((2, self.combis.len(), self.pois.shape()[1]));
+        izip!(self.pois.axis_iter(Axis(1)),
+                cs_other.axis_iter_mut(Axis(2))
+        ).for_each(|(pois,mut cs_other)| {
+            let mut acc00 = Af64 { x: [0.0; 4] };
+            let mut acc01 = Af64 { x: [0.0; 4] };
+            let mut acc11 = Af64 { x: [0.0; 4] };
+            let mut acc001 = Af64 { x: [0.0; 4] };
+            let mut acc011 = Af64 { x: [0.0; 4] };
+            let mut acc0011 = Af64 { x: [0.0; 4] };
+
+            inner_prod(&mut acc00,
+                &mut acc01,
+                &mut acc11,
+                &mut acc001,
+                &mut acc011,
+                &mut acc0011,
+
+                t0.slice(s![pois[0] as usize,..]).view().to_slice().unwrap(),
+                t0.slice(s![pois[1] as usize,..]).view().to_slice().unwrap(),
+            );
+            for i in 0..4{
+                cs_other[[0,2+0]] += acc00.x[i];
+                cs_other[[0,2+1]] += acc01.x[i];
+                cs_other[[0,2+2]] += acc11.x[i];
+                cs_other[[0,2+3]] += acc001.x[i];
+                cs_other[[0,2+4]] += acc011.x[i];
+                cs_other[[0,2+5]] += acc0011.x[i];
+            }
+
+            let mut acc00 = Af64 { x: [0.0; 4] };
+            let mut acc01 = Af64 { x: [0.0; 4] };
+            let mut acc11 = Af64 { x: [0.0; 4] };
+            let mut acc001 = Af64 { x: [0.0; 4] };
+            let mut acc011 = Af64 { x: [0.0; 4] };
+            let mut acc0011 = Af64 { x: [0.0; 4] };
+
+            inner_prod(&mut acc00,
+                &mut acc01,
+                &mut acc11,
+                &mut acc001,
+                &mut acc011,
+                &mut acc0011,
+
+                t1.slice(s![pois[0] as usize,..]).view().to_slice().unwrap(),
+                t1.slice(s![pois[1] as usize,..]).view().to_slice().unwrap(),
+            );
+            for i in 0..4{
+                cs_other[[1,2+0]] += acc00.x[i];
+                cs_other[[1,2+1]] += acc01.x[i];
+                cs_other[[1,2+2]] += acc11.x[i];
+                cs_other[[1,2+3]] += acc001.x[i];
+                cs_other[[1,2+4]] += acc011.x[i];
+                cs_other[[1,2+5]] += acc0011.x[i];
+            }
+        });
+
+        // Genereted the means according to the pois
+        let pois = &self.pois;
+        let mut mapped_means = Array3::<f64>::zeros((self.nc, self.d, self.ns));
+        izip!(mapped_means.outer_iter_mut(), mean.outer_iter()).for_each(
+            |(mut to_update, mean)| {
+                izip!(to_update.outer_iter_mut(), pois.outer_iter()).for_each(
+            |(mut to_update, pois)| {
+                        to_update.zip_mut_with(&pois, |x, p| *x = mean[*p as usize]);
+                    },
+                );
+            },
+        );
+
+        // Merge CS of the inputs with self.
+        self.merge_from_state(cs_other.view(), mapped_means.view(), n_traces.view());
+    }
     /// Updates the current CS estimation with fresh traces
     /// traces : fresh traces
     /// y : class corresponding to each traces
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
         let (mean, n_traces) = means_per_class(traces, y, self.nc);
-        self.update_with_means(traces, y, mean.view(), n_traces.view());
+        if self.d != 2 {
+            self.update_with_means(traces, y, mean.view(), n_traces.view());
+        }else{
+            println!("{:#?}",y.shape());
+            let (t0,t1) = center_transpose_aline(traces,mean.view(),y);
+            self.update_with_means_d2(t0.view(),t1.view(),mean.view(),n_traces.view());
+        }
     }
 }
 
@@ -292,7 +384,7 @@ impl MTtest {
         // _____________________________
         //
         // Each chunck above is updated with an accumulator.
-
+        let generic = self.d != 2;
         let y_chunck_size_level1 = cmp::max(
             1024,
             traces.shape()[0]
@@ -307,18 +399,34 @@ impl MTtest {
         )
             .into_par_iter()
             .map(|(traces, y)| {
-                // chunck different traces for more threads
+
                 let (mean, n_traces) = means_per_class(traces, y, 2);
                 let mut accumulators = build_accumulator(self.pois.view());
-                (
-                    self.pois.axis_chunks_iter(Axis(1), NS_BATCH),
-                    &mut accumulators,
-                )
-                    .into_par_iter()
-                    .for_each(|(_, acc)| {
-                        // chunck the traces with their lenght
-                        acc.update_with_means(traces, y, mean.view(), n_traces.view())
-                    });
+                if generic{
+                    // chunck different traces for more threads
+                    (
+                        self.pois.axis_chunks_iter(Axis(1), NS_BATCH),
+                        &mut accumulators,
+                    )
+                        .into_par_iter()
+                        .for_each(|(_, acc)| {
+                            // chunck the traces with their lenght
+                            acc.update_with_means(traces, y, mean.view(), n_traces.view())
+                        });
+                    }
+                else{
+                    let (t0,t1) = center_transpose_aline(traces,mean.view(),y);
+                    // chunck different traces for more threads
+                    (
+                        self.pois.axis_chunks_iter(Axis(1), NS_BATCH),
+                        &mut accumulators,
+                    )
+                        .into_par_iter()
+                        .for_each(|(_, acc)| {
+                            // chunck the traces with their lenght
+                            acc.update_with_means_d2(t0.view(),t1.view(),mean.view(),n_traces.view());
+                        });
+                }
                 accumulators
             })
             .reduce(
@@ -444,7 +552,7 @@ fn means_per_class(
     (mean, n_traces)
 }
 
-fn centered_products(
+fn centered_products_generic(
     traces: ArrayView2<i16>,
     y: ArrayView1<u16>,
     mean: ArrayView2<f64>,
@@ -456,154 +564,75 @@ fn centered_products(
     let d = pois.shape()[0];
     let mut cs_other = Array3::<f64>::zeros((nc, combis.len(), ns));
 
-    if d > 2 {
-        let mut prod = Array2::<f64>::zeros((combis.len(), ns));
+    let mut prod = Array2::<f64>::zeros((combis.len(), ns));
 
-        let precomp_loc: Vec<usize> = combis
-            .iter()
-            .filter(|x| x.len() > 1)
-            .map(|x| {
-                if x.len() == 2 {
-                    0
-                } else {
-                    let mut tmp = x.clone();
-                    tmp.remove(0);
-                    combis.iter().position(|y| tmp == *y).unwrap() - d
-                }
-            })
-            .collect();
-
-        // for each trace:
-        //  1. center it (t - mu)
-        //  2. re-order the traces for each of the pois
-        let mut ct = Array1::<f64>::zeros((traces.shape()[1],));
-        for c in 0..nc {
-            izip!(traces.axis_iter(Axis(0)), y.iter())
-                .filter(|(_, y)| **y as usize == c)
-                .for_each(|(t, y)| {
-                    // prod according to poi for first (t-mu)
-                    center_trace(ct.view_mut(), t.view(), mean.slice(s![*y as usize, ..]));
-                    let mut to_update = cs_other.slice_mut(s![*y as usize, .., ..]);
-
-                    // re-order according to pois.
-                    for i in 0..d {
-                        let mut c = prod.slice_mut(s![i, ..]);
-                        let mut tmp = to_update.slice_mut(s![i, ..]);
-                        c.zip_mut_with(&pois.slice(s![i, ..]), |c, p| *c = ct[*p as usize]);
-                        tmp += &c;
-                    }
-
-                    // compute the product for all the higher order combinations
-                    let (ct, mut higher_order) = prod.view_mut().split_at(Axis(0), d);
-                    let (_, mut to_update) = to_update.view_mut().split_at(Axis(0), d);
-                    let (_, higher_combi) = combis.split_at(d);
-                    izip!(
-                        (0..higher_order.len()),
-                        higher_combi.iter(),
-                        precomp_loc.iter(),
-                        to_update.axis_iter_mut(Axis(0)),
-                    )
-                    .for_each(|(i, combi, precomp_loc, to_update)| {
-                        let (tmp, mut hf) = higher_order.view_mut().split_at(Axis(0), i);
-                        let h = hf.slice_mut(s![0, ..]);
-
-                        if combi.len() == 2 {
-                            add_prod(
-                                to_update,
-                                h,
-                                ct.slice(s![combi[0], ..]),
-                                ct.slice(s![combi[1], ..]),
-                            );
-                        } else {
-                            add_prod(
-                                to_update,
-                                h,
-                                ct.slice(s![combi[0], ..]),
-                                tmp.slice(s![*precomp_loc, ..]),
-                            );
-                        }
-                    });
-                });
-        }
-    } else {
-        for c in 0..nc {
-            let mut t0 = Array1::<Af64>::from_elem(
-                (traces.shape()[0] / 4,),
-                Af64 {
-                    x: [0.0, 0.0, 0.0, 0.0],
-                },
-            );
-            let mut t1 = Array1::<Af64>::from_elem(
-                (traces.shape()[0] / 4,),
-                Af64 {
-                    x: [0.0, 0.0, 0.0, 0.0],
-                },
-            );
-
-            for i in 0..ns {
-                let mut acc00 = Af64 { x: [0.0; 4] };
-                let mut acc01 = Af64 { x: [0.0; 4] };
-                let mut acc11 = Af64 { x: [0.0; 4] };
-                let mut acc001 = Af64 { x: [0.0; 4] };
-                let mut acc011 = Af64 { x: [0.0; 4] };
-                let mut acc0011 = Af64 { x: [0.0; 4] };
-
-                let p0 = pois[[0, i]] as usize;
-                let p1 = pois[[1, i]] as usize;
-
-                let x0 = traces.slice(s![.., p0]);
-                let x1 = traces.slice(s![.., p1]);
-                let u0 = mean[[c, p0]];
-                let u1 = mean[[c, p1]];
-                izip!(
-                    x0.exact_chunks((4,)).into_iter(),
-                    t0.iter_mut(),
-                    y.exact_chunks((4,)).into_iter(),
-                )
-                .for_each(|(x0, mut t0, y)| {
-                    t0.x[0] = ((x0[0] as f64) - u0) * (((y[0] == c as u16) as i32) as f64);
-                    t0.x[1] = ((x0[1] as f64) - u0) * (((y[1] == c as u16) as i32) as f64);
-                    t0.x[2] = ((x0[2] as f64) - u0) * (((y[2] == c as u16) as i32) as f64);
-                    t0.x[3] = ((x0[3] as f64) - u0) * (((y[3] == c as u16) as i32) as f64);
-                });
-
-                izip!(
-                    x1.exact_chunks((4,)).into_iter(),
-                    t1.iter_mut(),
-                    y.exact_chunks((4,)).into_iter(),
-                )
-                .for_each(|(x1, mut t1, y)| {
-                    t1.x[0] = ((x1[0] as f64) - u1) * (((y[0] == c as u16) as i32) as f64);
-                    t1.x[1] = ((x1[1] as f64) - u1) * (((y[1] == c as u16) as i32) as f64);
-                    t1.x[2] = ((x1[2] as f64) - u1) * (((y[2] == c as u16) as i32) as f64);
-                    t1.x[3] = ((x1[3] as f64) - u1) * (((y[3] == c as u16) as i32) as f64);
-                });
-
-                let t0 = t0.view().to_slice().unwrap();
-                let t1 = t1.view().to_slice().unwrap();
-
-                inner_prod(
-                    &mut acc00,
-                    &mut acc01,
-                    &mut acc11,
-                    &mut acc001,
-                    &mut acc011,
-                    &mut acc0011,
-                    t0,
-                    t1,
-                );
-
-                for j in 0..4 {
-                    cs_other[[c, 0, i]] += acc00.x[j];
-                    cs_other[[c, 1, i]] += acc01.x[j];
-                    cs_other[[c, 2, i]] += acc11.x[j];
-                    cs_other[[c, 3, i]] += acc001.x[j];
-                    cs_other[[c, 4, i]] += acc011.x[j];
-                    cs_other[[c, 5, i]] += acc0011.x[j];
-                }
+    let precomp_loc: Vec<usize> = combis
+        .iter()
+        .filter(|x| x.len() > 1)
+        .map(|x| {
+            if x.len() == 2 {
+                0
+            } else {
+                let mut tmp = x.clone();
+                tmp.remove(0);
+                combis.iter().position(|y| tmp == *y).unwrap() - d
             }
-        }
+        })
+        .collect();
+
+    // for each trace:
+    //  1. center it (t - mu)
+    //  2. re-order the traces for each of the pois
+    let mut ct = Array1::<f64>::zeros((traces.shape()[1],));
+    for c in 0..nc {
+        izip!(traces.axis_iter(Axis(0)), y.iter())
+            .filter(|(_, y)| **y as usize == c)
+            .for_each(|(t, y)| {
+                // prod according to poi for first (t-mu)
+                center_trace(ct.view_mut(), t.view(), mean.slice(s![*y as usize, ..]));
+                let mut to_update = cs_other.slice_mut(s![*y as usize, .., ..]);
+
+                // re-order according to pois.
+                for i in 0..d {
+                    let mut c = prod.slice_mut(s![i, ..]);
+                    let mut tmp = to_update.slice_mut(s![i, ..]);
+                    c.zip_mut_with(&pois.slice(s![i, ..]), |c, p| *c = ct[*p as usize]);
+                    tmp += &c;
+                }
+
+                // compute the product for all the higher order combinations
+                let (ct, mut higher_order) = prod.view_mut().split_at(Axis(0), d);
+                let (_, mut to_update) = to_update.view_mut().split_at(Axis(0), d);
+                let (_, higher_combi) = combis.split_at(d);
+                izip!(
+                    (0..higher_order.len()),
+                    higher_combi.iter(),
+                    precomp_loc.iter(),
+                    to_update.axis_iter_mut(Axis(0)),
+                )
+                .for_each(|(i, combi, precomp_loc, to_update)| {
+                    let (tmp, mut hf) = higher_order.view_mut().split_at(Axis(0), i);
+                    let h = hf.slice_mut(s![0, ..]);
+
+                    if combi.len() == 2 {
+                        add_prod(
+                            to_update,
+                            h,
+                            ct.slice(s![combi[0], ..]),
+                            ct.slice(s![combi[1], ..]),
+                        );
+                    } else {
+                        add_prod(
+                            to_update,
+                            h,
+                            ct.slice(s![combi[0], ..]),
+                            tmp.slice(s![*precomp_loc, ..]),
+                        );
+                    }
+                });
+            });
     }
+
     cs_other
 }
 
@@ -622,6 +651,7 @@ fn build_accumulator(pois: ArrayView2<u32>) -> Vec<MultivarCSAcc> {
 }
 
 #[derive(Clone)]
+#[derive(Debug)]
 #[repr(align(32))]
 pub struct Af64 {
     x: [f64; 4],
@@ -672,3 +702,48 @@ pub fn inner_prod(
     });
 }
 
+pub fn center_transpose_aline(
+    traces: ArrayView2<i16>,
+    means: ArrayView2<f64>,
+    y: ArrayView1<u16>,
+) -> (Array2<Af64>, Array2<Af64>) {
+    let ns = traces.shape()[1];
+    let nt = traces.shape()[0];
+
+    let mut t0 = Array2::<Af64>::from_elem(
+        (ns, (nt as f64 / 4.0).ceil() as usize),
+        Af64 {
+            x: [0.0, 0.0, 0.0, 0.0],
+        },
+    );
+
+    let mut t1 = Array2::<Af64>::from_elem(
+        (ns, (nt as f64 / 4.0).ceil() as usize),
+        Af64 {
+            x: [0.0, 0.0, 0.0, 0.0],
+        },
+    );
+    println!("t1.shape() {:#?}", t1.shape());
+    for i in 0..ns {
+        let mu0 = means[[0, i]];
+        let mu1 = means[[1, i]];
+        izip!(
+            t0.slice_mut(s![i, ..]).iter_mut(),
+            t1.slice_mut(s![i, ..]).iter_mut(),
+        )
+        .enumerate()
+        .for_each(|(j, (t0, t1))| {
+            for pos in 0..4{
+                if (j * 4 + pos) < nt{ 
+                    let c = y[j * 4 + pos];
+                    t0.x[pos] = (traces[[j * 4 + pos, i]] as f64 - mu0) * ((c == 0) as i32 as f64);
+                    t1.x[pos] = (traces[[j * 4 + pos, i]] as f64 - mu1) * ((c == 1) as i32 as f64);
+                }
+            }
+        });
+    println!("means {} {}",mu0,mu1);
+    }
+    println!("traces {:#?}",traces);
+    println!("t0 {:#?}",t0);
+    (t0, t1)
+}
