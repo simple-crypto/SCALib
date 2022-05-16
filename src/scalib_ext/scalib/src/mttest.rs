@@ -527,66 +527,81 @@ fn centered_products(
         }
     } else {
         for c in 0..nc {
-            let mut t0 = Array1::<Af64>::from_elem((traces.shape()[0] / 4,),Af64{x:[0.0,0.0,0.0,0.0]});
-            let mut t1 = Array1::<Af64>::from_elem((traces.shape()[0] / 4,),Af64{x:[0.0,0.0,0.0,0.0]});
- 
-            for i in 0..ns{
-                let mut acc00 = Af64{x:[0.0;4]};
-                let mut acc01 = Af64{x:[0.0;4]};
-                let mut acc11 = Af64{x:[0.0;4]};
-                let mut acc001 = Af64{x:[0.0;4]};
-                let mut acc011 = Af64{x:[0.0;4]};
-                let mut acc0011 = Af64{x:[0.0;4]};
-                
-                let p0 = pois[[0,i]] as usize;
-                let p1 = pois[[1,i]] as usize;
+            let mut t0 = Array1::<Af64>::from_elem(
+                (traces.shape()[0] / 4,),
+                Af64 {
+                    x: [0.0, 0.0, 0.0, 0.0],
+                },
+            );
+            let mut t1 = Array1::<Af64>::from_elem(
+                (traces.shape()[0] / 4,),
+                Af64 {
+                    x: [0.0, 0.0, 0.0, 0.0],
+                },
+            );
 
-                let x0 = traces.slice(s![..,p0]);
-                let x1 = traces.slice(s![..,p1]);
-                let u0 = mean[[c,p0]];
-                let u1 = mean[[c,p1]];
-                izip!(x0.exact_chunks((4,)).into_iter(),
-                        t0.iter_mut(),
-                        y.exact_chunks((4,)).into_iter(),
-                ).for_each(|(x0,mut t0,y)|{
+            for i in 0..ns {
+                let mut acc00 = Af64 { x: [0.0; 4] };
+                let mut acc01 = Af64 { x: [0.0; 4] };
+                let mut acc11 = Af64 { x: [0.0; 4] };
+                let mut acc001 = Af64 { x: [0.0; 4] };
+                let mut acc011 = Af64 { x: [0.0; 4] };
+                let mut acc0011 = Af64 { x: [0.0; 4] };
+
+                let p0 = pois[[0, i]] as usize;
+                let p1 = pois[[1, i]] as usize;
+
+                let x0 = traces.slice(s![.., p0]);
+                let x1 = traces.slice(s![.., p1]);
+                let u0 = mean[[c, p0]];
+                let u1 = mean[[c, p1]];
+                izip!(
+                    x0.exact_chunks((4,)).into_iter(),
+                    t0.iter_mut(),
+                    y.exact_chunks((4,)).into_iter(),
+                )
+                .for_each(|(x0, mut t0, y)| {
                     t0.x[0] = ((x0[0] as f64) - u0) * (((y[0] == c as u16) as i32) as f64);
                     t0.x[1] = ((x0[1] as f64) - u0) * (((y[1] == c as u16) as i32) as f64);
                     t0.x[2] = ((x0[2] as f64) - u0) * (((y[2] == c as u16) as i32) as f64);
                     t0.x[3] = ((x0[3] as f64) - u0) * (((y[3] == c as u16) as i32) as f64);
                 });
- 
-                izip!(x1.exact_chunks((4,)).into_iter(),
-                        t1.iter_mut(),
-                        y.exact_chunks((4,)).into_iter(),
-                ).for_each(|(x1,mut t1,y)|{
+
+                izip!(
+                    x1.exact_chunks((4,)).into_iter(),
+                    t1.iter_mut(),
+                    y.exact_chunks((4,)).into_iter(),
+                )
+                .for_each(|(x1, mut t1, y)| {
                     t1.x[0] = ((x1[0] as f64) - u1) * (((y[0] == c as u16) as i32) as f64);
                     t1.x[1] = ((x1[1] as f64) - u1) * (((y[1] == c as u16) as i32) as f64);
                     t1.x[2] = ((x1[2] as f64) - u1) * (((y[2] == c as u16) as i32) as f64);
                     t1.x[3] = ((x1[3] as f64) - u1) * (((y[3] == c as u16) as i32) as f64);
                 });
-                               
+
                 let t0 = t0.view().to_slice().unwrap();
                 let t1 = t1.view().to_slice().unwrap();
 
-                inner_prod(&mut acc00,
+                inner_prod(
+                    &mut acc00,
                     &mut acc01,
                     &mut acc11,
                     &mut acc001,
                     &mut acc011,
                     &mut acc0011,
+                    t0,
+                    t1,
+                );
 
-                    t0,t1);
-                
-                for j in 0..4{
-                    cs_other[[c,0,i]] += acc00.x[j]; 
-                    cs_other[[c,1,i]] += acc01.x[j]; 
-                    cs_other[[c,2,i]] += acc11.x[j]; 
-                    cs_other[[c,3,i]] += acc001.x[j]; 
-                    cs_other[[c,4,i]] += acc011.x[j]; 
-                    cs_other[[c,5,i]] += acc0011.x[j]; 
+                for j in 0..4 {
+                    cs_other[[c, 0, i]] += acc00.x[j];
+                    cs_other[[c, 1, i]] += acc01.x[j];
+                    cs_other[[c, 2, i]] += acc11.x[j];
+                    cs_other[[c, 3, i]] += acc001.x[j];
+                    cs_other[[c, 4, i]] += acc011.x[j];
+                    cs_other[[c, 5, i]] += acc0011.x[j];
                 }
             }
-             
         }
     }
     cs_other
@@ -613,17 +628,18 @@ pub struct Af64 {
 }
 
 #[inline(never)]
-pub fn inner_prod(acc00: &mut Af64,
-            acc01: &mut Af64,
-            acc11: &mut Af64,
-            acc001: &mut Af64,
-            acc011: &mut Af64,
-            acc0011: &mut Af64,
+pub fn inner_prod(
+    acc00: &mut Af64,
+    acc01: &mut Af64,
+    acc11: &mut Af64,
+    acc001: &mut Af64,
+    acc011: &mut Af64,
+    acc0011: &mut Af64,
 
     t0: &[Af64],
-    t1: &[Af64]){
-    
-    izip!(t0.iter(),t1.iter()).for_each(|(t0,t1)|{
+    t1: &[Af64],
+) {
+    izip!(t0.iter(), t1.iter()).for_each(|(t0, t1)| {
         acc00.x[0] += t0.x[0] * t0.x[0];
         acc00.x[1] += t0.x[1] * t0.x[1];
         acc00.x[2] += t0.x[2] * t0.x[2];
@@ -633,12 +649,12 @@ pub fn inner_prod(acc00: &mut Af64,
         acc01.x[1] += t0.x[1] * t1.x[1];
         acc01.x[2] += t0.x[2] * t1.x[2];
         acc01.x[3] += t0.x[3] * t1.x[3];
-     
+
         acc11.x[0] += t1.x[0] * t1.x[0];
         acc11.x[1] += t1.x[1] * t1.x[1];
         acc11.x[2] += t1.x[2] * t1.x[2];
         acc11.x[3] += t1.x[3] * t1.x[3];
-       
+
         acc001.x[0] += t0.x[0] * t0.x[0] * t1.x[0];
         acc001.x[1] += t0.x[1] * t0.x[1] * t1.x[1];
         acc001.x[2] += t0.x[2] * t0.x[2] * t1.x[2];
@@ -655,3 +671,4 @@ pub fn inner_prod(acc00: &mut Af64,
         acc0011.x[3] += t0.x[3] * t0.x[3] * t1.x[3] * t1.x[3];
     });
 }
+
