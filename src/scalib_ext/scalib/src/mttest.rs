@@ -708,17 +708,19 @@ pub fn center_transpose_aline(
     y: ArrayView1<u16>,
 ) -> (Array2<Af64>, Array2<Af64>) {
     let ns = traces.shape()[1];
-    let nt = traces.shape()[0];
+    
+    let n0 = y.iter().filter(|x| **x == 0).count();
+    let n1 = y.shape()[0] - n0;
 
     let mut t0 = Array2::<Af64>::from_elem(
-        (ns, (nt as f64 / 4.0).ceil() as usize),
+        (ns, (n0 as f64 / 4.0).ceil() as usize),
         Af64 {
             x: [0.0, 0.0, 0.0, 0.0],
         },
     );
 
     let mut t1 = Array2::<Af64>::from_elem(
-        (ns, (nt as f64 / 4.0).ceil() as usize),
+        (ns, (n1 as f64 / 4.0).ceil() as usize),
         Af64 {
             x: [0.0, 0.0, 0.0, 0.0],
         },
@@ -726,20 +728,19 @@ pub fn center_transpose_aline(
     for i in 0..ns {
         let mu0 = means[[0, i]];
         let mu1 = means[[1, i]];
-        izip!(
-            t0.slice_mut(s![i, ..]).iter_mut(),
-            t1.slice_mut(s![i, ..]).iter_mut(),
-        )
-        .enumerate()
-        .for_each(|(j, (t0, t1))| {
-            for pos in 0..4{
-                if (j * 4 + pos) < nt{ 
-                    let c = y[j * 4 + pos];
-                    t0.x[pos] = (traces[[j * 4 + pos, i]] as f64 - mu0) * ((c == 0) as i32 as f64);
-                    t1.x[pos] = (traces[[j * 4 + pos, i]] as f64 - mu1) * ((c == 1) as i32 as f64);
+        let mut cnt0 = 0;
+        let mut cnt1 = 0;
+        izip!(traces.slice(s![..,i]).iter(),
+            y.iter()).
+            for_each(|(t,y)|{
+                if *y == 0{
+                    t0[[i,cnt0 / 4]].x[cnt0%4] = *t as f64 - mu0;
+                    cnt0 += 1;
+                }else{
+                    t1[[i,cnt1 / 4]].x[cnt1%4] = *t as f64 - mu1;
+                    cnt1 += 1;
                 }
-            }
-        });
+            });
     }
     (t0, t1)
 }
