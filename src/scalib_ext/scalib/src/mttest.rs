@@ -385,14 +385,7 @@ impl MTtest {
         //
         // Each chunck above is updated with an accumulator.
         let generic = self.d != 2;
-        let y_chunck_size_level1 = cmp::max(
-            1024,
-            traces.shape()[0]
-                / (cmp::max(
-                    1,
-                    4 * rayon::current_num_threads() / self.accumulators.len(),
-                )),
-        );
+        let y_chunck_size_level1 = 8192;
         let level1_accs = (
             traces.axis_chunks_iter(Axis(0), y_chunck_size_level1),
             y.axis_chunks_iter(Axis(0), y_chunck_size_level1),
