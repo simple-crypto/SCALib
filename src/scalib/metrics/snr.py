@@ -25,6 +25,15 @@ class SNR:
         Number of samples in a single trace.
     np : int
         Number of independent variables `X` for which SNR must be estimated.
+    use_64bit: bool (default False)
+        Use 64 bits for intermediate sums instead of 32 bits.
+        When using 64-bit sums, SNR can accumulate up to 2^32 traces, while when
+        32-bit sums are used, the bound is `n_i < 2^32/b`, where b is the
+        maximum absolute value of a sample rounded to the next power of 2, and
+        n_i is the maximum number of times a variable can take a given value.
+        Concretely, the total number of traces n should be at most
+        `2^32/b*nc-k`, where `k = O(sqrt(n))`, typ. `k>=3*sqrt(n)`
+        (See https://mathoverflow.net/a/273060)
 
     Examples
     --------
@@ -45,7 +54,7 @@ class SNR:
 
     """
 
-    def __init__(self, nc, ns, np=1, use_newer=False):
+    def __init__(self, nc, ns, np=1, use_64bit=False):
         if nc not in range(1, 2**16 + 1):
             raise ValueError(
                 f"SNR can be computed on max 16 bit variable, nc={nc} given"
@@ -53,10 +62,7 @@ class SNR:
 
         self._ns = ns
         self._np = np
-        if use_newer:
-            self._snr = _scalib_ext.SNR2(nc, ns, np)
-        else:
-            self._snr = _scalib_ext.SNR(nc, ns, np)
+        self._snr = _scalib_ext.SNR(nc, ns, np, use_64bit)
 
     def fit_u(self, l, x):
         r"""Updates the SNR estimation with samples of `l` for the classes `x`.
@@ -71,14 +77,24 @@ class SNR:
             Labels for each trace. Must be of shape `(n, np)` and must be
             `np.uint16`.
         """
+        if not isinstance(l, np.ndarray):
+            raise ValueError("l a numpy array")
+        if not isinstance(x, np.ndarray):
+            raise ValueError("x a numpy array")
         nl, nsl = l.shape
         nx, npx = x.shape
+        if l.dtype != np.int16:
+            raise ValueError("l must by array of np.int16")
         if not (npx == self._np and nx == nl):
             raise ValueError(f"Expected x with shape ({nl}, {self._np})")
         if not (nsl == self._ns):
             raise Exception(f"l is too long. Expected second dim of size {self._ns}.")
+        if not l.flags.c_contiguous:
+            raise Exception(f"l not a C-style array.")
         # _scalib_ext uses inverted axes for x.
-        self._snr.update(l, x.transpose())
+        # we can copy when needed, as x should be small, so this should be cheap
+        x = x.transpose().astype(np.uint16, order="C", casting="equiv", copy=False)
+        self._snr.update(l, x)
 
     def get_snr(self):
         r"""Return the current SNR estimation with an array of shape `(np,ns)`."""

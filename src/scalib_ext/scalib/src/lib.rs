@@ -3,5 +3,4 @@ pub mod lda;
 pub(crate) mod matrixmul;
 pub mod mttest;
 pub mod snr;
-pub mod snr2;
 pub mod ttest;
