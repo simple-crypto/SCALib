@@ -1,5 +1,5 @@
 T-tests
-=======
+-------
 The Student's :math:`t`-test can be used to highlight a difference in the means
 of two distributions. To do so, a `t` statistic is derived following the
 expression:
@@ -17,10 +17,18 @@ In this module, the definition of :math:`\mu` and :math:`v` are adapted to perfo
 univariate and multivariate :math:`t`-test to compare higher-order moments of
 two distributions.
 
-Notes
------
 **Warning**: Ttest should not be used alone as a standalone evaluation tool
 because of its qualitative nature. See [2]_ and [3]_ for cautionary notes.
+
+Univariate T-tests
+^^^^^^^^^^^^^^^^^^
+
+.. automodule:: scalib.metrics.ttest
+   :members: Ttest
+
+
+References
+^^^^^^^^^^
 
 .. [1] "Leakage assessment methodology", Tobias Schneider, Amir Moradi, CHES
    2015
@@ -30,7 +38,4 @@ because of its qualitative nature. See [2]_ and [3]_ for cautionary notes.
    Mitigation of Non-invasive Attack Classes Against Cryptographic
    Modules')", Carolyn Whitnall, Elisabeth Oswald, ASIACRYPT 2019
 
-
-.. automodule:: scalib.metrics.ttest
-   :members:
 

@@ -3,25 +3,31 @@ from scalib import _scalib_ext
 
 
 class Ttest:
-    r""" The `Ttest` object enables to perform univariate :math:`t`-test.
-    
-    Concretely if :math:`x^i` is the :math:`i`-th leakage observation,
-    for `d=1` the `t` test is performed with:
+    r"""The `Ttest` object enables to perform univariate :math:`t`-test.
+    Concretely, it first computes the  :math:`\mu[j]`'s and :math:`v[j]`'s which
+    corresponds to the statistical moment to test at index `j` in the traces and
+    the standard deviation of its estimate.  These are derived all the provided
+    traces (possibly in multiple chuncks) next denoted as :math:`l[:,j]`.
+    Second, the statistic `l[j]` is derived from the above equation. The
+    :math:`\mu[j]` are computed depending on `d` as defined below.
+
+
+    For `d=1`:
 
     .. math::
-        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} x[i,j]
-    
+        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} l[i,j]
+
     Similarly if `d=2`:
-    
+
     .. math::
-        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} (x[i,j] - \bar{x}[:,j])^2
+        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} (l[i,j] - \bar{l}[:,j])^2
 
     And finally if `d>2`:
 
-        
+
     .. math::
-        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} \left(\frac{x[i,j] - \bar{x}[:,j])}{\sigma_{x[:,j]}}\right)^d
-    
+        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} \left(\frac{l[i,j] - \bar{l}[:,j])}{\sigma_{l[:,j]}}\right)^d
+
     Parameters
     ----------
     ns : int
