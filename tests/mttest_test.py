@@ -36,7 +36,7 @@ def reference(traces, x, d, pois):
 
 
 def test_ttest_d2_many_3():
-    ns = 10230
+    ns = 10237
     npois = 12342
     d = 2
     nc = 2
@@ -56,8 +56,8 @@ def test_ttest_d2_many_3():
 
 
 def test_ttest_d2_many_2():
-    ns = 100
-    npois = 12342
+    ns = 99
+    npois = 12329
     d = 2
     nc = 2
     n = 1 << 8
