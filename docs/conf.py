@@ -3,7 +3,7 @@
 # -- Project information -----------------------------------------------------
 
 project = 'SCALib'
-copyright = '2021, UCLouvain'
+copyright = '2021-2022, UCLouvain'
 
 
 # Add any Sphinx extension module names here, as strings. They can be
@@ -12,7 +12,6 @@ copyright = '2021, UCLouvain'
 extensions = [
     'sphinx.ext.autodoc',
     'numpydoc',
-    'sphinx.ext.autosectionlabel',
     'sphinx.ext.intersphinx',
     'sphinx.ext.coverage',
     'sphinx.ext.doctest',

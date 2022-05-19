@@ -4,10 +4,10 @@ Metrics
 This module contains several well-know side-channel metrics.
 
 .. toctree::
-   :maxdepth: 2
-   :hidden:
+   :caption: Available metrics
+   :maxdepth: 1
 
-   scalib.metrics.snr.rst
+   scalib.metrics.snr.rst 
    scalib.metrics.ttest.rst
    
 
