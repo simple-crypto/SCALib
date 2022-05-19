@@ -5,11 +5,11 @@
 //! of the estimate.
 //!
 //! This is based on the one-pass algorithm proposed in
-//! <https://eprint.iacr.org/2015/207>.
+//! <https://eprint.iacr.org/2015/207> section 5.
 use itertools::{izip, Itertools};
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
 use rayon::prelude::*;
-use std::cmp;
+
 // Length of chunck for traces
 const NS_BATCH: usize = 1 << 13;
 
@@ -20,6 +20,7 @@ pub struct MultivarCSAcc {
     pub pois: Array2<u32>,
     /// Number of classes
     pub nc: usize,
+    /// Order to the statistical set
     pub d: usize,
     /// Number of samples in each sets. shape (nc,)
     pub n_traces: Array1<u64>,
@@ -27,6 +28,7 @@ pub struct MultivarCSAcc {
     /// shape of (nc, combis.len(), d)
     pub cs: Array3<f64>,
     /// Current means estimates
+    /// shape of (nc, d, ns)
     pub mean: Array3<f64>,
     /// List of all the points combinations to compute the centered product sum.
     /// This contains all the unique combinations on the set (0..d) U (0..d).
@@ -57,10 +59,7 @@ impl MultivarCSAcc {
                             x
                         })
                         .unique()
-                        .collect()
                 })
-                .collect::<Vec<Vec<Vec<usize>>>>()
-                .into_iter()
                 .flatten()
                 .collect()
         } else {
@@ -202,7 +201,7 @@ impl MultivarCSAcc {
     /// y : class corresponding to each traces
     /// mean : mean per class of the all traces
     /// n_traces : count per classes in traces
-    pub fn update_with_means(
+    fn update_with_means(
         &mut self,
         traces: ArrayView2<i16>,
         y: ArrayView1<u16>,
