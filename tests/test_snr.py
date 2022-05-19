@@ -29,21 +29,23 @@ def snr_pooled(x, y, nv, nc, ns):
 def snr_pooled2(x, y, nv, nc, ns):
     """Should be almost exact implementation of rust version, including rounding
     errors."""
-    snr_ref = np.zeros((nv, ns), dtype=np.float64)
-    g_sum = np.sum(x, axis=0)
-    sum_sq = np.sum(x**2, axis=0)
+    sig = np.zeros((nv, ns), dtype=np.float64)
+    no = np.zeros((nv, ns), dtype=np.float64)
+    g_sum = np.sum(x, axis=0).astype(object)
+    sum_sq = np.sum(x**2, axis=0).astype(object)
     n = x.shape[0]
     for v in range(nv):
-        sum_sq_cls = np.zeros((ns,))
+        sum_sq_cls = np.zeros((ns,)).astype(object)
         for c in range(nc):
             samples = x[np.where(y.transpose()[v] == c)[0], :]
             if samples.shape[0] != 0:
                 s = np.sum(samples, axis=0)
-                sum_sq_cls += np.floor(s**2 / samples.shape[0] * n)
-        sig = sum_sq_cls - g_sum**2
-        no = x.shape[0] * sum_sq - sum_sq_cls
-        with np.errstate(divide="ignore", invalid="ignore"):
-            snr_ref[v, :] = sig / no
+                sum_sq_cls += (s**2).astype(object)*n // samples.shape[0]
+        sig[v,:] = (sum_sq_cls - g_sum**2).astype(np.float64)
+        assert n == x.shape[0]
+        no[v,:] = (x.shape[0] * sum_sq - sum_sq_cls).astype(np.float64)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        snr_ref = sig / no
     return snr_ref
 
 
@@ -79,6 +81,7 @@ def test_snr():
         {"nc": 2, "nv": 1, "ns": 1, "n": 4},
         {"nc": 2, "nv": 1, "ns": 10, "n": 4},
         {"nc": 2, "nv": 1, "ns": 1, "n": 10},
+        {"nc": 2, "nv": 1, "ns": 1, "n": 1000},
         {"nc": 16, "nv": 5, "ns": 10, "n": 1000},
         {"nc": 16, "nv": 32, "ns": 10, "n": 10},
         {"nc": 16, "nv": 153, "ns": 10, "n": 10},
