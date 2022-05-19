@@ -4,13 +4,11 @@ from scalib import _scalib_ext
 
 class Ttest:
     r"""The `Ttest` object enables to perform univariate :math:`t`-test.
-    Concretely, it first computes the  :math:`\mu[j]`'s and :math:`v[j]`'s which
-    corresponds to the statistical moment to test at index `j` in the traces and
-    the standard deviation of its estimate.  These are derived all the provided
-    traces (possibly in multiple chuncks) next denoted as :math:`l[:,j]`.
-    Second, the statistic `l[j]` is derived from the above equation. The
-    :math:`\mu[j]` are computed depending on `d` as defined below.
-
+    Concretely, it first computes the  :math:`\mu[j]`'s and :math:`v[j]`'s for
+    the `d`-th statistical moment to test at all the indexes (`j`) in the
+    traces. These are derived based on all the provided traces :math:`l[:,j]`.
+    These traces can be provided through multiple calls to `fit_u`.
+    Second, the statistic `t[j]` is derived from the above equation.
 
     For `d=1`:
 
@@ -27,6 +25,9 @@ class Ttest:
 
     .. math::
         \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} \left(\frac{l[i,j] - \bar{l}[:,j])}{\sigma_{l[:,j]}}\right)^d
+
+    Especially, :math:`\bar{l}` denotes the estimated mean of `l` and
+    :math:`\sigma_l` its standard deviation.
 
     Parameters
     ----------
