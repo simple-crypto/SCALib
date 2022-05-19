@@ -40,10 +40,10 @@ def snr_pooled2(x, y, nv, nc, ns):
             samples = x[np.where(y.transpose()[v] == c)[0], :]
             if samples.shape[0] != 0:
                 s = np.sum(samples, axis=0)
-                sum_sq_cls += (s**2).astype(object)*n // samples.shape[0]
-        sig[v,:] = (sum_sq_cls - g_sum**2).astype(np.float64)
+                sum_sq_cls += (s**2).astype(object) * n // samples.shape[0]
+        sig[v, :] = (sum_sq_cls - g_sum**2).astype(np.float64)
         assert n == x.shape[0]
-        no[v,:] = (x.shape[0] * sum_sq - sum_sq_cls).astype(np.float64)
+        no[v, :] = (x.shape[0] * sum_sq - sum_sq_cls).astype(np.float64)
     with np.errstate(divide="ignore", invalid="ignore"):
         snr_ref = sig / no
     return snr_ref
