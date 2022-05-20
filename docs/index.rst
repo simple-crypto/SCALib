@@ -5,7 +5,10 @@ contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
-SCALib contains various features for side-channel analysis. Please read `SCALib workflow`_ for more details:
+Available Features
+------------------
+SCALib contains various features for side-channel analysis. Please read `SCALib
+workflow`_ for more details:
 
 - :doc:`source/scalib.metrics`:
 
@@ -22,9 +25,15 @@ SCALib contains various features for side-channel analysis. Please read `SCALib 
 
   - `rankestimation`: Histogram based full key rank estimation.
 
+Performances & Implementations
+------------------------------
+
+
+Getting Started
+===============
 
 Install
-=======
+-------
 You can install SCALib by using PyPi packages and running:
 
 .. code-block::
@@ -34,8 +43,42 @@ You can install SCALib by using PyPi packages and running:
 Wheels for Windows and Linux are provided. More information about source
 compilation, checkout :doc:`source/DEVELOP` page.
 
+
+SCALib workflow
+---------------
+
+The current version of SCALib contains modules for all the necessary steps for a
+profiled side-channel attack. Even if modules of SCALib can be used
+independently, a typical usage of SCALib for it goes in four steps:
+
+1. **Metrics**: In this step, standard metrics are evaluated from the
+   measurements. This helps to find point-of-interest (POIs), quantify avaiable information, etc. 
+   When applicable, these metrics are implemented with a one-pass
+   algorithm to save the cost of data load / store.
+
+2. **Modeling**: In this step, models are built to extract information about a
+   variable `y` from the leakage. Modeling methods work in two phases. The
+   first one is to `fit(t,x)` with traces `t` and target values `x`. This creates the
+   model parameters. In the second step, this model can be used to 
+   `predict_proba(t)` that returns the probability of every possible target values based on the
+   traces `t` and the model.
+
+3. **Attacks**: This modules contains attack methodologies. It essentially uses
+   the probabilities from the `modeling` step in order and recombine them to
+   recover a key. The module `SASCAGraph` is an extension of Divide & Conquer attacks that leverage `soft analytical side-channel attacks`. It allows to define `PROPERTY` that link intermediate varibles within an implementation.
+   By providing the `SASCAGraph` with the distributions of these variables, it propagates information on all the variables (e.g. secret keys).
+
+4. **PostProcessing**: Once the attack has been performed, the postprocessing
+   allows to evaluate the efficiency of the attack. Namely by estimating the
+   rank of the correct key with `rank_accuracy`, it allows to quantify what is
+   the remaining computational power that is needed by the adversary to recover
+   the correct key.
+
+Full example of SCALib is available `here <https://github.com/simple-crypto/scalib/tree/main/examples/aes_simulation>`_. 
+
 Pseudo-Example
-==============
+--------------
+
 Next, we detail a short pseudo example which illustrates the usage of SCALib. 
 For a full running example, please visit `this example <https://github.com/simple-crypto/scalib/tree/main/examples/aes_simulation>`_. 
 
@@ -75,60 +118,33 @@ For a full running example, please visit `this example <https://github.com/simpl
      k_distri = graph.get_distribution("k")
      key_guess = np.argmax(k_distri[0,:])
 
-SCALib workflow
-===============
-
-The current version of SCALib contains modules for all the necessary steps for a
-profiled side-channel attack. Even if modules of SCALib can be used
-independently, a typical usage of SCALib for it goes in four steps:
-
-1. **Metrics**: In this step, standard metrics are evaluated from the
-   measurements. This helps to find point-of-interest (POIs), quantify avaiable information, etc. 
-   When applicable, these metrics are implemented with a one-pass
-   algorithm to save the cost of data load / store.
-
-2. **Modeling**: In this step, models are built to extract information about a
-   variable `y` from the leakage. Modeling methods work in two phases. The
-   first one is to `fit(t,x)` with traces `t` and target values `x`. This creates the
-   model parameters. In the second step, this model can be used to 
-   `predict_proba(t)` that returns the probability of every possible target values based on the
-   traces `t` and the model.
-
-3. **Attacks**: This modules contains attack methodologies. It essentially uses
-   the probabilities from the `modeling` step in order and recombine them to
-   recover a key. The module `SASCAGraph` is an extension of Divide & Conquer attacks that leverage `soft analytical side-channel attacks`. It allows to define `PROPERTY` that link intermediate varibles within an implementation.
-   By providing the `SASCAGraph` with the distributions of these variables, it propagates information on all the variables (e.g. secret keys).
-
-4. **PostProcessing**: Once the attack has been performed, the postprocessing
-   allows to evaluate the efficiency of the attack. Namely by estimating the
-   rank of the correct key with `rank_accuracy`, it allows to quantify what is
-   the remaining computational power that is needed by the adversary to recover
-   the correct key.
-
-Full example of SCALib is available `here <https://github.com/simple-crypto/scalib/tree/main/examples/aes_simulation>`_. 
-
 About us
 ========
 SCALib has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. It has
-already been used by many other researcher at UCLouvain which contributed
-either directly or by constructive feedbacks. 
+UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. The SCALib
+project is part of `SIMPLE-Crypto <https://www.simple-crypto.dev/>`_ and is
+maintained in that context.
+
 
 Contributions and Issues
 ========================
 We are happy to take any suggestion for features would be useful for
-side-channel evaluators. If you want to contribute to the project, please visit :doc:`source/DEVELOP` for relevant information. Please
-contact Olivier Bronchain at `olivier.bronchain@uclouvain.be
-<olivier.bronchain@uclouvain.be>`_ for any futher suggestions / questions.
+side-channel evaluators.  If you want to contribute code to the project, please
+visit :doc:`source/DEVELOP` for relevant information as well as the Contributor
+License Agreement (`CLA <https://www.simple-crypto.dev/organization>`_) of
+SIMPLE-Crypto. Please open an Issue on the GitHub repository for further 
+questions, bug report or feature requests. 
 
 License
 =======
-This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`. See `COPYING <https://github.com/simple-crypto/scalib/blob/main/COPYING>`_ for more information.
+This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`.
+See `COPYING <https://github.com/simple-crypto/scalib/blob/main/COPYING>`_ for
+more information. 
 
 Publications
 ============
 
-SCALib has been used in various publications, let us know if you used it so that we can add it to the list.
+SCALib has been used in various publications. Here is a (non-exhaustive) list:
 
 1. "Mode-Level vs. Implementation-Level Physical Security in Symmetric
    Cryptography: A Practical Guide Through the Leakage-Resistance Jungle", D.
@@ -143,6 +159,27 @@ SCALib has been used in various publications, let us know if you used it so that
 4. "Improved Leakage-Resistant Authenticated Encryption based on Hardware AES
    Coprocessors". O. Bronchain, C. Momin, T. Peters, F.-X. Standaert in
    TCHES2021 - Issue 3.
+5. "Riding the Waves Towards Generic Single-Cycle Masking in Hardware". R.
+   Nagpal, B. Girgel, R. Primas, S. Mangard, eprint 2022/505.
+6. "Bitslice Masking and Improved Shuffling: How and When to Mix Them in
+   Software?". M. Azouaoui, O. Bronchain, V. Grosso, K.  Papagiannopoulos,
+   F.-X.  Standaert, TCHES2022 - Issue 2.
+7. "A Second Look at the ASCAD Databases", M. Egger, T. Schamberger, L.
+   Tebelmann, F. Lippert, G. Sigl, COSADE 2022. 
+8. "Give Me 5 Minutes: Attacking ASCAD with a Single Side-Channel Trace". O.
+   Bronchain, G. Cassiers, F.-X. Standaert, eprint 2021/817. 
+9. "Towards a Better Understanding of Side-Channel Analysis Measurements
+   Setups". D. Bellizia, B. Udvarhelyi, F.-X. Standaert, CARDIS 2021. 
+10. "A Finer-Grain Analysis of the Leakage (Non) Resilience of OCB". F. Berti,
+    S. Bhasin, J. Breier, X. Hou, R. Poussier, F.-X. Standaert, B. Udvarhelyi
+    in TCHES2022 - Issue 1. 
+
+
+We strongly appreciate if you could mention to us if you are using SCALib 
+for concrete projects so that we can add you to the above list. Please send 
+an email to Olivier Bronchain.
+
+
 
 .. toctree::
    :maxdepth: 2
