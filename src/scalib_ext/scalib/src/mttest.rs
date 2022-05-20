@@ -1,11 +1,10 @@
-//! Estimation for higher-order Multivariate T-test.
+//! Estimation for Multivariate T-test.
 //!
-//! An estimation of MTtest is represented with a MTtest struct. Calling update allows
-//! to update the Ttest state with fresh measurements. get_ttest returns the current value
-//! of the estimate.
+//! An estimation of MTtest is represented with a MTtest struct. Calling update allows to update
+//! the MTtest state with fresh measurements. get_ttest returns the current value of the estimate.
 //!
 //! This is based on the one-pass algorithm proposed in
-//! <https://eprint.iacr.org/2015/207> section 5.
+//! <https://eprint.iacr.org/2015/207> section 5 as well as <https://doi.org/10.2172/1028931>.
 use itertools::{izip, Itertools};
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, Axis};
 use rayon::prelude::*;
@@ -37,9 +36,27 @@ pub struct MultivarCSAcc {
 }
 
 impl MultivarCSAcc {
-    /// Creates an MultivarCSAcc
+    /// Creates an MultivarCSAcc.
+    /// It allows to estimate for a class c the central sums (CS) such that
+    /// at index j such that for the set combi:
+    ///
+    ///     cs_Q[c,index(combi),j] = sum_i(prod_{s \in combi} Q[c,pois[s,j]])
+    ///
+    /// for which:
+    ///    - combi: is a unique combination in the multiset (0..d)U(0..d). s are the elements in S.
+    ///    - i: ranges over all the traces in the class c
+    ///    - Q: are the centered traces
+    ///    - pois: see below.
+    ///    - j: Index of the cenral sum to compute.
+    ///
+    /// The update of CS_Q estimation with fresh measurements Q' is done in two steps: 
+    ///     1. Compute the CS_Q' of Q' with a two-passes algorithm
+    ///     2. Merge CS_Q and CS_Q' to obtain CS_{Q U Q'}. This is performed 
+    ///     thanks to the algorithms in <https://doi.org/10.2172/1028931> and
+    ///     <https://eprint.iacr.org/2015/207>
+    ///
     /// pois : (d,ns) array where each line corresponds to a poi
-    /// nc : Number of classes to estimate the higher order cs
+    /// nc : Number of classes to estimate the cs
     pub fn new(pois: ArrayView2<u32>, nc: usize) -> Self {
         let ns = pois.shape()[1];
         let d = pois.shape()[0];
@@ -87,31 +104,37 @@ impl MultivarCSAcc {
         }
     }
 
-    /// Merges two MutlivarCSAcc
-    /// cs_other : Estimated cs to merge (nc,combis.len(),ns)
-    /// means : mean per class (nc,d,ns)
-    /// n_traces : Number of traces in each of the classes (nc,)
+    /// Merges the current CS estimate another CS estimate. 
+    ///
+    /// cs_q2 : A CS estimate to merge with the current estimation. Its shape is
+    /// (nc,combis.len(),ns)
+    /// u_q2 : mean per class in the other estimation (nc,d,ns)
+    /// n_traces_q2 : Number of traces in each of the classes (nc,)
+    
+    //
     // We next describe the merge rule for a single class.
     //
     // Definitions:
-    //  Q_1 and Q_2 are the set of traces used to build the two CS's to merge.
-    //  Q = Q_1 U Q_2
-    //  x^j = leakage at index j
-    //  n_i = |Q_i|
-    //  u^j_i = n_i sum_{Q_i} x^j_i
-    //  delta^j_2,1 = u^j_2 - u^j_1
-    //  cs_{Q_i}_J = \sum_{Q_i} \prod_{j \in J} (x^j - u^j_i)
-    //
+    //  - Q1 and Q2 are the set of traces used to build the two CS's to merge.
+    //  - Q = Q1 U Q2
+    //  - n = |Q|
+    //  - 0 <= s < d
+    //  - u[s,j] = mean(Q[:,pois[s,j]])
+    //  - delta[s,j] = u2[s,j] - u1[s,j] 
+    //  
     //  Update rule:
-    //  cs_{Q}_J = cs_{Q_1}_{J} + cs_{Q_2}_{J} + (1) + (2)
-    //  with
-    //  (1) = sum_{k=2}^{|J|-1}
-    //              \sum_{s \ in J_|k|} cs_{Q_1}_{s}
-    //                  \prod_{j \in J \ s} (-n_1 / n) * delta^j_2_1
-    //          + ((-n_2 / n ) ** |J|) n_1
-    //                  \prod_{j \in J) delta^j_2_1
+    //  cs_q[combi,j] = cs_q1[combi,j] + cs_q2[combi,j] + (1) + (2)
+    //  with:
     //
-    //  (2) is the symmetry of 1.
+    //  (1) = sum_{k=2}^{|combi|-1}(
+    //              
+    //          sum_{S in |combi| | |S| = k} cs_q1[S,j] prod_{i in (|combi|\S)} (-n_1 / n) *
+    //                                      delta[i,j]
+    //          +
+    //          ((-n2 / n ) ** |combi|) n1 prod_{j in combi) delta[j]
+    //        )
+    //  (2) is the symmetry of (1) by swapping q1 and q2.
+    //
     pub fn merge_from_state(
         &mut self,
         cs_other: ArrayView3<f64>,
