@@ -5,6 +5,21 @@ contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
+The source code is available on `GitHub <https://github.com/simple-crypto/SCALib>`_!
+
+Usability & Efficiency
+----------------------
+SCALib main advantages are:
+
+1. **Incremental APIs**: SCALib leverages as much as possible incremental APIs. That is, 
+   it is possible to feed the data in multiple chunks to avoid loading multiple times
+   the same data into RAM. 
+2. **High Performances**: Despite SCALib is a Python package, it embeds a Rust back-end
+   which enables a fine grain control of the implementation.
+3. **Efficient Mutli-threading**: Thanks to the Rust back-end, SCALib enables efficient
+   parallelism. This is obtained thanks to `Rayon <https://docs.rs/crate/rayon/latest>`_.
+
+
 Available Features
 ------------------
 SCALib contains various features for side-channel analysis. Please read `SCALib
@@ -25,9 +40,6 @@ workflow`_ for more details:
 
   - `rankestimation`: Histogram based full key rank estimation.
 
-Performances & Implementations
-------------------------------
-
 
 Getting Started
 ===============
@@ -41,7 +53,9 @@ You can install SCALib by using PyPi packages and running:
    pip install scalib
 
 Wheels for Windows and Linux are provided. More information about source
-compilation, checkout :doc:`source/DEVELOP` page.
+compilation, checkout `DEVELOP
+<https://github.com/simple-crypto/SCALib/blob/main/DEVELOP.rst>`_ page.
+Especially, we recommand to compile SCALib to get maximal performances.
 
 
 SCALib workflow
@@ -118,33 +132,19 @@ For a full running example, please visit `this example <https://github.com/simpl
      k_distri = graph.get_distribution("k")
      key_guess = np.argmax(k_distri[0,:])
 
-About us
-========
-SCALib has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. The SCALib
-project is part of `SIMPLE-Crypto <https://www.simple-crypto.dev/>`_ and is
-maintained in that context.
 
 
-Contributions and Issues
-========================
-We are happy to take any suggestion for features would be useful for
-side-channel evaluators.  If you want to contribute code to the project, please
-visit :doc:`source/DEVELOP` for relevant information as well as the Contributor
-License Agreement (`CLA <https://www.simple-crypto.dev/organization>`_) of
-SIMPLE-Crypto. Please open an Issue on the GitHub repository for further 
-questions, bug report or feature requests. 
+Where is SCALib Used ?
+======================
 
-License
-=======
-This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`.
-See `COPYING <https://github.com/simple-crypto/scalib/blob/main/COPYING>`_ for
-more information. 
+We strongly appreciate if you could mention to us if you are using SCALib 
+for concrete projects so that we can add you to the above list. Please send 
+an email to Olivier Bronchain.
 
-Publications
-============
+Scientific Publications
+-----------------------
 
-SCALib has been used in various publications. Here is a (non-exhaustive) list:
+SCALib has been used in various scientific publications. Here is a (non-exhaustive) list:
 
 1. "Mode-Level vs. Implementation-Level Physical Security in Symmetric
    Cryptography: A Practical Guide Through the Leakage-Resistance Jungle", D.
@@ -174,11 +174,36 @@ SCALib has been used in various publications. Here is a (non-exhaustive) list:
     S. Bhasin, J. Breier, X. Hou, R. Poussier, F.-X. Standaert, B. Udvarhelyi
     in TCHES2022 - Issue 1. 
 
+Concrete Evaluations
+--------------------
 
-We strongly appreciate if you could mention to us if you are using SCALib 
-for concrete projects so that we can add you to the above list. Please send 
-an email to Olivier Bronchain.
+1. `CHES 2020 CTF <https://github.com/obronchain/BS21_ches2020CTF>`_ published in TCHES2021.
+2. `Attack against ASCAD <https://github.com/cassiersg/ASCAD-5minutes>`_ eprint 2021/817.
 
+About us
+========
+SCALib has been initiated by Olivier Bronchain during his PhD at Crypto Group,
+UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. The SCALib
+project is part of `SIMPLE-Crypto <https://www.simple-crypto.dev/>`_ and is
+maintained in that context.
+
+
+Contributions and Issues
+========================
+We are happy to take any suggestion for features would be useful for
+side-channel evaluators.  If you want to contribute code to the project, please
+visit `DEVELOP
+<https://github.com/simple-crypto/SCALib/blob/main/DEVELOP.rst>`_ for relevant
+information as well as the Contributor License Agreement (`CLA
+<https://www.simple-crypto.dev/organization>`_) of SIMPLE-Crypto. Please open
+an Issue on the GitHub repository for further questions, bug report or feature
+requests. 
+
+License
+=======
+This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`.
+See `COPYING <https://github.com/simple-crypto/scalib/blob/main/COPYING>`_ for
+more information. 
 
 
 .. toctree::
@@ -189,4 +214,3 @@ an email to Olivier Bronchain.
    source/scalib.modeling.rst
    source/scalib.attacks.rst
    source/scalib.postprocessing.rst
-   source/DEVELOP.rst
