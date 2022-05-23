@@ -9,11 +9,11 @@ fn bench_mttest(c: &mut Criterion) {
     let mut group = c.benchmark_group("ttest_update");
     let d = 2;
     let traces_len = 1000;
-    let n = 1024;
+    let n = 4096;
     let traces = Array2::<i16>::random((n, traces_len), Uniform::new(0, 1000));
     let y = Array1::<u16>::random((n,), Uniform::new(0, 2));
     for d in [2].iter() {
-        for npois in [500000].iter() {
+        for npois in [100000].iter() {
             let pois = Array2::<u32>::random((*d, *npois), Uniform::new(0, traces_len as u32));
 
             let mut mtt = mttest::MTtest::new(*d, pois.view());
