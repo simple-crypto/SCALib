@@ -1,14 +1,13 @@
 Metrics
 =======
 
-SNR
----
+This module contains several well-know side-channel metrics.
 
-.. automodule:: scalib.metrics.snr
-   :members:
+.. toctree::
+   :caption: Available metrics are:
+   :maxdepth: 1
 
-Ttest
------
+   scalib.metrics.snr.rst 
+   scalib.metrics.ttest.rst
+   
 
-.. automodule:: scalib.metrics.ttest
-   :members:

@@ -6,6 +6,7 @@ Not released
 ------------
 
 * SASCA: support modular ADD and MUL operations (#18)
+* Improved documentation and README.rst
 
 v0.3.4
 ------
