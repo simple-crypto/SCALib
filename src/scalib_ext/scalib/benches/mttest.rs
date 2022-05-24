@@ -9,7 +9,7 @@ fn bench_mttest(c: &mut Criterion) {
     let mut group = c.benchmark_group("ttest_update");
     let d = 2;
     let traces_len = 1000;
-    let n = 4096;
+    let n = 2048;
     let traces = Array2::<i16>::random((n, traces_len), Uniform::new(0, 1000));
     let y = Array1::<u16>::random((n,), Uniform::new(0, 2));
     for d in [2].iter() {
@@ -35,7 +35,7 @@ fn bench_mttest(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     // This can be any expression that returns a `Criterion` object.
-    config = Criterion::default().significance_level(0.01).sample_size(500).measurement_time(Duration::from_secs(120));
+    config = Criterion::default().significance_level(0.01).sample_size(500).measurement_time(Duration::from_secs(60));
     targets = bench_mttest
 }
 criterion_main!(benches);

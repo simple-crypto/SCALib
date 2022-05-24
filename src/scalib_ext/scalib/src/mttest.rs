@@ -259,12 +259,12 @@ impl MultivarCSAcc {
         izip!(self.pois.axis_iter(Axis(1)), cs2.axis_iter_mut(Axis(2))).for_each(
             |(pois, mut cs2)| {
                 if self.d == 2 {
-                    let mut acc00 = Af64 {x:[0.0;4]};
-                    let mut acc01 = Af64 {x:[0.0;4]};
-                    let mut acc11 = Af64 {x:[0.0;4]};
-                    let mut acc001 = Af64 {x:[0.0;4]};
-                    let mut acc011 = Af64 {x:[0.0;4]};
-                    let mut acc0011 = Af64 {x:[0.0;4]};
+                    let mut acc00 = Af64 { x: [0.0; 4] };
+                    let mut acc01 = Af64 { x: [0.0; 4] };
+                    let mut acc11 = Af64 { x: [0.0; 4] };
+                    let mut acc001 = Af64 { x: [0.0; 4] };
+                    let mut acc011 = Af64 { x: [0.0; 4] };
+                    let mut acc0011 = Af64 { x: [0.0; 4] };
                     inner_prod_d2(
                         &mut acc00,
                         &mut acc01,
@@ -305,12 +305,12 @@ impl MultivarCSAcc {
                 }
 
                 if self.d == 2 {
-                    let mut acc00 = Af64 {x:[0.0;4]};
-                    let mut acc01 = Af64 {x:[0.0;4]};
-                    let mut acc11 = Af64 {x:[0.0;4]};
-                    let mut acc001 = Af64 {x:[0.0;4]};
-                    let mut acc011 = Af64 {x:[0.0;4]};
-                    let mut acc0011 = Af64 {x:[0.0;4]};
+                    let mut acc00 = Af64 { x: [0.0; 4] };
+                    let mut acc01 = Af64 { x: [0.0; 4] };
+                    let mut acc11 = Af64 { x: [0.0; 4] };
+                    let mut acc001 = Af64 { x: [0.0; 4] };
+                    let mut acc011 = Af64 { x: [0.0; 4] };
+                    let mut acc0011 = Af64 { x: [0.0; 4] };
                     inner_prod_d2(
                         &mut acc00,
                         &mut acc01,
@@ -322,14 +322,13 @@ impl MultivarCSAcc {
                         t1.slice(s![pois[1] as usize, ..]).to_slice().unwrap(),
                     );
                     for i in 0..4 {
-                        cs2[[0, 2 + 0]] += acc00.x[i];
-                        cs2[[0, 2 + 1]] += acc01.x[i];
-                        cs2[[0, 2 + 2]] += acc11.x[i];
-                        cs2[[0, 2 + 3]] += acc001.x[i];
-                        cs2[[0, 2 + 4]] += acc011.x[i];
-                        cs2[[0, 2 + 5]] += acc0011.x[i];
+                        cs2[[1, 2 + 0]] += acc00.x[i];
+                        cs2[[1, 2 + 1]] += acc01.x[i];
+                        cs2[[1, 2 + 2]] += acc11.x[i];
+                        cs2[[1, 2 + 3]] += acc001.x[i];
+                        cs2[[1, 2 + 4]] += acc011.x[i];
+                        cs2[[1, 2 + 5]] += acc0011.x[i];
                     }
-
                 } else {
                     let mut prods = vec![Af64 { x: [0.0; 4] }; self.combis.len()];
                     let mut accs = vec![Af64 { x: [0.0; 4] }; self.combis.len()];
@@ -346,7 +345,7 @@ impl MultivarCSAcc {
                     );
                     for i in 0..4 {
                         for j in 0..self.combis.len() {
-                            cs2[[0, j]] += accs[j].x[i];
+                            cs2[[1, j]] += accs[j].x[i];
                         }
                     }
                 }
@@ -601,48 +600,6 @@ pub fn inner_prod_generic(
 
 #[inline(never)]
 pub fn inner_prod_d2(
-    acc00 : &mut Af64,
-    acc01 : &mut Af64,
-    acc11 : &mut Af64,
-    acc001 : &mut Af64,
-    acc011 : &mut Af64,
-    acc0011 : &mut Af64,
-
-    t0: &[Af64], t1: &[Af64]) {
-    izip!(t0.iter(), t1.iter()).for_each(|(t0, t1)| {
-        acc00.x[0] += t0.x[0] * t0.x[0];
-        acc00.x[1] += t0.x[1] * t0.x[1];
-        acc00.x[2] += t0.x[2] * t0.x[2];
-        acc00.x[3] += t0.x[3] * t0.x[3];
-
-        acc01.x[0] += t0.x[0] * t1.x[0];
-        acc01.x[1] += t0.x[1] * t1.x[1];
-        acc01.x[2] += t0.x[2] * t1.x[2];
-        acc01.x[3] += t0.x[3] * t1.x[3];
-
-        acc11.x[0] += t1.x[0] * t1.x[0];
-        acc11.x[1] += t1.x[1] * t1.x[1];
-        acc11.x[2] += t1.x[2] * t1.x[2];
-        acc11.x[3] += t1.x[3] * t1.x[3];
-
-        acc001.x[0] += t0.x[0] * t0.x[0] * t1.x[0];
-        acc001.x[1] += t0.x[1] * t0.x[1] * t1.x[1];
-        acc001.x[2] += t0.x[2] * t0.x[2] * t1.x[2];
-        acc001.x[3] += t0.x[3] * t0.x[3] * t1.x[3];
-
-        acc011.x[0] += t0.x[0] * t1.x[0] * t1.x[0];
-        acc011.x[1] += t0.x[1] * t1.x[1] * t1.x[1];
-        acc011.x[2] += t0.x[2] * t1.x[2] * t1.x[2];
-        acc011.x[3] += t0.x[3] * t1.x[3] * t1.x[3];
-
-        acc0011.x[0] += t0.x[0] * t0.x[0] * t1.x[0] * t1.x[0];
-        acc0011.x[1] += t0.x[1] * t0.x[1] * t1.x[1] * t1.x[1];
-        acc0011.x[2] += t0.x[2] * t0.x[2] * t1.x[2] * t1.x[2];
-        acc0011.x[3] += t0.x[3] * t0.x[3] * t1.x[3] * t1.x[3];
-    });
-}
-#[inline(never)]
-pub fn inner_prod(
     acc00: &mut Af64,
     acc01: &mut Af64,
     acc11: &mut Af64,
@@ -693,8 +650,13 @@ fn center_transpose_aline(
 ) -> (Array2<Af64>, Array2<Af64>) {
     let ns = traces.shape()[1];
 
-    let n0 = y.iter().filter(|x| **x == 0).count();
-    let n1 = y.shape()[0] - n0;
+    let posi0: Vec<usize> = y
+        .iter()
+        .enumerate()
+        .filter(|(_, x)| **x == 0)
+        .map(|(i, _)| i as usize)
+        .collect();
+    let n0 = posi0.len();
 
     let mut t0 = Array2::<Af64>::from_elem(
         (ns, (n0 as f64 / 4.0).ceil() as usize),
@@ -702,6 +664,13 @@ fn center_transpose_aline(
             x: [0.0, 0.0, 0.0, 0.0],
         },
     );
+    let posi1: Vec<usize> = y
+        .iter()
+        .enumerate()
+        .filter(|(_, x)| **x == 1)
+        .map(|(i, _)| i as usize)
+        .collect();
+    let n1 = posi1.len();
 
     let mut t1 = Array2::<Af64>::from_elem(
         (ns, (n1 as f64 / 4.0).ceil() as usize),
@@ -709,19 +678,24 @@ fn center_transpose_aline(
             x: [0.0, 0.0, 0.0, 0.0],
         },
     );
+
     for i in 0..ns {
-        let mu0 = means[[0, i]];
-        let mu1 = means[[1, i]];
-        let mut cnt0 = 0;
-        let mut cnt1 = 0;
-        izip!(traces.slice(s![.., i]).iter(), y.iter()).for_each(|(t, y)| {
-            if *y == 0 {
-                t0[[i, cnt0 / 4]].x[cnt0 % 4] = *t as f64 - mu0;
-                cnt0 += 1;
-            } else {
-                t1[[i, cnt1 / 4]].x[cnt1 % 4] = *t as f64 - mu1;
-                cnt1 += 1;
-            }
+        let mu = means[[0, i]];
+        izip!(&posi0.iter().chunks(4),
+            t0.slice_mut(s![i,..]).iter_mut()
+        ).for_each(|(p,t)|{
+            p.enumerate().for_each(|(x,p)|{
+                t.x[x] = traces[[*p,i]] as f64 - mu;
+            });
+        });
+
+        let mu = means[[1, i]];
+        izip!(&posi1.iter().chunks(4),
+            t1.slice_mut(s![i,..]).iter_mut()
+        ).for_each(|(p,t)|{
+            p.enumerate().for_each(|(x,p)|{
+                t.x[x] = traces[[*p,i]] as f64 - mu;
+            });
         });
     }
     (t0, t1)
