@@ -1,12 +1,22 @@
+// This files tests the internal representations of multivarcs.
+//
+// It first computes the central sums with multivarcs and
+// the compare the results with a reference 2 passes algorithm.
+//
+// It tests for:
+//   - different d's
+//   - feed multivarcs with multiple batches
+//   - number of samples (ns)
+//   - number of traces nc
 use itertools::izip;
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis};
 use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::RandomExt;
-//use ndarray_stats::QuantileExt;
 use scalib::mttest;
+extern crate approx;
 
 #[test]
-fn ttestacc_simple() {
+fn multivarcs_simple() {
     let order = 2;
     let ns = 100;
     let n = 50;
@@ -34,7 +44,7 @@ fn ttestacc_simple() {
 }
 
 #[test]
-fn ttestacc_simple_chuncks() {
+fn multivarcs_simple_chuncks() {
     let order = 2;
     let ns = 100;
     let n = 40;
@@ -69,7 +79,7 @@ fn ttestacc_simple_chuncks() {
     );
 }
 #[test]
-fn ttestacc_simple_chuncks_step1() {
+fn multivarcs_simple_chuncks_step1() {
     let order = 2;
     let ns = 100;
     let n = 40;
@@ -136,7 +146,7 @@ fn test_cs(
             println!("New vector {:#?} {:#?}", mean_ref.shape(), pois.shape());
             izip!(mean_ref, pois).for_each(|(x, poi)| {
                 println!("{} {}", x, mean[*poi as usize]);
-                assert!((x - mean[*poi as usize]).abs() < epsi);
+                approx::assert_abs_diff_eq!(*x, mean[*poi as usize], epsilon = epsi);
             });
         });
 
@@ -154,7 +164,7 @@ fn test_cs(
                         test = &test * &t0.slice(s![.., poi[*c] as usize]);
                     }
                     println!("{} {}", test.sum(), m);
-                    assert!((test.sum() - m).abs() < epsi);
+                    approx::assert_abs_diff_eq!(test.sum(), m, epsilon = epsi);
                     tests += 1;
                 });
             },

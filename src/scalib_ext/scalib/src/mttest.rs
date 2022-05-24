@@ -3,6 +3,9 @@
 //! An estimation of MTtest is represented with a MTtest struct. Calling update allows to update
 //! the MTtest state with fresh measurements. get_ttest returns the current value of the estimate.
 //!
+//! MultivarCSAcc computes the central sums CS. MTtest internally uses MultivarCSAcc
+//! to derive statistical moment estimations.
+//!
 //! This is based on the one-pass algorithm proposed in
 //! <https://eprint.iacr.org/2015/207> section 5 as well as <https://doi.org/10.2172/1028931>.
 use itertools::{izip, Itertools};
@@ -40,6 +43,9 @@ pub struct MultivarCSAcc {
     /// This contains all the unique combinations on the set (0..d) U (0..d).
     /// The combinations are ordered by size.
     pub combis: Vec<Vec<usize>>,
+    /// First index in the tuple is the Poi (s) to multiply.
+    /// Second index is the product to multiply with.
+    /// Only used for d > 2.
     pub posi: Vec<(i32, i32)>,
 }
 
@@ -243,6 +249,10 @@ impl MultivarCSAcc {
     }
 
     /// Updates the current CS estimation with fresh traces and its means per class
+    /// This workds in two steps:
+    ///     1. Computes CS on the fresh traces.
+    ///     2. Merge this with the current CS.
+    ///
     /// t0 : fresh traces for set 0. of shape (ns, ceil(n0 // 4)).
     /// t1 : fresh traces for set 1. of shape (ns, ceil(n1 // 4)).
     /// mean : mean per class of the all traces
@@ -384,7 +394,8 @@ pub struct MTtest {
     d: usize,
     /// Number of samples per trace
     ns: usize,
-    /// Vector of Moment accumulators
+    /// Vector of CS accumulators. This will be used to
+    /// derive the statistical moments.
     accumulators: Vec<MultivarCSAcc>,
     /// Pois to combine in the multivariate T-test (d,ns)
     pois: Array2<u32>,
@@ -416,18 +427,10 @@ impl MTtest {
     /// traces: the leakage traces with shape (n,ns)
     /// y: realization of random variables with shape (n,)
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
-        // The traces are chuncks with:
-        // _____________________________
-        // |    |    |    |    |    |  |
-        // _____________________________
-        // |    |    |    |    |    |  |
-        // _____________________________
-        // |    |    |    |    |    |  |
-        // _____________________________
-        //
-        // Each chunck above is updated with an accumulator.
+        // First pass to compute the means, center and align.
         let (mean, n_traces) = means_per_class(traces, y, 2);
         let (t0, t1) = center_transpose_aline(traces, mean.view(), y);
+
         // chunck different traces for more threads
         (
             self.pois.axis_chunks_iter(Axis(1), NS_BATCH),
@@ -440,6 +443,8 @@ impl MTtest {
             });
     }
 
+    /// Computes the t statistic according to the
+    /// order d.
     pub fn get_ttest(&self) -> Array1<f64> {
         let mut t = Array1::<f64>::zeros((self.ns,));
         izip!(
@@ -523,6 +528,7 @@ fn means_per_class(
     (mean, n_traces)
 }
 
+/// Generates accumulators according to the pois.
 fn build_accumulator(pois: ArrayView2<u32>) -> Vec<MultivarCSAcc> {
     // number of required accumulators
     let ns = pois.shape()[1];

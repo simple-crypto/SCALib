@@ -1,3 +1,13 @@
+"""
+    This script feeds MTtest object and compare the outcome with the reference
+    implementation. 
+    
+    The tests covers:
+        - various d
+        - Usage of incremental API. 
+        - Number of pois
+        - Number of traces
+"""
 import pytest
 from scalib.metrics import MTtest
 import numpy as np
