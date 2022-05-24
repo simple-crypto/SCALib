@@ -33,7 +33,7 @@ class SNR:
         :math:`n_i` is the maximum number of times a variable can take a given value.
         Concretely, the total number of traces `n` should be at most
         :math:`(nc \cdot 2^{32}/b) - k `, where :math:`k = O(\sqrt{n})`, typ.
-        :math:`k>=3*\sqrt{n}`  (see https://mathoverflow.net/a/273060). 
+        :math:`k>=3*\sqrt{n}`  (see https://mathoverflow.net/a/273060).
 
 
 
