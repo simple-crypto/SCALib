@@ -25,15 +25,17 @@ class SNR:
         Number of samples in a single trace.
     np : int
         Number of independent variables `X` for which SNR must be estimated.
-    use_64bit: bool (default False)
+    use_64bit : bool (default False)
         Use 64 bits for intermediate sums instead of 32 bits.
-        When using 64-bit sums, SNR can accumulate up to 2^32 traces, while when
-        32-bit sums are used, the bound is `n_i < 2^32/b`, where b is the
+        When using 64-bit sums, SNR can accumulate up to :math:`2^{32}` traces, while when
+        32-bit sums are used, the bound is :math:`n_i < 2^{32}/b`, where b is the
         maximum absolute value of a sample rounded to the next power of 2, and
-        n_i is the maximum number of times a variable can take a given value.
-        Concretely, the total number of traces n should be at most
-        `2^32/b*nc-k`, where `k = O(sqrt(n))`, typ. `k>=3*sqrt(n)`
-        (See https://mathoverflow.net/a/273060)
+        :math:`n_i` is the maximum number of times a variable can take a given value.
+        Concretely, the total number of traces `n` should be at most
+        :math:`(nc \cdot 2^{32}/b) - k `, where :math:`k = O(\sqrt{n})`, typ.
+        :math:`k>=3*\sqrt{n}`  (see https://mathoverflow.net/a/273060). 
+
+
 
     Examples
     --------
