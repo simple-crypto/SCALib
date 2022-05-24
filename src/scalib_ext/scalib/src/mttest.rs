@@ -10,7 +10,7 @@ use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axi
 use rayon::prelude::*;
 
 // Length of chunck for traces
-const NS_BATCH: usize = 1 << 13;
+const NS_BATCH: usize = 1 << 8;
 
 // Aligned f64 on 256 bits to fit AVX2 instructions.
 #[derive(Clone, Debug, Copy)]
@@ -426,45 +426,18 @@ impl MTtest {
         // _____________________________
         //
         // Each chunck above is updated with an accumulator.
-        let y_chunck_size_level1 = 8192;
-
-        let level1_accs = (
-            traces.axis_chunks_iter(Axis(0), y_chunck_size_level1),
-            y.axis_chunks_iter(Axis(0), y_chunck_size_level1),
+        let (mean, n_traces) = means_per_class(traces, y, 2);
+        let (t0, t1) = center_transpose_aline(traces, mean.view(), y);
+        // chunck different traces for more threads
+        (
+            self.pois.axis_chunks_iter(Axis(1), NS_BATCH),
+            &mut self.accumulators,
         )
             .into_par_iter()
-            .map(|(traces, y)| {
-                let (mean, n_traces) = means_per_class(traces, y, 2);
-                let mut accumulators = build_accumulator(self.pois.view());
-                let (t0, t1) = center_transpose_aline(traces, mean.view(), y);
-                // chunck different traces for more threads
-                (
-                    self.pois.axis_chunks_iter(Axis(1), NS_BATCH),
-                    &mut accumulators,
-                )
-                    .into_par_iter()
-                    .for_each(|(_, acc)| {
-                        // chunck the traces with their lenght
-                        acc.update_with_means_d2(
-                            t0.view(),
-                            t1.view(),
-                            mean.view(),
-                            n_traces.view(),
-                        );
-                    });
-                accumulators
-            })
-            .reduce(
-                || build_accumulator(self.pois.view()),
-                |mut x, y| {
-                    // accumulate all to the self accumulator
-                    x.iter_mut().zip(y.iter()).for_each(|(x, y)| x.merge(y));
-                    x
-                },
-            );
-        (&mut self.accumulators, level1_accs)
-            .into_par_iter()
-            .for_each(|(x, y)| x.merge(&y));
+            .for_each(|(_, acc)| {
+                // chunck the traces with their lenght
+                acc.update_with_means_d2(t0.view(), t1.view(), mean.view(), n_traces.view());
+            });
     }
 
     pub fn get_ttest(&self) -> Array1<f64> {
@@ -679,24 +652,29 @@ fn center_transpose_aline(
         },
     );
 
-    for i in 0..ns {
-        let mu = means[[0, i]];
-        izip!(&posi0.iter().chunks(4),
-            t0.slice_mut(s![i,..]).iter_mut()
-        ).for_each(|(p,t)|{
-            p.enumerate().for_each(|(x,p)|{
-                t.x[x] = traces[[*p,i]] as f64 - mu;
+    (traces.axis_iter(Axis(1)), t0.axis_iter_mut(Axis(0)))
+        .into_par_iter()
+        .enumerate()
+        .for_each(|(i, (traces, mut t0))| {
+            let m0 = means[[0, i]];
+            izip!(&posi0.iter().chunks(4), t0.iter_mut()).for_each(|(p, t)| {
+                p.enumerate().for_each(|(x, p)| {
+                    t.x[x] = traces[*p] as f64 - m0;
+                });
             });
         });
 
-        let mu = means[[1, i]];
-        izip!(&posi1.iter().chunks(4),
-            t1.slice_mut(s![i,..]).iter_mut()
-        ).for_each(|(p,t)|{
-            p.enumerate().for_each(|(x,p)|{
-                t.x[x] = traces[[*p,i]] as f64 - mu;
+    (traces.axis_iter(Axis(1)), t1.axis_iter_mut(Axis(0)))
+        .into_par_iter()
+        .enumerate()
+        .for_each(|(i, (traces, mut t1))| {
+            let m1 = means[[1, i]];
+            izip!(&posi1.iter().chunks(4), t1.iter_mut()).for_each(|(p, t)| {
+                p.enumerate().for_each(|(x, p)| {
+                    t.x[x] = traces[*p] as f64 - m1;
+                });
             });
         });
-    }
+
     (t0, t1)
 }
