@@ -84,13 +84,26 @@ class Ttest:
 
 
 class MTtest:
-    r"""Computes the multivariate :math:`t`-test at arbitrary order :math:`d`
-    between two sets :math:`i` of traces. Informally, it allows to highlight a
-    difference in statistical moments of order :math:`d` between the two sets.
-    The metric is defined with:
+    r"""The `MTtest` object enables to perform multivariate :math:`t`-test.
+    Concretely, it first computes the  :math:`\mu[j]`'s and :math:`v[j]`'s to
+    use in the :math:`t`-test definition. Especially, :math:`\mu[j]`'s is
+    derived such as:
 
-    This is similar to `Ttest` but allows to perform point recombination thanks
-    to the `pois` input to `MTtest` (see details Section 5 in [1]_).
+    For `d=2`:
+
+    .. math::
+        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} \prod_{d'=0}^{1}l[i,pois[d',j]] - \bar{l}[:,pois[d',j]]
+
+    For `d>2`:
+
+    .. math::
+        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} \prod_{d'=0}^{d-1}
+        \frac{l[i,pois[d',j]] -
+        \bar{l}[:,pois[d',j]]}{\sigma_{l[:,pois[d',j]]}}
+
+    Especially, :math:`\bar{l}` denotes the estimated mean of `l` and
+    :math:`\sigma_l` its standard deviation. `pois` defines the points in the
+    traces for which the (normalized) product will be tested.
 
     Parameters
     ----------
@@ -110,19 +123,6 @@ class MTtest:
     >>> mttest = MTtest(d=2,pois=pois)
     >>> mttest.fit_u(traces,X)
     >>> t = mttest.get_ttest()
-
-    Notes
-    -----
-    **Warning**: Ttest should not be used alone as a standalone evaluation tool
-    because of its qualitative nature. See [2]_ and [3]_ for cautionary notes.
-
-    .. [1] "Leakage assessment methodology", Tobias Schneider, Amir Moradi, CHES
-       2015
-    .. [2] "How (not) to Use Welch’s T-test in Side-Channel Security
-       Evaluations", François-Xavier Standaert, CARDIS 2018
-    .. [3] "A Critical Analysis of ISO 17825 ('Testing Methods for the
-       Mitigation of Non-invasive Attack Classes Against Cryptographic
-       Modules')", Carolyn Whitnall, Elisabeth Oswald, ASIACRYPT 2019
 
     """
 
