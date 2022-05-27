@@ -5,7 +5,10 @@ import numpy as np
 
 def gen_snr_data(nv, nc, ns, n):
     ii16 = np.iinfo(np.int16)
-    x = np.random.randint(ii16.min + 1, ii16.max, (n, ns), dtype=np.int16)
+    x = np.random.randint(ii16.min, ii16.max, (n, ns), dtype=np.int16)
+    x[0, 0] = ii16.min
+    if n > 1:
+        x[1, 0] = ii16.max
     y = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
     return x, y
 

@@ -59,7 +59,7 @@ use hytra::TrAdder;
 use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use itertools::izip;
 use ndarray::{s, Array1, Array2, Array3, ArrayView2, ArrayViewMut2, Axis, Zip};
-use num_traits::{PrimInt, Signed, WrappingAdd, Zero};
+use num_traits::{Bounded, PrimInt, Signed, WrappingAdd, Zero};
 use rayon::prelude::*;
 use std::convert::TryInto;
 use std::thread;
@@ -364,8 +364,9 @@ where
         // for any sample x, abs(x) < 2^bit_width
         // we want max_n_samples*abs(x) < T::SumAcc::max_value(), therefore
         // max_n_samples*abs(x) << bit_width \le T::SumAcc::max_value()
-        let max_val = (max_n_samples as u64) << self.bit_width;
-        if max_val > i32::MAX as u64 {
+        // max_val does not overflow since max_n_samples < 2^32 and self.bit_width < 16
+        let max_val = (max_n_samples as i64) << self.bit_width;
+        if max_val > T::acc2i64(T::SumAcc::max_value()) {
             return Err(SnrError::ClassOverflow);
         }
         return Ok(());
@@ -460,13 +461,13 @@ fn transpose_traces(
     mut traces_tr: ArrayViewMut2<[i16; 8]>,
     // shape: (n, ns) with ns <= 32
     trace_chunk: ArrayView2<i16>,
-) -> i16 {
+) -> u16 {
     assert_eq!(traces_tr.shape()[1], trace_chunk.shape()[0]);
     assert_eq!(traces_tr.shape()[0], 4);
     assert!(trace_chunk.shape()[1] <= 32);
-    let mut max_width: i16 = 0;
+    let mut max_width: u16 = 0;
     if trace_chunk.shape()[1] == 32 {
-        let mut max_width_vec = [0i16; 8];
+        let mut max_width_vec = [0u16; 8];
         izip!(
             traces_tr.axis_iter_mut(Axis(1)),
             trace_chunk.axis_iter(Axis(0))
@@ -481,7 +482,9 @@ fn transpose_traces(
                 //traces_tr.clone_from_slice(trace_chunk);
                 *traces_tr = *trace_chunk;
                 for (max_width, trace_chunk) in max_width_vec.iter_mut().zip(trace_chunk.iter()) {
-                    *max_width |= trace_chunk.abs();
+                    // i16::abs_diff returns a u16 without overflow nor panic, while i16::abs
+                    // panics on i16::min_value() input.
+                    *max_width |= trace_chunk.abs_diff(0);
                 }
             });
         });
@@ -500,7 +503,7 @@ fn transpose_traces(
             )
             .for_each(|(traces_tr, trace_chunk)| {
                 *traces_tr = *trace_chunk;
-                max_width |= trace_chunk.abs();
+                max_width |= trace_chunk.abs_diff(0);
             });
         });
     }
