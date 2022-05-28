@@ -94,6 +94,7 @@ impl MultivarCSAcc {
                 .flatten()
                 .collect()
         } else {
+            // This is hard-coded to ensure that the order matches our hard-coded algorithm for `d=2`.
             vec![
                 vec![0],
                 vec![1],
