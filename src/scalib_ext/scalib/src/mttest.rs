@@ -39,7 +39,7 @@ pub struct MultivarCSAcc {
     /// Current means estimates
     /// shape of (nc, d, ns)
     pub mean: Array3<f64>,
-    /// List of all the points combinations to compute the centered product sum.
+    /// List of all the variable combinations to compute the centered moment of.
     /// This contains all the unique combinations on the set (0..d) U (0..d).
     /// The combinations are ordered by size.
     pub combis: Vec<Vec<usize>>,
