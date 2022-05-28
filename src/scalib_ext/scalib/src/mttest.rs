@@ -33,7 +33,7 @@ pub struct MultivarCSAcc {
     pub d: usize,
     /// Number of samples in each sets. shape (nc,)
     pub n_traces: Array1<u64>,
-    /// Current estimation of centered sums at higher order.
+    /// Estimation of all needed centered statistical moments (each multiplied by the number of samples), excluding first-order moments (which are stored in `means`).
     /// shape of (nc, combis.len(), d)
     pub cs: Array3<f64>,
     /// Current means estimates
