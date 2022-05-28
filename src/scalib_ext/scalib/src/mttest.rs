@@ -79,7 +79,7 @@ impl MultivarCSAcc {
         // generate all the unique subsets of (0..d, 0..d)
         // each of them will maintain a state to be updated
         let combis: Vec<Vec<usize>> = if d > 2 {
-            (1..(2 * d + 1))
+            (1..=(2 * d))
                 .map(|l| {
                     max_set
                         .clone()
