@@ -29,7 +29,7 @@ pub struct MultivarCSAcc {
     pub pois: Array2<u32>,
     /// Number of classes
     pub nc: usize,
-    /// Order to the statistical set
+    /// Number of variables in the statistical test (and therefore, its order).
     pub d: usize,
     /// Number of samples in each sets. shape (nc,)
     pub n_traces: Array1<u64>,
