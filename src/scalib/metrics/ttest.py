@@ -146,12 +146,10 @@ class MTtest:
             Set in which each trace belongs. Must be of shape `(n,)`, must be
             `np.uint16` and must contain only `0` and `1`.
         """
-        nl, nsl = l.shape
+        nl, _ = l.shape
         nx = x.shape[0]
         if not (nx == nl):
             raise ValueError(f"Expected x with shape ({nl},)")
-        # if not (nsl == self._ns):
-        #    raise Exception(f"Expected second dim of l to have size {self._ns}.")
 
         self._mttest.update(l, x)
 

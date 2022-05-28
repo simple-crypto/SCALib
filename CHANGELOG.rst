@@ -6,7 +6,7 @@ Not released
 ------------
 
 * SASCA: support modular ADD and MUL operations (#18)
-* TTest: Performance improvement by using a mix of 2 passes and 1 pass algs. 
+* TTest: Performance improvement by using a mix of 2 passes and 1 pass algorithms 
 * MTTest: First implementation of multivariate T-test.
 
 v0.3.4

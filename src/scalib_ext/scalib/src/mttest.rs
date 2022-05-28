@@ -18,7 +18,7 @@ const NS_BATCH: usize = 1 << 8;
 // Aligned f64 on 256 bits to fit AVX2 instructions.
 #[derive(Clone, Debug, Copy)]
 #[repr(align(32))]
-pub struct Af64 {
+struct Af64 {
     x: [f64; 4],
 }
 
@@ -256,7 +256,7 @@ impl MultivarCSAcc {
     /// t1 : fresh traces for set 1. of shape (ns, ceil(n1 // 4)).
     /// mean : mean per class of the all traces
     /// n_traces : count per classes in traces
-    pub fn update_with_means_d2(
+    fn update_with_means(
         &mut self,
         t0: ArrayView2<Af64>,
         t1: ArrayView2<Af64>,
@@ -383,8 +383,8 @@ impl MultivarCSAcc {
     /// y : class corresponding to each traces
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
         let (mean, n_traces) = means_per_class(traces, y, self.nc);
-        let (t0, t1) = center_transpose_aline(traces, mean.view(), y);
-        self.update_with_means_d2(t0.view(), t1.view(), mean.view(), n_traces.view());
+        let (t0, t1) = center_transpose_align(traces, mean.view(), y);
+        self.update_with_means(t0.view(), t1.view(), mean.view(), n_traces.view());
     }
 }
 
@@ -428,7 +428,7 @@ impl MTtest {
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView1<u16>) {
         // First pass to compute the means, center and align.
         let (mean, n_traces) = means_per_class(traces, y, 2);
-        let (t0, t1) = center_transpose_aline(traces, mean.view(), y);
+        let (t0, t1) = center_transpose_align(traces, mean.view(), y);
 
         // chunck different traces for more threads
         (
@@ -438,7 +438,7 @@ impl MTtest {
             .into_par_iter()
             .for_each(|(_, acc)| {
                 // chunck the traces with their lenght
-                acc.update_with_means_d2(t0.view(), t1.view(), mean.view(), n_traces.view());
+                acc.update_with_means(t0.view(), t1.view(), mean.view(), n_traces.view());
             });
     }
 
@@ -543,7 +543,7 @@ fn build_accumulator(pois: ArrayView2<u32>) -> Vec<MultivarCSAcc> {
 }
 
 #[inline(never)]
-pub fn inner_prod_generic(
+fn inner_prod_generic(
     accs: &mut [Af64],
     prods: &mut [Af64],
     posi: &[(i32, i32)],
@@ -577,7 +577,7 @@ pub fn inner_prod_generic(
 }
 
 #[inline(never)]
-pub fn inner_prod_d2(
+fn inner_prod_d2(
     acc00: &mut Af64,
     acc01: &mut Af64,
     acc11: &mut Af64,
@@ -621,7 +621,7 @@ pub fn inner_prod_d2(
     });
 }
 
-fn center_transpose_aline(
+fn center_transpose_align(
     traces: ArrayView2<i16>,
     means: ArrayView2<f64>,
     y: ArrayView1<u16>,
