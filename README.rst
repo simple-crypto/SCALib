@@ -16,7 +16,6 @@ SCALib contains various features for side-channel analysis, see the documentatio
 
 .. _documentation: https://scalib.readthedocs.io/en/latest
 
-
 Install
 =======
 
@@ -34,9 +33,9 @@ See install_ for details.
 About us
 ========
 SCALib has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. It has
-already been used by many other researcher at UCLouvain which contributed
-either directly or by constructive feedbacks. 
+UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. The SCALib
+project is part of `SIMPLE-Crypto <https://www.simple-crypto.dev/>`_ and is
+maintained in that context.
 
 Contributions and Issues
 ========================
@@ -47,4 +46,5 @@ See contribution_ and `DEVELOP.rst <DEVELOP.rst>`_.
 
 License
 =======
-This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`. See `COPYING <COPYING>`_ for more information.
+This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`.
+See `COPYING <COPYING>`_ for more information.

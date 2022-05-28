@@ -3,20 +3,31 @@ from scalib import _scalib_ext
 
 
 class Ttest:
-    r"""Computes the univariate :math:`t`-test at arbitrary order :math:`d`
-    between two sets :math:`i` of traces. Informally, it allows to highlight a
-    difference in statistical moments of order :math:`d` between the two sets.
-    The metric is defined with:
+    r"""The `Ttest` object enables to perform univariate :math:`t`-test.
+    Concretely, it first computes the  :math:`\mu[j]`'s and :math:`v[j]`'s for
+    the `d`-th statistical moment to test at all the indexes (`j`) in the
+    traces. These are derived based on all the provided traces :math:`l[:,j]`.
+    These traces can be provided through multiple calls to `fit_u`.
+    Second, the statistic `t[j]` is derived from the above equation.
+
+    For `d=1`:
 
     .. math::
-        t = \frac{x_0 - x_1}{\sqrt{(v_0/n_0)+(v_1/n_1)}}
+        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} l[i,j]
 
-    where the both :math:`x_i` and :math:`v_i` are defined independently for
-    each of the two sets and :math:`n_i` the number of available samples in the
-    set :math:`i`.
+    Similarly if `d=2`:
 
-    The expressions of :math:`x_i` and :math:`v_i` depend on the order `d` and relies on
-    estimation of central and standardized moments. See [1]_ for full details.
+    .. math::
+        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} (l[i,j] - \bar{l}[:,j])^2
+
+    And finally if `d>2`:
+
+
+    .. math::
+        \mu[j] = \frac{1}{n} \sum_{i=0}^{n-1} \left(\frac{l[i,j] - \bar{l}[:,j])}{\sigma_{l[:,j]}}\right)^d
+
+    Especially, :math:`\bar{l}` denotes the estimated mean of `l` and
+    :math:`\sigma_l` its standard deviation.
 
     Parameters
     ----------
@@ -34,19 +45,6 @@ class Ttest:
     >>> ttest = Ttest(200,d=3)
     >>> ttest.fit_u(traces,X)
     >>> t = ttest.get_ttest()
-
-    Notes
-    -----
-    **Warning**: Ttest should not be used alone as a standalone evaluation tool
-    because of its qualitative nature. See [2]_ and [3]_ for cautionary notes.
-
-    .. [1] "Leakage assessment methodology", Tobias Schneider, Amir Moradi, CHES
-       2015
-    .. [2] "How (not) to Use Welch’s T-test in Side-Channel Security
-       Evaluations", François-Xavier Standaert, CARDIS 2018
-    .. [3] "A Critical Analysis of ISO 17825 ('Testing Methods for the
-       Mitigation of Non-invasive Attack Classes Against Cryptographic
-       Modules')", Carolyn Whitnall, Elisabeth Oswald, ASIACRYPT 2019
 
     """
 
