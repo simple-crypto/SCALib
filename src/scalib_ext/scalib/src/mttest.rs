@@ -43,9 +43,7 @@ pub struct MultivarCSAcc {
     /// This contains all the unique combinations on the set (0..d) U (0..d).
     /// The combinations are ordered by size.
     pub combis: Vec<Vec<usize>>,
-    /// First index in the tuple is the Poi (s) to multiply.
-    /// Second index is the product to multiply with.
-    /// Only used for d > 2.
+    /// Each element in `posi` describes how to compute the corresponding moment in `combis` (`posi.len() == combis.len()`). Each incremental contribution to a moment can be computed as the product between a contribution to a lower-order moment (`posi[i].1`) and a centered data point (`posi[i].0` is the index of the corresponding variable).
     pub posi: Vec<(i32, i32)>,
 }
 
