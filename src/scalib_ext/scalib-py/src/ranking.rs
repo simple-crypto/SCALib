@@ -1,3 +1,4 @@
+use crate::thread_pool::ThreadPool;
 use pyo3::prelude::{pyfunction, PyResult, Python};
 
 #[pyfunction]
@@ -9,8 +10,9 @@ pub fn rank_accuracy(
     merge: Option<usize>,
     method: String,
     max_nb_bin: usize,
+    thread_pool: &ThreadPool,
 ) -> PyResult<(f64, f64, f64)> {
-    py.allow_threads(|| {
+    crate::on_worker(py, thread_pool, || {
         let res = str2method(&method).unwrap_or_else(|s| panic!("{}", s));
         let res = res.rank_accuracy(&costs, &key, acc, merge, max_nb_bin);
         match res {
@@ -30,8 +32,9 @@ pub fn rank_nbin(
     nb_bin: usize,
     merge: Option<usize>,
     method: String,
+    thread_pool: &ThreadPool,
 ) -> PyResult<(f64, f64, f64)> {
-    py.allow_threads(|| {
+    crate::on_worker(py, thread_pool, || {
         let res = str2method(&method).unwrap_or_else(|s| panic!("{}", s));
         let res = res.rank_nbin(&costs, &key, nb_bin, merge);
         match res {

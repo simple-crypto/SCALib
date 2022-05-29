@@ -8,21 +8,17 @@ mod belief_propagation;
 mod lda;
 mod ranking;
 mod snr;
+mod thread_pool;
 mod ttest;
 
-#[pyfunction]
-pub fn run_bp(
-    py: Python,
-    functions: &PyList,
-    variables: &PyList,
-    it: usize,
-    vertex: usize,
-    nc: usize,
-    n: usize,
-    progress: bool,
-) -> PyResult<()> {
-    belief_propagation::run_bp(py, functions, variables, it, vertex, nc, n, progress)
+pub(crate) fn on_worker<OP, R>(py: Python, thread_pool: &thread_pool::ThreadPool, op: OP) -> R
+where
+    OP: FnOnce() -> R + Send,
+    R: Send,
+{
+    py.allow_threads(|| thread_pool.pool.install(op))
 }
+
 #[pyfunction]
 fn partial_cp(
     _py: Python,
@@ -43,6 +39,11 @@ fn partial_cp(
         });
 }
 
+#[pyfunction]
+fn get_n_cpus_physical(_py: Python) -> usize {
+    num_cpus::get_physical()
+}
+
 #[pymodule]
 fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
@@ -50,10 +51,12 @@ fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<ttest::MTtest>()?;
     m.add_class::<lda::LDA>()?;
     m.add_class::<lda::LdaAcc>()?;
+    m.add_class::<thread_pool::ThreadPool>()?;
     m.add_function(wrap_pyfunction!(ranking::rank_accuracy, m)?)?;
     m.add_function(wrap_pyfunction!(ranking::rank_nbin, m)?)?;
-    m.add_function(wrap_pyfunction!(run_bp, m)?)?;
+    m.add_function(wrap_pyfunction!(belief_propagation::run_bp, m)?)?;
     m.add_function(wrap_pyfunction!(partial_cp, m)?)?;
+    m.add_function(wrap_pyfunction!(get_n_cpus_physical, m)?)?;
 
     Ok(())
 }

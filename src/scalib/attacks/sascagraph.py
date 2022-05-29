@@ -1,6 +1,7 @@
 import numpy as np
 from functools import reduce
 from scalib import _scalib_ext
+from scalib.threading import _get_threadpool
 
 
 class SASCAGraph:
@@ -244,6 +245,7 @@ class SASCAGraph:
             self.nc_,
             self.n_,
             progress,
+            _get_threadpool(),
         )
         self.solved_ = True
 

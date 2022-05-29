@@ -1355,9 +1355,11 @@ version = "0.1.0"
 dependencies = [
  "indicatif 0.15.0",
  "ndarray",
+ "num_cpus",
  "numpy 0.16.2",
  "pyo3 0.16.5",
  "ranklib",
+ "rayon",
  "scalib",
 ]
 

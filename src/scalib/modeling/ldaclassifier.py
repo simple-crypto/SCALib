@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 
 from scalib import _scalib_ext
+from scalib.threading import _get_threadpool, _get_n_threads
 
 
 class LDAClassifier:
@@ -96,8 +97,11 @@ class LDAClassifier:
             n>0: use n threads with BLIS matrix multiplication.
             BLIS is only used on linux. Matrixmultiply is always used on other
             OSes.
+            The BLIS threads (if > 1) do not belong to the SCALib threadpool.
         """
-        self.acc.fit(l, x, gemm_mode)
+        # TODO maybe there is something smarter to do here w.r.t. number of
+        # threads + investigate exact BLIS behavior.
+        self.acc.fit(l, x, gemm_mode, _get_threadpool())
         self.solved = False
 
     def solve(self, done=False):
@@ -117,7 +121,7 @@ class LDAClassifier:
         assert (
             not self.done
         ), "Calling LDA.solve() after done flag has been set is not allowed."
-        self.lda = self.acc.lda(self.p)
+        self.lda = self.acc.lda(self.p, _get_threadpool())
         self.solved = True
         self.done = done
 
@@ -142,7 +146,7 @@ class LDAClassifier:
         assert (
             self.solved
         ), "Call LDA.solve() before LDA.predict_proba() to compute the model."
-        prs = self.lda.predict_proba(l)
+        prs = self.lda.predict_proba(l, _get_threadpool())
         return prs
 
     def __getstate__(self):
@@ -188,10 +192,6 @@ class MultiLDA:
         Indices of the POIs in the traces for each variable. That is, for
         variable `i`, and training trace `t`, `t[pois[i]]` is the input
         datapoints for the LDA.
-    num_cpus: int or None (default)
-        Total number of threads to use in parallel (taking into
-        account multi-threading in a single LDA parameterized with gemm_mode).
-        If None, takes the number of available logial CPUs.
     gemm_mode: int
         0: use matrixmultiply matrix multiplication.
         n>0: use n threads with BLIS matrix multiplication.
@@ -217,21 +217,8 @@ class MultiLDA:
     >>> predicted_proba = lda.predict_proba(x)
     """
 
-    def __init__(self, ncs, ps, pois, num_cpus=None, gemm_mode=4):
+    def __init__(self, ncs, ps, pois, gemm_mode=1):
         self.pois = pois
-        self.num_cpus = num_cpus
-        if self.num_cpus is None:
-            try:
-                self.num_cpus = len(os.sched_getaffinity(0))
-            except AttributeError:
-                self.num_cpus = os.cpu_count()
-                if self.num_cpus is None:
-                    # default to one thread
-                    self.num_cpus = 1
-        if gemm_mode == 0:
-            self.num_threads = self.num_cpus
-        else:
-            self.num_threads = max(1, self.num_cpus // gemm_mode)
         self.gemm_mode = gemm_mode
         self.ldas = [
             LDAClassifier(nc, p, len(poi)) for nc, p, poi in zip(ncs, ps, pois)
@@ -249,7 +236,12 @@ class MultiLDA:
             Labels for each trace. Must be of shape `(n, nv)` and
             must be `uint16`.
         """
-        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+        # Try to avoid the over-subscription of CPUs.
+        if self.gemm_mode == 0:
+            num_threads = _get_n_threads()
+        else:
+            num_threads = max(1, _get_n_threads() // self.gemm_mode)
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
             list(
                 executor.map(
                     lambda i: self.ldas[i].fit_u(
@@ -261,9 +253,8 @@ class MultiLDA:
 
     def solve(self, done=False):
         """See `LDAClassifier.solve`."""
-        # Use num_cpus instead of num_threads as there is not parallelism
-        # inside of lda.solve.
-        with ThreadPoolExecutor(max_workers=self.num_cpus) as executor:
+        # Put as much work as needed to fill rayon threadpool
+        with ThreadPoolExecutor(max_workers=_get_n_threads()) as executor:
             list(executor.map(lambda lda: lda.solve(done), self.ldas))
 
     def predict_proba(self, l):
@@ -281,9 +272,8 @@ class MultiLDA:
             Probabilities. `nv` arrays of shape `(n, nc)`.
         See `LDAClassifier.solve`.
         """
-        # Use num_cpus instead of num_threads as there is not parallelism
-        # inside of lda.predict_proba.
-        with ThreadPoolExecutor(max_workers=self.num_cpus) as executor:
+        # Put as much work as needed to fill rayon threadpool
+        with ThreadPoolExecutor(max_workers=_get_n_threads()) as executor:
             return executor.map(
                 lambda i: self.ldas[i].predict_proba(l[:, self.pois[i]]),
                 range(len(self.ldas)),

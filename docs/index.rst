@@ -214,3 +214,4 @@ more information.
    source/scalib.modeling.rst
    source/scalib.attacks.rst
    source/scalib.postprocessing.rst
+   source/scalib.configuration.rst

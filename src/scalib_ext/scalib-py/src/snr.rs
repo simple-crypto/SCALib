@@ -1,5 +1,6 @@
 //! Python binding of SCALib's SNR implementation.
 
+use crate::thread_pool::ThreadPool;
 use numpy::{PyArray2, PyReadonlyArray2, ToPyArray};
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
@@ -41,11 +42,12 @@ impl SNR {
         py: Python,
         traces: PyReadonlyArray2<i16>,
         y: PyReadonlyArray2<u16>,
+        thread_pool: &ThreadPool,
     ) -> PyResult<()> {
         let inner = &mut self.inner;
         let x = traces.as_array();
         let y = y.as_array();
-        py.allow_threads(|| match inner {
+        crate::on_worker(py, thread_pool, || match inner {
             InnerSnr::Snr32bit(inner) => inner.update(x, y),
             InnerSnr::Snr64bit(inner) => inner.update(x, y),
         })
@@ -55,11 +57,15 @@ impl SNR {
 
     /// Generate the actual SNR metric based on the current state.
     /// return array axes (variable, samples in trace)
-    fn get_snr<'py>(&mut self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
-        let snr = py.allow_threads(|| match &self.inner {
+    fn get_snr<'py>(
+        &mut self,
+        py: Python<'py>,
+        thread_pool: &ThreadPool,
+    ) -> PyResult<&'py PyArray2<f64>> {
+        let snr = crate::on_worker(py, thread_pool, || match &self.inner {
             InnerSnr::Snr32bit(inner) => inner.get_snr(),
             InnerSnr::Snr64bit(inner) => inner.get_snr(),
         });
-        Ok(&(snr.to_pyarray(py)))
+        Ok(snr.to_pyarray(py))
     }
 }
