@@ -51,7 +51,7 @@ jobs:
                   CARGO_TARGET_DIR: ${{ github.workspace }}\cargo_build
                   CIBW_ARCHS_WINDOWS: native
                   CIBW_BUILD_VERBOSITY: "1"
-                  CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full'
+                  CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full RUSTFLAGS="-C target-cpu=+avx2"'
                   CIBW_BUILD: "cp36-win_amd64"
                   # I don't know how to make both normal and doctring tests
                   # work with only one command, so I use shell &&.
@@ -75,7 +75,7 @@ jobs:
             #CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/simple-crypto/manylinux2014_x86_64:rust-1.51.0"
             CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/simple-crypto/manylinux2014_x86_64-clang:rust-1.60.0"
             CIBW_BUILD_VERBOSITY: "1"
-            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full CARGO_TARGET_DIR=/host${{ github.workspace }}/cargo_build CARGO_HOME=/host${{ github.workspace }}/cargo_home'
+            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full CARGO_TARGET_DIR=/host${{ github.workspace }}/cargo_build CARGO_HOME=/host${{ github.workspace }}/cargo_home RUSTFLAGS="-C target-cpu=+avx2"'
             CIBW_BUILD: "cp36-manylinux_x86_64*"
             # I don't know how to make both normal and doctring tests work with only one command,
             # so I use shell &&.
