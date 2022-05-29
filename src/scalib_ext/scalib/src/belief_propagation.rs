@@ -269,12 +269,12 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             let value = value.first().unwrap();
                             for i1 in 0..nc {
                                 let o: usize = match &function.functype {
-                                    FuncType::XORCST(values) => ((i1 as u32) ^ value) as usize,
-                                    FuncType::ANDCST(values) => ((i1 as u32) & value) as usize,
-                                    FuncType::ADDCST(values) => {
+                                    FuncType::XORCST(_) => ((i1 as u32) ^ value) as usize,
+                                    FuncType::ANDCST(_) => ((i1 as u32) & value) as usize,
+                                    FuncType::ADDCST(_) => {
                                         (((i1 as u32) + value) % (nc as u32)) as usize
                                     }
-                                    FuncType::MULCST(values) => {
+                                    FuncType::MULCST(_) => {
                                         (((i1 as u32) * value) % (nc as u32)) as usize
                                     }
                                     _ => unreachable!(),

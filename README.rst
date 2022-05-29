@@ -19,13 +19,16 @@ SCALib contains various features for side-channel analysis, see the documentatio
 Install
 =======
 
-SCALib is on PyPi! See install_ for details.
+SCALib is on PyPi!
 
 .. code-block::
 
     pip install scalib
 
+See install_ for details.
+ 
 .. _install: https://scalib.readthedocs.io/en/latest/index.html#install
+
 
 About us
 ========

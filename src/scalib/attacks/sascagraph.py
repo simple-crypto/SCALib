@@ -48,7 +48,7 @@ class SASCAGraph:
             VAR MULTI x # Sbox input
             VAR MULTI y # Sbox output (whose leakage is targeted)
             PROPERTY x = k ^ p   # Key addition
-            PROPERTY x = sbox[y] # Sbox lookup
+            PROPERTY y = sbox[x] # Sbox lookup
             '''
         # n is the number of traces for our attack.
         graph = SASCAGraph(graph_desc,n)

@@ -5,7 +5,6 @@ use ndarray_stats::QuantileExt;
 use scalib::lda;
 
 extern crate openblas_src as _;
-
 #[test]
 fn fit_lda() {
     let ns = 100;
