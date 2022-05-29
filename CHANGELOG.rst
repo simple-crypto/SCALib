@@ -9,6 +9,8 @@ Not released
 * TTest: Performance improvement by using a mix of 2 passes and 1 pass algorithms 
 * MTTest: First implementation of multivariate T-test.
 * Improved documentation and README.rst
+* SNR: use pooled formulas for better correctness then there are few traces,
+  saves RAM (up to 75% reduction) and improves perf (about 2x single-threaded).
 
 v0.3.4
 ------

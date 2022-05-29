@@ -1,3 +1,5 @@
+// state i64, acc local i32, dyn bit width
+//
 //! Estimation for signal-to-noise ratio.
 //!
 //! An estimation of SNR is represented with a SNR struct. Calling update allows
@@ -6,76 +8,226 @@
 //! The SNR can be computed for np independent random variables and the same measurements.
 //! The measurements are expected to be of length ns. The random variable values must be
 //! included in [0,nc[.
+//!
+//! The SNR estimation algorithm works as follows. We consider a single point in the trace (all
+//! points are treated in the same way).
+//! For every $i=0,\dots,nc-1$ ($nc$ is the number of classes), let $x\_{i,j}$ (for
+//! $j=0,\dots,n\_i-1$) be all the leakages of class $i$.
+//! Let $\mu\_i = \sum\_{j=0}^{n\_i-1} x_{i,j}/n\_i$ and $n = \sum\{i=0}^{nc-1} n\_i$.
+//! Moreover, let
+//! $S\_i = \sum\_j x\_{i,j}$, $S = \sum\_i S\_i$, $SS\_i = \sum\_j x\_{i,j}^2$ and $SS = \sum\_i
+//! SS\_i$.
+//!
+//! We compute $SNR = Sig/No$, where
+//!
+//! $$
+//! No
+//! = \sum\_{i=0}^{nc-1} \sum\_{j=0}^{n\_i-1} 1/(n-nc) (x\_{i,j}-\mu\_i)^2
+//!  = \sum\_{i,j} 1/(n-nc) * x_{i,j}^2 - \sum\_i 1/(n-nc)/n\_i (\sum\_j x\_{i,j})^2
+//!  = 1/(n-nc) (SS - \sum\_i 1/n\_i S\_i^2)
+//!  = 1/(n(n-nc)) (n SS - \sum\_i n/n\_i S\_i^2)
+//! $$
+//!
+//! so that
+//!
+//! - the $No$ estimator is non-biased, and
+//! - we use a [pooled variance](https://en.wikipedia.org/wiki/Pooled_variance) to ensure an
+//! accurate estimation when the samples in the classes are not balanced.
+//!
+//! For the signal, we proceed similarly:
+//!
+//! $$
+//! Sig = \sum\_i n\_i/(n-nc) (mu\_i-mu)^2
+//!     = \sum\_i n\_i/(n-nc) (S\_i/n\_i-S/n)^2
+//!     = \sum\_i n\_i/(n-nc) \left S\_i^2/n\_i^2 -2S\_i/n\_i S/n + S^2/n^2 \right)
+//!     = 1/(n(n-nc)) \left(\sum\_i n/n\_i S\_i^2 - S^2\right)
+//! $$
+//!
+//! For both $No$ and $Sig$, when some $n\_i$ is zero, it is left out from the sums (avoiding the
+//! need to compute $1/n\_i$) and $nc$ is consequently decreased.
+//!
+//!
+//! Regarding the implementation, we have to compute $SS$, $S\_i$, $n\_i$ and $nc$, from which $S$
+//! and $n$ can be easily derived.
+//! Assuming 16-bit data, and $n<2^32$, we can store $SS$ and $S\_i$ on 64-bit integers (and $S\_i$
+//! could even be on 32-bit if $n<2^16$, or for temporary accumulators).
+//! For the final computation, for $No$, we can have $S\_i^2$ on 128-bit integer (small loss of
+//! performance, should not be too costly), then $S\_i^2/n\_i$ on 64-bit integer.
+//! For $Sig$, $(n S\_i^2) / n\_i$ can be computed on 128-bit, as well as $S^2$.
 
 use hytra::TrAdder;
 use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use itertools::izip;
-use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut1, Axis, Zip};
+use ndarray::{s, Array1, Array2, Array3, ArrayView2, ArrayViewMut2, Axis, Zip};
+use num_traits::{Bounded, PrimInt, Signed, WrappingAdd, Zero};
 use rayon::prelude::*;
+use std::convert::TryInto;
 use std::thread;
 use std::time::Duration;
+
+pub trait NativeInt: PrimInt + Signed + WrappingAdd + Send + Sync {}
+impl<T: PrimInt + Signed + WrappingAdd + Send + Sync> NativeInt for T {}
+
+pub trait SnrType {
+    const UPDATE_SNR_CHUNK_SIZE: usize;
+    type SumAcc;
+    type Sample;
+    fn sample2tmp(s: Self::Sample) -> i32;
+    fn sample2i64(s: Self::Sample) -> i64;
+    fn tmp2acc(s: i32) -> Self::SumAcc;
+    fn acc2i64(acc: Self::SumAcc) -> i64;
+}
+
+const TRACES_CHUNK_SIZE: usize = 1024;
+
+#[derive(Debug)]
+pub struct SnrType64bit;
+#[derive(Debug)]
+pub struct SnrType32bit;
+
+impl SnrType for SnrType64bit {
+    const UPDATE_SNR_CHUNK_SIZE: usize = 1 << 13;
+    type SumAcc = i64;
+    type Sample = i16;
+    #[inline(always)]
+    fn tmp2acc(s: i32) -> Self::SumAcc {
+        s as i64
+    }
+    #[inline(always)]
+    fn acc2i64(acc: Self::SumAcc) -> i64 {
+        acc
+    }
+    #[inline(always)]
+    fn sample2tmp(s: Self::Sample) -> i32 {
+        s as i32
+    }
+    #[inline(always)]
+    fn sample2i64(s: Self::Sample) -> i64 {
+        s as i64
+    }
+}
+impl SnrType for SnrType32bit {
+    const UPDATE_SNR_CHUNK_SIZE: usize = 1 << 13;
+    type SumAcc = i32;
+    type Sample = i16;
+    #[inline(always)]
+    fn tmp2acc(s: i32) -> Self::SumAcc {
+        s as i32
+    }
+    #[inline(always)]
+    fn acc2i64(acc: Self::SumAcc) -> i64 {
+        acc as i64
+    }
+    #[inline(always)]
+    fn sample2tmp(s: Self::Sample) -> i32 {
+        s as i32
+    }
+    #[inline(always)]
+    fn sample2i64(s: Self::Sample) -> i64 {
+        s as i64
+    }
+}
+
 /// SNR state. stores the sum and the sum of squares of the leakage for each of the class.
 /// This allows to estimate the mean and the variance for each of the classes which are
 /// needed for SNR.
-pub struct SNR {
-    /// Sum of all the traces corresponding to each of the classes. shape (np,nc,ns)
-    sum: Array3<i64>,
-    /// sum of squares per class with shape (np,nc,ns)
-    sum_square: Array3<i64>,
+#[derive(Debug)]
+pub struct SNR<T = SnrType32bit>
+where
+    T: SnrType,
+    T::SumAcc: NativeInt,
+{
+    /// Sum of all the traces corresponding to each of the classes. shape (ceil(ns/8),np,nc)
+    sum: Array3<[T::SumAcc; 8]>,
+    /// Sum of squares with shape (ceil(ns/8))
+    /// (never overflows since samples are i16 and tot_n_samples <= u32::MAX)
+    sum_square: Array1<[i64; 8]>,
     /// number of samples per class (np,nc)
-    n_samples: Array2<u64>,
+    n_samples: Array2<u32>,
     /// number of independent variables
     np: usize,
     /// number of samples in a trace
     ns: usize,
+    /// number of classes
+    nc: u16,
+    /// max sample bit width
+    bit_width: u32,
+    /// total number of accumulated traces
+    tot_n_samples: u32,
 }
 
-/// Size of chunks of trace to handle in a single loop. This should be large enough to limit loop
-/// overhead costs, while being small enough to limit memory bandwidth usage by optimizing cache
-/// use.
-const GET_SNR_CHUNK_SIZE: usize = 1 << 12;
-const UPDATE_SNR_CHUNK_SIZE: usize = 1 << 13;
+#[derive(Debug)]
+pub enum SnrError {
+    TooManyTraces,
+    ClassOverflow,
+    ClassOutOfBound,
+}
 
-impl SNR {
+impl std::fmt::Display for SnrError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooManyTraces => write!(f, "Number of traces accumulated exceeds 2^32"),
+            Self::ClassOverflow => write!(f,
+    "The sum of samples (for a variable value) might overflow (threshold is 2^32 or 2^64)."
+               ),
+            Self::ClassOutOfBound => write!(
+                f,
+                "A class value of a variable is larger than the given number of classes."
+            ),
+        }
+    }
+}
+
+impl std::error::Error for SnrError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl<T> SNR<T>
+where
+    T: SnrType<Sample = i16> + std::fmt::Debug,
+    T::SumAcc: NativeInt,
+{
     /// Create a new SNR state.
     /// nc: random variables between [0,nc[
     /// ns: traces length
     /// np: number of independent random variable for which SNR must be estimated
     pub fn new(nc: usize, ns: usize, np: usize) -> Self {
+        let ns8 = if ns % 8 == 0 { ns / 8 } else { ns / 8 + 1 };
         SNR {
-            sum: Array3::<i64>::zeros((np, nc, ns)),
-            sum_square: Array3::<i64>::zeros((np, nc, ns)),
-            n_samples: Array2::<u64>::zeros((np, nc)),
-            ns: ns,
-            np: np,
+            sum: Array3::from_elem((ns8, np, nc), [Zero::zero(); 8]),
+            sum_square: Array1::from_elem((ns8,), [0; 8]),
+            n_samples: Array2::zeros((np, nc)),
+            np,
+            ns,
+            nc: nc.try_into().expect("Too many classes"),
+            bit_width: 1,
+            tot_n_samples: 0,
         }
     }
 
     /// Update the SNR state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
     /// y: realization of random variables with shape (np,n)
-    pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView2<u16>) {
+    /// If this errors, the SNR object should not be used anymore.
+    /// traces and y must be in standard C order
+    pub fn update(
+        &mut self,
+        traces: ArrayView2<T::Sample>,
+        y: ArrayView2<u16>,
+    ) -> Result<(), SnrError> {
         let x = traces;
-
-        if self.n_samples.slice(s![0, ..]).sum() + x.shape()[0] as u64 >= (1 << 32) {
-            panic!("SNR can not be updated with more than 2**32 traces.");
-        }
 
         let acc: TrAdder<u64> = TrAdder::new();
         let acc_ref = &acc;
 
-        let n_chunks = (self.ns as f64 / UPDATE_SNR_CHUNK_SIZE as f64).ceil() as u64;
-        let n_it = n_chunks * self.np as u64 * self.n_samples.shape()[1] as u64;
+        let n_it = (self.sum.shape()[0] as u64 + 3) / 4;
         let n_updates = x.shape()[0] as u64 * x.shape()[1] as u64 * self.np as u64;
 
         // Display bar if about 8E9 updates
         if n_updates > (1 << 33) {
             crossbeam_utils::thread::scope(|s| {
-                // spawn computing thread
-                s.spawn(move |_| {
-                    self.update_internal(traces, y, acc_ref);
-                });
-
                 // spawn progress bar thread
                 s.spawn(move |_| {
                     let pb = ProgressBar::new(n_it);
@@ -93,193 +245,308 @@ impl SNR {
                     }
                     pb.finish_and_clear();
                 });
+
+                // spawn computing thread
+                let res: Result<(), SnrError> = s
+                    .spawn(move |_| self.update_internal(traces, y, acc_ref))
+                    .join()
+                    .unwrap();
+                res
             })
-            .unwrap();
+            .unwrap()
         } else {
-            self.update_internal(traces, y, acc_ref);
+            self.update_internal(traces, y, acc_ref)
         }
     }
 
+    #[inline(never)]
+    /// If this errors, the SNR object should not be used anymore.
     fn update_internal(
         &mut self,
-        traces: ArrayView2<i16>,
+        traces: ArrayView2<T::Sample>,
         y: ArrayView2<u16>,
         acc_ref: &TrAdder<u64>,
-    ) {
-        let x = traces;
-        // chunk the traces to keep one line of sum and sum_square in L2 cache
-        (
-            self.sum
-                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
-            self.sum_square
-                .axis_chunks_iter_mut(Axis(2), UPDATE_SNR_CHUNK_SIZE),
-            x.axis_chunks_iter(Axis(1), UPDATE_SNR_CHUNK_SIZE),
+    ) -> Result<(), SnrError> {
+        assert_eq!(traces.shape()[0], y.shape()[1]);
+        assert_eq!(traces.shape()[1], self.ns);
+        assert_eq!(y.shape()[0], self.np);
+        assert!(traces.is_standard_layout());
+        assert!(y.is_standard_layout());
+        let n_traces: u32 = traces.shape()[0]
+            .try_into()
+            .map_err(|_| SnrError::TooManyTraces)?;
+        self.tot_n_samples = self
+            .tot_n_samples
+            .checked_add(n_traces)
+            .ok_or(SnrError::TooManyTraces)?;
+        let mut max_n_samples: u32 = 0;
+        let nc = self.nc;
+        let np = self.np;
+        izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).try_for_each(
+            |(mut n_samples, y)| {
+                y.into_iter().try_for_each(|y| {
+                    if *y >= nc {
+                        Err(SnrError::ClassOutOfBound)
+                    } else {
+                        n_samples[*y as usize] += 1;
+                        max_n_samples = std::cmp::max(max_n_samples, n_samples[*y as usize]);
+                        Ok(())
+                    }
+                })
+            },
+        )?;
+        let sample_bits_used_msk = (
+            self.sum.axis_chunks_iter_mut(Axis(0), 32 / 8),
+            self.sum_square.axis_chunks_iter_mut(Axis(0), 32 / 8),
+            traces.axis_chunks_iter(Axis(1), 32),
         )
             .into_par_iter()
-            .for_each(|(mut sum, mut sum_square, x)| {
-                // iter on each variable to update
-                (
-                    sum.outer_iter_mut(),
-                    sum_square.outer_iter_mut(),
-                    y.outer_iter(),
-                )
-                    .into_par_iter()
-                    .for_each(|(mut sum, mut sum_square, y)| {
-                        // for each of the possible realization of y
-                        (sum.outer_iter_mut(), sum_square.outer_iter_mut())
-                            .into_par_iter()
-                            .enumerate()
-                            .for_each(|(i, (mut sum, mut sum_square))| {
-                                inner_loop_update(
-                                    sum.view_mut(),
-                                    sum_square.view_mut(),
-                                    x.view(),
-                                    y.view(),
-                                    i as u16,
-                                );
-                                acc_ref.inc(1);
+            .map_init(
+                || {
+                    (
+                        Array2::from_elem((4, TRACES_CHUNK_SIZE), [0i16; 8]),
+                        Array3::from_elem((4, np, nc as usize), [0i32; 8]),
+                    )
+                },
+                |(traces_tr, tmp_sum), (mut sum, mut sum_square, trace_chunk)| {
+                    let mut sample_bits_used_msk = 0;
+                    izip!(
+                        trace_chunk.axis_chunks_iter(Axis(0), u16::MAX as usize),
+                        y.axis_chunks_iter(Axis(1), u16::MAX as usize)
+                    )
+                    .for_each(|(trace_chunk, y)| {
+                        tmp_sum.fill([0; 8]);
+                        izip!(
+                            trace_chunk.axis_chunks_iter(Axis(0), TRACES_CHUNK_SIZE),
+                            y.axis_chunks_iter(Axis(1), TRACES_CHUNK_SIZE)
+                        )
+                        .for_each(|(trace_chunk, y)| {
+                            let mut traces_tr =
+                                traces_tr.slice_mut(s![.., ..trace_chunk.shape()[0]]);
+                            sample_bits_used_msk |=
+                                transpose_traces(traces_tr.view_mut(), trace_chunk);
+                            izip!(
+                                traces_tr.axis_iter(Axis(0)),
+                                tmp_sum.axis_iter_mut(Axis(0)),
+                                sum_square.axis_iter_mut(Axis(0)),
+                            )
+                            .for_each(
+                                |(traces_chunk, sum, sum_square)| {
+                                    let traces_chunk = traces_chunk.to_slice().unwrap();
+                                    // SAFETY: y has been checked before, and offset/stride is in bound
+                                    unsafe {
+                                        inner_snr_update(
+                                            traces_chunk,
+                                            y,
+                                            sum,
+                                            sum_square.into_scalar(),
+                                        );
+                                    }
+                                },
+                            );
+                        });
+                        for (mut sum, tmp_sum) in
+                            izip!(sum.axis_iter_mut(Axis(0)), tmp_sum.axis_iter(Axis(0)))
+                        {
+                            Zip::from(&mut sum).and(tmp_sum).for_each(|sum, tmp_sum| {
+                                for (sum, tmp_sum) in sum.iter_mut().zip(tmp_sum.iter()) {
+                                    *sum = sum.wrapping_add(&T::tmp2acc(*tmp_sum));
+                                }
                             });
+                        }
                     });
-            });
-
-        // update the number of samples for each classes.
-        izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).for_each(|(mut n_samples, y)| {
-            y.into_iter().for_each(|y| n_samples[*y as usize] += 1);
-        });
+                    acc_ref.inc(1);
+                    sample_bits_used_msk
+                },
+            )
+            .reduce(|| 0, |a, b| a | b);
+        self.bit_width = std::cmp::max(self.bit_width, 16 - sample_bits_used_msk.leading_zeros());
+        // for any sample x, abs(x) < 2^bit_width
+        // we want max_n_samples*abs(x) < T::SumAcc::max_value(), therefore
+        // max_n_samples*abs(x) << bit_width \le T::SumAcc::max_value()
+        // max_val does not overflow since max_n_samples < 2^32 and self.bit_width < 16
+        let max_val = (max_n_samples as i64) << self.bit_width;
+        if max_val > T::acc2i64(T::SumAcc::max_value()) {
+            return Err(SnrError::ClassOverflow);
+        }
+        return Ok(());
     }
 
     /// Generate the actual SNR metric based on the current state.
     /// return array axes (variable, samples in trace)
-    pub fn get_snr<'py>(&self) -> Array2<f64> {
-        // Vor each var, each time sample, compute
-        // SNR = Signal / Noise
-        // Signal = Var_classes(Mean_traces))
-        //     Mean_traces = sum/n_traces
-        // Noise = Mean_classes(Var_traces)
-        //     Var_traces = 1/n_samples * Sum_traces (trace - Mean_traces)^2
-        //                = 1/n_samples * Sum_traces (trace^2 + Mean_traces^2 - 2* trace * Mean_traces)
-        //                = Sum_traces (trace^2/n_samples) -  Mean_traces^2
-        // TODO check memory layout and algorithmic passes to optimize perf.
-
+    pub fn get_snr(&self) -> Array2<f64> {
         let mut snr = Array2::<f64>::zeros((self.np, self.ns));
-        let sum = &self.sum;
-        let sum_square = &self.sum_square;
-        let n_samples = &self.n_samples;
-        let n_samples_inv = 1.0 / n_samples.mapv(|x| x as f64);
-
-        // For each independent variable
+        // on chunks of samples
         (
-            sum.outer_iter(),
-            sum_square.outer_iter(),
-            n_samples_inv.outer_iter(),
-            snr.outer_iter_mut(),
+            self.sum.axis_iter(Axis(0)),
+            self.sum_square.axis_iter(Axis(0)),
+            snr.axis_chunks_iter_mut(Axis(1), 8),
         )
             .into_par_iter()
-            .for_each(|(sum, sum_square, n_samples_inv, mut snr)| {
-                let mut cum_mean_of_var = Array1::<f64>::zeros(self.ns);
-                let mut cum_mean_of_mean = Array1::<f64>::zeros(self.ns);
-                let mut cum_var_of_mean = Array1::<f64>::zeros(self.ns);
-
+            .for_each(|(sum, sum_square, mut snr)| {
+                let sum_square: &[i64; 8] = sum_square.into_scalar();
+                let general_sum = sum
+                    .slice(s![0usize, ..])
+                    .iter()
+                    .fold([0i64; 8], |mut acc, s| {
+                        for (acc, s) in izip!(acc.iter_mut(), s.iter()) {
+                            // no overflow: sample on 16 bits, at most 2^32 traces
+                            *acc += T::acc2i64(*s);
+                        }
+                        acc
+                    });
+                let mut general_sum_sq = [0i128; 8];
+                for (sq, s) in izip!(general_sum_sq.iter_mut(), general_sum.iter()) {
+                    let s = *s as i128;
+                    *sq = s * s;
+                }
+                // on variables
                 izip!(
-                    cum_mean_of_var.axis_chunks_iter_mut(Axis(0), GET_SNR_CHUNK_SIZE),
-                    cum_mean_of_mean.axis_chunks_iter_mut(Axis(0), GET_SNR_CHUNK_SIZE),
-                    cum_var_of_mean.axis_chunks_iter_mut(Axis(0), GET_SNR_CHUNK_SIZE),
-                    snr.axis_chunks_iter_mut(Axis(0), GET_SNR_CHUNK_SIZE),
-                    sum.axis_chunks_iter(Axis(1), GET_SNR_CHUNK_SIZE),
-                    sum_square.axis_chunks_iter(Axis(1), GET_SNR_CHUNK_SIZE)
+                    sum.axis_iter(Axis(0)),
+                    self.n_samples.axis_iter(Axis(0)),
+                    snr.axis_iter_mut(Axis(0))
                 )
-                .for_each(
-                    |(
-                        mut cum_mean_of_var,
-                        mut cum_mean_of_mean,
-                        mut cum_var_of_mean,
-                        mut snr,
-                        sum,
+                .for_each(|(sum, n_samples, snr)| {
+                    compute_snr::<T>(
+                        sum.to_slice().unwrap(),
+                        n_samples.to_slice().unwrap(),
                         sum_square,
-                    )| {
-                        // compute mean for each of the classes
-                        n_samples_inv
-                            .iter()
-                            .zip(sum.outer_iter())
-                            .zip(sum_square.outer_iter())
-                            .enumerate()
-                            .for_each(|(i, ((n_samples_inv, sum), sum_square))| {
-                                let n_inv = 1.0 / ((i + 1) as f64);
-                                Zip::from(&mut cum_mean_of_var)
-                                    .and(&mut cum_mean_of_mean)
-                                    .and(&mut cum_var_of_mean)
-                                    .and(&sum)
-                                    .and(&sum_square)
-                                    .for_each(
-                                        |cum_mean_of_var,
-                                         cum_mean_of_mean,
-                                         cum_var_of_mean,
-                                         sum,
-                                         sum_square| {
-                                            inner_loop_get_snr(
-                                                cum_mean_of_var,
-                                                cum_mean_of_mean,
-                                                cum_var_of_mean,
-                                                sum,
-                                                sum_square,
-                                                *n_samples_inv,
-                                                n_inv,
-                                            );
-                                        },
-                                    );
-                            });
-                        snr.assign(&(&cum_var_of_mean / &cum_mean_of_var));
-                    },
-                );
+                        &general_sum_sq,
+                        self.tot_n_samples,
+                        snr.into_slice().unwrap(),
+                    );
+                });
             });
-        return snr;
+        snr
     }
 }
-/// Incremental update of:
-/// - `cum_mean_of_var` and `cum_mean_of_mean`: incremental mean computation
-/// - `cum_var_of_mean`: incremental variance computation
-fn inner_loop_get_snr(
-    cum_mean_of_var: &mut f64,
-    cum_mean_of_mean: &mut f64,
-    cum_var_of_mean: &mut f64,
-    sum: &i64,
-    sum_square: &i64,
-    n_samples_inv: f64,
-    n_inv: f64,
+
+#[inline(never)]
+///  # Safety
+///  all values in y must be < sum.shape()[1]
+unsafe fn inner_snr_update(
+    // len: n
+    trace_chunk: &[[i16; 8]],
+    // (np, n)
+    y: ArrayView2<u16>,
+    // (np, nc)
+    mut sum: ArrayViewMut2<[i32; 8]>,
+    sum_square: &mut [i64; 8],
 ) {
-    let u = (*sum as f64) * n_samples_inv;
-    let v = (*sum_square as f64) * n_samples_inv - u * u;
-
-    // update the mean of variances estimate
-    let v_diff = v - *cum_mean_of_var;
-    *cum_mean_of_var += (v_diff) * n_inv;
-
-    // update the variance of means estimate
-    let u_diff = u - *cum_mean_of_mean;
-    *cum_mean_of_mean += u_diff * n_inv;
-    *cum_var_of_mean += ((u_diff * (u - *cum_mean_of_mean)) - *cum_var_of_mean) * n_inv;
+    assert_eq!(trace_chunk.len(), y.shape()[1]);
+    assert_eq!(sum.shape()[0], y.shape()[0]);
+    for trace in trace_chunk {
+        for (sum_square, trace) in sum_square.iter_mut().zip(trace.iter()) {
+            let trace = *trace as i64;
+            // overflow handled with error elsewhere
+            *sum_square = sum_square.wrapping_add(trace * trace);
+        }
+    }
+    izip!(y.outer_iter(), sum.outer_iter_mut()).for_each(|(y, sum)| {
+        let sum = sum.into_slice().unwrap();
+        izip!(y.to_slice().unwrap(), trace_chunk).for_each(|(y, trace_chunk)| {
+            // sum.get_unchecked_mut is safe due to assumption,
+            let sum = sum.get_unchecked_mut(*y as usize);
+            for j in 0..8 {
+                // overflow handled with error elsewhere
+                sum[j] = sum[j].wrapping_add(trace_chunk[j] as i32);
+            }
+        })
+    });
 }
 
-#[inline(always)]
-fn inner_loop_update(
-    sum: ArrayViewMut1<i64>,
-    sum_square: ArrayViewMut1<i64>,
-    x: ArrayView2<i16>,
-    y: ArrayView1<u16>,
-    i: u16,
-) {
-    let sum = sum.into_slice().unwrap();
-    let sum_square = sum_square.into_slice().unwrap();
-    izip!(x.outer_iter(), y.iter()).for_each(|(x, v)| {
-        if i == *v {
-            let x = x.to_slice().unwrap();
-            izip!(sum.iter_mut(), sum_square.iter_mut(), x.iter()).for_each(
-                |(sum, sum_square, &x)| {
-                    let x = x as i64;
-                    *sum += x;
-                    *sum_square += x * x;
-                },
-            );
+#[inline(never)]
+fn transpose_traces(
+    // shape: (4, n)
+    mut traces_tr: ArrayViewMut2<[i16; 8]>,
+    // shape: (n, ns) with ns <= 32
+    trace_chunk: ArrayView2<i16>,
+) -> u16 {
+    assert_eq!(traces_tr.shape()[1], trace_chunk.shape()[0]);
+    assert_eq!(traces_tr.shape()[0], 4);
+    assert!(trace_chunk.shape()[1] <= 32);
+    let mut max_width: u16 = 0;
+    if trace_chunk.shape()[1] == 32 {
+        let mut max_width_vec = [0u16; 8];
+        izip!(
+            traces_tr.axis_iter_mut(Axis(1)),
+            trace_chunk.axis_iter(Axis(0))
+        )
+        .for_each(|(mut traces_tr, trace_chunk)| {
+            izip!(
+                traces_tr.iter_mut(),
+                trace_chunk.axis_chunks_iter(Axis(0), 8)
+            )
+            .for_each(|(traces_tr, trace_chunk)| {
+                let trace_chunk: &[i16; 8] = trace_chunk.to_slice().unwrap().try_into().unwrap();
+                //traces_tr.clone_from_slice(trace_chunk);
+                *traces_tr = *trace_chunk;
+                for (max_width, trace_chunk) in max_width_vec.iter_mut().zip(trace_chunk.iter()) {
+                    // i16::abs_diff returns a u16 without overflow nor panic, while i16::abs
+                    // panics on i16::min_value() input.
+                    *max_width |= trace_chunk.abs_diff(0);
+                }
+            });
+        });
+        for mw in max_width_vec {
+            max_width |= mw;
         }
+    } else {
+        izip!(
+            traces_tr.axis_iter_mut(Axis(1)),
+            trace_chunk.axis_iter(Axis(0))
+        )
+        .for_each(|(mut traces_tr, trace_chunk)| {
+            izip!(
+                traces_tr.iter_mut().flat_map(|x| x.iter_mut()),
+                trace_chunk.iter()
+            )
+            .for_each(|(traces_tr, trace_chunk)| {
+                *traces_tr = *trace_chunk;
+                max_width |= trace_chunk.abs_diff(0);
+            });
+        });
+    }
+    return max_width;
+}
+
+#[inline(never)]
+fn compute_snr<T>(
+    sum: &[[T::SumAcc; 8]],
+    n_samples: &[u32],
+    sum_square: &[i64; 8],
+    general_sum_sq: &[i128; 8],
+    n: u32,
+    snr: &mut [f64],
+) where
+    T: SnrType,
+    T::SumAcc: NativeInt,
+{
+    let sum_square_class =
+        izip!(sum.iter(), n_samples.iter()).fold([0i128; 8], |mut acc, (s, ns)| {
+            for (acc, s) in izip!(acc.iter_mut(), s.iter()) {
+                if *ns != 0 {
+                    let s = T::acc2i64(*s) as i128;
+                    // No overflow: s is on <= (16+32) bit (signed), n is on 32-bit therefore, s*s
+                    // in on < 96 bits (signed), and n*s*s is on <128 bits (signed)
+                    // TODO optimize this bottleneck, the division is 75% exec. time (e.g.
+                    // use libdivide)
+                    *acc += s * s * (n as i128) / (*ns as i128);
+                }
+            }
+            acc
+        });
+    let l = snr.len();
+    izip!(
+        sum_square_class[..l].iter(),
+        general_sum_sq[..l].iter(),
+        sum_square[..l].iter(),
+        snr.iter_mut()
+    )
+    .for_each(|(sum_square_class, general_sum_sq, sum_square, snr)| {
+        let sum_square = *sum_square as i128;
+        let signal = sum_square_class - general_sum_sq;
+        let noise = (n as i128) * sum_square - sum_square_class;
+        *snr = (signal as f64) / (noise as f64);
     });
 }

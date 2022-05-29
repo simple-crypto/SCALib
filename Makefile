@@ -25,4 +25,4 @@ fmt:
 	tox -e fmt
 
 wheel:
-	CARGO_TARGET_DIR=.cargo_build pip wheel .
+	RUSTFLAGS="-C target-cpu=native" CARGO_TARGET_DIR=.cargo_build pip wheel . --no-deps

@@ -95,3 +95,15 @@ To check code formatting
 
     make codestyle
 
+Performance measurements
+------------------------
+
+
+Measure !
+
+Py-spy is a nice tool to show execution flamegraphs. It can even report the profile of rust code, but not the one executed in native thread pools (such as rayon's):
+
+.. code-block::
+
+    py-spy record --native -- python my_bench_code.py
+
