@@ -80,6 +80,7 @@ class ThreadPool:
         self.n_threads = n_threads
         self.pool = _scalib_ext.ThreadPool(n_threads)
 
+
 _num_threads = os.environ.get("SCALIB_NUM_THREADS")
 if _num_threads is None:
     _num_threads = _scalib_ext.get_n_cpus_physical()
@@ -87,9 +88,7 @@ else:
     try:
         _num_threads = int(_num_threads)
     except ValueError:
-        raise ValueError(
-                "Environment variable SCALIB_NUM_THREADS must be an integer."
-                )
+        raise ValueError("Environment variable SCALIB_NUM_THREADS must be an integer.")
 _default_threadpool = ThreadPool(_num_threads)
 _thread_pool = contextvars.ContextVar("thread_pool", default=_default_threadpool)
 
