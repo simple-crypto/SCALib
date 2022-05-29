@@ -18,11 +18,11 @@ blis = ["scalib/blis"]
 
 [dependencies]
 ndarray = { version = "0.15.1", features = ["rayon"] }
-numpy = "0.13.0"
+numpy = "0.16.2"
 indicatif = "0.15.0"
 
 [dependencies.pyo3]
-version = "0.13"
+version = "0.16.4"
 features = ["extension-module"]
 
 [dependencies.ranklib]

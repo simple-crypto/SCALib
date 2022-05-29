@@ -11,6 +11,7 @@ Not released
 * Improved documentation and README.rst
 * SNR: use pooled formulas for better correctness then there are few traces,
   saves RAM (up to 75% reduction) and improves perf (about 2x single-threaded).
+* Bump python minimum version to 3.7
 
 v0.3.4
 ------
