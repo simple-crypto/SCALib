@@ -6,9 +6,10 @@ the `tread_context` context manager, or the `default_threadpool` function.
 
 The initial number of threads in the default thread pool is determined by the
 value of the environment variable SCALIB_NUM_THREADS if it is set, otherwise a
-reasonnable default for the typical use of SCALib is taken (it is currently the
+reasonable default for the typical use of SCALib is taken (it is currently the
 one given by https://docs.rs/num_cpus/1.13.1/num_cpus/fn.get_physical.html),
 but might not be optimal for your workload.
+
 For best performance, we recommend tuning this to your machine and workload,
 where two good starting points are the number of logical or physical cores in
 the system.
@@ -40,7 +41,7 @@ def thread_context(threads):
     >>> # One can also re-use a ThreadPool:
     >>> pool = ThreadPool(5)
     >>> # If the two following statements are executed in parallel (on multiple
-    >>> # threads), both computations will share the same 5 threads.
+    >>> # Python threads), both computations will share the same 5 threads.
     >>> with thread_context(pool):
     ...     pass
     >>> with thread_context(pool):
