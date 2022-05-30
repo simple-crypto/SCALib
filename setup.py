@@ -1,4 +1,3 @@
-
 import os
 import sys
 
@@ -11,7 +10,7 @@ import setuptools_scm
 
 use_avx2 = os.environ.get("SCALIB_AVX2") is not None
 
-with open("src/scalib/_build_config.py", "w") as f:
+with open("src/scalib/build_config.py", "w") as f:
     f.write(f"REQUIRE_AVX2={use_avx2}\n")
 
 rustc_flags = []
