@@ -35,6 +35,8 @@ def thread_context(threads):
     Examples
     --------
     >>> from scalib.threading import thread_context, ThreadPool
+    >>> # Set a default ThreadPool to 10 threads.
+    >>> default_threadpool(10)
     >>> with thread_context(5):
     ...     # All computation-intensive tasks of SCALib will be run on 5 threads.
     ...     pass
