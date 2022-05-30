@@ -1,4 +1,5 @@
 
+import os
 import sys
 
 from setuptools import setup
@@ -7,6 +8,15 @@ from setuptools_rust import Binding, RustExtension
 # Ensure these are present (in case we are not using PEP-518 compatible build
 # system).
 import setuptools_scm
+
+use_avx2 = os.environ.get("SCALIB_AVX2") is not None
+
+with open("src/scalib/_build_config.py", "w") as f:
+    f.write(f"REQUIRE_AVX2={use_avx2}\n")
+
+rustc_flags = []
+if use_avx2:
+    rustc_flags.extend(["-C", "target-feature=+avx2"])
 
 scalib_features = ["pyo3/abi3"]
 
@@ -24,6 +34,7 @@ setup(
             binding=Binding.PyO3,
             features=scalib_features,
             py_limited_api=True,
+            rustc_flags=rustc_flags,
         )
     ],
 )

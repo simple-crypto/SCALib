@@ -1,5 +1,5 @@
 For developers
-===============
+==============
 
 SCALib is developped on github_.
 
@@ -8,7 +8,10 @@ SCALib is developped on github_.
 Local build
 -----------
 
-If you want to build your own version of SCALib, you can run
+For best adaptation of SCALib to your CPU (to get best performance or if you
+CPU does not support AVX2), you may want to build your own version of SCALib.
+
+To do so, run
 
 .. code-block::
     

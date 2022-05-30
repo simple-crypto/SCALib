@@ -12,4 +12,5 @@ dist/
 docs/_build/
 htmlcov/
 src/scalib/version.py
+src/scalib/_build_config.py
 
