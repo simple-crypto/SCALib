@@ -5,3 +5,4 @@ matplotlib >= 3.3.0
 ipython >= 7.16.0
 setuptools_scm[toml] >= 3.4.3
 setuptools-rust >=0.12.1
+cpufeature~=0.2.0
