@@ -22,7 +22,7 @@ key is skipped, since it has no impact on the final rank.
 import math
 
 from scalib import _scalib_ext
-from scalib.threading import _get_threadpool
+from scalib.config.threading import _get_threadpool
 
 
 def rank_nbin(costs, key, nbins, method="hist"):

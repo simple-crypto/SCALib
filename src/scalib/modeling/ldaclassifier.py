@@ -1,10 +1,8 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
-
 import numpy as np
-
 from scalib import _scalib_ext
-from scalib.threading import _get_threadpool, _get_n_threads
+from scalib.config.threading import _get_threadpool, _get_n_threads
 
 
 class LDAClassifier:

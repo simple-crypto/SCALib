@@ -5,14 +5,41 @@ The thread pools are  created with the `ThreadPool` class, and activated using
 the `tread_context` context manager, or the `default_threadpool` function.
 
 The initial number of threads in the default thread pool is determined by the
-value of the environment variable SCALIB_NUM_THREADS if it is set, otherwise a
-reasonable default for the typical use of SCALib is taken (it is currently the
-one given by https://docs.rs/num_cpus/1.13.1/num_cpus/fn.get_physical.html),
-but might not be optimal for your workload.
+value of the environment variable `SCALIB_NUM_THREADS` if it is set such as:
 
+.. code-block::
+
+    SCALIB_NUM_THREADS=8 python3 XXX.py
+
+If `SCALIB_NUM_THREADS` is not set, 
+reasonable default for the typical use of SCALib is taken (it is currently the
+one given 
+`here <https://docs.rs/num_cpus/1.13.1/num_cpus/fn.get_physical.html>`_),
+but might not be optimal for your workload.
 For best performance, we recommend tuning this to your machine and workload,
 where two good starting points are the number of logical or physical cores in
 the system.
+
+Examples
+--------
+
+The used `ThreadPool` can also be defined directly in the python scripts. 
+
+>>> from scalib.config.threading import thread_context, ThreadPool
+>>> # Example 1: Set a default ThreadPool to 10 threads.
+>>> default_threadpool(10)
+>>> # Example 2: All computation-intensive tasks of SCALib will be run on 5 threads.
+>>> with thread_context(5):
+...     pass
+>>> # Example 3: One can also re-use a ThreadPool
+>>> # If the two following statements are executed in parallel (on multiple
+>>> # Python threads), both computations will share the same 5 threads.
+>>> pool = ThreadPool(5)
+>>> with thread_context(pool):
+...     pass
+>>> with thread_context(pool):
+...     pass
+
 """
 
 import contextvars
@@ -31,23 +58,6 @@ def thread_context(threads):
     threads: ThreadPool or int
         Either `ThreadPool` to use, or use a fresh `ThreadPool` with `threads`
         threads.
-
-    Examples
-    --------
-    >>> from scalib.threading import thread_context, ThreadPool
-    >>> # Set a default ThreadPool to 10 threads.
-    >>> default_threadpool(10)
-    >>> with thread_context(5):
-    ...     # All computation-intensive tasks of SCALib will be run on 5 threads.
-    ...     pass
-    >>> # One can also re-use a ThreadPool:
-    >>> pool = ThreadPool(5)
-    >>> # If the two following statements are executed in parallel (on multiple
-    >>> # Python threads), both computations will share the same 5 threads.
-    >>> with thread_context(pool):
-    ...     pass
-    >>> with thread_context(pool):
-    ...     pass
     """
     pool = _threads_as_pool(threads)
     restore_token = _thread_pool.set(pool)

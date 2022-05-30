@@ -1,6 +1,6 @@
 import numpy as np
 from scalib import _scalib_ext
-from scalib.threading import _get_threadpool
+from scalib.config.threading import _get_threadpool
 
 
 class Ttest:
