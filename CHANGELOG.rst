@@ -13,6 +13,7 @@ Not released
   saves RAM (up to 75% reduction) and improves perf (about 2x single-threaded).
 * Bump python minimum version to 3.7
 * Revamp multi-threading handling thanks to new `scalib.threading` module.
+* AVX2: Wheels on PyPi are built with AVX2 feature. 
 
 v0.3.4
 ------

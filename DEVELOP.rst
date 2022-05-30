@@ -24,6 +24,8 @@ You can then install it (in any python environment) with
 
     pip install XXX.whl --force-reinstall 
 
+**NOTE**: The wheel on PyPi is built with AVX2 feature. If our CPU does not
+support AVX2 instructions, you have to install SCALib from source. 
 
 Development setup
 -----------------
