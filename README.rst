@@ -14,7 +14,7 @@ side-channel community and maintaining a flexible and simple interface.
 
 SCALib contains various features for side-channel analysis, see the documentation_.
 
-.. _documentation: https://scalib.readthedocs.io/en/latest
+.. _documentation: https://scalib.readthedocs.io/en/stable
 
 Install
 =======
@@ -27,7 +27,7 @@ SCALib is on PyPi!
 
 See install_ for details.
  
-.. _install: https://scalib.readthedocs.io/en/latest/index.html#install
+.. _install: https://scalib.readthedocs.io/en/stable/index.html#install
 
 
 About us
@@ -42,7 +42,7 @@ Contributions and Issues
 
 See contribution_ and `DEVELOP.rst <DEVELOP.rst>`_.
 
-.. _contribution: https://scalib.readthedocs.io/en/latest/index.html#contributions-and-issues
+.. _contribution: https://scalib.readthedocs.io/en/stable/index.html#contributions-and-issues
 
 License
 =======
