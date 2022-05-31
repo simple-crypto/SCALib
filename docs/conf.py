@@ -49,6 +49,7 @@ numpydoc_show_class_members = False
 autodoc_mock_imports = [
         "scalib._scalib_ext",
         "scalib.version",
+        "scalib.build_config",
         "numpy",
         ]
 
