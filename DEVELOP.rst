@@ -140,3 +140,13 @@ Also, when you develop, looking at generated assembly may help
     RUSTFLAGS="-C target-feature=+avx2" cargo asm scalib::module::function --rust
     # or
     RUSTFLAGS="-C target-cpu=native" cargo asm scalib::module::function --rust
+
+Make a release
+--------------
+
+0. Start from main branch
+1. Add any missing element in CHANGELOG.rst
+2. Add the new release with the release date in CHANGELOG.rst
+3. Commit, create pull request and merge it (after CI succeeds).
+4. Create and push release tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+
