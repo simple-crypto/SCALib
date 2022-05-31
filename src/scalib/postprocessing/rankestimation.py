@@ -22,6 +22,7 @@ key is skipped, since it has no impact on the final rank.
 import math
 
 from scalib import _scalib_ext
+from scalib.config.threading import _get_threadpool
 
 
 def rank_nbin(costs, key, nbins, method="hist"):
@@ -51,7 +52,9 @@ def rank_nbin(costs, key, nbins, method="hist"):
             - **r** is the stimated key rank.
             - **rmax** is an upper bound for the key rank.
     """
-    return _scalib_ext.rank_nbin(costs, key, nbins, _choose_merge_value(costs), method)
+    return _scalib_ext.rank_nbin(
+        costs, key, nbins, _choose_merge_value(costs), method, _get_threadpool()
+    )
 
 
 def rank_accuracy(costs, key, acc_bit=1.0, method="hist", max_nb_bin=2**26):
@@ -87,7 +90,13 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist", max_nb_bin=2**26):
     """
 
     return _scalib_ext.rank_accuracy(
-        costs, key, 2.0**acc_bit, _choose_merge_value(costs), method, max_nb_bin
+        costs,
+        key,
+        2.0**acc_bit,
+        _choose_merge_value(costs),
+        method,
+        max_nb_bin,
+        _get_threadpool(),
     )
 
 

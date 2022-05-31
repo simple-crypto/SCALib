@@ -1,5 +1,6 @@
 //! Python binding of SCALib's belief propagation.
 
+use crate::thread_pool::ThreadPool;
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -96,13 +97,14 @@ pub fn run_bp(
     variables: &PyList,
     it: usize,
     // number of variable nodes in the graph
-    edge: usize,
+    vertex: usize,
     // size of the field
     nc: usize,
     // number of copies in the graph (n_runs)
     n: usize,
     // show a progress bar
     progress: bool,
+    thread_pool: &ThreadPool,
 ) -> PyResult<()> {
     // map all python functions to rust ones + generate the mapping in vec_functs_id
     let functions_rust: Vec<Func> = functions
@@ -118,12 +120,12 @@ pub fn run_bp(
         .map(|x| to_var(x.downcast::<PyDict>().unwrap()))
         .collect();
 
-    py.allow_threads(|| {
+    crate::on_worker(py, thread_pool, || {
         scalib::belief_propagation::run_bp(
             &functions_rust,
             &mut variables_rust,
             it,
-            edge,
+            vertex,
             nc,
             n,
             progress,

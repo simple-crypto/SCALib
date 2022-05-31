@@ -1,5 +1,6 @@
 import numpy as np
 from scalib import _scalib_ext
+from scalib.config.threading import _get_threadpool
 
 
 class Ttest:
@@ -74,11 +75,11 @@ class Ttest:
         if not (nsl == self._ns):
             raise Exception(f"Expected second dim of l to have size {self._ns}.")
 
-        self._ttest.update(l, x)
+        self._ttest.update(l, x, _get_threadpool())
 
     def get_ttest(self):
         r"""Return the current Ttest estimation with an array of shape `(d,ns)`."""
-        return self._ttest.get_ttest()
+        return self._ttest.get_ttest(_get_threadpool())
 
 
 class MTtest:
@@ -149,7 +150,7 @@ class MTtest:
         if not (nx == nl):
             raise ValueError(f"Expected x with shape ({nl},)")
 
-        self._mttest.update(l, x)
+        self._mttest.update(l, x, _get_threadpool())
 
     def get_ttest(self):
         r"""Return the current MTtest estimation with an array of shape
@@ -157,4 +158,4 @@ class MTtest:
         `pois`.
 
         """
-        return self._mttest.get_ttest()
+        return self._mttest.get_ttest(_get_threadpool())

@@ -39,7 +39,9 @@ workflow`_ for more details:
 - :doc:`source/scalib.postprocessing`:
 
   - `rankestimation`: Histogram based full key rank estimation.
+- :doc:`source/scalib.configuration`:
 
+  - `threading`: provides a fine control on the number of threads used by SCALib.  
 
 Getting Started
 ===============
@@ -214,3 +216,4 @@ more information.
    source/scalib.modeling.rst
    source/scalib.attacks.rst
    source/scalib.postprocessing.rst
+   source/scalib.configuration.rst

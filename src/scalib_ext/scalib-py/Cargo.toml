@@ -17,12 +17,14 @@ hellib = ["ranklib/hellib"]
 blis = ["scalib/blis"]
 
 [dependencies]
+rayon = "1.5.0"
 ndarray = { version = "0.15.1", features = ["rayon"] }
-numpy = "0.13.0"
+numpy = "0.16.2"
 indicatif = "0.15.0"
+num_cpus = "1.13.1"
 
 [dependencies.pyo3]
-version = "0.13"
+version = "0.16.4"
 features = ["extension-module"]
 
 [dependencies.ranklib]

@@ -1,5 +1,6 @@
 //! Python binding of SCALib's LDA implementation.
 
+use crate::thread_pool::ThreadPool;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
@@ -26,15 +27,16 @@ impl LdaAcc {
         x: PyReadonlyArray2<i16>,
         y: PyReadonlyArray1<u16>,
         gemm_algo: u32,
+        thread_pool: &ThreadPool,
     ) {
         let x = x.as_array();
         let y = y.as_array();
-        py.allow_threads(|| self.inner.update(x, y, gemm_algo));
+        crate::on_worker(py, thread_pool, || self.inner.update(x, y, gemm_algo));
     }
 
     /// Compute the LDA with p dimensions in the projected space
-    fn lda(&self, py: Python, p: usize) -> PyResult<LDA> {
-        match py.allow_threads(|| self.inner.lda(p)) {
+    fn lda(&self, py: Python, p: usize, thread_pool: &ThreadPool) -> PyResult<LDA> {
+        match crate::on_worker(py, thread_pool, || self.inner.lda(p)) {
             Ok(inner) => Ok(LDA { inner }),
             Err(()) => Err(pyo3::exceptions::PyZeroDivisionError::new_err(
                 "Class without traces.",
@@ -99,10 +101,11 @@ impl LDA {
         &self,
         py: Python<'py>,
         x: PyReadonlyArray2<i16>,
+        thread_pool: &ThreadPool,
     ) -> PyResult<&'py PyArray2<f64>> {
         let x = x.as_array();
-        let prs = py.allow_threads(|| self.inner.predict_proba(x));
-        Ok(&(prs.to_pyarray(py)))
+        let prs = crate::on_worker(py, thread_pool, || self.inner.predict_proba(x));
+        Ok(prs.to_pyarray(py))
     }
 
     /// Get the lda state for serialization
