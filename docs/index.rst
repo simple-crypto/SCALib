@@ -11,16 +11,18 @@ Usability & Efficiency
 ----------------------
 SCALib main advantages are:
 
-1. **Incremental APIs**: SCALib leverages as much as possible incremental APIs. That is, 
+1. **High Performances**: Despite SCALib is a Python package, it embeds a Rust
+   back-end which enables a fine grain control of the implementation. Thanks to
+   the Rust back-end, SCALib enables efficient parallelism. This is obtained
+   thanks to `rayon <https://docs.rs/crate/rayon/latest>`_.
+2. **Flexible & Simple Interface**: The interface provided by SCALib aims to be
+   as simple and flexible as possible. As an example, the API is mostly based
+   on numpy arrays. 
+3. **Incremental APIs**: SCALib leverages as much as possible incremental APIs. That is, 
    it is possible to feed the data in multiple chunks to avoid loading multiple times
    the same data into RAM. 
-2. **High Performances**: Despite SCALib is a Python package, it embeds a Rust back-end
-   which enables a fine grain control of the implementation.
-3. **Efficient Mutli-threading**: Thanks to the Rust back-end, SCALib enables efficient
-   parallelism. This is obtained thanks to `Rayon <https://docs.rs/crate/rayon/latest>`_.
 
-
-Available Features
+Available features
 ------------------
 SCALib contains various features for side-channel analysis. Please read `SCALib
 workflow`_ for more details:
@@ -41,7 +43,7 @@ workflow`_ for more details:
   - `rankestimation`: Histogram based full key rank estimation.
 
 
-Getting Started
+Getting started
 ===============
 
 Install
@@ -88,9 +90,9 @@ independently, a typical usage of SCALib for it goes in four steps:
    the remaining computational power that is needed by the adversary to recover
    the correct key.
 
-Full example of SCALib is available `here <https://github.com/simple-crypto/scalib/tree/main/examples/aes_simulation>`_. 
+Full example of SCALib is available `here <https://github.com/simple-crypto/scalib/tree/main/examples/aes_simulation>`_ for an unprotected simulated AES. 
 
-Pseudo-Example
+Pseudo-example
 --------------
 
 Next, we detail a short pseudo example which illustrates the usage of SCALib. 
@@ -134,14 +136,14 @@ For a full running example, please visit `this example <https://github.com/simpl
 
 
 
-Where is SCALib Used ?
+Where is SCALib used ?
 ======================
 
-We strongly appreciate if you could mention to us if you are using SCALib 
-for concrete projects so that we can add you to the above list. Please send 
+We strongly appreciate if you could mention to us your usage SCALib 
+for concrete projects so that we can add you to the lists below. Please send 
 an email to Olivier Bronchain.
 
-Scientific Publications
+Scientific publications
 -----------------------
 
 SCALib has been used in various scientific publications. Here is a (non-exhaustive) list:
@@ -174,7 +176,7 @@ SCALib has been used in various scientific publications. Here is a (non-exhausti
     S. Bhasin, J. Breier, X. Hou, R. Poussier, F.-X. Standaert, B. Udvarhelyi
     in TCHES2022 - Issue 1. 
 
-Concrete Evaluations
+Concrete evaluations
 --------------------
 
 1. `CHES 2020 CTF <https://github.com/obronchain/BS21_ches2020CTF>`_ published in TCHES2021.
@@ -183,12 +185,12 @@ Concrete Evaluations
 About us
 ========
 SCALib has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. The SCALib
-project is part of `SIMPLE-Crypto <https://www.simple-crypto.dev/>`_ and is
-maintained in that context.
+UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored
+of SCALib starting from the first version. The SCALib project is part of `SIMPLE-Crypto
+<https://www.simple-crypto.dev/>`_ and is now maintained in that context.
 
 
-Contributions and Issues
+Contributions and issues
 ========================
 We are happy to take any suggestion for features would be useful for
 side-channel evaluators.  If you want to contribute code to the project, please
@@ -196,7 +198,7 @@ visit `DEVELOP
 <https://github.com/simple-crypto/SCALib/blob/main/DEVELOP.rst>`_ for relevant
 information as well as the Contributor License Agreement (`CLA
 <https://www.simple-crypto.dev/organization>`_) of SIMPLE-Crypto. Please open
-an Issue on the GitHub repository for further questions, bug report or feature
+an `issue <https://github.com/simple-crypto/SCALib/issues>`_ on the GitHub repository for further questions, bug report or feature
 requests. 
 
 License
