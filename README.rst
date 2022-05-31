@@ -3,8 +3,8 @@ Welcome to SCALib
 
 .. image:: https://badge.fury.io/py/scalib.svg
     :target: https://badge.fury.io/py/scalib
-.. image:: https://readthedocs.org/projects/scalib/badge/?version=latest
-    :target: https://scalib.readthedocs.io/en/latest/?badge=latest
+.. image:: https://readthedocs.org/projects/scalib/badge/?version=stable
+    :target: https://scalib.readthedocs.io/en/stable/
     :alt: Documentation Status
 
 The Side-Channel Analysis Library (SCALib) is a Python package that

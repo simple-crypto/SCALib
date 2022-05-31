@@ -115,3 +115,23 @@ utilities. A command line example is:
 
     cargo bench --  
 
+You may also use `perf` on linux, running a test case, for general metrics, or instruction-oriented data.
+
+.. code-block::
+
+    perf stat python3 scalib_benchcase.py # you may want to look at option -e of perf stat
+
+.. code-block::
+
+    # This might generate a lot of data, probably a small example (a few
+    # seconds) on a single thread is enough statistical evidence.
+    SCALIB_NUM_THREADS=1 perf record python3 scalib_benchcase.py
+    perf report -g folded
+
+Also, when you develop, looking at generated assembly may help
+
+.. code-block::
+
+    RUSTFLAGS="-C target-feature=+avx2" cargo asm scalib::module::function --rust
+    # or
+    RUSTFLAGS="-C target-cpu=native" cargo asm scalib::module::function --rust
