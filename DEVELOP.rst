@@ -1,7 +1,7 @@
 For developers
 ===============
 
-SCALib is developped on github at github_.
+SCALib is developped on github_.
 
 .. _github: https://github.com/simple-crypto/SCALib
 
@@ -26,7 +26,7 @@ Development setup
 -----------------
 
 In order to use the developer environment, you will need `make`, `tox` and the
-latest stable release of the `rust toolchain`. Once this is installed, you can
+latest stable release of the `rust toolchain <https://rustup.rs/>`_. Once this is installed, you can
 create a `virtualenv` and enter it with
 
 .. code-block::
@@ -98,8 +98,7 @@ To check code formatting
 Performance measurements
 ------------------------
 
-
-Measure !
+Do not guess, Measure !
 
 Py-spy is a nice tool to show execution flamegraphs. It can even report the profile of rust code, but not the one executed in native thread pools (such as rayon's):
 
@@ -107,3 +106,32 @@ Py-spy is a nice tool to show execution flamegraphs. It can even report the prof
 
     py-spy record --native -- python my_bench_code.py
 
+In order to benchmark directly the Rust crate (without using Python), you can
+leverage the `criterion
+<https://bheisler.github.io/criterion.rs/book/criterion_rs.html>`_ cargo's
+utilities. A command line example is:
+
+.. code-block::
+
+    cargo bench --  
+
+You may also use `perf` on linux, running a test case, for general metrics, or instruction-oriented data.
+
+.. code-block::
+
+    perf stat python3 scalib_benchcase.py # you may want to look at option -e of perf stat
+
+.. code-block::
+
+    # This might generate a lot of data, probably a small example (a few
+    # seconds) on a single thread is enough statistical evidence.
+    SCALIB_NUM_THREADS=1 perf record python3 scalib_benchcase.py
+    perf report -g folded
+
+Also, when you develop, looking at generated assembly may help
+
+.. code-block::
+
+    RUSTFLAGS="-C target-feature=+avx2" cargo asm scalib::module::function --rust
+    # or
+    RUSTFLAGS="-C target-cpu=native" cargo asm scalib::module::function --rust
