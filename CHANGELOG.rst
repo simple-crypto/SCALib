@@ -5,6 +5,11 @@ Changelog
 Not released
 ------------
 
+v0.4.2 (2022/05/31)
+-------------------
+
+* Fix AVX2 not used when building rust dependencies.
+
 v0.4.1 (2022/05/31)
 -------------------
 
