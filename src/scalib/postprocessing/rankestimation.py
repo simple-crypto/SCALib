@@ -4,9 +4,14 @@ Rank estimation estimates the rank of the full (e.g. 128-bit) key based on a
 score for each value of its (e.g 8-bit) sub-keys. The scores must be additive
 and positive (e.g. negative log probabilities).
 
-`rank_accuracy` allows to specify the desired precision of the bound in
-bits (may not be achieved if computationally untractable), while `rank_nbin`
-gives direct, lower-level control over the number of bins in the historgrams.
+The `rank_accuracy` function allows to specify the desired precision of the
+bound in bits. It is the high-level, and its usage is recommended over the
+lower-level
+`rank_nbin` function.
+That function gives direct, lower-level control to the core algorithm, allowing
+to specify the number of bins in the historgrams (whereas `rank_accuracy` tunes
+this parameter automatically).
+
 
 
 Notes
@@ -27,6 +32,9 @@ from scalib.config.threading import _get_threadpool
 
 def rank_nbin(costs, key, nbins, method="hist"):
     r"""Estimate the rank of the full keys based on scores based on histograms.
+
+    Warning: this is a low-level function, you probably want to use
+    `rank_accuracy` instead.
 
     Parameters
     ----------
@@ -69,16 +77,21 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist", max_nb_bin=2**26):
     key : array_like, int
         Correct full key split in sub-keys. Array must be of shape `(ns,)`.
     acc_bit : f64, default: 1.0
-        Expected log2 accuracy for the key rank estimation. `acc_bit` must so be
-        set to `log2(rank_max/rank_min)`.
+        Expected log2 accuracy for the key rank estimation.
+
+        The algorithms attempts to get a result such that `rmax/rmin < 2^acc_bit`,
+        but may not achieve this if the result is computationally intractable.
+        In such a case, rank estimate and rank bounds are still returned, but
+        the inequality may be violated.
     method : string
         Method used to estimate the rank. Can be the following:
 
         * "hist": using histograms (default).
         * "ntl": using NTL library, allows better precision.
     max_nb_bin : int, default: 2**26
-        Maximum number of bins to use (if too low, the requested accuracy might
-        not be reached).
+        Maximum number of bins to use.
+        This fixes an upper bound on the computational cost of the algorithm
+        (if too low, the requested accuracy might not be reached).
 
     Returns
     -------
