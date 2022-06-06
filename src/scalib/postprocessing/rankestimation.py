@@ -6,13 +6,24 @@ and positive (e.g. negative log probabilities).
 
 The `rank_accuracy` function allows to specify the desired precision of the
 bound in bits. It is the high-level, and its usage is recommended over the
-lower-level
-`rank_nbin` function.
+lower-level `rank_nbin` function.
 That function gives direct, lower-level control to the core algorithm, allowing
-to specify the number of bins in the historgrams (whereas `rank_accuracy` tunes
+to specify the number of bins in the histograms (whereas `rank_accuracy` tunes
 this parameter automatically).
 
+Examples
+--------
 
+>>> from scalib.postprocessing import rank_accuracy
+>>> import numpy as np
+>>> # define the correct key
+>>> key = np.random.randint(0,256,16)
+>>> # Derive the score for each key byte
+>>> scores = np.ones((16,256)) * 1E-5
+>>> scores[np.arange(16),key] = 1
+>>> # Compute the full key rank (correct key must have rank 1).
+>>> (rmin,r,rmax) = rank_accuracy(-np.log(scores),key)
+>>> assert r == 1
 
 Notes
 -----
@@ -57,7 +68,7 @@ def rank_nbin(costs, key, nbins, method="hist"):
     (rmin, r, rmax): (float, float, float)
 
             - **rmin** is a lower bound for the key rank.
-            - **r** is the stimated key rank.
+            - **r** is the estimated key rank.
             - **rmax** is an upper bound for the key rank.
     """
     return _scalib_ext.rank_nbin(
@@ -98,7 +109,7 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist", max_nb_bin=2**26):
     (rmin, r, rmax): (float, float, float)
 
             - **rmin** is a lower bound for the key rank.
-            - **r** is the stimated key rank.
+            - **r** is the estimated key rank.
             - **rmax** is an upper bound for the key rank.
     """
 
