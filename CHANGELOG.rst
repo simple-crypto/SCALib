@@ -5,6 +5,8 @@ Changelog
 Not released
 ------------
 
+* Optimize bitwise AND in SASCA: O(nc*log(nc)) instead of O(nc^2).
+* Bitwise AND in SASCA: use a more correct law for computing input distribution.
 * Re-design `scalib.config` to handle more configuration in a single `Config` class. **Breaking change** to `scalib.config` and `scalib.config.threading`.
 * Smarter behavior for progress bars, unified configuration for progress bar. **Breaking change** to `scalib.attack.SASCAGraph`.
 * Add accessors for the internal state of the LDA.

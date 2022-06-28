@@ -106,6 +106,48 @@ fn fwht(a: &mut [f64], len: usize) {
     }
 }
 
+/// Cumulative transform
+#[inline(always)]
+fn cumt(a: &mut [f64], len: usize) {
+    // Note: the speed of this can probably be much improved, with the following techiques
+    // * use (auto-)vectorization
+    // * generate small static kernels
+    let mut h = 1;
+    while h < len {
+        for mut i in 0..(len / (2 * h) as usize) {
+            i *= 2 * h;
+            for j in i..(i + h) {
+                let x = a[j];
+                let y = a[j + h];
+                a[j] = x + y;
+                a[j + h] = y;
+            }
+        }
+        h *= 2;
+    }
+}
+
+/// Cumulative inverse transform
+#[inline(always)]
+fn cumti(a: &mut [f64], len: usize) {
+    // Note: the speed of this can probably be much improved, with the following techiques
+    // * use (auto-)vectorization
+    // * generate small static kernels
+    let mut h = 1;
+    while h < len {
+        for mut i in 0..(len / (2 * h) as usize) {
+            i *= 2 * h;
+            for j in i..(i + h) {
+                let x = a[j];
+                let y = a[j + h];
+                a[j] = x - y;
+                a[j + h] = y;
+            }
+        }
+        h *= 2;
+    }
+}
+
 /// Make it such that the sum of the probabilities in the distribution is 1.0.
 /// `distri` can be a ParaDistri or a SingleDistri.
 fn normalize_distri(distri: &mut Array2<f64>) {
@@ -200,7 +242,7 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
         .for_each(|(function, edge)| match &function.functype {
             // TODO: if nc is prime, the update for MUL can be computed more efficiently by mapping
             // classes to their discrete logarithm, and by applying FFT.
-            FuncType::AND | FuncType::MUL => {
+            FuncType::MUL => {
                 let [output_msg, input1_msg, input2_msg]: &mut [_; 3] =
                     edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
@@ -223,13 +265,7 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             for i1 in 0..nc {
                                 for i2 in 0..nc {
                                     // Unifies operators that can only be binary
-                                    let o = match &function.functype {
-                                        FuncType::AND => i1 & i2,
-                                        FuncType::MUL => {
-                                            (((i1 * i2) as u32) % (nc as u32)) as usize
-                                        }
-                                        _ => unreachable!(),
-                                    };
+                                    let o = (((i1 * i2) as u32) % (nc as u32)) as usize;
                                     in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
                                     in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
                                     out_msg_scratch[o] += input1_msg[i1] * input2_msg[i2];
@@ -240,6 +276,9 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             output_msg.assign(out_msg_scratch);
                         },
                     );
+            }
+            FuncType::AND => {
+                ands(edge.as_mut());
             }
             FuncType::ADD => {
                 adds(edge.as_mut());
@@ -392,6 +431,44 @@ pub fn xors(inputs: &mut [&mut Array2<f64>]) {
             input.zip_mut_with(&acc, |x, y| *x = *y / *x);
             let input_fwt_s = input.as_slice_mut().unwrap();
             fwht(input_fwt_s, nc);
+            make_non_zero(&mut input);
+            let s = input.sum();
+            input /= s;
+            make_non_zero(&mut input);
+        });
+    }
+}
+
+/// Compute a AND function node between all edges.
+pub fn ands(inputs: &mut [&mut Array2<f64>]) {
+    let n_runs = inputs[0].shape()[0];
+    let nc = inputs[0].shape()[1];
+    for run in 0..n_runs {
+        let mut acc = Array1::<f64>::ones(nc);
+        // Accumulate in a cumulative transformed domain.
+        inputs.iter_mut().for_each(|input| {
+            let mut input = input.slice_mut(s![run, ..]);
+            let input_fwt_s = input.as_slice_mut().unwrap();
+            cumt(input_fwt_s, nc);
+            // non zero with input_fwt_s possibly negative
+            input.mapv_inplace(|x| {
+                if x.is_sign_positive() {
+                    x.max(MIN_PROBA)
+                } else {
+                    // always positive results with cumt
+                    assert!(false);
+                    x.min(-MIN_PROBA)
+                }
+            });
+            acc.zip_mut_with(&input, |x, y| *x = *x * y);
+            acc /= acc.sum();
+        });
+        // Invert accumulation input-wise and invert transform.
+        inputs.iter_mut().for_each(|input| {
+            let mut input = input.slice_mut(s![run, ..]);
+            input.zip_mut_with(&acc, |x, y| *x = *y / *x);
+            let input_fwt_s = input.as_slice_mut().unwrap();
+            cumti(input_fwt_s, nc);
             make_non_zero(&mut input);
             let s = input.sum();
             input /= s;
