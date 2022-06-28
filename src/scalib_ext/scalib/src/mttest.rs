@@ -52,7 +52,7 @@ impl MultivarCSAcc {
     /// It allows to estimate for a class c the central sums (CS) such that
     /// at index j such that for the set combi:
     ///
-    ///     cs_Q[c,index(combi),j] = sum_i(prod_{s \in combi} Q[c,pois[s,j]])
+    /// cs_Q[c,index(combi),j] = sum_i(prod_{s \in combi} Q[c,pois[s,j]])
     ///
     /// for which:
     ///    - combi: is a unique combination in the multiset (0..d)U(0..d). s are the elements in S.
