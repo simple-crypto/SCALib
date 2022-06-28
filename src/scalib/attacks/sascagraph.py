@@ -1,5 +1,6 @@
 import numpy as np
 from functools import reduce
+import copy
 from scalib import _scalib_ext
 from scalib.config.threading import _get_threadpool
 
@@ -127,6 +128,53 @@ class SASCAGraph:
         self.properties_ = self.graph.properties
         self.var_ = self.graph.var
         self.publics_ = {}
+
+    def sanity_check(self, var_assignment):
+        """Verify that the graph is compatible with example variable assignments.
+
+        If the graph is not compatible, raise a SACAGraphError.
+
+        Parameters
+        ----------
+        var_assignment: dict[var_name -> np.array (int)]
+            For each non-public variable its value for all test executions.
+        """
+        for k in self.var_:
+            if k not in var_assignment:
+                raise ValueError(f"Missing value for variable {k}.")
+        for k in self.publics_:
+            if k in var_assignment:
+                raise ValueError(f"Value given for public variable {k}.")
+
+        def get_var_values(var):
+            if var in self.publics_:
+                return self.publics_[var]
+            else:
+                if self.var_[var]["para"]:
+                    return var_assignment[var]
+                else:
+                    return var_assignment[var] * np.ones((self.n_,), dtype=np.uint32)
+
+        for property in self.properties_:
+            inp_values = [get_var_values(inp) for inp in property["inputs"]]
+            if property["property"] == "LOOKUP":
+                output = self.tables_[property["tab"]][inp_values[0]]
+            elif property["property"] in ("AND", "XOR", "ADD", "MUL"):
+                fn = {
+                    "AND": lambda a, b: a & b,
+                    "XOR": lambda a, b: a ^ b,
+                    "ADD": lambda a, b: (a + b) % self.nc_,
+                    "MUL": lambda a, b: (a * b) % self.nc_,
+                }
+
+                output = reduce(fn[property["property"]], inp_values)
+            else:
+                assert False
+            output_val = get_var_values(property["output"])
+            if (output != output_val).any():
+                raise SASCAGraphError(
+                    f"Property {property} fail, expected: {output}, given: {output_val}."
+                )
 
     def set_init_distribution(self, var, distribution):
         r"""Sets initial distribution of a variables.
@@ -476,8 +524,8 @@ class SASCAGraphParser:
             self.errors.append("NC appears multiple times, can only appear once.")
         elif len(self.nc_decls) == 0:
             self.errors.append("NC not declared.")
-        elif self.nc_decls[0] not in range(1, 2**16 + 1):
-            self.errors.append("NC not in admissible range [1, 2^16].")
+        elif self.nc_decls[0] not in range(1, 2**32 + 1):
+            self.errors.append("NC not in admissible range [1, 2^32].")
         else:
             self.nc = self.nc_decls[0]
         self._raise_errors()
