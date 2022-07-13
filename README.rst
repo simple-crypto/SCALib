@@ -37,6 +37,7 @@ UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. The SCALi
 project is part of `SIMPLE-Crypto <https://www.simple-crypto.dev/>`_ and is
 maintained in that context.
 
+
 Contributions and Issues
 ========================
 
@@ -48,3 +49,11 @@ License
 =======
 This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`.
 See `COPYING <COPYING>`_ for more information.
+
+Acknowledgements
+================
+
+This work is supported by the Belgian Fund for Scientific Research
+(F.R.S.-FNRS) through the Equipment Project SCALAB and by the ERC through the
+Consolidator Grant SWORD.
+
