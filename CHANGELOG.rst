@@ -5,6 +5,9 @@ Changelog
 Not released
 ------------
 
+* Optimize bitwise AND in SASCA: O(nc*log(nc)) instead of O(nc^2).
+* Bitwise AND in SASCA: use a more correct law for computing input distribution.
+
 v0.4.2 (2022/05/31)
 -------------------
 

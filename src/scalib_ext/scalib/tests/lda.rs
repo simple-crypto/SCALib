@@ -4,7 +4,6 @@ use ndarray_rand::RandomExt;
 use ndarray_stats::QuantileExt;
 use scalib::lda;
 
-extern crate openblas_src as _;
 #[test]
 fn fit_lda() {
     let ns = 100;
@@ -12,11 +11,9 @@ fn fit_lda() {
     let nc = 16;
     let p = 4;
 
-    let mut lda = lda::LDA::new(nc, p, ns);
     let x = Array2::<i16>::random((n, ns), Uniform::new(0, 100));
     let y = Array1::<u16>::random(n, Uniform::new(0, nc as u16));
-
-    lda.fit(x.view(), y.view(), 0);
+    let lda = lda::LdaAcc::new(nc, x.view(), y.view(), 0);
 }
 
 #[test]
@@ -26,11 +23,9 @@ fn predict_lda() {
     let nc = 16;
     let p = 4;
 
-    let mut lda = lda::LDA::new(nc, p, ns);
     let x = Array2::<i16>::random((n, ns), Uniform::new(0, 100));
     let y = Array1::<u16>::random(n, Uniform::new(0, nc as u16));
-
-    lda.fit(x.view(), y.view(), 0);
+    let lda = lda::LdaAcc::new(nc, x.view(), y.view(), 0).lda(p).unwrap();
 
     lda.predict_proba(x.view());
 }
@@ -42,7 +37,6 @@ fn predict_lda_functional() {
     let nc = 16;
     let p = 4;
 
-    let mut lda = lda::LDA::new(nc, p, ns);
     let noise = Array2::<i16>::random((n, ns), Uniform::new(-10, 10));
     let mut signal = Array2::<i16>::zeros((n, ns));
     let y = Array1::<u16>::random(n, Uniform::new(0, nc as u16));
@@ -52,7 +46,7 @@ fn predict_lda_functional() {
         .for_each(|(mut s, y)| s.fill((y * 100) as i16));
     let x = &noise + signal;
 
-    lda.fit(x.view(), y.view(), 0);
+    let lda = lda::LdaAcc::new(nc, x.view(), y.view(), 0).lda(p).unwrap();
     let prs = lda.predict_proba(x.view());
 
     prs.outer_iter().zip(y.iter()).for_each(|(prs, y)| {
