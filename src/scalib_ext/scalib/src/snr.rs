@@ -156,7 +156,10 @@ where
 #[derive(Debug)]
 pub enum SnrError {
     TooManyTraces,
-    ClassOverflow,
+    ClassOverflow {
+        leak_upper_bound: i64,
+        max_n_traces: i64,
+    },
     ClassOutOfBound,
 }
 
@@ -164,9 +167,16 @@ impl std::fmt::Display for SnrError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TooManyTraces => write!(f, "Number of traces accumulated exceeds 2^32"),
-            Self::ClassOverflow => write!(f,
-    "The sum of samples (for a variable value) might overflow (threshold is 2^32 or 2^64)."
-               ),
+            Self::ClassOverflow {
+                leak_upper_bound,
+                max_n_traces,
+            } => write!(
+                f,
+                "The sum of samples (for a variable value) might overflow. \
+                Use use_64bit=True when initializing SNR object.
+                (Up to {} traces in a single class, max absolute value of leakage: {}.)",
+                max_n_traces, leak_upper_bound
+            ),
             Self::ClassOutOfBound => write!(
                 f,
                 "A class value of a variable is larger than the given number of classes."
@@ -340,7 +350,10 @@ where
         // max_val does not overflow since max_n_samples < 2^32 and self.bit_width < 16
         let max_val = (max_n_samples as i64) << self.bit_width;
         if max_val > T::acc2i64(T::SumAcc::max_value()) {
-            return Err(SnrError::ClassOverflow);
+            return Err(SnrError::ClassOverflow {
+                leak_upper_bound: 1 << self.bit_width,
+                max_n_traces: max_n_samples as i64,
+            });
         }
         return Ok(());
     }
