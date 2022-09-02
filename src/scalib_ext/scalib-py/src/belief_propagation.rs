@@ -65,7 +65,12 @@ pub fn to_func(function: &PyDict) -> Func {
         f = FuncType::XORCST(values.as_array().to_owned());
     } else if func == 3 {
         let table: PyReadonlyArray1<u32> = function.get_item("table").unwrap().extract().unwrap();
-        f = FuncType::LOOKUP(table.as_array().to_owned());
+        let table = table.as_array().to_owned();
+        let mut img_count: Array1<f64> = Array1::zeros((table.len()));
+        for img in &table {
+            img_count[img] += 1.0;
+        }
+        f = FuncType::LOOKUP { table, img_count };
     } else if func == 4 {
         let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
         f = FuncType::ANDCST(values.as_array().to_owned());
