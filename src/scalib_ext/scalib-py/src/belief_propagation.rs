@@ -1,6 +1,7 @@
 //! Python binding of SCALib's belief propagation.
 
 use crate::thread_pool::ThreadPool;
+use ndarray::Array1;
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -65,7 +66,8 @@ pub fn to_func(function: &PyDict) -> Func {
         f = FuncType::XORCST(values.as_array().to_owned());
     } else if func == 3 {
         let table: PyReadonlyArray1<u32> = function.get_item("table").unwrap().extract().unwrap();
-        f = FuncType::LOOKUP(table.as_array().to_owned());
+        let table = table.as_array().to_owned();
+        f = FuncType::LOOKUP { table };
     } else if func == 4 {
         let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
         f = FuncType::ANDCST(values.as_array().to_owned());

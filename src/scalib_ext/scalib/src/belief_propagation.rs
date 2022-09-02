@@ -66,7 +66,7 @@ pub enum FuncType {
     /// Modular MUL of variables, MULing additionally a public variable.
     MULCST(Array1<u32>),
     /// Lookup table function.
-    LOOKUP(Array1<u32>),
+    LOOKUP { table: Array1<u32> },
 }
 
 /// A function node in the graph.
@@ -362,7 +362,7 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                         },
                     );
             }
-            FuncType::LOOKUP(table) => {
+            FuncType::LOOKUP { table } => {
                 let [output_msg, input1_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
                 (input1_msg.outer_iter_mut(), output_msg.outer_iter_mut())
@@ -374,9 +374,6 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             out_msg_scratch.fill(0.0);
                             for i1 in 0..nc {
                                 let o: usize = table[i1] as usize;
-                                // This requires table to be bijective. Otherwise, we would have to
-                                // divide the messge on the output by the number of matching inputs
-                                // to get the message to forward on the input edge.
                                 in1_msg_scratch[i1] += output_msg[o];
                                 out_msg_scratch[o] += input1_msg[i1];
                             }

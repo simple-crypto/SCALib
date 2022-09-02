@@ -266,10 +266,6 @@ class SASCAGraph:
             raise ValueError("Table has wrong shape")
         elif values.dtype != np.uint32:
             raise ValueError("Table must be np.uint32")
-        elif set(values) != set(range(self.nc_)):
-            raise ValueError(
-                "In current implementation, table is not a bijection over the set of values [0, nc)."
-            )
         self.tables_[table] = values
 
     def run_bp(self, it, progress=False):
