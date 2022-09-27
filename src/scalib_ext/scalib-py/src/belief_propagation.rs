@@ -1,6 +1,7 @@
 //! Python binding of SCALib's belief propagation.
 
 use crate::thread_pool::ThreadPool;
+use ndarray::Array1;
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -66,9 +67,9 @@ pub fn to_func(function: &PyDict) -> Func {
     } else if func == 3 {
         let table: PyReadonlyArray1<u32> = function.get_item("table").unwrap().extract().unwrap();
         let table = table.as_array().to_owned();
-        let mut img_count: Array1<f64> = Array1::zeros((table.len()));
+        let mut img_count: Array1<f64> = Array1::zeros(table.len());
         for img in &table {
-            img_count[img] += 1.0;
+            img_count[*img as usize] += 1.0;
         }
         f = FuncType::LOOKUP { table, img_count };
     } else if func == 4 {

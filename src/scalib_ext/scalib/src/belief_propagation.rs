@@ -290,7 +290,7 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                         },
                     );
             }
-            FuncType::LOOKUP(table, img_count) => {
+            FuncType::LOOKUP { table, img_count } => {
                 let [output_msg, input1_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
                 (input1_msg.outer_iter_mut(), output_msg.outer_iter_mut())
