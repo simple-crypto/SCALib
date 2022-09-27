@@ -1,5 +1,5 @@
 import pytest
-from scalib.metrics import SNR
+from scalib.metrics import SNR, SnrError
 import numpy as np
 
 
@@ -106,3 +106,21 @@ def test_snr():
     for test_case in test_cases:
         for use_64bit in [False, True]:
             snr_run(use_64bit=use_64bit, **test_case)
+
+
+def test_large_snr():
+    # Was deadlocking on error (only when displaying progress bar, i.e., for
+    # large cases)
+    ntraces = 1000
+    ns = 10000
+    nv = 1000
+    traces = np.random.randint(0, 256, (ntraces, ns), dtype=np.int16)
+    nb = 16
+    X = np.random.randint(0, nb, (ntraces, nv), dtype=np.uint16)
+    snr = SNR(nb, ns, nv)
+    snr.fit_u(traces, X)
+    snr.get_snr()
+
+    snr = SNR(nb - 1, ns, nv)
+    with pytest.raises(SnrError):
+        snr.fit_u(traces, X)

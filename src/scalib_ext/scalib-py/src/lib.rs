@@ -45,8 +45,9 @@ fn get_n_cpus_physical(_py: Python) -> usize {
 }
 
 #[pymodule]
-fn _scalib_ext(_py: Python, m: &PyModule) -> PyResult<()> {
+fn _scalib_ext(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<snr::SNR>()?;
+    m.add("SnrError", py.get_type::<snr::SnrError>())?;
     m.add_class::<ttest::Ttest>()?;
     m.add_class::<ttest::MTtest>()?;
     m.add_class::<lda::LDA>()?;
