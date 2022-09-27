@@ -5,6 +5,8 @@ Changelog
 Not released
 ------------
 
+* Fix freeze when there is an error in large SNR computations (i.e., when n_vars*n_samples*n_traces > 2**33).
+
 v0.4.3 (2022/10/27)
 -------------------
 
