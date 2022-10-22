@@ -211,13 +211,22 @@ impl LDA {
     ) -> Self {
         let ns = sw.shape()[0];
         let nc = means_ns.shape()[0];
-        // ---- Step 1
-        // compute the projection
-        // Partial generalized eigenvalue decomposition for sb and sw.
-        let solver =
-            geigen::GEigenSolverP::new(&sb.view(), &sw.view(), p).expect("failed to solve");
-        let projection = solver.vecs().into_owned();
-        assert_eq!(projection.dim(), (ns, p));
+        let projection = if p == ns {
+            // no LDA, simple pooled gaussian templates
+            // This is suboptimal since we then have to pay multiplication with the identity, but
+            // it should not matter much (we are probably in a cheap case anyway).
+            ndarray::Array2::eye(ns)
+        } else {
+            // LDA here
+            // ---- Step 1
+            // compute the projection
+            // Partial generalized eigenvalue decomposition for sb and sw.
+            let solver =
+                geigen::GEigenSolverP::new(&sb.view(), &sw.view(), p).expect("failed to solve");
+            let projection = solver.vecs().into_owned();
+            assert_eq!(projection.dim(), (ns, p));
+            projection
+        };
 
         // ---- Step 2
         // means per class within the subspace by projecting means_ns

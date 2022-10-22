@@ -143,7 +143,7 @@ Where is SCALib used ?
 
 We strongly appreciate if you could mention to us your usage SCALib 
 for concrete projects so that we can add you to the lists below. Please send 
-an email to Olivier Bronchain.
+an email to Olivier Bronchain and Gaëtan Cassiers, or directly open a pull request.
 
 Scientific publications
 -----------------------
@@ -194,14 +194,18 @@ of SCALib starting from the first version. The SCALib project is part of `SIMPLE
 
 Contributions and issues
 ========================
+
 We are happy to take any suggestion for features would be useful for
-side-channel evaluators.  If you want to contribute code to the project, please
-visit `DEVELOP
-<https://github.com/simple-crypto/SCALib/blob/main/DEVELOP.rst>`_ for relevant
-information as well as the Contributor License Agreement (`CLA
-<https://www.simple-crypto.dev/organization>`_) of SIMPLE-Crypto. Please open
-an `issue <https://github.com/simple-crypto/SCALib/issues>`_ on the GitHub repository for further questions, bug report or feature
-requests. 
+side-channel evaluators.
+We very much welcome code, documentation, examples, etc. contributions.
+`DEVELOP <https://github.com/simple-crypto/SCALib/blob/main/DEVELOP.rst>`_
+contains a few informations and guides for working with SCALib code.
+Please open an `issue <https://github.com/simple-crypto/SCALib/issues>`_ on the
+GitHub repository for further questions, bug report or feature requests. 
+
+All code contributions are subject to the Contributor License Agreement (`CLA
+<https://www.simple-crypto.dev/organization>`_) of SIMPLE-Crypto, which ensures
+a thriving future for open-source hardware security.
 
 License
 =======
