@@ -305,18 +305,8 @@ class SASCAGraph:
 
     def _init_graph(self):
         self._check_fully_init()
-        # mapping to Rust functions
-        AND = 0
-        XOR = 1
-        XOR_CST = 2
-        LOOKUP = 3
-        AND_CST = 4
-        ADD = 5
-        ADD_CST = 6
-        MUL = 7
-        MUL_CST = 8
-        property_map_binary = {"AND": (AND, AND_CST), "MUL": (MUL, MUL_CST)}
-        property_map_nary = {"XOR": (XOR, XOR_CST), "ADD": (ADD, ADD_CST)}
+        binary_properties = ["AND", "MUL"]
+        nary_properties = ["XOR", "ADD"]
 
         # edge id
         self.edge_ = 0
@@ -363,19 +353,17 @@ class SASCAGraph:
                 )
             )
 
+            property["func"] = property["property"]
             if property["property"] == "LOOKUP":
-                property["func"] = LOOKUP
                 # get the table into the function
                 property["table"] = self.tables_[property["tab"]]
                 # set edge to input and output
                 self._share_edge(property, property["output"])
                 self._share_edge(property, property["inputs"][0])
 
-            elif property["property"] in property_map_binary.keys():
-                op, op_cst = property_map_binary[property["property"]]
+            elif property["property"] in binary_properties:
                 # If no public inputs
                 if all(x in self.var_ for x in property["inputs"]):
-                    property["func"] = op
                     self._share_edge(property, property["output"])
                     for i in property["inputs"]:
                         self._share_edge(property, i)
@@ -383,7 +371,7 @@ class SASCAGraph:
                 # if and with public input
                 elif len(property["inputs"]) == 2:
                     # OP with one public
-                    property["func"] = op_cst
+                    property["func"] = property["property"] + "CST"
 
                     self._share_edge(property, property["output"])
 
@@ -401,24 +389,17 @@ class SASCAGraph:
                     # merge public input in the property
                     property["values"] = self.publics_[property["inputs"][i[1]]]
 
-            elif property["property"] in property_map_nary.keys():
-                op, op_cst = property_map_nary[property["property"]]
+            elif property["property"] in nary_properties:
                 # if no inputs are public
                 if all(x in self.var_ for x in property["inputs"]):
-                    # OP with no public
-                    property["func"] = op
-
                     # share edge with the output
                     self._share_edge(property, property["output"])
-
                     # share edge with all the inputs
                     for i in property["inputs"]:
                         self._share_edge(property, i)
-
                 elif len(property["inputs"]) == 2:
                     # OP with one public
-                    property["func"] = op_cst
-
+                    property["func"] = property["property"] + "CST"
                     # which of both inputs is public
                     if property["inputs"][0] in self.var_:
                         i = (0, 1)
@@ -426,14 +407,11 @@ class SASCAGraph:
                         i = (1, 0)
                     else:
                         assert False
-
                     # share edges with variables
                     self._share_edge(property, property["output"])
                     self._share_edge(property, property["inputs"][i[0]])
-
                     # merge public into the property
                     property["values"] = self.publics_[property["inputs"][i[1]]]
-
                 else:
                     key = property["property"]
                     raise ValueError(
