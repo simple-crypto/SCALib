@@ -53,6 +53,8 @@ pub enum FuncType {
     AND,
     /// Bitwise XOR of variables
     XOR,
+    /// Bitwise NOT of variables
+    NOT,
     /// Modular ADD of variables
     ADD,
     /// Modular MUL of variables
@@ -322,6 +324,24 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
             }
             FuncType::XOR => {
                 xors(edge.as_mut());
+            }
+            FuncType::NOT => {
+                let [output_msg, input_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
+                let nc = input_msg.shape()[1];
+                (input_msg.outer_iter_mut(), output_msg.outer_iter_mut())
+                    .into_par_iter()
+                    .for_each_init(
+                        || (Array1::zeros(nc), Array1::zeros(nc)),
+                        |(in_msg_scratch, out_msg_scratch), (mut input_msg, mut output_msg)| {
+                            for i in 0..nc {
+                                let o = (nc - 1) ^ i as usize;
+                                in_msg_scratch[i] = output_msg[o];
+                                out_msg_scratch[o] = input_msg[i];
+                            }
+                            input_msg.assign(in_msg_scratch);
+                            output_msg.assign(out_msg_scratch);
+                        },
+                    );
             }
             FuncType::XORCST(values)
             | FuncType::ANDCST(values)

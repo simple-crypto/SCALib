@@ -1,6 +1,9 @@
-import numpy as np
-from functools import reduce
 import copy
+from functools import reduce
+import math
+
+import numpy as np
+
 from scalib import _scalib_ext
 from scalib.config.threading import _get_threadpool
 
@@ -94,6 +97,8 @@ class SASCAGraph:
       exactly two operands, with at most one public operand.
     - `LOOKUP x = t[y]`: declares a LOOKUP property (`y` is the lookup of the
       table `t` at index `y`). No public variable is allowed in this property.
+    - `LOOKUP x = !y`: declares a bitwise NOT property.
+      No public variable is allowed in this property.
     - `TABLE` t = [0, 3, 2, 1]`: Declares a table that can be used in a LOOKUP.
       The values provided in the table must belong to the interval [0, nc).
       The initialization expression can be omitted from the graph description
@@ -159,6 +164,8 @@ class SASCAGraph:
             inp_values = [get_var_values(inp) for inp in property["inputs"]]
             if property["property"] == "LOOKUP":
                 output = self.tables_[property["tab"]][inp_values[0]]
+            elif property["property"] == "NOT":
+                output = (self.nc_ - 1) ^ inp_values[0]
             elif property["property"] in ("AND", "XOR", "ADD", "MUL"):
                 fn = {
                     "AND": lambda a, b: a & b,
@@ -305,6 +312,9 @@ class SASCAGraph:
 
     def _init_graph(self):
         self._check_fully_init()
+        unary_properties = [
+            "NOT",
+        ]
         binary_properties = ["AND", "MUL"]
         nary_properties = ["XOR", "ADD"]
 
@@ -358,6 +368,11 @@ class SASCAGraph:
                 # get the table into the function
                 property["table"] = self.tables_[property["tab"]]
                 # set edge to input and output
+                self._share_edge(property, property["output"])
+                self._share_edge(property, property["inputs"][0])
+
+            elif property["property"] in unary_properties:
+                assert len(property["inputs"]) == 1
                 self._share_edge(property, property["output"])
                 self._share_edge(property, property["inputs"][0])
 
@@ -419,7 +434,7 @@ class SASCAGraph:
                     )
 
             else:
-                assert False, "Property must be either LOOKUP, AND or XOR."
+                assert False, "Property non-implemented."
 
         for v in self.var_:
             v = self.var_[v]
@@ -451,6 +466,16 @@ class SASCAGraphParser:
         self._build_var_set()
         self._build_tables()
         self._build_properties()
+        self._check_nc_bitwise()
+
+    def _check_nc_bitwise(self):
+        if bin(self.nc).count("1") == 1:
+            return
+        if any(prop["property"] in ("NOT", "XOR", "AND") for prop in self.properties):
+            self.errors.append(
+                "Use of bitwise operators with NC not a power of 2 is not supported."
+            )
+            self._raise_errors()
 
     def _build_properties(self):
         for prop_kind, res, inputs in self.prop_decls:
@@ -557,6 +582,12 @@ class SASCAGraphParser:
             inputs = prop.split("&")
             if len(inputs) != 2:
                 raise SASCAGraphError("Wrong number of & operands: must be 2.")
+        elif "!" in prop:
+            prop_kind = "NOT"
+            inputs = prop.split("!")
+            if len(inputs) != 2 or inputs[0] != "":
+                raise SASCAGraphError("Wrong number of ! operands: must be 1 (post).")
+            inputs = [inputs[1]]
         elif "[" in prop and "]" in prop:
             prop_kind = "LOOKUP"
             tab, in_ = prop.split("[")

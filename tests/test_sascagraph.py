@@ -76,6 +76,41 @@ def test_table_non_bij():
     assert np.allclose(distri_y_ref, distri_y)
 
 
+def test_not():
+    """
+    Test non-bijective Table lookup
+    """
+    nc = 2
+    n = 1
+    distri_x = np.array([[0.6, 0.4]])
+    distri_y = np.array([[0.8, 0.2]])
+
+    graph = f"""
+            PROPERTY y = !x
+            VAR MULTI x
+            VAR MULTI y
+            NC {nc}
+            """
+    graph = SASCAGraph(graph, n)
+
+    graph.sanity_check({"x": np.array([0, 1]), "y": np.array([1, 0])})
+
+    graph.set_init_distribution("x", distri_x)
+    graph.set_init_distribution("y", distri_y)
+
+    graph.run_bp(1)
+    distri_x = graph.get_distribution("x")
+    distri_y = graph.get_distribution("y")
+
+    s = 0.6 * 0.2 + 0.4 * 0.8
+    b = 0.6 * 0.2 / s
+    distri_x_ref = np.array([b, 1.0 - b])
+    distri_y_ref = np.array([1.0 - b, b])
+
+    assert np.allclose(distri_x_ref, distri_x)
+    assert np.allclose(distri_y_ref, distri_y)
+
+
 def test_and_public():
     """
     Test AND with public data

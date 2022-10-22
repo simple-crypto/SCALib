@@ -60,6 +60,8 @@ pub fn to_func(function: &PyDict) -> Func {
         f = FuncType::AND;
     } else if func == "XOR" {
         f = FuncType::XOR;
+    } else if func == "NOT" {
+        f = FuncType::NOT;
     } else if func == "XORCST" {
         let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
         f = FuncType::XORCST(values.as_array().to_owned());

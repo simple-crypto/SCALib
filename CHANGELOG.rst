@@ -9,6 +9,7 @@ Not released
 * Optimize bitwise AND in SASCA: O(nc*log(nc)) instead of O(nc^2).
 * SASCA: add `SASCAGraph.sanity_check`.
 * SASCA: allow tables to not be bijective.
+* SASCA: support NOT gate.
 
 v0.4.2 (2022/05/31)
 -------------------
