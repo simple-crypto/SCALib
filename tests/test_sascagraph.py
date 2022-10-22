@@ -151,18 +151,21 @@ def test_xor_public():
     nc = 16
     n = 100
     public = np.random.randint(0, nc, n, dtype=np.uint32)
+    public2 = np.random.randint(0, nc, n, dtype=np.uint32)
     distri_x = np.random.randint(1, 100, (n, nc))
     distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
 
     graph = f"""
-        PROPERTY y = x ^ p
+        PROPERTY y = x ^ p ^ p2
         VAR MULTI y
         VAR MULTI x
         VAR MULTI p
+        VAR MULTI p2
         NC {nc}
         """
     graph = SASCAGraph(graph, n)
     graph.set_public("p", public)
+    graph.set_public("p2", public2)
     graph.set_init_distribution("x", distri_x)
 
     graph.run_bp(1)
@@ -170,7 +173,7 @@ def test_xor_public():
     distri_y = graph.get_distribution("y")
     distri_y_ref = np.zeros(distri_x.shape)
     for x in range(nc):
-        y = x ^ public
+        y = x ^ public ^ public2
         distri_y_ref[np.arange(n), y] = distri_x[np.arange(n), x]
 
     assert np.allclose(distri_y_ref, distri_y)

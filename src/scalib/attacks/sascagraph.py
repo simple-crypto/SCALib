@@ -7,6 +7,21 @@ import numpy as np
 from scalib import _scalib_ext
 from scalib.config.threading import _get_threadpool
 
+_NODE_FN = {
+    "AND": lambda a, b: a & b,
+    "XOR": lambda a, b: a ^ b,
+    "ADD": lambda a, b: (a + b) % self.nc_,
+    "MUL": lambda a, b: (a * b) % self.nc_,
+}
+
+
+def _node_reduce(node, values):
+    l = [v for v in values if v is not None]
+    if l:
+        return reduce(_NODE_FN[node], l)
+    else:
+        return None
+
 
 class SASCAGraph:
     r"""SASCAGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
@@ -166,15 +181,8 @@ class SASCAGraph:
                 output = self.tables_[property["tab"]][inp_values[0]]
             elif property["property"] == "NOT":
                 output = (self.nc_ - 1) ^ inp_values[0]
-            elif property["property"] in ("AND", "XOR", "ADD", "MUL"):
-                fn = {
-                    "AND": lambda a, b: a & b,
-                    "XOR": lambda a, b: a ^ b,
-                    "ADD": lambda a, b: (a + b) % self.nc_,
-                    "MUL": lambda a, b: (a * b) % self.nc_,
-                }
-
-                output = reduce(fn[property["property"]], inp_values)
+            elif property["property"] in _NODE_FN:
+                output = _node_reduce(property["property"], inp_values)
             else:
                 assert False
             output_val = get_var_values(property["output"])
@@ -329,13 +337,9 @@ class SASCAGraph:
         for property in self.properties_:
             if property["output"] in self.publics_:
                 raise ValueError(
-                    "In current implementation public vars can only be ^ or & operands.\n"
+                    "In current implementation public vars can only be operands.\n"
                     + "Cannot assign "
                     + property["output"]
-                )
-            if len([inp for inp in property["inputs"] if inp in self.publics_]) > 1:
-                raise ValueError(
-                    "In current implementation there can only be one public operand."
                 )
             for inp in property["inputs"]:
                 if inp in self.publics_ and property["property"] == "LOOKUP":
@@ -364,75 +368,38 @@ class SASCAGraph:
             )
 
             property["func"] = property["property"]
+
             if property["property"] == "LOOKUP":
                 # get the table into the function
                 property["table"] = self.tables_[property["tab"]]
                 # set edge to input and output
                 self._share_edge(property, property["output"])
                 self._share_edge(property, property["inputs"][0])
-
             elif property["property"] in unary_properties:
                 assert len(property["inputs"]) == 1
                 self._share_edge(property, property["output"])
                 self._share_edge(property, property["inputs"][0])
-
-            elif property["property"] in binary_properties:
-                # If no public inputs
-                if all(x in self.var_ for x in property["inputs"]):
-                    self._share_edge(property, property["output"])
-                    for i in property["inputs"]:
-                        self._share_edge(property, i)
-
-                # if and with public input
-                elif len(property["inputs"]) == 2:
-                    # OP with one public
-                    property["func"] = property["property"] + "CST"
-
-                    self._share_edge(property, property["output"])
-
-                    # which of both inputs is public
-                    if property["inputs"][0] in self.var_:
-                        i = (0, 1)
-                    elif property["inputs"][1] in self.var_:
-                        i = (1, 0)
-                    else:
-                        assert False
-
-                    # share edge with non public input
-                    self._share_edge(property, property["inputs"][i[0]])
-
-                    # merge public input in the property
-                    property["values"] = self.publics_[property["inputs"][i[1]]]
-
-            elif property["property"] in nary_properties:
-                # if no inputs are public
-                if all(x in self.var_ for x in property["inputs"]):
-                    # share edge with the output
-                    self._share_edge(property, property["output"])
-                    # share edge with all the inputs
-                    for i in property["inputs"]:
-                        self._share_edge(property, i)
-                elif len(property["inputs"]) == 2:
-                    # OP with one public
-                    property["func"] = property["property"] + "CST"
-                    # which of both inputs is public
-                    if property["inputs"][0] in self.var_:
-                        i = (0, 1)
-                    elif property["inputs"][1] in self.var_:
-                        i = (1, 0)
-                    else:
-                        assert False
-                    # share edges with variables
-                    self._share_edge(property, property["output"])
-                    self._share_edge(property, property["inputs"][i[0]])
-                    # merge public into the property
-                    property["values"] = self.publics_[property["inputs"][i[1]]]
-                else:
-                    key = property["property"]
-                    raise ValueError(
-                        f"{key} must have two operands when one operand is public."
+            elif (
+                property["property"] in binary_properties
+                or property["property"] in nary_properties
+            ):
+                if (
+                    property["property"] in binary_properties
+                    and len(property["inputs"]) != 2
+                ):
+                    raise SASCAGraphError(
+                        f"Too many inputs. output: {property['output']}"
                     )
-
+                property["values"] = _node_reduce(
+                    property["property"],
+                    (self.publics_.get(x) for x in property["inputs"]),
+                )
+                self._share_edge(property, property["output"])
+                for inp in property["inputs"]:
+                    if inp in self.var_:
+                        self._share_edge(property, inp)
+                if any(inp in self.publics_ for inp in property["inputs"]):
+                    property["func"] = property["property"] + "CST"
             else:
                 assert False, "Property non-implemented."
 

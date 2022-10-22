@@ -10,6 +10,7 @@ Not released
 * SASCA: add `SASCAGraph.sanity_check`.
 * SASCA: allow tables to not be bijective.
 * SASCA: support NOT gate.
+* SASCA: allow multiple public operands.
 
 v0.4.2 (2022/05/31)
 -------------------
