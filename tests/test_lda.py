@@ -40,7 +40,7 @@ def test_lda_pickle():
     dumped_lda = pickle.dumps(lda)
     lda = pickle.loads(dumped_lda)
 
-    lda_ref = LDA_sklearn(solver="eigen")
+    lda_ref = LDA_sklearn(solver="eigen", n_components=n_components)
     lda_ref.fit(traces, labels)
 
     lda_projection = lda.lda.get_projection()
@@ -132,31 +132,42 @@ def test_lda():
     traces_t = traces_t - means_check[labels, :]
     cov_check = np.cov(traces_t.T)
 
-    # traces_t = (lda_projection[:, :].T @ traces.T).T
-    # means_check_rust = np.zeros((nc, n_components))
-    # for i in range(nc):
-    #    I = np.where(labels == i)[0]
-    #    means_check_rust[i, :] = np.mean(traces_t[I, :], axis=0)
-    # traces_t = traces_t - means_check_rust[labels, :]
-    # cov_check_rust = np.cov(traces_t.T)
+    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
+    labels = np.random.randint(0, nc, n, dtype=np.uint16)
+    traces += m[labels]
 
-    # assert np.allclose(means_check_rust, lda.lda.get_means().T )
-    #    assert(np.allclose(cov_check,lda.lda.get_cov()))
+    prs = lda.predict_proba(traces)
+    prs_ref = lda_ref.predict_proba(traces)
+
+    assert np.allclose(prs, prs_ref, rtol=1e-2)
+
+
+def test_lda_noproj():
+    ns = 3
+    n_components = 3
+    nc = 4
+    n = 500
+
+    m = np.random.randint(0, 100, (nc, ns))
+    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
+    labels = np.random.randint(0, nc, n, dtype=np.uint16)
+    traces += m[labels]
+
+    lda = LDAClassifier(nc, n_components, ns)
+    lda.fit_u(traces, labels, 1)
+    lda.solve()
+
+    lda_ref = LDA_sklearn(solver="eigen", n_components=n_components)
+    lda_ref.fit(traces, labels)
 
     traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
     labels = np.random.randint(0, nc, n, dtype=np.uint16)
     traces += m[labels]
 
     prs = lda.predict_proba(traces)
-    traces_t = (lda_ref.scalings_[:, :n_components].T @ traces.T).T
-    prs_ref = np.zeros((len(traces), nc))
-    for x in range(nc):
-        prs_ref[:, x] = scipy.stats.multivariate_normal.pdf(
-            traces_t, means_check[x], cov_check
-        )
-    prs_ref = (prs_ref.T / np.sum(prs_ref, axis=1)).T
+    prs_ref = lda_ref.predict_proba(traces)
 
-    assert np.allclose(prs, prs_ref, rtol=1e-2)
+    assert np.allclose(prs, prs_ref, rtol=1e-2, atol=1e-5)
 
 
 if __name__ == "__main__":
