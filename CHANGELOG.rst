@@ -5,6 +5,10 @@ Changelog
 Not released
 ------------
 
+* SASCA: add `SASCAGraph.sanity_check`.
+* SASCA: allow tables to not be bijective.
+* SASCA: support NOT gate.
+* SASCA: allow multiple public operands.
 * Optimize bitwise AND in SASCA: O(nc*log(nc)) instead of O(nc^2).
 * Bitwise AND in SASCA: use a more correct law for computing input distribution.
 * Re-design `scalib.config` to handle more configuration in a single `Config` class. **Breaking change** to `scalib.config` and `scalib.config.threading`.

@@ -50,32 +50,35 @@ pub fn to_var(function: &PyDict) -> Var {
 /// Convert the python description of a function node to a Func.
 pub fn to_func(function: &PyDict) -> Func {
     let neighboors: Vec<isize> = function.get_item("neighboors").unwrap().extract().unwrap();
-    let func: usize = function.get_item("func").unwrap().extract().unwrap();
+    let func: &str = function.get_item("func").unwrap().extract().unwrap();
 
     let neighboors: Vec<usize> = neighboors.iter().map(|x| *x as usize).collect();
 
     let f: FuncType;
-    if func == 0 {
+    if func == "AND" {
         f = FuncType::AND;
-    } else if func == 1 {
+    } else if func == "XOR" {
         f = FuncType::XOR;
-    } else if func == 2 {
+    } else if func == "NOT" {
+        f = FuncType::NOT;
+    } else if func == "XORCST" {
         let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
         f = FuncType::XORCST(values.as_array().to_owned());
-    } else if func == 3 {
+    } else if func == "LOOKUP" {
         let table: PyReadonlyArray1<u32> = function.get_item("table").unwrap().extract().unwrap();
-        f = FuncType::LOOKUP(table.as_array().to_owned());
-    } else if func == 4 {
+        let table = table.as_array().to_owned();
+        f = FuncType::LOOKUP { table };
+    } else if func == "ANDCST" {
         let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
         f = FuncType::ANDCST(values.as_array().to_owned());
-    } else if func == 5 {
+    } else if func == "ADD" {
         f = FuncType::ADD;
-    } else if func == 6 {
+    } else if func == "ADDCST" {
         let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
         f = FuncType::ADDCST(values.as_array().to_owned());
-    } else if func == 7 {
+    } else if func == "MUL" {
         f = FuncType::MUL;
-    } else if func == 8 {
+    } else if func == "MULCST" {
         let values: PyReadonlyArray1<u32> = function.get_item("values").unwrap().extract().unwrap();
         f = FuncType::MULCST(values.as_array().to_owned());
     } else {
