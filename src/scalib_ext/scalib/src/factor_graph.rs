@@ -1,4 +1,4 @@
-use crate::bp_compute::{self, Distribution};
+use crate::bp_compute::Distribution;
 use indexmap::IndexMap;
 use itertools::Itertools;
 
@@ -40,7 +40,6 @@ enum FactorKind {
     OR,
     NOR,
     XOR,
-    XNOR,
     NOT,
     ADD,
     MUL,
@@ -65,7 +64,7 @@ struct Table {
     values: Vec<ClassVal>,
 }
 
-struct FactorGraph {
+pub struct FactorGraph {
     nc: usize,
     vars: NamedList<Var>,
     factors: Vec<Factor>,
@@ -75,75 +74,77 @@ struct FactorGraph {
 }
 
 #[derive(Debug, Clone)]
-enum PublicValue {
+pub enum PublicValue {
     Single(ClassVal),
     Multi(Vec<ClassVal>),
 }
-
-#[derive(Debug, Clone)]
-struct Belief {
-    from_var: Distribution,
-    to_var: Distribution,
-}
-
-impl Belief {
-    fn new(multi: bool, nc: usize, nmulti: u32) -> Self {
-        Self {
-            from_var: Distribution::new(multi, nc, nmulti),
-            to_var: Distribution::new(multi, nc, nmulti),
-        }
+impl PublicValue {
+  pub fn as_slice(&self) -> &[ClassVal] {
+    match self {
+      PublicValue::Single(x) => std::slice::from_ref(x),
+      PublicValue::Multi(x) => x.as_slice(),
     }
+  }
 }
 
-struct BPState {
+pub struct BPState {
     graph: std::rc::Rc<FactorGraph>,
     nmulti: u32,
     public_values: Vec<PublicValue>,
+    // public value for each function node
+    pub_reduced: Vec<PublicValue>,
     // evidence for each var
     evidence: Vec<Distribution>,
     // current proba for each var
     var_state: Vec<Distribution>,
     // beliefs on each edge
-    beliefs: Vec<Belief>,
+    belief_from_var: Vec<Distribution>,
+    belief_to_var: Vec<Distribution>,
 }
 
 #[derive(Debug, Clone)]
-enum BPError {
+pub enum BPError {
     WrongDistributionKind,
     MissingEdge,
 }
 
 impl FactorGraph {
-    fn new() -> Self {
+    pub fn new() -> Self {
         todo!()
     }
-    fn edge(&self, var: VarId, factor: FactorId) -> Option<EdgeId> {
+    pub fn edge(&self, var: VarId, factor: FactorId) -> Option<EdgeId> {
         self.vars[var].edges.get_index(factor).map(|(_, e)| *e)
     }
 }
 
 impl BPState {
-    fn new(graph: std::rc::Rc<FactorGraph>, nmulti: u32, public_values: Vec<PublicValue>) -> Self {
+    pub fn new(graph: std::rc::Rc<FactorGraph>, nmulti: u32, public_values: Vec<PublicValue>) -> Self {
         let var_state: Vec<_> = graph
             .vars
             .values()
             .map(|v| Distribution::new(v.multi, graph.nc, nmulti))
             .collect();
-        let beliefs = graph
+        let beliefs: Vec<_> = graph
             .edges
             .iter()
-            .map(|e| Belief::new(graph.factors[e.factor].multi, graph.nc, nmulti))
+            .map(|e| Distribution::new(graph.factors[e.factor].multi, graph.nc, nmulti))
             .collect();
+        let pub_reduced = Self::reduce_pub(&graph, &public_values);
         Self {
             evidence: var_state.clone(),
-            beliefs,
+            belief_from_var: beliefs.clone(),
+            belief_to_var: beliefs,
             var_state,
             graph,
             nmulti,
             public_values,
+            pub_reduced,
         }
     }
-    fn is_cyclic(&self) -> bool {
+    fn reduce_pub(graph: &FactorGraph, public_values: &[PublicValue]) -> Vec<PublicValue> {
+      todo!()
+    }
+    pub fn is_cyclic(&self) -> bool {
         // Let's do something simple here, and revisit it when we need more sophisticated queries.
         // The factor graph is cyclic if either
         // 1. there is a cycle in a single execution, or
@@ -195,7 +196,7 @@ impl BPState {
         }
         return false;
     }
-    fn set_evidence(&mut self, var: VarId, evidence: Distribution) -> Result<(), BPError> {
+    pub fn set_evidence(&mut self, var: VarId, evidence: Distribution) -> Result<(), BPError> {
         if self.graph.vars[var].multi != evidence.multi() {
             Err(BPError::WrongDistributionKind)
         } else {
@@ -203,13 +204,13 @@ impl BPState {
             Ok(())
         }
     }
-    fn drop_evidence(&mut self, var: VarId) {
+    pub fn drop_evidence(&mut self, var: VarId) {
         self.evidence[var] = self.evidence[var].as_uniform();
     }
-    fn get_state(&self, var: VarId) -> &Distribution {
+    pub fn get_state(&self, var: VarId) -> &Distribution {
         &self.var_state[var]
     }
-    fn set_state(&self, var: VarId, state: Distribution) -> Result<(), BPError> {
+    pub fn set_state(&mut self, var: VarId, state: Distribution) -> Result<(), BPError> {
         if self.graph.vars[var].multi != state.multi() {
             Err(BPError::WrongDistributionKind)
         } else {
@@ -217,127 +218,160 @@ impl BPState {
             Ok(())
         }
     }
-    fn get_belief(&self, var: VarId, factor: FactorId) -> Result<&Belief, BPError> {
+    pub fn get_belief_to_var(&self, var: VarId, factor: FactorId) -> Result<&Distribution, BPError> {
         self.graph
             .edge(var, factor)
-            .map(|e| &self.beliefs[e])
+            .map(|e| &self.belief_to_var[e])
+            .ok_or(BPError::MissingEdge)
+    }
+    pub fn get_belief_from_var(&self, var: VarId, factor: FactorId) -> Result<&Distribution, BPError> {
+        self.graph
+            .edge(var, factor)
+            .map(|e| &self.belief_from_var[e])
             .ok_or(BPError::MissingEdge)
     }
     // Propagation type:
     // belief to var -> var
     // var -> belief to func
     // trhough func: towards all vars, towards a subset of vars
-    fn propagate_to_var(&mut self, var: VarId) {
-        let multi = self.graph.vars[var].multi;
-        let distr_iter = std::iter::once(&self.evidence[var]).chain(
-            self.graph.vars[var]
-                .edges
-                .values()
-                .map(|e| &self.beliefs[*e].to_var),
-        );
-        bp_compute::multiply_distr(&mut self.var_state[var], distr_iter);
+    pub fn propagate_to_var(&mut self, var: VarId) {
+        let distr_iter = self.graph.vars[var] .edges .values() .map(|e| &self.belief_to_var[*e]);
+        self.var_state[var].reset();
+        self.var_state[var] = self.evidence[var].clone();
+        self.var_state[var].multiply(distr_iter);
     }
-    fn propagate_from_var(&mut self, edge: EdgeId) {
+    pub fn propagate_from_var(&mut self, edge: EdgeId) {
         let var = self.graph.edges[edge].var;
-        bp_compute::divide_distr(
-            &mut self.beliefs[edge].from_var,
+        self.belief_from_var[edge].reset();
+        self.belief_from_var[edge] = Distribution::divide(
             &self.var_state[var],
-            &self.beliefs[edge].to_var,
+            &self.belief_to_var[edge],
         );
     }
-    fn propagate_factor(&mut self, factor: FactorId, dest: &[VarId]) {
-        let factor = &self.graph.factors[factor];
+    pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId]) {
+        let factor = &self.graph.factors[factor_id];
+        // Pre-erase to have buffers available in cache allocator.
         for d in dest {
-            self.beliefs[factor.edges[d]].to_var.reset();
+            self.belief_to_var[factor.edges[d]].reset();
         }
-        let in_distr = factor.edges.values().map(|e| &self.beliefs[*e].from_var);
-        let res_distr = match factor.kind {
-            FactorKind::AND => factor_gen_and(factor, in_distr, dest, false, false),
-            FactorKind::NAND => factor_gen_and(factor, in_distr, dest, false, true),
-            FactorKind::OR => factor_gen_and(factor, in_distr, dest, true, true),
-            FactorKind::NOR => factor_gen_and(factor, in_distr, dest, true, false),
-            FactorKind::XOR => factor_gen_xor(factor, in_distr, dest, false),
-            FactorKind::XNOR => factor_gen_xor(factor, in_distr, dest, true),
-            FactorKind::NOT => factor_not(factor, in_distr, dest),
-            FactorKind::ADD => factor_add(factor, in_distr, dest),
-            FactorKind::MUL => factor_mul(factor, in_distr, dest),
-            FactorKind::LOOKUP { table } => {
-                factor_lookup(factor, in_distr, dest, &self.graph.tables[table])
-            }
-        };
-        for (distr, dest) in res_distr.into_iter().zip(dest.iter()) {
-            self.beliefs[factor.edges[dest]].to_var = distr;
+        // Use a macro to call very similar functions in match arms.
+        // Needed because of anonymous return types of these functions.
+        macro_rules! prop_factor {
+            ($f:ident, $($arg:expr),*) => {
+                {
+                    let it = $f(factor, &self.belief_from_var, dest, $($arg,)*);
+                    for (distr, dest) in it.zip(dest.iter()) {
+                        self.belief_to_var[factor.edges[dest]]= distr;
+                    }
+                }
+            };
+        }
+        match factor.kind {
+            FactorKind::AND => prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], false, false),
+            FactorKind::NAND => prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], false, true),
+            FactorKind::OR => prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], true, true),
+            FactorKind::NOR => prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], true, false),
+            FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id]),
+            FactorKind::NOT => prop_factor!(factor_not,),
+            FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id]),
+            FactorKind::MUL => prop_factor!(factor_mul, &self.pub_reduced[factor_id]),
+            FactorKind::LOOKUP { table } => prop_factor!(factor_lookup, &self.graph.tables[table]),
         }
     }
 
     // Higher-level
-    fn propagate_factor_all(&mut self, factor: FactorId) {}
-    fn propagate_var_all(&mut self, var: VarId) {}
-    fn propagate_loopy_step(&mut self) {}
-    fn propagate_full(&mut self) {}
+    pub fn propagate_factor_all(&mut self, factor: FactorId) { todo!() }
+    pub fn propagate_var_all(&mut self, var: VarId) { todo!() }
+    pub fn propagate_loopy_step(&mut self) { todo!() }
+    pub fn propagate_full(&mut self) { todo!() }
 }
+
 
 fn factor_gen_and<'a>(
-    factor: &Factor,
-    in_distr: impl Iterator<Item = &'a Distribution>,
-    dest: &[VarId],
+    factor: &'a Factor,
+    belief_from_var: &'a [Distribution],
+    dest: &'a [VarId],
+    pub_red: &PublicValue,
     invert_op: bool,
     invert_res: bool,
-) -> Vec<Distribution> {
-    todo!()
+) -> impl Iterator<Item=Distribution> + 'a {
+    #![allow(unreachable_code)]
+    todo!();
+    [].into_iter()
 }
 
-fn factor_gen_xor<'a>(
-    factor: &Factor,
-    in_distr: impl Iterator<Item = &'a Distribution>,
-    dest: &[VarId],
-    invert: bool,
-) -> Vec<Distribution> {
-    let mut in_distr = in_distr.peekable();
-    let mut acc = in_distr.peek().as_cst(0);
-    for d in in_distr {
+fn factor_xor<'a>(
+    factor: &'a Factor,
+    belief_from_var: &'a [Distribution],
+    dest: &'a [VarId],
+    pub_red: &PublicValue,
+) -> impl Iterator<Item=Distribution> + 'a {
+    let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
+    for d in factor.edges.values().map(|e| &belief_from_var[*e]) {
         // TODO re-use a bufer...
         let mut d = d.clone();
         d.wht();
-        acc.multiply(Some(d).into_iter());
+        acc.multiply(Some(&d).into_iter());
     }
-    acc.iwht();
-    todo!()
+      dest.iter().map(move |dest| {
+          let mut d = Distribution::divide(&acc, &belief_from_var[factor.edges[dest]]);
+          d.iwht();
+          d.regularize();
+          d
+      })
 }
 
 fn factor_not<'a>(
-    factor: &Factor,
-    in_distr: impl Iterator<Item = &'a Distribution>,
-    dest: &[VarId],
-) -> Vec<Distribution> {
-    let in_distr = in_distr.next().unwrap();
+    factor: &'a Factor,
+    belief_from_var: &'a [Distribution],
+    dest: &'a [VarId],
+) -> impl Iterator<Item=Distribution> + 'a {
+    let in_distr = &belief_from_var[factor.edges[0]];
     let mut res = in_distr.clone();
     res.not();
-    return vec![res];
+    return std::iter::once(res);
 }
 
 // TODO handle subraction too
 fn factor_add<'a>(
-    factor: &Factor,
-    in_distr: impl Iterator<Item = &'a Distribution>,
-    dest: &[VarId],
-) -> Vec<Distribution> {
-    todo!()
+    factor: &'a Factor,
+    belief_from_var: &'a [Distribution],
+    dest: &'a [VarId],
+    pub_red: &PublicValue,
+) -> impl Iterator<Item=Distribution> + 'a {
+    let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
+    for d in factor.edges.values().map(|e| &belief_from_var[*e]) {
+        // TODO re-use a bufer...
+        let mut d = d.clone();
+        d.fft();
+        acc.multiply(Some(&d).into_iter());
+    }
+      dest.iter().map(move |dest| {
+          let mut d = Distribution::divide(&acc, &belief_from_var[factor.edges[dest]]);
+          d.ifft();
+          d.regularize();
+          d
+      })
 }
 
 fn factor_mul<'a>(
-    factor: &Factor,
-    in_distr: impl Iterator<Item = &'a Distribution>,
-    dest: &[VarId],
-) -> Vec<Distribution> {
-    todo!()
+    factor: &'a Factor,
+    belief_from_var: &'a [Distribution],
+    dest: &'a [VarId],
+    pub_red: &PublicValue,
+) -> impl Iterator<Item=Distribution> + 'a {
+    #![allow(unreachable_code)]
+    todo!();
+    [].into_iter()
 }
 
 fn factor_lookup<'a>(
-    factor: &Factor,
-    in_distr: impl Iterator<Item = &'a Distribution>,
-    dest: &[VarId],
+    factor: &'a Factor,
+    belief_from_var: &'a [Distribution],
+    dest: &'a [VarId],
     table: &Table,
-) -> Vec<Distribution> {
-    todo!()
+) -> impl Iterator<Item=Distribution> + 'a {
+    #![allow(unreachable_code)]
+    todo!();
+    [].into_iter()
 }
