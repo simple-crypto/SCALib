@@ -138,7 +138,7 @@ impl Distribution {
         }
     }
     pub fn wht(&mut self) {
-        self.for_each_error(|d| {
+        self.for_each_error(|mut d| {
             slice_wht(d.as_slice_mut().unwrap());
         });
     }

@@ -15,21 +15,34 @@ features = ["extension-module"]
 blis = ["blis-src", "blis-sys"]
 
 [dependencies]
-numpy = "0.18.0"
+
+# Factor graph parsing and error display
+chumsky = "0.8.0"
+ariadne = "0.1.5"
+
+# Factor graph structure
 indexmap = "1.9.1"
+
 rayon = "1.5.0"
 num-integer = "0.1.42"
+
+# Progress bars
 indicatif = { version = "0.17.3" }
-ndarray = { version = "0.15.1", features = ["rayon", "approx"] }
+hytra = "0.1.2"
+crossbeam-utils = "0.8.3"
+
 itertools = "0.10.0"
-nalgebra = "0.26.1"
+
 geigen = { path = "../geigen" }
-nshare = { git= "https://github.com/cassiersg/nshare", branch="rm_lt", features=["nalgebra", "ndarray", "std"] }
+
+# Numerical libs
+ndarray = { version = "0.15.1", features = ["rayon", "approx"] }
 blis-src = { version = "0.2.1-alpha.0", default-features=false, features=["static", "pthreads"], optional = true }
 blis-sys = { git="https://github.com/cassiersg/blis-sys", optional = true }
 matrixmultiply = "0.3.1"
-hytra = "0.1.2"
-crossbeam-utils = "0.8.3"
+nalgebra = "0.26.1"
+nshare = { git= "https://github.com/cassiersg/nshare", branch="rm_lt", features=["nalgebra", "ndarray", "std"] }
+
 realfft = "2.0.1"
 num-traits = "0.2.15"
 thiserror = "1.0"

@@ -1,4 +1,4 @@
-use crate::bp_compute::Distribution;
+use super::Distribution;
 use indexmap::IndexMap;
 use itertools::Itertools;
 
@@ -6,70 +6,69 @@ use itertools::Itertools;
 // - use a pool for Distribution allocations (can be a simple Vec storing them), to avoid frequent
 // allocations
 
-type NamedList<T> = IndexMap<String, T>;
 
-type ClassVal = u32;
+use super::{ClassVal,NamedList};
 
-type VarId = usize;
-type FactorId = usize;
-type EdgeId = usize;
-type PublicId = usize;
-type TableId = usize;
+pub(super) type VarId = usize;
+pub(super) type FactorId = usize;
+pub(super) type EdgeId = usize;
+pub(super) type PublicId = usize;
+pub(super) type TableId = usize;
 
 #[derive(Debug, Clone)]
-struct Var {
-    multi: bool,
-    edges: IndexMap<FactorId, EdgeId>,
+pub(super) struct Var {
+    pub(super) multi: bool,
+    pub(super) edges: IndexMap<FactorId, EdgeId>,
 }
 
 #[derive(Debug, Clone)]
-struct Factor {
-    kind: FactorKind,
-    multi: bool,
+pub(super) struct Factor {
+    pub(super) kind: FactorKind,
+    pub(super) multi: bool,
     // res is first element, operands come next
-    edges: IndexMap<VarId, EdgeId>,
+    pub(super) edges: IndexMap<VarId, EdgeId>,
     // May not be allowed for all factor kinds
-    publics: Vec<PublicId>,
+    pub(super) publics: Vec<PublicId>,
 }
 
 #[derive(Debug, Clone)]
-enum FactorKind {
+pub(super) enum FactorKind<T = TableId> {
     AND,
-    NAND,
+//    NAND,
     OR,
-    NOR,
+//    NOR,
     XOR,
     NOT,
     ADD,
     MUL,
-    LOOKUP { table: TableId },
+    LOOKUP { table: T },
 }
 
 #[derive(Debug, Clone)]
-struct Edge {
-    var: VarId,
-    pos_var: usize,
-    factor: FactorId,
-    pos_factor: usize,
+pub(super) struct Edge {
+    pub(super) var: VarId,
+    pub(super) pos_var: usize,
+    pub(super) factor: FactorId,
+    pub(super) pos_factor: usize,
 }
 
 #[derive(Debug, Clone)]
-struct Public {
-    multi: bool,
+pub(super) struct Public {
+    pub(super) multi: bool,
 }
 
 #[derive(Debug, Clone)]
-struct Table {
-    values: Vec<ClassVal>,
+pub(super) struct Table {
+    pub(super) values: Vec<ClassVal>,
 }
 
 pub struct FactorGraph {
-    nc: usize,
-    vars: NamedList<Var>,
-    factors: Vec<Factor>,
-    edges: Vec<Edge>,
-    publics: NamedList<Public>,
-    tables: NamedList<Table>,
+    pub(super) nc: usize,
+    pub(super) vars: NamedList<Var>,
+    pub(super) factors: Vec<Factor>,
+    pub(super) edges: Vec<Edge>,
+    pub(super) publics: NamedList<Public>,
+    pub(super) tables: NamedList<Table>,
 }
 
 #[derive(Debug, Clone)]
@@ -283,15 +282,17 @@ impl BPState {
             FactorKind::AND => {
                 prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], false, false)
             }
-            FactorKind::NAND => {
-                prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], false, true)
-            }
             FactorKind::OR => {
                 prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], true, true)
+            }
+            /*
+            FactorKind::NAND => {
+                prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], false, true)
             }
             FactorKind::NOR => {
                 prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], true, false)
             }
+            */
             // TODO know when to erase incoming
             FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id], false),
             FactorKind::NOT => prop_factor!(factor_not,),
