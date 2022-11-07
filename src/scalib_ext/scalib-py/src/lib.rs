@@ -7,6 +7,7 @@ use pyo3::prelude::*;
 use std::error::Error;
 
 mod belief_propagation;
+mod factor_graph;
 mod lda;
 mod ranking;
 mod snr;

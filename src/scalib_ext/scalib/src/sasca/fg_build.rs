@@ -5,16 +5,18 @@ use super::{ClassVal, NamedList};
 use indexmap::IndexMap;
 
 #[derive(Debug, Clone)]
-enum GraphBuildError {
+pub enum GraphBuildError {
     MultipleTableDecl(String),
     MultipleVarDecl(String),
     UnknownVar(String),
     UnknownTable(String),
     RepeatedOperand(String),
-    TableSize(usize),
+    TableSize(String, usize),
+    TableValue(String, ClassVal),
     MissingTableDef(String),
     MultipleNc,
     NoNc,
+    Parse(Vec<u8>),
 }
 
 impl fg::FactorGraph {
@@ -59,7 +61,12 @@ impl fg::FactorGraph {
             return Err(GraphBuildError::MultipleTableDecl(name));
         }
         if values.len() != self.nc {
-            return Err(GraphBuildError::TableSize(values.len()));
+            return Err(GraphBuildError::TableSize(name, values.len()));
+        }
+        for v in values.iter() {
+            if (*v as usize) >= self.nc {
+                return Err(GraphBuildError::TableValue(name, *v));
+            }
         }
         self.tables.insert(name, fg::Table { values });
         Ok(())
@@ -114,8 +121,8 @@ impl fg::FactorGraph {
             F: Fn(T) -> Result<S, E>,
         {
             Ok(match self {
-                fg::FactorKind::AND => fg::FactorKind::AND,
-                fg::FactorKind::OR => fg::FactorKind::OR,
+                fg::FactorKind::AND { vars_neg } => fg::FactorKind::AND { vars_neg },
+                fg::FactorKind::OR { vars_neg } => fg::FactorKind::OR {vars_neg },
                 fg::FactorKind::XOR => fg::FactorKind::XOR,
                 fg::FactorKind::NOT => fg::FactorKind::NOT,
                 fg::FactorKind::ADD => fg::FactorKind::ADD,
@@ -126,6 +133,7 @@ impl fg::FactorGraph {
     }
 impl fg_parser::Expr {
     fn as_factor_kind(&self) -> fg::FactorKind<&str> {
+        let get_neg = |vars: &Vec<fg_parser::NVar>| vars.iter().map(|v| v.neg).collect();
         match self {
             Self::Not(_) => fg::FactorKind::NOT,
             Self::Lookup { table, .. } => fg::FactorKind::LOOKUP {
@@ -134,25 +142,22 @@ impl fg_parser::Expr {
             Self::Add(_) => fg::FactorKind::ADD,
             Self::Mul(_) => fg::FactorKind::MUL,
             Self::Xor(_) => fg::FactorKind::XOR,
-            Self::And(_) => fg::FactorKind::AND,
-            Self::Or(_) => fg::FactorKind::OR,
+            Self::And(vars) => fg::FactorKind::AND { vars_neg: get_neg(vars) },
+            Self::Or(vars) => fg::FactorKind::OR { vars_neg: get_neg(vars) },
         }
     }
     fn vars(&self) -> impl Iterator<Item = &str> {
         match self {
             Self::Not(var) | Self::Lookup { var, .. } => vec![var.0.as_str()],
-            Self::Add(v) | Self::Mul(v) => v.iter().map(|v| v.0.as_str()).collect(),
-            Self::Xor(v) | Self::And(v) | Self::Or(v) => v
-                .iter()
-                .map(|v| if v.neg { todo!() } else { v.var.0.as_str() })
-                .collect(),
+            Self::Xor(v) | Self::Add(v) | Self::Mul(v) => v.iter().map(|v| v.0.as_str()).collect(),
+            Self::And(v) | Self::Or(v) => v.iter().map(|v| v.var.0.as_str()).collect(),
         }
         .into_iter()
     }
 }
 pub(super) fn build_graph(
     stmts: &[fg_parser::Statement],
-    mut tables: NamedList<Vec<ClassVal>>,
+    mut tables: std::collections::HashMap<String, Vec<ClassVal>>,
 ) -> Result<fg::FactorGraph, GraphBuildError> {
     let nc = get_nc(stmts)?;
     let mut graph = fg::FactorGraph::build(nc as usize);

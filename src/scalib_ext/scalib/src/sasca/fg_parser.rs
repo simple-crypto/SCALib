@@ -24,7 +24,7 @@ pub(super) enum Expr {
     Lookup { var: Var, table: String },
     Add(Vec<Var>),
     Mul(Vec<Var>),
-    Xor(Vec<NVar>),
+    Xor(Vec<Var>),
     And(Vec<NVar>),
     Or(Vec<NVar>),
 }
@@ -73,7 +73,7 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
         .or(ident
             .then(var.delimited_by(op('['), op(']')))
             .map(|(table, var)| Expr::Lookup { table, var }))
-        .or(op_nexpr('^', Expr::Xor as fn(_) -> _))
+        .or(op_expr('^', Expr::Xor as fn(_) -> _))
         .or(op_nexpr('&', Expr::And as fn(_) -> _))
         .or(op_nexpr('|', Expr::Or as fn(_) -> _))
         .or(op_expr('+', Expr::Add as fn(_) -> _))
@@ -109,6 +109,7 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
     let graph = prop
         .or(nc)
         .or(var_decl)
+        .or(pub_decl)
         .or(table)
         .or(comment)
         .or(end().to(Statement::End))
@@ -119,9 +120,12 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
     graph
 }
 
-pub(super) fn parse(src: &str) -> Result<Vec<Statement>, ()> {
+/// Parse the factor graph description in src, and returns the statements if no
+/// error, otherwise the error is a locale-encoded error message.
+pub(super) fn parse(src: &str) -> Result<Vec<Statement>, Vec<u8>> {
     let (graph, errs) = parser().parse_recovery_verbose(src);
     let err = !errs.is_empty();
+    let mut err_str = Vec::new();
     for e in errs {
         let msg = if let chumsky::error::SimpleReason::Custom(msg) = e.reason() {
             msg.clone()
@@ -157,11 +161,10 @@ pub(super) fn parse(src: &str) -> Result<Vec<Statement>, ()> {
                     })
                     .with_color(Color::Red),
             );
-        report.finish().print(Source::from(&src)).unwrap();
+        report.finish().write(Source::from(&src), &mut err_str).unwrap();
     }
     if err {
-        // TODO return ariadne's errors.
-        return Err(());
+        return Err(err_str);
     } else {
         return Ok(graph.unwrap());
     }
