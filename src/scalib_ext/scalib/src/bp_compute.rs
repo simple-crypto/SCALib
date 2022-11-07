@@ -1,5 +1,5 @@
-use ndarray::s;
 use super::factor_graph::PublicValue;
+use ndarray::s;
 
 type Proba = f64;
 
@@ -54,8 +54,11 @@ impl Distribution {
     }
     pub fn new_constant(&self, cst: &PublicValue) -> Self {
         let mut value = ndarray::Array2::zeros(self.shape);
-        for (mut d, c) in value.axis_iter_mut(ndarray::Axis(0)).zip(cst.as_slice().iter()) {
-          d[*c as usize] = 1.0;
+        for (mut d, c) in value
+            .axis_iter_mut(ndarray::Axis(0))
+            .zip(cst.as_slice().iter())
+        {
+            d[*c as usize] = 1.0;
         }
         Self {
             multi: self.multi,
@@ -63,8 +66,10 @@ impl Distribution {
             value: DistrRepr::Full(value),
         }
     }
-    pub fn reset(&mut self) {
-        self.value = DistrRepr::Uniform;
+    pub fn reset(&mut self) -> Self {
+        let mut new = self.as_uniform();
+        std::mem::swap(self, &mut new);
+        new
     }
     pub fn multiply<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>) {
         for factor in factors {
@@ -73,7 +78,10 @@ impl Distribution {
                 assert_eq!(d.dim(), factor.shape);
                 match (self.multi, factor.multi, &mut self.value) {
                     (true, _, DistrRepr::Uniform) | (false, false, DistrRepr::Uniform) => {
-                        self.value = DistrRepr::Full(ndarray::Array::from_shape_fn(self.shape, |(_i, j)| d[(0, j)]));
+                        self.value = DistrRepr::Full(ndarray::Array::from_shape_fn(
+                            self.shape,
+                            |(_i, j)| d[(0, j)],
+                        ));
                     }
                     (true, _, DistrRepr::Full(ref mut v)) => {
                         *v *= d;
@@ -114,16 +122,25 @@ impl Distribution {
         res.value = DistrRepr::Full(vst / vdiv);
         return res;
     }
+    pub fn dividing_full(&mut self, other: &Distribution) {
+        match (&mut self.value, &other.value) {
+            (DistrRepr::Full(div), DistrRepr::Full(st)) => {
+                ndarray::azip!(div, st).for_each(|div, st| *div = *st / *div);
+            }
+            _ => {
+                unimplemented!();
+            }
+        }
+    }
     pub fn not(&mut self) {
         if let DistrRepr::Full(ref mut array) = &mut self.value {
             todo!()
         }
     }
     pub fn wht(&mut self) {
-        todo!()
-    }
-    pub fn iwht(&mut self) {
-        todo!()
+        self.for_each_error(|d| {
+            slice_wht(d.as_slice_mut().unwrap());
+        });
     }
     pub fn fft(&mut self) {
         todo!()
@@ -131,7 +148,77 @@ impl Distribution {
     pub fn ifft(&mut self) {
         todo!()
     }
+    pub fn is_full(&self) -> bool {
+        match &self.value {
+            DistrRepr::Full(_) => true,
+            DistrRepr::Uniform => false,
+        }
+    }
     pub fn regularize(&mut self) {
-        todo!()
+        self.for_each_ignore(|mut d| {
+            let norm_f = 1.0 / (d.sum() + MIN_PROBA * d.len() as f64);
+            d.mapv_inplace(|x| (x + MIN_PROBA) * norm_f);
+        })
+    }
+    pub fn make_non_zero_signed(&mut self) {
+        self.for_each_ignore(|mut d| {
+            d.mapv_inplace(|y| {
+                if y.is_sign_positive() {
+                    y.max(MIN_PROBA)
+                } else {
+                    y.min(-MIN_PROBA)
+                }
+            });
+        });
+    }
+    fn for_each<F, G>(&mut self, f: F, default: G)
+    where
+        F: Fn(ndarray::ArrayViewMut1<f64>),
+        G: Fn(&mut Self),
+    {
+        if let DistrRepr::Full(v) = &mut self.value {
+            for d in v.axis_iter_mut(ndarray::Axis(0)) {
+                f(d);
+            }
+        } else {
+            default(self);
+        }
+    }
+    fn for_each_ignore<F>(&mut self, f: F)
+    where
+        F: Fn(ndarray::ArrayViewMut1<f64>),
+    {
+        self.for_each(f, |_| {});
+    }
+    fn for_each_error<F>(&mut self, f: F)
+    where
+        F: Fn(ndarray::ArrayViewMut1<f64>),
+    {
+        self.for_each(f, |_| {
+            unimplemented!();
+        });
+    }
+}
+
+/// Walsh-Hadamard transform (non-normalized).
+#[inline(always)]
+fn slice_wht(a: &mut [f64]) {
+    // The speed of this can be much improved, with the following techiques
+    // * improved memory locality
+    // * use (auto-)vectorization
+    // * generate small static kernels
+    let len = a.len();
+    let mut h = 1;
+    while h < len {
+        for mut i in 0..(len / (2 * h) as usize) {
+            i *= 2 * h;
+            for j in i..(i + h) {
+                let x = a[j];
+                let y = a[j + h];
+                a[j] = x + y;
+                a[j + h] = x - y;
+            }
+        }
+        h *= 2;
     }
 }
