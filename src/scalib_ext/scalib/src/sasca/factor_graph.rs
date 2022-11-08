@@ -1,5 +1,6 @@
 use indexmap::IndexMap;
 
+use thiserror::Error;
 
 
 use super::{ClassVal,NamedList};
@@ -78,9 +79,31 @@ impl PublicValue {
     }
 }
 
+#[derive(Debug, Clone, Error)]
+pub enum FGError {
+    #[error("No variable named {0}.")]
+    NoVar(String),
+    #[error("No edge between variable {var} and factor {factor}.")]
+    NoEdge {
+        var: String,
+        factor: FactorId,
+    }
+}
+
+type Result<T> = std::result::Result<T, FGError>;
+
 impl FactorGraph {
-    pub fn edge(&self, var: VarId, factor: FactorId) -> Option<EdgeId> {
-        self.vars[var].edges.get_index(factor).map(|(_, e)| *e)
+    pub fn edge(&self, var: VarId, factor: FactorId) -> Result<EdgeId> {
+        self.vars[var].edges.get_index(factor).map(|(_, e)| *e).ok_or_else(|| FGError::NoEdge { var: self.vars.get_index(var).unwrap().0.to_owned(), factor })
+    }
+    pub fn public_multi(&self) -> impl Iterator<Item=(&str, bool)> {
+        self.publics.iter().map(|(n, v)| (n.as_str(), v.multi))
+    }
+    pub fn get_varid(&self, var: &str) -> Result<VarId> {
+        self.vars.get_index_of(var).ok_or_else(|| FGError::NoVar(var.to_owned()))
+    }
+    pub fn var_multi(&self, var: VarId) -> bool {
+        self.vars[var].multi
     }
 }
 

@@ -16,6 +16,12 @@ blis = ["blis-src", "blis-sys"]
 
 [dependencies]
 
+# Utilities
+thiserror = "1.0"
+itertools = "0.10.0"
+rayon = "1.5.0"
+num-integer = "0.1.42"
+
 # Factor graph parsing and error display
 chumsky = "0.8.0"
 ariadne = "0.1.5"
@@ -23,15 +29,11 @@ ariadne = "0.1.5"
 # Factor graph structure
 indexmap = "1.9.1"
 
-rayon = "1.5.0"
-num-integer = "0.1.42"
 
 # Progress bars
 indicatif = { version = "0.17.3" }
 hytra = "0.1.2"
 crossbeam-utils = "0.8.3"
-
-itertools = "0.10.0"
 
 geigen = { path = "../geigen" }
 
@@ -45,7 +47,6 @@ nshare = { git= "https://github.com/cassiersg/nshare", branch="rm_lt", features=
 
 realfft = "2.0.1"
 num-traits = "0.2.15"
-thiserror = "1.0"
 
 [lib]
 bench = false

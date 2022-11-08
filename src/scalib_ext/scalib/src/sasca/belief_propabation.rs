@@ -1,5 +1,7 @@
 
 use itertools::Itertools;
+use thiserror::Error;
+
 use super::{Distribution, PublicValue, FactorGraph};
 use super::factor_graph::{Table,Factor, EdgeId, VarId, FactorId, FactorKind};
 use super::ClassVal;
@@ -9,7 +11,7 @@ use super::ClassVal;
 // allocations
 
 pub struct BPState {
-    graph: std::rc::Rc<FactorGraph>,
+    graph: std::sync::Arc<FactorGraph>,
     nmulti: u32,
     // one public for every factor. Set to 0 if not relevant.
     public_values: Vec<PublicValue>,
@@ -24,15 +26,19 @@ pub struct BPState {
     belief_to_var: Vec<Distribution>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum BPError {
-    WrongDistributionKind,
-    MissingEdge,
+    #[error("Wrong distribution kind: got {0}, expected {1}.")]
+    WrongDistributionKind(&'static str, &'static str),
+    #[error("Wrong number of classes for distribution: got {0}, expected {1}.")]
+    WrongDistributionNc(usize, usize),
+    #[error("Wrong number of traces for distribution: got {0}, expected {1}.")]
+    WrongDistributionNmulti(usize, u32),
 }
 
 impl BPState {
     pub fn new(
-        graph: std::rc::Rc<FactorGraph>,
+        graph: std::sync::Arc<FactorGraph>,
         nmulti: u32,
         public_values: Vec<PublicValue>,
     ) -> Self {
@@ -156,9 +162,19 @@ impl BPState {
         }
         return false;
     }
+    pub fn get_graph(&self) -> &FactorGraph {
+        &self.graph
+    }
     pub fn set_evidence(&mut self, var: VarId, evidence: Distribution) -> Result<(), BPError> {
         if self.graph.vars[var].multi != evidence.multi() {
-            Err(BPError::WrongDistributionKind)
+            Err(BPError::WrongDistributionKind(
+                    if evidence.multi() { "multi" } else { "single" },
+                    if self.graph.vars[var].multi { "multi" } else { "single" },
+            ))
+        } else if evidence.shape().1  != self.graph.nc {
+            Err(BPError::WrongDistributionNc(evidence.shape().1, self.graph.nc))
+        } else if evidence.multi() && self.nmulti as usize != evidence.shape().0 {
+            Err(BPError::WrongDistributionNmulti(evidence.shape().0, self.nmulti))
         } else {
             self.evidence[var] = evidence;
             Ok(())
@@ -172,31 +188,20 @@ impl BPState {
     }
     pub fn set_state(&mut self, var: VarId, state: Distribution) -> Result<(), BPError> {
         if self.graph.vars[var].multi != state.multi() {
-            Err(BPError::WrongDistributionKind)
+            Err(BPError::WrongDistributionKind(
+                    if state.multi() { "multi" } else { "single" },
+                    if self.graph.vars[var].multi { "multi" } else { "single" },
+            ))
         } else {
             self.var_state[var] = state;
             Ok(())
         }
     }
-    pub fn get_belief_to_var(
-        &self,
-        var: VarId,
-        factor: FactorId,
-    ) -> Result<&Distribution, BPError> {
-        self.graph
-            .edge(var, factor)
-            .map(|e| &self.belief_to_var[e])
-            .ok_or(BPError::MissingEdge)
+    pub fn get_belief_to_var(&self, edge: EdgeId) -> &Distribution {
+        &self.belief_to_var[edge]
     }
-    pub fn get_belief_from_var(
-        &self,
-        var: VarId,
-        factor: FactorId,
-    ) -> Result<&Distribution, BPError> {
-        self.graph
-            .edge(var, factor)
-            .map(|e| &self.belief_from_var[e])
-            .ok_or(BPError::MissingEdge)
+    pub fn get_belief_from_var(&self, edge: EdgeId) -> &Distribution {
+        &self.belief_from_var[edge]
     }
     // Propagation type:
     // belief to var -> var
@@ -255,8 +260,12 @@ impl BPState {
     pub fn propagate_factor_all(&mut self, factor: FactorId) {
         todo!()
     }
-    pub fn propagate_var_all(&mut self, var: VarId) {
+    // TODO drop existing beliefs ?
+    pub fn propagate_from_var_all(&mut self, var: VarId) {
         todo!()
+    }
+    pub fn propagate_var(&mut self, var: VarId) {
+        todo!() // from, then to
     }
     pub fn propagate_loopy_step(&mut self) {
         todo!()

@@ -3,20 +3,32 @@ use super::factor_graph as fg;
 use super::fg_parser;
 use super::{ClassVal, NamedList};
 use indexmap::IndexMap;
+use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum GraphBuildError {
+    #[error("Table {0} declared multiple times.")]
     MultipleTableDecl(String),
+    #[error("Variable or public {0} declared multiple times.")]
     MultipleVarDecl(String),
+    #[error("Variable or public {0} not declared.")]
     UnknownVar(String),
+    #[error("Table {0} not declared.")]
     UnknownTable(String),
+    #[error("Operand {0} appears multiple times in a factor.")]
     RepeatedOperand(String),
+    #[error("Wrong length {1} for table {0}.")]
     TableSize(String, usize),
+    #[error("Wrong value {1} for table {0}.")]
     TableValue(String, ClassVal),
+    #[error("Value of table {0} not given.")]
     MissingTableDef(String),
+    #[error("NC given more than once.")]
     MultipleNc,
+    #[error("NC not given.")]
     NoNc,
-    Parse(Vec<u8>),
+    #[error("Could not parse graph description.\n{0}")]
+    Parse(String),
 }
 
 impl fg::FactorGraph {

@@ -23,6 +23,32 @@ impl Distribution {
     pub fn multi(&self) -> bool {
         self.multi
     }
+    pub fn shape(&self) -> (usize, usize) {
+        self.shape
+    }
+    pub fn value(&self) -> Option<ndarray::ArrayView2<Proba>> {
+        if let DistrRepr::Full(v) = &self.value {
+            Some(v.view())
+        } else {
+            None
+        }
+    }
+    pub fn from_array_single(array: ndarray::Array1<Proba>) -> Self {
+        let l = array.len();
+        let array = array.into_shape((1, l)).expect("Non-contiguous array");
+        Self {
+            multi: false,
+            shape: array.dim(),
+            value: DistrRepr::Full(array),
+        }
+    }
+    pub fn from_array_multi(array: ndarray::Array2<Proba>) -> Self {
+        Self {
+            multi: true,
+            shape: array.dim(),
+            value: DistrRepr::Full(array),
+        }
+    }
     pub fn new_single(nc: usize) -> Self {
         Self {
             multi: false,
