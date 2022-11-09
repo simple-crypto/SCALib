@@ -3,7 +3,7 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use super::{Distribution, PublicValue, FactorGraph};
-use super::factor_graph::{Table,Factor, EdgeId, VarId, FactorId, FactorKind};
+use super::factor_graph::{Table,Factor, EdgeId, VarId, FactorId, FactorKind, VarVec, FactorVec, EdgeVec, EdgeSlice};
 use super::ClassVal;
 
 // TODO improvements
@@ -14,16 +14,16 @@ pub struct BPState {
     graph: std::sync::Arc<FactorGraph>,
     nmulti: u32,
     // one public for every factor. Set to 0 if not relevant.
-    public_values: Vec<PublicValue>,
-    // public value for each function node
-    pub_reduced: Vec<PublicValue>,
+    public_values: FactorVec<PublicValue>,
+    // public value for each factor
+    pub_reduced: FactorVec<PublicValue>,
     // evidence for each var
-    evidence: Vec<Distribution>,
+    evidence: VarVec<Distribution>,
     // current proba for each var
-    var_state: Vec<Distribution>,
+    var_state: VarVec<Distribution>,
     // beliefs on each edge
-    belief_from_var: Vec<Distribution>,
-    belief_to_var: Vec<Distribution>,
+    belief_from_var: EdgeVec<Distribution>,
+    belief_to_var: EdgeVec<Distribution>,
 }
 
 #[derive(Debug, Clone, Error)]
@@ -42,12 +42,12 @@ impl BPState {
         nmulti: u32,
         public_values: Vec<PublicValue>,
     ) -> Self {
-        let var_state: Vec<_> = graph
+        let var_state: VarVec<_> = graph
             .vars
             .values()
             .map(|v| Distribution::new(v.multi, graph.nc, nmulti))
             .collect();
-        let beliefs: Vec<_> = graph
+        let beliefs: EdgeVec<_> = graph
             .edges
             .iter()
             .map(|e| Distribution::new(graph.factors[e.factor].multi, graph.nc, nmulti))
@@ -60,11 +60,11 @@ impl BPState {
             var_state,
             graph,
             nmulti,
-            public_values,
+            public_values: FactorVec::from_vec(public_values),
             pub_reduced,
         }
     }
-    fn reduce_pub(graph: &FactorGraph, public_values: &[PublicValue]) -> Vec<PublicValue> {
+    fn reduce_pub(graph: &FactorGraph, public_values: &[PublicValue]) -> FactorVec<PublicValue> {
         fn merge_pubs<F: Fn(ClassVal, ClassVal) -> ClassVal>(f: F, p1: PublicValue, p2: &PublicValue) -> PublicValue {
             match (p1, p2) {
                 (PublicValue::Single(c1), PublicValue::Single(c2)) => PublicValue::Single(f(c1, *c2)),
@@ -113,9 +113,10 @@ impl BPState {
         // For 1, we do a DFS walk of the graph starting from an arbitrary var and memoize the vars
         // we've already seen. If we see again a node, there is a cycle.
         // We start from all not-yet expored vars to cover all connected components.
-        let mut seen_vars = vec![false; self.graph.vars.len()];
-        let mut visit_stack = vec![];
-        for start_var in 0..self.graph.vars.len() {
+        let mut seen_vars: VarVec<bool> = self.graph.range_vars().map(|_| false).collect();
+        let mut visit_stack = VarVec::new();
+
+        for start_var in self.graph.range_vars() {
             if !seen_vars[start_var] {
                 visit_stack.push(start_var);
             }
@@ -125,10 +126,9 @@ impl BPState {
                 }
                 seen_vars[var_id] = true;
                 // Enumerate over all incident edges, each edge giving a factor,
-                // then we iter over all adjacent factors
-                for edge_id in self.graph.vars[var_id].edges.keys() {
-                    let factor_id = self.graph.edges[*edge_id].factor;
-                    visit_stack.extend(self.graph.factors[factor_id].edges.keys());
+                // then we iter over all adjacent vars to the factor
+                for factor_id in self.graph.var(var_id).edges.keys() {
+                    visit_stack.extend(self.graph.factors[*factor_id].edges.keys());
                 }
             }
         }
@@ -138,13 +138,14 @@ impl BPState {
         // For 2., we do the same, but consider all "single" nodes as one:
         // we start from all the "single" nodes together, we ignore paths that touch only "single"
         // node (i.e., the !multi factors), and run the DFS.
-        let mut seen_vars = vec![false; self.graph.vars.len()];
+        let mut seen_vars: VarVec<bool> = std::iter::repeat(false).take(self.graph.vars.len()).collect();
         // start from single vars
-        let mut visit_stack: Vec<_> = self
+        let mut visit_stack: VarVec<_> = self
             .graph
             .vars
             .values()
             .positions(|var| !var.multi)
+            .map(VarId::from_idx)
             .collect();
         while let Some(var_id) = visit_stack.pop() {
             if seen_vars[var_id] {
@@ -152,11 +153,10 @@ impl BPState {
             }
             seen_vars[var_id] = true;
             // Enumerate over all incident edges, each edge giving a factor,
-            // then we iter over all adjacent factors
-            for edge_id in self.graph.vars[var_id].edges.keys() {
-                let factor_id = self.graph.edges[*edge_id].factor;
-                if self.graph.factors[factor_id].multi {
-                    visit_stack.extend(self.graph.factors[factor_id].edges.keys());
+                // then we iter over all adjacent vars to the factor
+            for factor_id in self.graph.var(var_id).edges.keys() {
+                if self.graph.factors[*factor_id].multi {
+                    visit_stack.extend(self.graph.factors[*factor_id].edges.keys());
                 }
             }
         }
@@ -166,10 +166,10 @@ impl BPState {
         &self.graph
     }
     pub fn set_evidence(&mut self, var: VarId, evidence: Distribution) -> Result<(), BPError> {
-        if self.graph.vars[var].multi != evidence.multi() {
+        if self.graph.var_multi(var) != evidence.multi() {
             Err(BPError::WrongDistributionKind(
                     if evidence.multi() { "multi" } else { "single" },
-                    if self.graph.vars[var].multi { "multi" } else { "single" },
+                    if self.graph.var_multi(var) { "multi" } else { "single" },
             ))
         } else if evidence.shape().1  != self.graph.nc {
             Err(BPError::WrongDistributionNc(evidence.shape().1, self.graph.nc))
@@ -187,15 +187,18 @@ impl BPState {
         &self.var_state[var]
     }
     pub fn set_state(&mut self, var: VarId, state: Distribution) -> Result<(), BPError> {
-        if self.graph.vars[var].multi != state.multi() {
+        if self.graph.var_multi(var) != state.multi() {
             Err(BPError::WrongDistributionKind(
                     if state.multi() { "multi" } else { "single" },
-                    if self.graph.vars[var].multi { "multi" } else { "single" },
+                    if self.graph.var_multi(var) { "multi" } else { "single" },
             ))
         } else {
             self.var_state[var] = state;
             Ok(())
         }
+    }
+    pub fn drop_state(&mut self, var: VarId) {
+        self.var_state[var] = self.var_state[var].as_uniform();
     }
     pub fn get_belief_to_var(&self, edge: EdgeId) -> &Distribution {
         &self.belief_to_var[edge]
@@ -208,7 +211,7 @@ impl BPState {
     // var -> belief to func
     // trhough func: towards all vars, towards a subset of vars
     pub fn propagate_to_var(&mut self, var: VarId) {
-        let distr_iter = self.graph.vars[var]
+        let distr_iter = self.graph.var(var)
             .edges
             .values()
             .map(|e| &self.belief_to_var[*e]);
@@ -258,26 +261,40 @@ impl BPState {
 
     // Higher-level
     pub fn propagate_factor_all(&mut self, factor: FactorId) {
-        todo!()
+        let dest: Vec<_> = self.graph.factors[factor].edges.keys().cloned().collect();
+        self.propagate_factor(factor, dest.as_slice());
     }
-    // TODO drop existing beliefs ?
     pub fn propagate_from_var_all(&mut self, var: VarId) {
-        todo!()
+        for i in 0..self.graph.var(var).edges.len() {
+            self.propagate_from_var(self.graph.var(var).edges[i]);
+        }
+        for i in 0..self.graph.var(var).edges.len() {
+            self.belief_to_var[self.graph.var(var).edges[i]].reset();
+        }
     }
     pub fn propagate_var(&mut self, var: VarId) {
-        todo!() // from, then to
+        self.propagate_to_var(var);
+        self.propagate_from_var_all(var);
     }
-    pub fn propagate_loopy_step(&mut self) {
-        todo!()
+    pub fn propagate_loopy_step(&mut self, n_steps: u32) {
+        for _ in 0..n_steps {
+            for var_id in self.graph.range_vars() {
+                self.propagate_var(var_id);
+            }
+            for factor_id in self.graph.range_factors() {
+                self.propagate_factor_all(factor_id);
+            }
+        }
     }
     pub fn propagate_full(&mut self) {
+        // for non-cyclic graph
         todo!()
     }
 }
 
 fn factor_gen_and<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a [Distribution],
+    belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
     pub_red: &PublicValue,
     invert_op: &'a [bool],
@@ -290,7 +307,7 @@ fn factor_gen_and<'a>(
 
 fn reset_incoming(
     factor: &Factor,
-    belief_from_var: &mut [Distribution],
+    belief_from_var: &mut EdgeSlice<Distribution>,
     dest_taken: &[bool],
     clear_incoming: bool,
 ) {
@@ -307,7 +324,7 @@ fn reset_incoming(
 
 fn factor_xor<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a mut [Distribution],
+    belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
     pub_red: &PublicValue,
     clear_incoming: bool,
@@ -317,7 +334,7 @@ fn factor_xor<'a>(
     acc.wht();
     let mut taken_dest = vec![false; factor.edges.len()];
     for dest in dest {
-        taken_dest[factor.edges[dest]] = true;
+        taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
     }
     let mut uniform_iter = factor
         .edges
@@ -390,7 +407,7 @@ fn factor_xor<'a>(
 
 fn factor_not<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a [Distribution],
+    belief_from_var: &'a EdgeSlice<Distribution>,
     dest: &'a [VarId],
 ) -> impl Iterator<Item = Distribution> + 'a {
     let in_distr = &belief_from_var[factor.edges[0]];
@@ -402,7 +419,7 @@ fn factor_not<'a>(
 // TODO handle subraction too
 fn factor_add<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a [Distribution],
+    belief_from_var: &'a EdgeSlice<Distribution>,
     dest: &'a [VarId],
     pub_red: &PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
@@ -423,7 +440,7 @@ fn factor_add<'a>(
 
 fn factor_mul<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a [Distribution],
+    belief_from_var: &'a EdgeSlice<Distribution>,
     dest: &'a [VarId],
     pub_red: &PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
@@ -434,7 +451,7 @@ fn factor_mul<'a>(
 
 fn factor_lookup<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a [Distribution],
+    belief_from_var: &'a EdgeSlice<Distribution>,
     dest: &'a [VarId],
     table: &Table,
 ) -> impl Iterator<Item = Distribution> + 'a {

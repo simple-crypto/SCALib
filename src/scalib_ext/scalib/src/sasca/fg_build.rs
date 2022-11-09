@@ -36,8 +36,8 @@ impl fg::FactorGraph {
         Self {
             nc,
             vars: NamedList::new(),
-            factors: Vec::new(),
-            edges: Vec::new(),
+            factors: fg::FactorVec::new(),
+            edges: fg::EdgeVec::new(),
             publics: NamedList::new(),
             tables: NamedList::new(),
         }
@@ -88,13 +88,14 @@ impl fg::FactorGraph {
         kind: fg::FactorKind<&str>,
         vars: impl Iterator<Item = &'a str>,
     ) -> Result<(), GraphBuildError> {
-        let factor_id = self.factors.len();
+        let factor_id = fg::FactorId::from_idx(self.factors.len());
         let mut edges = IndexMap::new();
         let mut publics = Vec::new();
         let mut multi = false;
         for var in vars {
             if let Some((var_id, _, v)) = self.vars.get_full_mut(var) {
-                let edge_id = self.edges.len();
+                let var_id = fg::VarId::from_idx(var_id);
+                let edge_id = fg::EdgeId::from_idx(self.edges.len());
                 if edges.insert(var_id, edge_id).is_some() {
                     return Err(GraphBuildError::RepeatedOperand(var.to_owned()));
                 }

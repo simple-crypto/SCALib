@@ -153,7 +153,8 @@ impl BPState {
         Ok(())
     }
     pub fn drop_evidence(&mut self, var: &str) -> PyResult<()> {
-        self.get_inner_mut().drop_evidence(self.get_var(var)?);
+        let var_id = self.get_var(var)?;
+        self.get_inner_mut().drop_evidence(var_id);
         Ok(())
     }
     pub fn get_state(&self, py: Python, var: &str) -> PyResult<PyObject> {
@@ -166,21 +167,35 @@ impl BPState {
         bp.set_state(var_id, distr).map_err(|e| PyTypeError::new_err(e.to_string()))?;
         Ok(())
     }
+    pub fn drop_state(&mut self, var: &str) -> PyResult<()> {
+        let var_id = self.get_var(var)?;
+        self.get_inner_mut().drop_state(var_id);
+        Ok(())
+    }
     pub fn get_belief_to_var(&self, py: Python, var: &str) -> PyResult<PyObject> {
-        distr2py(py, self.get_inner().get_belief_to_var(self.get_var(var)?))
+        let var_id = self.get_var(var)?;
+        let edge_id = todo!();
+        distr2py(py, self.get_inner().get_belief_to_var(edge_id))
     }
     pub fn get_belief_from_var(&self, py: Python, var: &str) -> PyResult<PyObject> {
-        distr2py(py, self.get_inner().get_belief_from_var(self.get_var(var)?))
+        let var_id = self.get_var(var)?;
+        let edge_id = todo!();
+        distr2py(py, self.get_inner().get_belief_from_var(edge_id))
     }
     pub fn propagate_to_var(&mut self, var: &str) -> PyResult<()> {
-        self.get_inner_mut().propagate_to_var(self.get_var(var)?);
+        let var_id = self.get_var(var)?;
+        self.get_inner_mut().propagate_to_var(var_id);
         Ok(())
     }
-    // TODO implement factor naming
-    pub fn propagate_factor(&mut self, factor_id: usize, dest: &[&str]) -> PyResult<()> {
+    pub fn propagate_factor(&mut self, factor_id: usize, dest: Vec<&str>) -> PyResult<()> {
         let dest = dest.iter().map(|v| self.get_var(v)).collect::<Result<Vec<_>, _>>()?;
-        self.get_inner_mut().propagate_factor(factor_id, dest.as_slice());
+        //self.get_inner_mut().propagate_factor(factor_id, dest.as_slice());
+        // requires factor labels
+        todo!();
         Ok(())
+    }
+    pub fn propagate_loopy_step(&mut self, n_steps: u32) {
+        self.get_inner_mut().propagate_loopy_step(n_steps);
     }
 }
 
@@ -195,7 +210,7 @@ fn obj2distr(py: Python, distr: PyObject, multi: bool) -> PyResult<sasca::Distri
     })
 }
 
-fn dist2py(py: Python, distr: &sasca::Distribution) -> PyResult<PyObject> {
+fn distr2py(py: Python, distr: &sasca::Distribution) -> PyResult<PyObject> {
     if let Some(d) = distr.value() {
         if distr.multi() {
             return Ok(PyArray2::from_array(py, &d).into_py(py));

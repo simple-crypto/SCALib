@@ -5,11 +5,29 @@ use thiserror::Error;
 
 use super::{ClassVal,NamedList};
 
-pub(super) type VarId = usize;
-pub(super) type FactorId = usize;
-pub(super) type EdgeId = usize;
-pub(super) type PublicId = usize;
-pub(super) type TableId = usize;
+macro_rules! new_id {
+    ($it:ident, $vt:ident) => {
+        index_vec::define_index_type! {
+            pub struct $it = u32;
+            DISPLAY_FORMAT = "{}";
+        }
+        pub type $vt<T> = index_vec::IndexVec<$it, T>;
+        impl $it {
+            pub fn idx(self) -> usize {
+                <Self as Into<usize>>::into(self)
+            }
+            pub fn from_idx(x: usize) -> Self {
+                <Self as From<usize>>::from(x)
+            }
+        }
+    }
+}
+new_id!(VarId, VarVec);
+new_id!(FactorId, FactorVec);
+new_id!(EdgeId, EdgeVec);
+pub type EdgeSlice<T> = index_vec::IndexSlice<EdgeId, [T]>;
+pub type PublicId = usize;
+pub type TableId = usize;
 
 #[derive(Debug, Clone)]
 pub(super) struct Var {
@@ -59,8 +77,8 @@ pub(super) struct Table {
 pub struct FactorGraph {
     pub(super) nc: usize,
     pub(super) vars: NamedList<Var>,
-    pub(super) factors: Vec<Factor>,
-    pub(super) edges: Vec<Edge>,
+    pub(super) factors: FactorVec<Factor>,
+    pub(super) edges: EdgeVec<Edge>,
     pub(super) publics: NamedList<Public>,
     pub(super) tables: NamedList<Table>,
 }
@@ -94,16 +112,25 @@ type Result<T> = std::result::Result<T, FGError>;
 
 impl FactorGraph {
     pub fn edge(&self, var: VarId, factor: FactorId) -> Result<EdgeId> {
-        self.vars[var].edges.get_index(factor).map(|(_, e)| *e).ok_or_else(|| FGError::NoEdge { var: self.vars.get_index(var).unwrap().0.to_owned(), factor })
+        self.var(var).edges.get(&factor).map(|e| *e).ok_or_else(|| FGError::NoEdge { var: self.vars.get_index(var.idx()).unwrap().0.to_owned(), factor })
     }
     pub fn public_multi(&self) -> impl Iterator<Item=(&str, bool)> {
         self.publics.iter().map(|(n, v)| (n.as_str(), v.multi))
     }
     pub fn get_varid(&self, var: &str) -> Result<VarId> {
-        self.vars.get_index_of(var).ok_or_else(|| FGError::NoVar(var.to_owned()))
+        self.vars.get_index_of(var).map(VarId::from_idx).ok_or_else(|| FGError::NoVar(var.to_owned()))
+    }
+    pub(super) fn var(&self, var: VarId) -> &Var {
+        &self.vars[var.idx()]
     }
     pub fn var_multi(&self, var: VarId) -> bool {
-        self.vars[var].multi
+        self.var(var).multi
+    }
+    pub fn range_vars(&self) -> impl Iterator<Item=VarId> {
+        (0..self.vars.len()).map(VarId::from_idx)
+    }
+    pub fn range_factors(&self) -> impl Iterator<Item=FactorId> {
+        (0..self.factors.len()).map(FactorId::from_idx)
     }
 }
 
