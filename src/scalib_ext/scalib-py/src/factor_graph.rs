@@ -189,11 +189,11 @@ impl BPState {
 
 fn obj2distr(py: Python, distr: PyObject, multi: bool) -> PyResult<sasca::Distribution> {
     Ok(if multi {
-        let distr: &PyArray1<f64> = distr.extract(py)?;
-        sasca::Distribution::from_array_single(distr.to_owned_array())
-    } else {
         let distr: &PyArray2<f64> = distr.extract(py)?;
         sasca::Distribution::from_array_multi(distr.to_owned_array())
+    } else {
+        let distr: &PyArray1<f64> = distr.extract(py)?;
+        sasca::Distribution::from_array_single(distr.to_owned_array())
     })
 }
 

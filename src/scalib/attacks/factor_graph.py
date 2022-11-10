@@ -5,7 +5,6 @@ import numpy as np
 import numpy.typing as npt
 
 from scalib import _scalib_ext
-from scalib.config.threading import _get_threadpool
 
 __all__ = ['FactorGraph', 'BPState']
 
@@ -122,7 +121,9 @@ class FactorGraph:
         The graph description.
     """
 
-    def __init__(self, graph_text: str, tables: Mapping[str, npt.NDArray[np.uint32]]):
+    def __init__(self, graph_text: str, tables: Optional[Mapping[str, npt.NDArray[np.uint32]]] = None):
+        if tables is None:
+            tables = dict()
         self._inner = _scalib_ext.FactorGraph(graph_text, tables)
 
 
@@ -140,7 +141,9 @@ class FactorGraph:
 
 
 class BPState:
-    def __init__(self, factor_graph: FactorGraph, nexec: int, public_values: Mapping[str, Union[int, Sequence[int]]]):
+    def __init__(self, factor_graph: FactorGraph, nexec: int, public_values: Optional[Mapping[str, Union[int, Sequence[int]]]] = None):
+        if public_values is None:
+            public_values = dict()
         self._inner = factor_graph._inner.new_bp(nexec, public_values)
 
     def is_cyclic(self) -> bool:
@@ -180,7 +183,7 @@ class BPState:
             If the variable has a uniform distribution, None may be returned
             (but this is not guaranteed).
         """
-        self._inner.get_state(var)
+        return self._inner.get_state(var)
 
     def set_distribution(self, var: str, distribution: Optional[npt.NDArray[np.float64]]):
         r"""Sets current distribution of a variable in the BP.

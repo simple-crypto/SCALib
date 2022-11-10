@@ -40,7 +40,7 @@ pub(super) struct VarDecl {
 pub(super) enum Statement {
     End, // only to appease parser
     Invalid,
-    Comment,
+    Empty,
     Property {
         name: Option<String>,
         dest: Var,
@@ -88,9 +88,7 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
     let nc = kw("NC")
         .ignore_then(text::int(10))
         .map(|nc: String| Statement::NC(nc.parse().unwrap()));
-    let comment = kw("#")
-        .then_ignore(filter(|c| *c != '\n' && *c != '\r').repeated())
-        .to(Statement::Comment);
+    let comment = op('#').then_ignore(filter(|c| *c != '\n' && *c != '\r').repeated());
     let var_decl = kw("VAR")
         .ignore_then(kw("SINGLE").to(false).or(kw("MULTI").to(true)))
         .then(var)
@@ -113,10 +111,11 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
         .or(var_decl)
         .or(pub_decl)
         .or(table)
-        .or(comment)
+        .or(space.to(Statement::Empty))
         .or(end().to(Statement::End))
+        .then_ignore(comment.or_not())
         .recover_with(skip_until(['\n', '\r'], |_| Statement::Invalid))
-        .separated_by(text::newline().then(text::whitespace().or_not()))
+        .separated_by(text::newline())
         .allow_leading()
         .allow_trailing();
     graph

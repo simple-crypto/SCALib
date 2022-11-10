@@ -15,6 +15,7 @@ enum DistrRepr {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Distribution {
     multi: bool,
+    /// (nmulti, nc), same as DistrRepr::Full(x) => x.dim()
     shape: (usize, usize),
     value: DistrRepr,
 }
@@ -52,14 +53,14 @@ impl Distribution {
     pub fn new_single(nc: usize) -> Self {
         Self {
             multi: false,
-            shape: (nc, 1),
+            shape: (1, nc),
             value: DistrRepr::Uniform,
         }
     }
     pub fn new_multi(nc: usize, nmulti: u32) -> Self {
         Self {
             multi: true,
-            shape: (nc, nmulti as usize),
+            shape: (nmulti as usize, nc),
             value: DistrRepr::Uniform,
         }
     }
@@ -99,18 +100,17 @@ impl Distribution {
     }
     pub fn multiply<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>) {
         for factor in factors {
+            dbg!(&self);
+            dbg!(factor);
             assert_eq!(self.shape, factor.shape);
             if let DistrRepr::Full(d) = &factor.value {
                 assert_eq!(d.dim(), factor.shape);
                 match (self.multi, factor.multi, &mut self.value) {
-                    (true, _, DistrRepr::Uniform) | (false, false, DistrRepr::Uniform) => {
+                    (_, false, DistrRepr::Uniform) => {
                         self.value = DistrRepr::Full(ndarray::Array::from_shape_fn(
                             self.shape,
                             |(_i, j)| d[(0, j)],
                         ));
-                    }
-                    (true, _, DistrRepr::Full(ref mut v)) => {
-                        *v *= d;
                     }
                     (false, true, DistrRepr::Uniform) => {
                         let mut v = ndarray::Array2::ones(self.shape);
@@ -118,6 +118,12 @@ impl Distribution {
                             v *= &d.slice(s![ndarray::NewAxis, ..]);
                         }
                         self.value = DistrRepr::Full(v);
+                    }
+                    (true, true, DistrRepr::Uniform) => {
+                        self.value = DistrRepr::Full(d.to_owned());
+                    }
+                    (true, _, DistrRepr::Full(ref mut v)) => {
+                        *v *= d;
                     }
                     (false, _, DistrRepr::Full(ref mut v)) => {
                         for d in d.axis_iter(ndarray::Axis(0)) {
@@ -127,6 +133,7 @@ impl Distribution {
                 }
             }
         }
+        dbg!(self);
     }
     pub fn divide(state: &Distribution, div: &Distribution) -> Self {
         let mut res = Self {

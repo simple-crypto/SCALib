@@ -203,7 +203,7 @@ pub(super) fn build_graph(
             }
             | fg_parser::Statement::End
             | fg_parser::Statement::Invalid
-            | fg_parser::Statement::Comment
+            | fg_parser::Statement::Empty
             | fg_parser::Statement::Property { .. }
             | fg_parser::Statement::NC(_) => {}
         }
