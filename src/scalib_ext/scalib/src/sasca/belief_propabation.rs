@@ -10,6 +10,7 @@ use super::ClassVal;
 // - use a pool for Distribution allocations (can be a simple Vec storing them), to avoid frequent
 // allocations
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BPState {
     graph: std::sync::Arc<FactorGraph>,
     nmulti: u32,
@@ -50,7 +51,7 @@ impl BPState {
         let beliefs: EdgeVec<_> = graph
             .edges
             .iter()
-            .map(|e| Distribution::new(graph.factors[e.factor].multi, graph.nc, nmulti))
+            .map(|e| Distribution::new(graph.factor(e.factor).multi, graph.nc, nmulti))
             .collect();
         let pub_reduced = Self::reduce_pub(&graph, &public_values);
         Self {
@@ -83,7 +84,7 @@ impl BPState {
                 }
             }
         }
-        graph.factors.iter().map(|factor| {
+        graph.factors.values().map(|factor| {
             let merge_fn = |a, b| match factor.kind {
                 FactorKind::AND { vars_neg: _ } => a & b,
                 FactorKind::OR { vars_neg: _ } => a | b,
@@ -128,7 +129,7 @@ impl BPState {
                 // Enumerate over all incident edges, each edge giving a factor,
                 // then we iter over all adjacent vars to the factor
                 for factor_id in self.graph.var(var_id).edges.keys() {
-                    visit_stack.extend(self.graph.factors[*factor_id].edges.keys());
+                    visit_stack.extend(self.graph.factor(*factor_id).edges.keys());
                 }
             }
         }
@@ -155,8 +156,8 @@ impl BPState {
             // Enumerate over all incident edges, each edge giving a factor,
                 // then we iter over all adjacent vars to the factor
             for factor_id in self.graph.var(var_id).edges.keys() {
-                if self.graph.factors[*factor_id].multi {
-                    visit_stack.extend(self.graph.factors[*factor_id].edges.keys());
+                if self.graph.factor(*factor_id).multi {
+                    visit_stack.extend(self.graph.factor(*factor_id).edges.keys());
                 }
             }
         }
@@ -226,7 +227,7 @@ impl BPState {
             Distribution::divide(&self.var_state[var], &self.belief_to_var[edge]);
     }
     pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId]) {
-        let factor = &self.graph.factors[factor_id];
+        let factor = &self.graph.factor(factor_id);
         // Pre-erase to have buffers available in cache allocator.
         for d in dest {
             self.belief_to_var[factor.edges[d]].reset();
@@ -261,7 +262,7 @@ impl BPState {
 
     // Higher-level
     pub fn propagate_factor_all(&mut self, factor: FactorId) {
-        let dest: Vec<_> = self.graph.factors[factor].edges.keys().cloned().collect();
+        let dest: Vec<_> = self.graph.factor(factor).edges.keys().cloned().collect();
         self.propagate_factor(factor, dest.as_slice());
     }
     pub fn propagate_from_var_all(&mut self, var: VarId) {

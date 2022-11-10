@@ -6,13 +6,13 @@ type Proba = f64;
 /// The minimum non-zero probability (to avoid denormalization, etc.)
 const MIN_PROBA: Proba = 1e-40;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 enum DistrRepr {
     Uniform,
     Full(ndarray::Array2<Proba>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Distribution {
     multi: bool,
     shape: (usize, usize),

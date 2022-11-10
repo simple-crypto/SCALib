@@ -1,0 +1,211 @@
+
+from typing import Sequence, Mapping, Union, Optional
+
+import numpy as np
+import numpy.typing as npt
+
+from scalib import _scalib_ext
+from scalib.config.threading import _get_threadpool
+
+__all__ = ['FactorGraph', 'BPState']
+
+
+class FactorGraph:
+    r"""FactorGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
+
+    A SASCA is based on a set of variables, on knowledge of
+    relationships between those variables and information about the values of
+    the variables.
+
+    Variables have values in a binary finite field of size `nc`, and are viewed
+    as bit vectors. Those values are represented as integers in [0, nc).
+    Variables can be qualified as `SINGLE` or `MULTI`, which relates
+    to the multiple-execution feature of `FactorGraph`: when performing a
+    SASCA, it is useful to acquire multiple execution traces. In these
+    executions, some variables stay the same (e.g. an encryption key), and other
+    change (e.g. plaintext, masked variables, etc.).
+    The `SINGLE` qualifier should be used for variables that remain the same
+    and `MULTI` for variables that change.
+    `FactorGraph` will then build a graph where each `MULTI` variable is
+    replicated `n` times (once for each execution), as well as all the
+    relationships that relate at least on `MULTI` variable.
+
+    Relationships between variables are bitwise XOR, bitwise AND, bitwise OR,
+    bitiwise negation, modular addition, modular multiplication and lookup
+    table. A lookup table can describe any function that maps a single variable
+    to another variable.
+    Description of `nc`, the variables, and the relationships is given in a
+    text format specified below.
+
+    Finally, variables are of two kinds: the public values and the variables.
+    The public values have a single known value, while variables have an
+    uncertain value modelled as a probability distribution.
+    The SASCA computes these distributions from the relationships encoded by
+    the graph, and from prior information.
+    The prior distributions are by default uniform, but this can be changed.
+
+    An attack attempting to recover the secret key byte `k` is shown below.
+
+    .. code-block::
+
+        # Describe and generate the SASCAGraph
+        graph_desc = '''
+            # Small unprotected Sbox example
+            NC 256 # Graph over GF(256)
+            TABLE sbox   # Sbox
+            VAR SINGLE k # key (to recover !)
+            VAR MULTI p  # plaintext (known)
+            VAR MULTI x # Sbox input
+            VAR MULTI y # Sbox output (whose leakage is targeted)
+            PROPERTY x = k ^ p   # Key addition
+            PROPERTY y = sbox[x] # Sbox lookup
+            '''
+        # n is the number of traces for our attack.
+        graph = FactorGraph(graph_desc,n)
+
+        # Encode data into the graph
+        graph.set_table("sbox",aes_sbox)
+        graph.set_public("p",plaintexts)
+        graph.set_distribution("y",x_distribution)
+
+        # Solve graph
+        graph.run_bp(it=3)
+
+        # Get key distribution and derive key guess
+        k_distri = graph.get_distribution("k")
+        key_guess = np.argmax(k_distri[0,:])
+
+    By running a belief propagation algorithm (see [1]_), the distributions on all
+    the variables are updated based on their initial distributions. The
+    `SASCAGraph` can be solved by using `run_bp()`.
+
+    Notes
+    -----
+
+    **The graph description format** is a text line-oriented format (each line
+    of text is a statement) that describes a set of variables and relationships
+    between those variables.
+    The ordering of the statements is irrelevant and whitespace is irrelevant
+    except for newlines and around keywords. End-of-line comments start with
+    the `#` symbol.
+    The statements are:
+
+    - `NC <nc>`: specifies the field size (must be a power of two). There must
+      be one `NC` statement in the description.
+    - `PUBLIC SINGLE|MULTI variable_name`: declares a public variable.  `variable_name`
+      is an identifier of the variable (allowed characters are letters, digits
+      and underscore). One of the qualifiers `SINGLE` or `MULTI` must be given.
+    - `VAR SINGLE|MULTI variable_name`: declares a variables.
+    - `PROPERTY w = x^y^z`: declares a bitwise XOR property. There can be any
+      number of operands.
+    - `PROPERTY x = x&y`: declares a bitwise AND property.
+    - `PROPERTY x = t[y]`: declares a LOOKUP property (`y` is the lookup of the
+      table `t` at index `y`). No public variable is allowed in this property.
+    - `PROPERTY x = !y`: declares a bitwise NOT property.
+      No public variable is allowed in this property.
+    - `TABLE` t = [0, 3, 2, 1]`: Declares a table that can be used in a LOOKUP.
+      The values provided in the table must belong to the interval [0, nc).
+      The initialization expression can be omitted from the graph description
+      (e.g. `TABLE t`) and be given with `tables` parameter.
+
+
+    **Note**: if the `MULTI` feature doesn't match your use-case, using only
+    `SINGLE` variables works (or set the number of execution to 1).
+
+
+    .. [1] "Soft Analytical Side-Channel Attacks". N. Veyrat-Charvillon, B.
+       Gérard, F.-X. Standaert, ASIACRYPT2014.
+
+    Parameters
+    ----------
+    graph: string
+        The graph description.
+    """
+
+    def __init__(self, graph_text: str, tables: Mapping[str, npt.NDArray[np.uint32]]):
+        self._inner = _scalib_ext.FactorGraph(graph_text, tables)
+
+
+    def sanity_check(self, var_assignment):
+        """Verify that the graph is compatible with example variable assignments.
+
+        If the graph is not compatible, raise a ValueError.
+
+        Parameters
+        ----------
+        var_assignment: dict[var_name -> np.array (int)]
+            For each non-public variable its value for all test executions.
+        """
+        raise NotImplemented()
+
+
+class BPState:
+    def __init__(self, factor_graph: FactorGraph, nexec: int, public_values: Mapping[str, Union[int, Sequence[int]]]):
+        self._inner = factor_graph._inner.new_bp(nexec, public_values)
+
+    def is_cyclic(self) -> bool:
+        return self._inner.is_cyclic()
+
+    def set_evidence(self, var: str, distribution: Optional[npt.NDArray[np.float64]]):
+        r"""Sets prior distribution of a variable.
+
+        Parameters
+        ----------
+        var :
+            Identifier of the variable to assign the distribution to.
+        distribution :
+            Distribution to assign. If `var` is SINGLE, must be of shape `(nc,)`.
+            If `var` is MULTI, must be of shape `(nexec,nc)`.
+            If None, sets the prior distribution to uniform.
+        """
+        if distribution is None:
+            self._inner.drop_evidence(var)
+        else:
+            self._inner.set_evidence(var, distribution)
+
+    def get_distribution(self, var: str) -> Optional[npt.NDArray[np.float64]]:
+        r"""Returns the current distribution of a variable `var`.
+
+        Parameters
+        ----------
+        var : string
+            Identifier of the variable for which distribution must be returned.
+            Distribution cannot be obtained for public variables.
+
+        Returns
+        -------
+        distribution : array_like, f64
+            Distribution of `var`. If `var` is SINGLE, distribution has shape
+            `(nc)`. Else, it has shape `(n,nc)`.
+            If the variable has a uniform distribution, None may be returned
+            (but this is not guaranteed).
+        """
+        self._inner.get_state(var)
+
+    def set_distribution(self, var: str, distribution: Optional[npt.NDArray[np.float64]]):
+        r"""Sets current distribution of a variable in the BP.
+
+        Parameters
+        ----------
+        var :
+            Identifier of the variable to assign the distribution to.
+        distribution :
+            Distribution to assign. If `var` is SINGLE, must be of shape `(nc,)`.
+            If `var` is MULTI, must be of shape `(nexec,nc)`.
+            If None, sets the distribution to uniform.
+        """
+        if distribution is None:
+            self._inner.drop_state(var)
+        else:
+            self._inner.set_state(var, distribution)
+
+    def bp_loopy(self, it: int):
+        """Runs belief propagation algorithm on the current state of the graph.
+
+        Parameters
+        ----------
+        it :
+            Number of iterations of belief propagation.
+        """
+        self._inner.propagate_loopy_step(it)
+

@@ -29,13 +29,13 @@ pub type EdgeSlice<T> = index_vec::IndexSlice<EdgeId, [T]>;
 pub type PublicId = usize;
 pub type TableId = usize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct Var {
     pub(super) multi: bool,
     pub(super) edges: IndexMap<FactorId, EdgeId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct Factor {
     pub(super) kind: FactorKind,
     pub(super) multi: bool,
@@ -45,7 +45,7 @@ pub(super) struct Factor {
     pub(super) publics: Vec<PublicId>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) enum FactorKind<T = TableId> {
     AND { vars_neg: Vec<bool> },
     OR { vars_neg: Vec<bool> },
@@ -56,7 +56,7 @@ pub(super) enum FactorKind<T = TableId> {
     LOOKUP { table: T },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct Edge {
     pub(super) var: VarId,
     pub(super) pos_var: usize,
@@ -64,26 +64,27 @@ pub(super) struct Edge {
     pub(super) pos_factor: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct Public {
     pub(super) multi: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct Table {
     pub(super) values: Vec<ClassVal>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FactorGraph {
     pub(super) nc: usize,
     pub(super) vars: NamedList<Var>,
-    pub(super) factors: FactorVec<Factor>,
+    pub(super) factors: NamedList<Factor>,
     pub(super) edges: EdgeVec<Edge>,
     pub(super) publics: NamedList<Public>,
     pub(super) tables: NamedList<Table>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum PublicValue {
     Single(ClassVal),
     Multi(Vec<ClassVal>),
@@ -101,6 +102,8 @@ impl PublicValue {
 pub enum FGError {
     #[error("No variable named {0}.")]
     NoVar(String),
+    #[error("No factor named {0}.")]
+    NoFactor(String),
     #[error("No edge between variable {var} and factor {factor}.")]
     NoEdge {
         var: String,
@@ -108,16 +111,16 @@ pub enum FGError {
     }
 }
 
-type Result<T> = std::result::Result<T, FGError>;
+type FGResult<T> = Result<T, FGError>;
 
 impl FactorGraph {
-    pub fn edge(&self, var: VarId, factor: FactorId) -> Result<EdgeId> {
+    pub fn edge(&self, var: VarId, factor: FactorId) -> FGResult<EdgeId> {
         self.var(var).edges.get(&factor).map(|e| *e).ok_or_else(|| FGError::NoEdge { var: self.vars.get_index(var.idx()).unwrap().0.to_owned(), factor })
     }
     pub fn public_multi(&self) -> impl Iterator<Item=(&str, bool)> {
         self.publics.iter().map(|(n, v)| (n.as_str(), v.multi))
     }
-    pub fn get_varid(&self, var: &str) -> Result<VarId> {
+    pub fn get_varid(&self, var: &str) -> FGResult<VarId> {
         self.vars.get_index_of(var).map(VarId::from_idx).ok_or_else(|| FGError::NoVar(var.to_owned()))
     }
     pub(super) fn var(&self, var: VarId) -> &Var {
@@ -131,6 +134,12 @@ impl FactorGraph {
     }
     pub fn range_factors(&self) -> impl Iterator<Item=FactorId> {
         (0..self.factors.len()).map(FactorId::from_idx)
+    }
+    pub(super) fn factor(&self, factor: FactorId) -> &Factor {
+        &self.factors[factor.idx()]
+    }
+    pub fn get_factorid(&self, factor: &str) -> FGResult<FactorId> {
+        self.factors.get_index_of(factor).map(FactorId::from_idx).ok_or_else(|| FGError::NoFactor(factor.to_owned()))
     }
 }
 

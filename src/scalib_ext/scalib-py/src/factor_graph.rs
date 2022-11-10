@@ -4,11 +4,11 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 
-//use bincode::{deserialize, serialize};
+use bincode::{deserialize, serialize};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple};
 use pyo3::exceptions::{PyTypeError, PyKeyError, PyValueError};
-use numpy::{PyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
+use numpy::{PyArray, PyArray1, PyArray2};
 
 use scalib::sasca;
 
@@ -22,48 +22,40 @@ impl FactorGraph {
     }
 }
 
+// TODO run stuff on SCALib thread pool
 
 #[pymethods]
 impl FactorGraph {
     #[new]
     #[args(args = "*")]
-    fn new(py: Python, args: &PyTuple) -> PyResult<Self> {
+    fn new(args: &PyTuple) -> PyResult<Self> {
         if args.len() == 0 {
             Ok(Self { inner: None })
         } else {
-            /*
-            let (a, b): ( PyReadonlyArray2<f64>, bool) = args.extract()?;
-            let a = a.as_array().to_owned();
-            let inner = py.allow_threads(|| {
-                Some(...)
-            });
-            Ok(Self { inner })
-            */
-            todo!("FactorGraph deserialization");
+            let (description, tables): (&str, std::collections::HashMap<String, &PyArray1<sasca::ClassVal>>) =
+                                         args.extract()?;
+            let tables = tables.into_iter().map(|(k, v)| PyResult::<_>::Ok((k, PyArray::to_vec(v)?))).collect::<Result<std::collections::HashMap<_, _>, _>>()?;
+            let fg = sasca::build_graph(description, tables).map_err(|e| PyValueError::new_err(e.to_string()))?;
+            Ok(Self { inner: Some(Arc::new(fg)) })
         }
+    }
+
+    pub fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
+        Ok(PyBytes::new(py, &serialize(&self.inner.as_deref()).unwrap()).to_object(py))
+    }
+
+    pub fn __getnewargs__(&self) -> PyResult<()> {
+        Ok(())
     }
 
     pub fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
         match state.extract::<&PyBytes>(py) {
             Ok(s) => {
-                todo!("Implement Deserialize for FactorGraph");
-                //self.inner = deserialize(s.as_bytes()).unwrap();
+                self.inner = Some(Arc::new(deserialize(s.as_bytes()).unwrap()));
                 Ok(())
             }
             Err(e) => Err(e),
         }
-    }
-
-    pub fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
-        todo!("Implement Serialize for FactorGraph")
-        //Ok(PyBytes::new(py, &serialize(&self.inner).unwrap()).to_object(py))
-    }
-
-    #[staticmethod]
-    pub fn from_desc(description: &str, tables: std::collections::HashMap<String, &PyArray1<sasca::ClassVal>>) -> PyResult<Self> {
-        let tables = tables.into_iter().map(|(k, v)| PyResult::<_>::Ok((k, PyArray::to_vec(v)?))).collect::<Result<std::collections::HashMap<_, _>, _>>()?;
-        let fg = sasca::build_graph(description, tables).map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(Self { inner: Some(Arc::new(fg)) })
     }
 
     pub fn new_bp(&self, py: Python, nmulti: u32, public_values: PyObject) -> PyResult<BPState> {
@@ -103,42 +95,40 @@ impl BPState {
     fn get_var(&self, var: &str) -> PyResult<sasca::VarId> {
         self.get_inner().get_graph().get_varid(var).map_err(|e| PyValueError::new_err(e.to_string()))
     }
+    fn get_factor(&self, factor: &str) -> PyResult<sasca::FactorId> {
+        self.get_inner().get_graph().get_factorid(factor).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+    fn get_edge(&self, var: sasca::VarId, factor: sasca::FactorId) -> PyResult<sasca::EdgeId> {
+        self.get_inner().get_graph().edge(var, factor).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+    fn get_edge_named(&self, var: &str, factor: &str) -> PyResult<sasca::EdgeId> {
+        self.get_edge(self.get_var(var)?, self.get_factor(factor)?)
+    }
 }
 
 #[pymethods]
 impl BPState {
     #[new]
-    #[args(args = "*")]
-    fn new(py: Python, args: &PyTuple) -> PyResult<Self> {
-        if args.len() == 0 {
-            Ok(Self { inner: None })
-        } else {
-            /*
-            let (a, b): ( PyReadonlyArray2<f64>, bool) = args.extract()?;
-            let a = a.as_array().to_owned();
-            let inner = py.allow_threads(|| {
-                Some(...)
-            });
-            Ok(Self { inner })
-            */
-            todo!("BPState deserialization");
-        }
+    fn new() -> PyResult<Self> {
+        Ok(Self { inner: None })
+    }
+
+    pub fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
+        Ok(PyBytes::new(py, &serialize(&self.inner).unwrap()).to_object(py))
+    }
+
+    pub fn __getnewargs__(&self) -> PyResult<()> {
+        Ok(())
     }
 
     pub fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
         match state.extract::<&PyBytes>(py) {
             Ok(s) => {
-                todo!("Implement Deserialize for BPState");
-                //self.inner = deserialize(s.as_bytes()).unwrap();
+                self.inner = deserialize(s.as_bytes()).unwrap();
                 Ok(())
             }
             Err(e) => Err(e),
         }
-    }
-
-    pub fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
-        todo!("Implement Serialize for BPState")
-        //Ok(PyBytes::new(py, &serialize(&self.inner).unwrap()).to_object(py))
     }
 
     pub fn is_cyclic(&self) -> bool {
@@ -172,14 +162,12 @@ impl BPState {
         self.get_inner_mut().drop_state(var_id);
         Ok(())
     }
-    pub fn get_belief_to_var(&self, py: Python, var: &str) -> PyResult<PyObject> {
-        let var_id = self.get_var(var)?;
-        let edge_id = todo!();
+    pub fn get_belief_to_var(&self, py: Python, var: &str, factor: &str) -> PyResult<PyObject> {
+        let edge_id = self.get_edge_named(var, factor)?;
         distr2py(py, self.get_inner().get_belief_to_var(edge_id))
     }
-    pub fn get_belief_from_var(&self, py: Python, var: &str) -> PyResult<PyObject> {
-        let var_id = self.get_var(var)?;
-        let edge_id = todo!();
+    pub fn get_belief_from_var(&self, py: Python, var: &str, factor: &str) -> PyResult<PyObject> {
+        let edge_id = self.get_edge_named(var, factor)?;
         distr2py(py, self.get_inner().get_belief_from_var(edge_id))
     }
     pub fn propagate_to_var(&mut self, var: &str) -> PyResult<()> {
@@ -187,11 +175,10 @@ impl BPState {
         self.get_inner_mut().propagate_to_var(var_id);
         Ok(())
     }
-    pub fn propagate_factor(&mut self, factor_id: usize, dest: Vec<&str>) -> PyResult<()> {
+    pub fn propagate_factor(&mut self, factor: &str, dest: Vec<&str>) -> PyResult<()> {
+        let factor_id = self.get_factor(factor)?;
         let dest = dest.iter().map(|v| self.get_var(v)).collect::<Result<Vec<_>, _>>()?;
-        //self.get_inner_mut().propagate_factor(factor_id, dest.as_slice());
-        // requires factor labels
-        todo!();
+        self.get_inner_mut().propagate_factor(factor_id, dest.as_slice());
         Ok(())
     }
     pub fn propagate_loopy_step(&mut self, n_steps: u32) {

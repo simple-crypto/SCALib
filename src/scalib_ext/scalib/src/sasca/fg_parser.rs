@@ -42,6 +42,7 @@ pub(super) enum Statement {
     Invalid,
     Comment,
     Property {
+        name: Option<String>,
         dest: Var,
         expr: Expr,
     },
@@ -79,10 +80,11 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
         .or(op_expr('+', Expr::Add as fn(_) -> _))
         .or(op_expr('*', Expr::Mul as fn(_) -> _));
     let prop = kw("PROPERTY")
-        .ignore_then(var)
+        .ignore_then(ident.then_ignore(op(':')).or_not())
+        .then(var)
         .then_ignore(op('='))
         .then(expr)
-        .map(|(dest, expr)| Statement::Property { dest, expr });
+        .map(|((name, dest), expr)| Statement::Property { name, dest, expr });
     let nc = kw("NC")
         .ignore_then(text::int(10))
         .map(|nc: String| Statement::NC(nc.parse().unwrap()));

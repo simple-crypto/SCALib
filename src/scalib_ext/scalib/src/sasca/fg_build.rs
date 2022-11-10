@@ -11,6 +11,8 @@ pub enum GraphBuildError {
     MultipleTableDecl(String),
     #[error("Variable or public {0} declared multiple times.")]
     MultipleVarDecl(String),
+    #[error("Multiple properties with name {0}, property name must be unique.")]
+    MultiplePropDecl(String),
     #[error("Variable or public {0} not declared.")]
     UnknownVar(String),
     #[error("Table {0} not declared.")]
@@ -36,7 +38,7 @@ impl fg::FactorGraph {
         Self {
             nc,
             vars: NamedList::new(),
-            factors: fg::FactorVec::new(),
+            factors: NamedList::new(),
             edges: fg::EdgeVec::new(),
             publics: NamedList::new(),
             tables: NamedList::new(),
@@ -85,6 +87,7 @@ impl fg::FactorGraph {
     }
     fn add_factor<'a>(
         &mut self,
+        name: String,
         kind: fg::FactorKind<&str>,
         vars: impl Iterator<Item = &'a str>,
     ) -> Result<(), GraphBuildError> {
@@ -119,12 +122,18 @@ impl fg::FactorGraph {
                 .get_index_of(t)
                 .ok_or_else(|| GraphBuildError::UnknownTable(t.to_owned()))
         })?;
-        self.factors.push(fg::Factor {
+        let factor = 
+            fg::Factor {
             kind,
             multi,
             edges,
             publics,
-        });
+        };
+        if self.factors.contains_key(&name) {
+            return Err(GraphBuildError::MultiplePropDecl(name));
+        } else {
+            self.factors.insert(name, factor).is_some();
+        }
         Ok(())
     }
 }
@@ -199,9 +208,12 @@ pub(super) fn build_graph(
             | fg_parser::Statement::NC(_) => {}
         }
     }
+    let mut anon_names = (0..).map(|i| format!("ANONYMOUS_{}", i));
     for s in stmts {
-        if let fg_parser::Statement::Property { dest, expr } = s {
+        if let fg_parser::Statement::Property { name, dest, expr } = s {
+            let name = name.clone().unwrap_or_else(|| anon_names.next().unwrap());
             graph.add_factor(
+                name,
                 expr.as_factor_kind(),
                 std::iter::once(dest.0.as_str()).chain(expr.vars()),
             )?;
