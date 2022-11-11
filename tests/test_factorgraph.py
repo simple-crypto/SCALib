@@ -2,7 +2,10 @@ import pytest
 from scalib.attacks import FactorGraph, BPState
 import numpy as np
 import os
+import copy
 
+def normalize_distr(x):
+    return x / x.sum(axis=-1, keepdims=True)
 
 def test_table():
     """
@@ -150,8 +153,6 @@ def test_xor_public():
     """
     nc = 16
     n = 100
-    nc = 4
-    n = 3
     public = np.random.randint(0, nc, n, dtype=np.uint32)
     public2 = np.random.randint(0, nc, n, dtype=np.uint32)
     distri_x = np.random.randint(1, 100, (n, nc))
@@ -411,23 +412,25 @@ def test_xor():
     Test XOR between distributions
     """
     nc = 512
-    n = 1
-    nc = 4
+    n = 10
     distri_x = np.random.randint(1, 10000000, (n, nc))
     distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
     distri_y = np.random.randint(1, 10000000, (n, nc))
     distri_y = (distri_y.T / np.sum(distri_y, axis=1)).T
 
     distri_b = np.random.randint(1, 10000000, (n, nc))
+    distri_b[1,0] = 1.0
+    distri_b[1,1] = 0.0
     distri_b = (distri_b.T / np.sum(distri_b, axis=1)).T
     distri_a = np.random.randint(1, 10000000, (n, nc))
+    distri_a[1,:] = 1.0
     distri_a = (distri_a.T / np.sum(distri_a, axis=1)).T
 
     graph = f"""
         # some comments
         NC {nc}
-        PROPERTY z = x^y
-        PROPERTY x = a^b
+        PROPERTY s2: z = x^y
+        PROPERTY s1: x = a^b
         VAR MULTI x # some comments too
         VAR MULTI y
         VAR MULTI a
@@ -441,9 +444,22 @@ def test_xor():
     bp_state.set_evidence("a", distri_a)
     bp_state.set_evidence("b", distri_b)
 
-    #bp_state.bp_loopy(4)
-    bp_state.bp_loopy(2)
+    bp_state2 = copy.deepcopy(bp_state)
+
+    # Custom optimized sequence -- equivelent to non-loopy algo, but focusing only on z.
+    bp_state.propagate_var("a")
+    bp_state.propagate_var("b")
+    bp_state.propagate_var("x")
+    bp_state.propagate_factor("s1")
+    bp_state.propagate_var("x")
+    bp_state.propagate_var("y")
+    bp_state.propagate_factor("s2")
+    bp_state.propagate_var("z")
+
+    bp_state2.bp_loopy(3)
+
     distri_z = bp_state.get_distribution("z")
+    distri_z2 = bp_state2.get_distribution("z")
 
     msg = np.zeros((n, nc))
     distri_z_ref_multi = np.zeros((n, nc))
@@ -461,5 +477,10 @@ def test_xor():
         print(d)
         distri_z_ref *= d
 
+    print("distri_x_ref", distri_x)
+    print("distri_y_ref", distri_y)
+    print("distri_z_ref", distri_z_ref)
+
     distri_z_ref = distri_z_ref / np.sum(distri_z_ref)
     assert np.allclose(distri_z_ref, distri_z)
+    assert np.allclose(distri_z_ref, distri_z2)

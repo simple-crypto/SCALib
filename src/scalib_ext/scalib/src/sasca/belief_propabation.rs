@@ -163,7 +163,7 @@ impl BPState {
         }
         return false;
     }
-    pub fn get_graph(&self) -> &FactorGraph {
+    pub fn get_graph(&self) -> &std::sync::Arc<FactorGraph> {
         &self.graph
     }
     fn check_distribution(&self, distr: &Distribution, multi: bool) -> Result<(), BPError> {
@@ -189,7 +189,7 @@ impl BPState {
         self.evidence[var] = self.evidence[var].as_uniform();
     }
     pub fn get_state(&self, var: VarId) -> &Distribution {
-        dbg!(&self.var_state[var])
+        &self.var_state[var]
     }
     pub fn set_state(&mut self, var: VarId, state: Distribution) -> Result<(), BPError> {
         self.check_distribution(&state, self.graph.var_multi(var))?;
@@ -210,30 +210,26 @@ impl BPState {
     // var -> belief to func
     // trhough func: towards all vars, towards a subset of vars
     pub fn propagate_to_var(&mut self, var: VarId) {
-        dbg!("TO VAR");
-        dbg!(var);
         let distr_iter = self.graph.var(var)
             .edges
             .values()
-            .map(|e| dbg!(&self.belief_to_var[*e]));
+            .map(|e| &self.belief_to_var[*e]);
         self.var_state[var].reset();
-        self.var_state[var] = dbg!(self.evidence[var].clone());
+        self.var_state[var] = self.evidence[var].clone();
         self.var_state[var].multiply(distr_iter);
-        dbg!(&self.var_state[var]);
+        self.var_state[var].regularize();
     }
     pub fn propagate_from_var(&mut self, edge: EdgeId) {
-        dbg!("FROM VAR");
-        dbg!(edge);
         // TODO consider not dividing for better stability ?
-        let var = dbg!(self.graph.edges[edge].var);
+        // That should be ok if we ensure that there is no zero element and no
+        // underflow (or denormalization).
+        // This is guaranteed as long as min_proba > var_degree * MIN_POSITIVE
+        let var = self.graph.edges[edge].var;
         self.belief_from_var[edge].reset();
-        self.belief_from_var[edge] =
-            dbg!(Distribution::divide(&self.var_state[var], &self.belief_to_var[edge]));
+        self.belief_from_var[edge] = Distribution::divide(&self.var_state[var], &self.belief_to_var[edge]);
     }
     pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId]) {
-        dbg!("FACTOR");
-        dbg!(factor_id, dest);
-        let factor = dbg!(self.graph.factor(factor_id));
+        let factor = self.graph.factor(factor_id);
         // Pre-erase to have buffers available in cache allocator.
         for d in dest {
             self.belief_to_var[factor.edges[d]].reset();
@@ -245,7 +241,7 @@ impl BPState {
                 {
                     let it = $f(factor, &mut self.belief_from_var, dest, $($arg,)*);
                     for (distr, dest) in it.zip(dest.iter()) {
-                        self.belief_to_var[factor.edges[dest]]= dbg!(distr);
+                        self.belief_to_var[factor.edges[dest]] = distr;
                     }
                 }
             };
@@ -284,9 +280,7 @@ impl BPState {
         self.propagate_from_var_all(var);
     }
     pub fn propagate_loopy_step(&mut self, n_steps: u32) {
-        dbg!(n_steps);
-        for i in 0..n_steps {
-            dbg!(i);
+        for _ in 0..n_steps {
             for var_id in self.graph.range_vars() {
                 self.propagate_var(var_id);
             }

@@ -141,5 +141,20 @@ impl FactorGraph {
     pub fn get_factorid(&self, factor: &str) -> FGResult<FactorId> {
         self.factors.get_index_of(factor).map(FactorId::from_idx).ok_or_else(|| FGError::NoFactor(factor.to_owned()))
     }
+    pub fn var_names(&self) -> impl Iterator<Item=&str> {
+        self.vars.keys().map(String::as_str)
+    }
+    pub fn var_name(&self, v: VarId) -> &str {
+        self.vars.get_index(v.idx()).unwrap().0.as_str()
+    }
+    pub fn factor_names(&self) -> impl Iterator<Item=&str> {
+        self.factors.keys().map(String::as_str)
+    }
+    pub fn factor_name(&self, f: FactorId) -> &str {
+        self.factors.get_index(f.idx()).unwrap().0.as_str()
+    }
+    pub fn factor_scope<'s>(&'s self, factor: FactorId) -> impl Iterator<Item=VarId> + 's {
+        self.factor(factor).edges.keys().cloned()
+    }
 }
 

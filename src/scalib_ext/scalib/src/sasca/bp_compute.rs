@@ -68,7 +68,6 @@ impl Distribution {
         if multi {
             Self::new_multi(nc, nmulti)
         } else {
-            assert_eq!(nmulti, 1);
             Self::new_single(nc)
         }
     }
@@ -80,12 +79,17 @@ impl Distribution {
         }
     }
     pub fn new_constant(&self, cst: &PublicValue) -> Self {
+        if let PublicValue::Multi(cst) = cst {
+            assert!(self.multi);
+            assert_eq!(self.shape.0, cst.len());
+        }
         let mut value = ndarray::Array2::zeros(self.shape);
-        for (mut d, c) in value
-            .axis_iter_mut(ndarray::Axis(0))
-            .zip(cst.as_slice().iter())
-        {
-            d[*c as usize] = 1.0;
+        for (i, mut d) in value.axis_iter_mut(ndarray::Axis(0)).enumerate() {
+            let c = match cst {
+                PublicValue::Single(x) => *x,
+                PublicValue::Multi(x) => x[i],
+            };
+            d[c as usize] = 1.0;
         }
         Self {
             multi: self.multi,
@@ -98,11 +102,13 @@ impl Distribution {
         std::mem::swap(self, &mut new);
         new
     }
+
     pub fn multiply<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>) {
         for factor in factors {
-            dbg!(&self);
-            dbg!(factor);
-            assert_eq!(self.shape, factor.shape);
+            assert_eq!(self.shape.1, factor.shape.1);
+            if self.multi & factor.multi {
+                assert_eq!(self.shape.0, factor.shape.0);
+            }
             if let DistrRepr::Full(d) = &factor.value {
                 assert_eq!(d.dim(), factor.shape);
                 match (self.multi, factor.multi, &mut self.value) {
@@ -133,7 +139,6 @@ impl Distribution {
                 }
             }
         }
-        dbg!(self);
     }
     pub fn divide(state: &Distribution, div: &Distribution) -> Self {
         let mut res = Self {
@@ -187,6 +192,7 @@ impl Distribution {
             DistrRepr::Uniform => false,
         }
     }
+    /// Normalize sum to one, and make values not too small
     pub fn regularize(&mut self) {
         self.for_each_ignore(|mut d| {
             let norm_f = 1.0 / (d.sum() + MIN_PROBA * d.len() as f64);

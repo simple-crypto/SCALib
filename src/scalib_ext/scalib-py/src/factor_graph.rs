@@ -20,6 +20,12 @@ impl FactorGraph {
     fn get_inner(&self) -> &Arc<sasca::FactorGraph> {
         self.inner.as_ref().unwrap()
     }
+    fn get_var(&self, var: &str) -> PyResult<sasca::VarId> {
+        self.get_inner().get_varid(var).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+    fn get_factor(&self, factor: &str) -> PyResult<sasca::FactorId> {
+        self.get_inner().get_factorid(factor).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
 }
 
 // TODO run stuff on SCALib thread pool
@@ -44,10 +50,6 @@ impl FactorGraph {
         Ok(PyBytes::new(py, &serialize(&self.inner.as_deref()).unwrap()).to_object(py))
     }
 
-    pub fn __getnewargs__(&self) -> PyResult<()> {
-        Ok(())
-    }
-
     pub fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
         match state.extract::<&PyBytes>(py) {
             Ok(s) => {
@@ -70,6 +72,17 @@ impl FactorGraph {
             }
         }).collect::<Result<Vec<sasca::PublicValue>, PyErr>>()?;
         Ok(BPState { inner: Some(sasca::BPState::new(self.get_inner().clone(), nmulti, pub_values)) })
+    }
+
+    pub fn var_names(&self) -> Vec<&str> {
+        self.get_inner().var_names().collect()
+    }
+    pub fn factor_names(&self) -> Vec<&str> {
+        self.get_inner().factor_names().collect()
+    }
+    pub fn factor_scope<'s>(&'s self, factor: &str) -> PyResult<Vec<&'s str>> {
+        let factor_id = self.get_factor(factor)?;
+        Ok(self.get_inner().factor_scope(factor_id).map(|v| self.get_inner().var_name(v)).collect())
     }
 }
 
@@ -109,16 +122,13 @@ impl BPState {
 #[pymethods]
 impl BPState {
     #[new]
-    fn new() -> PyResult<Self> {
+    #[args(_args = "*")]
+    fn new(_args: &PyTuple) -> PyResult<Self> {
         Ok(Self { inner: None })
     }
 
     pub fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
         Ok(PyBytes::new(py, &serialize(&self.inner).unwrap()).to_object(py))
-    }
-
-    pub fn __getnewargs__(&self) -> PyResult<()> {
-        Ok(())
     }
 
     pub fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
@@ -170,9 +180,14 @@ impl BPState {
         let edge_id = self.get_edge_named(var, factor)?;
         distr2py(py, self.get_inner().get_belief_from_var(edge_id))
     }
-    pub fn propagate_to_var(&mut self, var: &str) -> PyResult<()> {
+    pub fn propagate_var(&mut self, var: &str) -> PyResult<()> {
         let var_id = self.get_var(var)?;
-        self.get_inner_mut().propagate_to_var(var_id);
+        self.get_inner_mut().propagate_var(var_id);
+        Ok(())
+    }
+    pub fn propagate_factor_all(&mut self, factor: &str) -> PyResult<()> {
+        let factor_id = self.get_factor(factor)?;
+        self.get_inner_mut().propagate_factor_all(factor_id);
         Ok(())
     }
     pub fn propagate_factor(&mut self, factor: &str, dest: Vec<&str>) -> PyResult<()> {
@@ -183,6 +198,9 @@ impl BPState {
     }
     pub fn propagate_loopy_step(&mut self, n_steps: u32) {
         self.get_inner_mut().propagate_loopy_step(n_steps);
+    }
+    pub fn graph(&self) -> FactorGraph {
+        FactorGraph { inner: Some(self.get_inner().get_graph().clone()) }
     }
 }
 

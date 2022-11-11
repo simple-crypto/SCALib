@@ -201,6 +201,74 @@ class BPState:
             self._inner.drop_state(var)
         else:
             self._inner.set_state(var, distribution)
+ 
+    def get_belief_to_var(self, var: str, factor: str) -> Optional[npt.NDArray[np.float64]]:
+        r"""Returns the current belief from factor to var.
+
+        Parameters
+        ----------
+        var : string
+            Identifier of the variable for which distribution must be returned.
+        factor : string
+            Identifier of the factor for which distribution must be returned.
+
+        Returns
+        -------
+        distribution : array_like, f64
+            Belief on the edge from `factor` to `var`. If `factor` is SINGLE, distribution has shape
+            `(nc)`. Else, it has shape `(n,nc)`.
+            If the belief is a uniform distribution, None may be returned
+            (but this is not guaranteed).
+        """
+        return self._inner.get_belief_to_var(var, factor)
+
+    def get_belief_from_var(self, var: str, factor: str) -> Optional[npt.NDArray[np.float64]]:
+        r"""Returns the current belief from var to factor.
+
+        Parameters
+        ----------
+        var : string
+            Identifier of the variable for which distribution must be returned.
+        factor : string
+            Identifier of the factor for which distribution must be returned.
+
+        Returns
+        -------
+        distribution : array_like, f64
+            Belief on the edge from `var` to `factor`. If `factor` is SINGLE, distribution has shape
+            `(nc)`. Else, it has shape `(n,nc)`.
+            If the belief is a uniform distribution, None may be returned
+            (but this is not guaranteed).
+        """
+        return self._inner.get_belief_from_var(var, factor)
+
+    def propagate_var(self, var: str):
+        """Run belief propagation on variable var.
+
+        This fetches beliefs from adjacent factors, computes the var
+        distribution, and sends updated beliefs to all adjacent factors.
+
+        Parameters
+        ----------
+        var : string
+            Identifier of the variable.
+
+        """
+        return self._inner.propagate_var(var)
+
+    def propagate_factor(self, factor: str):
+        """Run belief propagation on the given factor.
+
+        This fetches beliefs from adjacent variables and sends updated beliefs
+        to all adjacent variables.
+
+        Parameters
+        ----------
+        var : string
+            Identifier of the variable.
+
+        """
+        return self._inner.propagate_factor_all(factor)
 
     def bp_loopy(self, it: int):
         """Runs belief propagation algorithm on the current state of the graph.
@@ -211,4 +279,23 @@ class BPState:
             Number of iterations of belief propagation.
         """
         self._inner.propagate_loopy_step(it)
+
+    def debug(self):
+        s = []
+        s.append("VAR DISTRIBUTION")
+        for var in self._inner.graph().var_names():
+            s.append(f"\tVar {var}")
+            s.append(repr(self.get_distribution(var)))
+        s.append("FACTORS FROM VARS")
+        for factor in self._inner.graph().factor_names():
+            for var in self._inner.graph().factor_scope(factor):
+                s.append(f"\t{var} -> {factor}")
+                s.append(repr(self.get_belief_from_var(var, factor)))
+        s.append("FACTORS TO VARS")
+        for factor in self._inner.graph().factor_names():
+            for var in self._inner.graph().factor_scope(factor):
+                s.append(f"\t{factor} -> {var}")
+                s.append(repr(self.get_belief_to_var(var, factor)))
+        return "\n".join(s)
+
 
