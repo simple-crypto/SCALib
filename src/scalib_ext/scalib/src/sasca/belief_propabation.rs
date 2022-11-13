@@ -1,10 +1,11 @@
-
 use itertools::Itertools;
 use thiserror::Error;
 
-use super::{Distribution, PublicValue, FactorGraph};
-use super::factor_graph::{Table,Factor, EdgeId, VarId, FactorId, FactorKind, VarVec, FactorVec, EdgeVec, EdgeSlice};
+use super::factor_graph::{
+    EdgeId, EdgeSlice, EdgeVec, Factor, FactorId, FactorKind, FactorVec, Table, VarId, VarVec,
+};
 use super::ClassVal;
+use super::{Distribution, FactorGraph, PublicValue};
 
 // TODO improvements
 // - use a pool for Distribution allocations (can be a simple Vec storing them), to avoid frequent
@@ -66,16 +67,24 @@ impl BPState {
         }
     }
     fn reduce_pub(graph: &FactorGraph, public_values: &[PublicValue]) -> FactorVec<PublicValue> {
-        fn merge_pubs<F: Fn(ClassVal, ClassVal) -> ClassVal>(f: F, p1: PublicValue, p2: &PublicValue) -> PublicValue {
+        fn merge_pubs<F: Fn(ClassVal, ClassVal) -> ClassVal>(
+            f: F,
+            p1: PublicValue,
+            p2: &PublicValue,
+        ) -> PublicValue {
             match (p1, p2) {
-                (PublicValue::Single(c1), PublicValue::Single(c2)) => PublicValue::Single(f(c1, *c2)),
-                (PublicValue::Single(c1), PublicValue::Multi(c2)) => PublicValue::Multi(c2.iter().map(|c2| f(c1, *c2)).collect()),
+                (PublicValue::Single(c1), PublicValue::Single(c2)) => {
+                    PublicValue::Single(f(c1, *c2))
+                }
+                (PublicValue::Single(c1), PublicValue::Multi(c2)) => {
+                    PublicValue::Multi(c2.iter().map(|c2| f(c1, *c2)).collect())
+                }
                 (PublicValue::Multi(mut c1), PublicValue::Single(c2)) => {
                     for c1 in c1.iter_mut() {
                         *c1 = f(*c1, *c2);
                     }
                     PublicValue::Multi(c1)
-                },
+                }
                 (PublicValue::Multi(mut c1), PublicValue::Multi(c2)) => {
                     for (c1, c2) in c1.iter_mut().zip(c2.iter()) {
                         *c1 = f(*c1, *c2);
@@ -84,23 +93,35 @@ impl BPState {
                 }
             }
         }
-        graph.factors.values().map(|factor| {
-            let merge_fn = |a, b| match factor.kind {
-                FactorKind::AND { vars_neg: _ } => a & b,
-                FactorKind::OR { vars_neg: _ } => a | b,
-                FactorKind::XOR => a ^ b,
-                FactorKind::ADD => (((a as usize) + (b as usize)) % graph.nc) as ClassVal,
-                FactorKind::MUL => (((a as u64) + (b as u64)) % (graph.nc as u64)) as ClassVal,
-                FactorKind::NOT | FactorKind::LOOKUP { .. } => unreachable!(),
-            };
-            let init = match factor.kind {
-                FactorKind::AND { vars_neg: _ } => PublicValue::Single((graph.nc -1) as ClassVal),
-                FactorKind::OR { vars_neg: _ } | FactorKind::XOR | FactorKind::ADD => PublicValue::Single(0),
-                FactorKind::MUL => PublicValue::Single(1),
-                FactorKind::NOT | FactorKind::LOOKUP { .. } => unreachable!(),
-            };
-            factor.publics.iter().map(|pub_id| &public_values[*pub_id]).fold(init, |p1, p2| merge_pubs(merge_fn, p1, p2))
-        }).collect()
+        graph
+            .factors
+            .values()
+            .map(|factor| {
+                let merge_fn = |a, b| match factor.kind {
+                    FactorKind::AND { vars_neg: _ } => a & b,
+                    FactorKind::OR { vars_neg: _ } => a | b,
+                    FactorKind::XOR => a ^ b,
+                    FactorKind::ADD => (((a as usize) + (b as usize)) % graph.nc) as ClassVal,
+                    FactorKind::MUL => (((a as u64) + (b as u64)) % (graph.nc as u64)) as ClassVal,
+                    FactorKind::NOT | FactorKind::LOOKUP { .. } => unreachable!(),
+                };
+                let init = match factor.kind {
+                    FactorKind::AND { vars_neg: _ } => {
+                        PublicValue::Single((graph.nc - 1) as ClassVal)
+                    }
+                    FactorKind::OR { vars_neg: _ } | FactorKind::XOR | FactorKind::ADD => {
+                        PublicValue::Single(0)
+                    }
+                    FactorKind::MUL => PublicValue::Single(1),
+                    FactorKind::NOT | FactorKind::LOOKUP { .. } => unreachable!(),
+                };
+                factor
+                    .publics
+                    .iter()
+                    .map(|pub_id| &public_values[*pub_id])
+                    .fold(init, |p1, p2| merge_pubs(merge_fn, p1, p2))
+            })
+            .collect()
     }
     pub fn is_cyclic(&self) -> bool {
         // Let's do something simple here, and revisit it when we need more sophisticated queries.
@@ -139,7 +160,9 @@ impl BPState {
         // For 2., we do the same, but consider all "single" nodes as one:
         // we start from all the "single" nodes together, we ignore paths that touch only "single"
         // node (i.e., the !multi factors), and run the DFS.
-        let mut seen_vars: VarVec<bool> = std::iter::repeat(false).take(self.graph.vars.len()).collect();
+        let mut seen_vars: VarVec<bool> = std::iter::repeat(false)
+            .take(self.graph.vars.len())
+            .collect();
         // start from single vars
         let mut visit_stack: VarVec<_> = self
             .graph
@@ -154,7 +177,7 @@ impl BPState {
             }
             seen_vars[var_id] = true;
             // Enumerate over all incident edges, each edge giving a factor,
-                // then we iter over all adjacent vars to the factor
+            // then we iter over all adjacent vars to the factor
             for factor_id in self.graph.var(var_id).edges.keys() {
                 if self.graph.factor(*factor_id).multi {
                     visit_stack.extend(self.graph.factor(*factor_id).edges.keys());
@@ -169,13 +192,16 @@ impl BPState {
     fn check_distribution(&self, distr: &Distribution, multi: bool) -> Result<(), BPError> {
         if distr.multi() != multi {
             Err(BPError::WrongDistributionKind(
-                    if distr.multi() { "multi" } else { "single" },
-                    if multi { "multi" } else { "single" },
+                if distr.multi() { "multi" } else { "single" },
+                if multi { "multi" } else { "single" },
             ))
-        } else if distr.shape().1  != self.graph.nc {
+        } else if distr.shape().1 != self.graph.nc {
             Err(BPError::WrongDistributionNc(distr.shape().1, self.graph.nc))
         } else if distr.multi() && self.nmulti as usize != distr.shape().0 {
-            Err(BPError::WrongDistributionNmulti(distr.shape().0, self.nmulti))
+            Err(BPError::WrongDistributionNmulti(
+                distr.shape().0,
+                self.nmulti,
+            ))
         } else {
             Ok(())
         }
@@ -210,7 +236,9 @@ impl BPState {
     // var -> belief to func
     // trhough func: towards all vars, towards a subset of vars
     pub fn propagate_to_var(&mut self, var: VarId) {
-        let distr_iter = self.graph.var(var)
+        let distr_iter = self
+            .graph
+            .var(var)
             .edges
             .values()
             .map(|e| &self.belief_to_var[*e]);
@@ -226,7 +254,8 @@ impl BPState {
         // This is guaranteed as long as min_proba > var_degree * MIN_POSITIVE
         let var = self.graph.edges[edge].var;
         self.belief_from_var[edge].reset();
-        self.belief_from_var[edge] = Distribution::divide(&self.var_state[var], &self.belief_to_var[edge]);
+        self.belief_from_var[edge] =
+            Distribution::divide(&self.var_state[var], &self.belief_to_var[edge]);
     }
     pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId]) {
         let factor = self.graph.factor(factor_id);
@@ -248,10 +277,20 @@ impl BPState {
         }
         match &factor.kind {
             FactorKind::AND { vars_neg } => {
-                prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], vars_neg.as_slice(), false)
+                prop_factor!(
+                    factor_gen_and,
+                    &self.pub_reduced[factor_id],
+                    vars_neg.as_slice(),
+                    false
+                )
             }
             FactorKind::OR { vars_neg } => {
-                prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], vars_neg.as_slice(), true)
+                prop_factor!(
+                    factor_gen_and,
+                    &self.pub_reduced[factor_id],
+                    vars_neg.as_slice(),
+                    true
+                )
             }
             // TODO know when to erase incoming
             FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id], false),
@@ -332,6 +371,21 @@ fn factor_xor<'a>(
     pub_red: &PublicValue,
     clear_incoming: bool,
 ) -> impl Iterator<Item = Distribution> + 'a {
+    // Special case for single-input XOR
+    if factor.edges.len() == 2 {
+        return (0..2)
+            .map(|i| {
+                let mut distr = if clear_incoming {
+                    belief_from_var[factor.edges[1 - i]].reset()
+                } else {
+                    belief_from_var[factor.edges[1 - i]].clone()
+                };
+                distr.xor_cst(pub_red);
+                distr
+            })
+            .collect::<Vec<_>>()
+            .into_iter();
+    }
     // TODO special case for single-input case.
     let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
     acc.wht();

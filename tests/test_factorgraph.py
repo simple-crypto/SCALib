@@ -179,8 +179,14 @@ def test_xor_public():
         distri_y_ref[np.arange(n), y] = distri_x[np.arange(n), x]
 
     distri_x = bp_state.get_distribution("x")
+
+    print("p ^ p2")
+    print(public ^ public2)
+    print("y_ref")
     print(distri_y_ref)
+    print("y")
     print(distri_y)
+    print("x")
     print(distri_x)
     assert distri_x is not None
     assert distri_y is not None

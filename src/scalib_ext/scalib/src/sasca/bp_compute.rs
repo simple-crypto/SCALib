@@ -1,4 +1,5 @@
 use super::factor_graph::PublicValue;
+use super::ClassVal;
 use ndarray::s;
 
 type Proba = f64;
@@ -176,7 +177,7 @@ impl Distribution {
         }
     }
     pub fn wht(&mut self) {
-        self.for_each_error(|mut d| {
+        self.for_each_error(|mut d, _| {
             slice_wht(d.as_slice_mut().unwrap());
         });
     }
@@ -194,13 +195,13 @@ impl Distribution {
     }
     /// Normalize sum to one, and make values not too small
     pub fn regularize(&mut self) {
-        self.for_each_ignore(|mut d| {
+        self.for_each_ignore(|mut d, _| {
             let norm_f = 1.0 / (d.sum() + MIN_PROBA * d.len() as f64);
             d.mapv_inplace(|x| (x + MIN_PROBA) * norm_f);
         })
     }
     pub fn make_non_zero_signed(&mut self) {
-        self.for_each_ignore(|mut d| {
+        self.for_each_ignore(|mut d, _| {
             d.mapv_inplace(|y| {
                 if y.is_sign_positive() {
                     y.max(MIN_PROBA)
@@ -210,14 +211,19 @@ impl Distribution {
             });
         });
     }
+    pub fn xor_cst(&mut self, cst: &super::PublicValue) {
+        self.for_each_ignore(|mut d, i| {
+            xor_cst_slice(d.as_slice_mut().unwrap(), cst.get(i));
+        });
+    }
     fn for_each<F, G>(&mut self, f: F, default: G)
     where
-        F: Fn(ndarray::ArrayViewMut1<f64>),
+        F: Fn(ndarray::ArrayViewMut1<f64>, usize),
         G: Fn(&mut Self),
     {
         if let DistrRepr::Full(v) = &mut self.value {
-            for d in v.axis_iter_mut(ndarray::Axis(0)) {
-                f(d);
+            for (i, d) in v.axis_iter_mut(ndarray::Axis(0)).enumerate() {
+                f(d, i);
             }
         } else {
             default(self);
@@ -225,13 +231,13 @@ impl Distribution {
     }
     fn for_each_ignore<F>(&mut self, f: F)
     where
-        F: Fn(ndarray::ArrayViewMut1<f64>),
+        F: Fn(ndarray::ArrayViewMut1<f64>, usize),
     {
         self.for_each(f, |_| {});
     }
     fn for_each_error<F>(&mut self, f: F)
     where
-        F: Fn(ndarray::ArrayViewMut1<f64>),
+        F: Fn(ndarray::ArrayViewMut1<f64>, usize),
     {
         self.for_each(f, |_| {
             unimplemented!();
@@ -240,7 +246,6 @@ impl Distribution {
 }
 
 /// Walsh-Hadamard transform (non-normalized).
-#[inline(always)]
 fn slice_wht(a: &mut [f64]) {
     // The speed of this can be much improved, with the following techiques
     // * improved memory locality
@@ -259,5 +264,23 @@ fn slice_wht(a: &mut [f64]) {
             }
         }
         h *= 2;
+    }
+}
+
+fn xor_cst_slice(a: &mut [f64], cst: ClassVal) {
+    let leading_zeros = cst.leading_zeros();
+    if leading_zeros == 32 {
+        return;
+    }
+    let pivot_bit = ClassVal::BITS - 1 - leading_zeros;
+    let step = [1, 1 << (pivot_bit + 1) as usize];
+    let n_max = [1 << pivot_bit as usize, a.len()];
+    let n_iter = [n_max[0] / step[0], n_max[1] / step[1]];
+    let outer_i = if n_iter[0] < n_iter[1] { 0 } else { 1 };
+    for i in (0..n_max[outer_i]).step_by(step[outer_i]) {
+        for j in (0..n_max[1 - outer_i]).step_by(step[1 - outer_i]) {
+            let idx = i + j;
+            a.swap(idx, idx ^ cst as usize);
+        }
     }
 }

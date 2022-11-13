@@ -2,8 +2,7 @@ use indexmap::IndexMap;
 
 use thiserror::Error;
 
-
-use super::{ClassVal,NamedList};
+use super::{ClassVal, NamedList};
 
 macro_rules! new_id {
     ($it:ident, $vt:ident) => {
@@ -20,7 +19,7 @@ macro_rules! new_id {
                 <Self as From<usize>>::from(x)
             }
         }
-    }
+    };
 }
 new_id!(VarId, VarVec);
 new_id!(FactorId, FactorVec);
@@ -96,6 +95,18 @@ impl PublicValue {
             PublicValue::Multi(x) => x.as_slice(),
         }
     }
+    pub fn iter(&self, n: usize) -> impl Iterator<Item = ClassVal> + '_ {
+        if let PublicValue::Multi(x) = self {
+            assert_eq!(x.len(), n);
+        }
+        (0..n).map(|i| self.get(i))
+    }
+    pub fn get(&self, n: usize) -> ClassVal {
+        match self {
+            PublicValue::Single(x) => *x,
+            PublicValue::Multi(x) => x[n],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Error)]
@@ -105,23 +116,30 @@ pub enum FGError {
     #[error("No factor named {0}.")]
     NoFactor(String),
     #[error("No edge between variable {var} and factor {factor}.")]
-    NoEdge {
-        var: String,
-        factor: FactorId,
-    }
+    NoEdge { var: String, factor: FactorId },
 }
 
 type FGResult<T> = Result<T, FGError>;
 
 impl FactorGraph {
     pub fn edge(&self, var: VarId, factor: FactorId) -> FGResult<EdgeId> {
-        self.var(var).edges.get(&factor).map(|e| *e).ok_or_else(|| FGError::NoEdge { var: self.vars.get_index(var.idx()).unwrap().0.to_owned(), factor })
+        self.var(var)
+            .edges
+            .get(&factor)
+            .map(|e| *e)
+            .ok_or_else(|| FGError::NoEdge {
+                var: self.vars.get_index(var.idx()).unwrap().0.to_owned(),
+                factor,
+            })
     }
-    pub fn public_multi(&self) -> impl Iterator<Item=(&str, bool)> {
+    pub fn public_multi(&self) -> impl Iterator<Item = (&str, bool)> {
         self.publics.iter().map(|(n, v)| (n.as_str(), v.multi))
     }
     pub fn get_varid(&self, var: &str) -> FGResult<VarId> {
-        self.vars.get_index_of(var).map(VarId::from_idx).ok_or_else(|| FGError::NoVar(var.to_owned()))
+        self.vars
+            .get_index_of(var)
+            .map(VarId::from_idx)
+            .ok_or_else(|| FGError::NoVar(var.to_owned()))
     }
     pub(super) fn var(&self, var: VarId) -> &Var {
         &self.vars[var.idx()]
@@ -129,32 +147,34 @@ impl FactorGraph {
     pub fn var_multi(&self, var: VarId) -> bool {
         self.var(var).multi
     }
-    pub fn range_vars(&self) -> impl Iterator<Item=VarId> {
+    pub fn range_vars(&self) -> impl Iterator<Item = VarId> {
         (0..self.vars.len()).map(VarId::from_idx)
     }
-    pub fn range_factors(&self) -> impl Iterator<Item=FactorId> {
+    pub fn range_factors(&self) -> impl Iterator<Item = FactorId> {
         (0..self.factors.len()).map(FactorId::from_idx)
     }
     pub(super) fn factor(&self, factor: FactorId) -> &Factor {
         &self.factors[factor.idx()]
     }
     pub fn get_factorid(&self, factor: &str) -> FGResult<FactorId> {
-        self.factors.get_index_of(factor).map(FactorId::from_idx).ok_or_else(|| FGError::NoFactor(factor.to_owned()))
+        self.factors
+            .get_index_of(factor)
+            .map(FactorId::from_idx)
+            .ok_or_else(|| FGError::NoFactor(factor.to_owned()))
     }
-    pub fn var_names(&self) -> impl Iterator<Item=&str> {
+    pub fn var_names(&self) -> impl Iterator<Item = &str> {
         self.vars.keys().map(String::as_str)
     }
     pub fn var_name(&self, v: VarId) -> &str {
         self.vars.get_index(v.idx()).unwrap().0.as_str()
     }
-    pub fn factor_names(&self) -> impl Iterator<Item=&str> {
+    pub fn factor_names(&self) -> impl Iterator<Item = &str> {
         self.factors.keys().map(String::as_str)
     }
     pub fn factor_name(&self, f: FactorId) -> &str {
         self.factors.get_index(f.idx()).unwrap().0.as_str()
     }
-    pub fn factor_scope<'s>(&'s self, factor: FactorId) -> impl Iterator<Item=VarId> + 's {
+    pub fn factor_scope<'s>(&'s self, factor: FactorId) -> impl Iterator<Item = VarId> + 's {
         self.factor(factor).edges.keys().cloned()
     }
 }
-
