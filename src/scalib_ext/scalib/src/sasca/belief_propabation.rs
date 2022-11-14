@@ -248,8 +248,7 @@ impl BPState {
         self.var_state[var].regularize();
     }
     pub fn propagate_from_var(&mut self, edge: EdgeId) {
-        // TODO consider not dividing for better stability ?
-        // That should be ok if we ensure that there is no zero element and no
+        // Dividing here is ok if we ensure that there is no zero element and no
         // underflow (or denormalization).
         // This is guaranteed as long as min_proba > var_degree * MIN_POSITIVE
         let var = self.graph.edges[edge].var;
@@ -294,7 +293,7 @@ impl BPState {
             }
             // TODO know when to erase incoming
             FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id], false),
-            FactorKind::NOT => prop_factor!(factor_not,),
+            FactorKind::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32, false),
             FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id]),
             FactorKind::MUL => prop_factor!(factor_mul, &self.pub_reduced[factor_id]),
             FactorKind::LOOKUP { table } => prop_factor!(factor_lookup, &self.graph.tables[*table]),
@@ -386,7 +385,6 @@ fn factor_xor<'a>(
             .collect::<Vec<_>>()
             .into_iter();
     }
-    // TODO special case for single-input case.
     let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
     acc.wht();
     let mut taken_dest = vec![false; factor.edges.len()];
@@ -464,13 +462,18 @@ fn factor_xor<'a>(
 
 fn factor_not<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a EdgeSlice<Distribution>,
+    belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
+    inv_cst: u32,
+    clear_incoming: bool,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    let in_distr = &belief_from_var[factor.edges[0]];
-    let mut res = in_distr.clone();
-    res.not();
-    return std::iter::once(res);
+    factor_xor(
+        factor,
+        belief_from_var,
+        dest,
+        &PublicValue::Single(inv_cst),
+        clear_incoming,
+    )
 }
 
 // TODO handle subraction too

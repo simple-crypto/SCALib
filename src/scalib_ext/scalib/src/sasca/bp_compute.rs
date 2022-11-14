@@ -172,9 +172,10 @@ impl Distribution {
         }
     }
     pub fn not(&mut self) {
-        if let DistrRepr::Full(ref mut array) = &mut self.value {
-            todo!()
-        }
+        let inv_cst = (self.shape.1 - 1) as u32;
+        self.for_each_ignore(|mut d, _| {
+            xor_cst_slice(d.as_slice_mut().unwrap(), inv_cst);
+        });
     }
     pub fn wht(&mut self) {
         self.for_each_error(|mut d, _| {
@@ -211,7 +212,7 @@ impl Distribution {
             });
         });
     }
-    pub fn xor_cst(&mut self, cst: &super::PublicValue) {
+    pub fn xor_cst(&mut self, cst: &PublicValue) {
         self.for_each_ignore(|mut d, i| {
             xor_cst_slice(d.as_slice_mut().unwrap(), cst.get(i));
         });
