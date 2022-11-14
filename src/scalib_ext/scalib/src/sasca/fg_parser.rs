@@ -111,7 +111,7 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
         .or(var_decl)
         .or(pub_decl)
         .or(table)
-        .or(space.to(Statement::Empty))
+        .or(pad.at_least(0).to(Statement::Empty))
         .or(end().to(Statement::End))
         .then_ignore(comment.or_not())
         .recover_with(skip_until(['\n', '\r'], |_| Statement::Invalid))

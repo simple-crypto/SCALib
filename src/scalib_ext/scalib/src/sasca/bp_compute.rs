@@ -182,6 +182,21 @@ impl Distribution {
             slice_wht(d.as_slice_mut().unwrap());
         });
     }
+    pub fn cumt(&mut self) {
+        self.for_each_error(|mut d, _| {
+            slice_cumt(d.as_slice_mut().unwrap());
+        });
+    }
+    pub fn cumti(&mut self) {
+        self.for_each_error(|mut d, _| {
+            slice_cumti(d.as_slice_mut().unwrap());
+        });
+    }
+    pub fn opandt(&mut self) {
+        self.for_each_error(|mut d, _| {
+            slice_opandt(d.as_slice_mut().unwrap());
+        });
+    }
     pub fn fft(&mut self) {
         todo!()
     }
@@ -215,6 +230,16 @@ impl Distribution {
     pub fn xor_cst(&mut self, cst: &PublicValue) {
         self.for_each_ignore(|mut d, i| {
             xor_cst_slice(d.as_slice_mut().unwrap(), cst.get(i));
+        });
+    }
+    pub fn and_cst(&mut self, cst: &PublicValue) {
+        self.for_each_ignore(|mut d, i| {
+            and_cst_slice(d.as_slice_mut().unwrap(), cst.get(i));
+        });
+    }
+    pub fn inv_and_cst(&mut self, cst: &PublicValue) {
+        self.for_each_ignore(|mut d, i| {
+            inv_and_cst_slice(d.as_slice_mut().unwrap(), cst.get(i));
         });
     }
     fn for_each<F, G>(&mut self, f: F, default: G)
@@ -268,6 +293,69 @@ fn slice_wht(a: &mut [f64]) {
     }
 }
 
+/// Cumulative transform (U in RLDA paper)
+fn slice_cumt(a: &mut [f64]) {
+    // Note: the speed of this can probably be much improved, with the following techiques
+    // * use (auto-)vectorization
+    // * generate small static kernels
+    let len = a.len();
+    let mut h = 1;
+    while h < len {
+        for mut i in 0..(len / (2 * h) as usize) {
+            i *= 2 * h;
+            for j in i..(i + h) {
+                let x = a[j];
+                let y = a[j + h];
+                a[j] = x + y;
+                a[j + h] = y;
+            }
+        }
+        h *= 2;
+    }
+}
+
+/// Cumulative inverse transform (U^-1 in RLDA paper)
+fn slice_cumti(a: &mut [f64]) {
+    // Note: the speed of this can probably be much improved, with the following techiques
+    // * use (auto-)vectorization
+    // * generate small static kernels
+    let len = a.len();
+    let mut h = 1;
+    while h < len {
+        for mut i in 0..(len / (2 * h) as usize) {
+            i *= 2 * h;
+            for j in i..(i + h) {
+                let x = a[j];
+                let y = a[j + h];
+                a[j] = x - y;
+                a[j + h] = y;
+            }
+        }
+        h *= 2;
+    }
+}
+
+/// Tansform for operand of AND (V in RLDA paper), involutive
+fn slice_opandt(a: &mut [f64]) {
+    // Note: the speed of this can probably be much improved, with the following techiques
+    // * use (auto-)vectorization
+    // * generate small static kernels
+    let len = a.len();
+    let mut h = 1;
+    while h < len {
+        for mut i in 0..(len / (2 * h) as usize) {
+            i *= 2 * h;
+            for j in i..(i + h) {
+                let x = a[j];
+                let y = a[j + h];
+                a[j] = x;
+                a[j + h] = x - y;
+            }
+        }
+        h *= 2;
+    }
+}
+
 fn xor_cst_slice(a: &mut [f64], cst: ClassVal) {
     let leading_zeros = cst.leading_zeros();
     if leading_zeros == 32 {
@@ -283,5 +371,20 @@ fn xor_cst_slice(a: &mut [f64], cst: ClassVal) {
             let idx = i + j;
             a.swap(idx, idx ^ cst as usize);
         }
+    }
+}
+fn and_cst_slice(a: &mut [f64], cst: ClassVal) {
+    for i in 0..a.len() {
+        let j = i & (cst as usize);
+        if j != i {
+            a[j] += a[i];
+            a[i] = 0.0;
+        }
+    }
+}
+fn inv_and_cst_slice(a: &mut [f64], cst: ClassVal) {
+    for i in 0..a.len() {
+        let j = i & (cst as usize);
+        a[i] = a[j];
     }
 }

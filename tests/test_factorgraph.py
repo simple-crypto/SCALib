@@ -94,24 +94,25 @@ def test_not():
             VAR MULTI y
             NC {nc}
             """
-    graph = FactorGraph(graph, n)
+    graph = FactorGraph(graph)
 
-    graph.sanity_check({"x": np.array([0, 1]), "y": np.array([1, 0])})
+    graph.sanity_check({}, {"x": np.array([0, 1]), "y": np.array([1, 0])})
+
+    bp_state = BPState(graph, n)
 
     bp_state.set_evidence("x", distri_x)
     bp_state.set_evidence("y", distri_y)
 
-    bp_state.bp_loopy(1)
-    distri_x = bp_state.get_distribution("x")
-    distri_y = bp_state.get_distribution("y")
+    bp_state.bp_loopy(2)
+    distri_x_bp = bp_state.get_distribution("x")
+    distri_y_bp = bp_state.get_distribution("y")
 
-    s = 0.6 * 0.2 + 0.4 * 0.8
-    b = 0.6 * 0.2 / s
-    distri_x_ref = np.array([b, 1.0 - b])
-    distri_y_ref = np.array([1.0 - b, b])
+    t = np.array([1, 0])
+    distri_x_ref = normalize_distr(distri_x*distri_y[0,t][np.newaxis,:])
+    distri_y_ref = normalize_distr(distri_y*distri_x[0,t][np.newaxis,:])
 
-    assert np.allclose(distri_x_ref, distri_x)
-    assert np.allclose(distri_y_ref, distri_y)
+    assert np.allclose(distri_x_ref, distri_x_bp)
+    assert np.allclose(distri_y_ref, distri_y_bp)
 
 
 def test_and_public():
@@ -130,13 +131,13 @@ def test_and_public():
         PROPERTY y = x & p
         VAR MULTI y
         VAR MULTI x
-        VAR MULTI p#come comments
+        PUB MULTI p#come comments
         """
-    graph = FactorGraph(graph, n)
-    graph.set_public("p", public)
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n, {"p": public})
     bp_state.set_evidence("x", distri_x)
 
-    bp_state.bp_loopy(1)
+    bp_state.bp_loopy(2)
 
     distri_y = bp_state.get_distribution("y")
     distri_y_ref = np.zeros(distri_x.shape)
@@ -198,11 +199,8 @@ def test_AND():
     Test AND between distributions
     """
 
-    def norm_d(d):
-        return d / np.sum(d, axis=1, keepdims=True)
-
     def make_distri(nc, n):
-        return norm_d(np.random.randint(1, 10000000, (n, nc)).astype(np.float64))
+        return normalize_distr(np.random.randint(1, 10000000, (n, nc)).astype(np.float64))
 
     cases = [
         (
@@ -240,7 +238,8 @@ def test_AND():
             VAR MULTI y
 
             """
-        graph = FactorGraph(graph, n)
+        graph = FactorGraph(graph)
+        bp_state = BPState(graph, n)
         bp_state.set_evidence("x", distri_x)
         bp_state.set_evidence("y", distri_y)
         bp_state.set_evidence("z", distri_z)
@@ -255,27 +254,16 @@ def test_AND():
                 distri_y_ref[:, y] += distri_z[:, x & y] * distri_x[:, x]
                 distri_z_ref[:, x & y] += distri_x[:, x] * distri_y[:, y]
 
-        # def make_dist_matrix(d):
-        #    d_matrix = np.zeros((n, nc, nc))
-        #    for x in range(nc):
-        #        for y in range(nc):
-        #            d_matrix[:,x&y,y] += d[:,x]
-        #    return d_matrix
-        # distri_x_matrix = make_dist_matrix(distri_x)
-        # distri_y_ref = np.linalg.solve(distri_x_matrix, distri_z)
-        # distri_y_matrix = make_dist_matrix(distri_y)
-        # distri_x_ref = np.linalg.solve(distri_y_matrix, distri_z)
-
-        distri_x_ref = norm_d(distri_x_ref * distri_x)
-        distri_y_ref = norm_d(distri_y_ref * distri_y)
-        distri_z_ref = norm_d(distri_z_ref * distri_z)
+        distri_x_ref = normalize_distr(distri_x_ref * distri_x)
+        distri_y_ref = normalize_distr(distri_y_ref * distri_y)
+        distri_z_ref = normalize_distr(distri_z_ref * distri_z)
 
         print("#### Ref:")
         print(distri_x_ref)
         print(distri_y_ref)
         print(distri_z_ref)
 
-        bp_state.bp_loopy(1)
+        bp_state.bp_loopy(2)
         distri_x = bp_state.get_distribution("x")
         distri_y = bp_state.get_distribution("y")
         distri_z = bp_state.get_distribution("z")
@@ -289,6 +277,13 @@ def test_AND():
         assert np.allclose(distri_x_ref, distri_x)
         assert np.allclose(distri_y_ref, distri_y)
 
+def test_and_not():
+    # Add negation to operands (public or not)
+    raise NotImplemented()
+
+def test_or_not():
+    # Add negation to operands (public or not)
+    raise NotImplemented()
 
 def test_ADD():
     """

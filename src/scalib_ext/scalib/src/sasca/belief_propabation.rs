@@ -54,7 +54,7 @@ impl BPState {
             .iter()
             .map(|e| Distribution::new(graph.factor(e.factor).multi, graph.nc, nmulti))
             .collect();
-        let pub_reduced = Self::reduce_pub(&graph, &public_values);
+        let pub_reduced = graph.reduce_pub(&public_values);
         Self {
             evidence: var_state.clone(),
             belief_from_var: beliefs.clone(),
@@ -65,63 +65,6 @@ impl BPState {
             public_values: FactorVec::from_vec(public_values),
             pub_reduced,
         }
-    }
-    fn reduce_pub(graph: &FactorGraph, public_values: &[PublicValue]) -> FactorVec<PublicValue> {
-        fn merge_pubs<F: Fn(ClassVal, ClassVal) -> ClassVal>(
-            f: F,
-            p1: PublicValue,
-            p2: &PublicValue,
-        ) -> PublicValue {
-            match (p1, p2) {
-                (PublicValue::Single(c1), PublicValue::Single(c2)) => {
-                    PublicValue::Single(f(c1, *c2))
-                }
-                (PublicValue::Single(c1), PublicValue::Multi(c2)) => {
-                    PublicValue::Multi(c2.iter().map(|c2| f(c1, *c2)).collect())
-                }
-                (PublicValue::Multi(mut c1), PublicValue::Single(c2)) => {
-                    for c1 in c1.iter_mut() {
-                        *c1 = f(*c1, *c2);
-                    }
-                    PublicValue::Multi(c1)
-                }
-                (PublicValue::Multi(mut c1), PublicValue::Multi(c2)) => {
-                    for (c1, c2) in c1.iter_mut().zip(c2.iter()) {
-                        *c1 = f(*c1, *c2);
-                    }
-                    PublicValue::Multi(c1)
-                }
-            }
-        }
-        graph
-            .factors
-            .values()
-            .map(|factor| {
-                let merge_fn = |a, b| match factor.kind {
-                    FactorKind::AND { vars_neg: _ } => a & b,
-                    FactorKind::OR { vars_neg: _ } => a | b,
-                    FactorKind::XOR => a ^ b,
-                    FactorKind::ADD => (((a as usize) + (b as usize)) % graph.nc) as ClassVal,
-                    FactorKind::MUL => (((a as u64) + (b as u64)) % (graph.nc as u64)) as ClassVal,
-                    FactorKind::NOT | FactorKind::LOOKUP { .. } => unreachable!(),
-                };
-                let init = match factor.kind {
-                    FactorKind::AND { vars_neg: _ } => {
-                        PublicValue::Single((graph.nc - 1) as ClassVal)
-                    }
-                    FactorKind::OR { vars_neg: _ } | FactorKind::XOR | FactorKind::ADD => {
-                        PublicValue::Single(0)
-                    }
-                    FactorKind::MUL => PublicValue::Single(1),
-                    FactorKind::NOT | FactorKind::LOOKUP { .. } => unreachable!(),
-                };
-                factor
-                    .publics
-                    .iter()
-                    .map(|pub_id| &public_values[*pub_id])
-                    .fold(init, |p1, p2| merge_pubs(merge_fn, p1, p2))
-            })
-            .collect()
     }
     pub fn is_cyclic(&self) -> bool {
         // Let's do something simple here, and revisit it when we need more sophisticated queries.
@@ -275,6 +218,7 @@ impl BPState {
             };
         }
         match &factor.kind {
+            // TODO know when to erase incoming
             FactorKind::AND { vars_neg } => {
                 prop_factor!(
                     factor_gen_and,
@@ -283,15 +227,6 @@ impl BPState {
                     false
                 )
             }
-            FactorKind::OR { vars_neg } => {
-                prop_factor!(
-                    factor_gen_and,
-                    &self.pub_reduced[factor_id],
-                    vars_neg.as_slice(),
-                    true
-                )
-            }
-            // TODO know when to erase incoming
             FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id], false),
             FactorKind::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32, false),
             FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id]),
@@ -339,11 +274,94 @@ fn factor_gen_and<'a>(
     dest: &'a [VarId],
     pub_red: &PublicValue,
     invert_op: &'a [bool],
-    invert_all: bool,
+    clear_incoming: bool,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    #![allow(unreachable_code)]
-    todo!();
-    [].into_iter()
+    // Special case for single-input AND 
+    if factor.has_res & (factor.edges.len() == 2) {
+        return dest.iter()
+            .map(|var| {
+                let i = factor.edges.get_index_of(var).unwrap();
+                let mut distr = if clear_incoming {
+                    belief_from_var[factor.edges[1 - i]].reset()
+                } else {
+                    belief_from_var[factor.edges[1 - i]].clone()
+                };
+                if invert_op[1-i] {
+                    distr.not();
+                }
+                if i == 0 {
+                    // dest is the result of the AND
+                    distr.and_cst(pub_red);
+                } else {
+                    // dest is an operand of the AND, original distr is result 
+                    distr.inv_and_cst(pub_red);
+                }
+                if invert_op[i] {
+                    distr.not();
+                }
+                distr
+            })
+            .collect::<Vec<_>>()
+            .into_iter();
+    }
+    // Compute a product in the transformed domain
+    // direct transform:
+    // - if operand: cumt
+    // - if result: opandt
+    // inverse transform:
+    // - if operand: opandt^-1 = opandt
+    // - if result: cumt^-1 = cumti
+    let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
+    if factor.has_res {
+        // constant is operand
+        acc.cumt();
+    } else {
+        // constant is result 
+        acc.opandt();
+    }
+    let mut taken_dest = vec![false; factor.edges.len()];
+    for dest in dest {
+        taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
+    }
+    // Compute the product in transform domain
+    // We do not take the product of all factors then divide because some factors could be zero.
+    let mut dest_transformed = Vec::with_capacity(dest.len());
+    for ((i, e), taken) in factor.edges.values().enumerate().zip(taken_dest.iter()) {
+        let mut d = if clear_incoming {
+            belief_from_var[*e].reset()
+        } else {
+            belief_from_var[*e].clone()
+        };
+        assert!(d.is_full());
+        if factor.has_res && (i == 0) {
+            d.opandt();
+        } else {
+            d.cumt();
+        }
+        // We either multiply (non-taken distributions) or we add to the vector of factors.
+        if !*taken {
+            acc.multiply(Some(&d).into_iter());
+        } else {
+            dest_transformed.push(d);
+        }
+    }
+    // This could be done in O(l log l) instead of O(l^2) where l=dest.len()
+    // by better caching product computations.
+    return (0..dest.len())
+        .map(|i| {
+            let mut res = acc.clone();
+            res.multiply((0..dest.len()).filter(|j| *j != i).map(|j| &dest_transformed[j]));
+            // Inverse transform
+            if factor.has_res && (dest[i] == *factor.edges.get_index(0).unwrap().0) {
+                res.cumti();
+            } else {
+                res.opandt();
+            }
+            res.regularize();
+            res
+        })
+        .collect::<Vec<_>>()
+        .into_iter();
 }
 
 fn reset_incoming(
@@ -372,8 +390,9 @@ fn factor_xor<'a>(
 ) -> impl Iterator<Item = Distribution> + 'a {
     // Special case for single-input XOR
     if factor.edges.len() == 2 {
-        return (0..2)
-            .map(|i| {
+        return dest.iter()
+            .map(|var| {
+                let i = factor.edges.get_index_of(var).unwrap();
                 let mut distr = if clear_incoming {
                     belief_from_var[factor.edges[1 - i]].reset()
                 } else {

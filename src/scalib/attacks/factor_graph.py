@@ -8,6 +8,9 @@ from scalib import _scalib_ext
 
 __all__ = ['FactorGraph', 'BPState']
 
+CstValue = Union[int, Sequence[int]]
+ValsAssign = Mapping[str, CstValue]
+
 
 class FactorGraph:
     r"""FactorGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
@@ -127,21 +130,27 @@ class FactorGraph:
         self._inner = _scalib_ext.FactorGraph(graph_text, tables)
 
 
-    def sanity_check(self, var_assignment):
+    def sanity_check(self, pub_assignment: ValsAssign, var_assignment: ValsAssign):
         """Verify that the graph is compatible with example variable assignments.
 
         If the graph is not compatible, raise a ValueError.
 
         Parameters
         ----------
-        var_assignment: dict[var_name -> np.array (int)]
+        pub_assignment:
+            For each public variable its value for all test executions.
+        var_assignment:
             For each non-public variable its value for all test executions.
+
+        Returns
+        -------
+        None if the assignment is compatible
         """
-        raise NotImplemented()
+        self._inner.sanity_check(pub_assignment, var_assignment)
 
 
 class BPState:
-    def __init__(self, factor_graph: FactorGraph, nexec: int, public_values: Optional[Mapping[str, Union[int, Sequence[int]]]] = None):
+    def __init__(self, factor_graph: FactorGraph, nexec: int, public_values: Optional[ValsAssign] = None):
         if public_values is None:
             public_values = dict()
         self._inner = factor_graph._inner.new_bp(nexec, public_values)

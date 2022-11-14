@@ -123,7 +123,7 @@ fn fwht(a: &mut [f64], len: usize) {
     }
 }
 
-/// Cumulative transform
+/// Cumulative transform (U in RLDA paper)
 #[inline(always)]
 fn cumt(a: &mut [f64], len: usize) {
     // Note: the speed of this can probably be much improved, with the following techiques
@@ -144,7 +144,7 @@ fn cumt(a: &mut [f64], len: usize) {
     }
 }
 
-/// Cumulative inverse transform
+/// Cumulative inverse transform (U^-1 in RLDA paper)
 #[inline(always)]
 fn cumti(a: &mut [f64], len: usize) {
     // Note: the speed of this can probably be much improved, with the following techiques

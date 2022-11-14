@@ -17,8 +17,10 @@ pub enum GraphBuildError {
     UnknownVar(String),
     #[error("Table {0} not declared.")]
     UnknownTable(String),
-    #[error("Operand {0} appears multiple times in a factor.")]
-    RepeatedOperand(String),
+    #[error("Operand {1} appears multiple times in factor {0}.")]
+    RepeatedOperand(String, String),
+    #[error("Constants appears as both result and operand in factor {0}.")]
+    CstOpRes(String),
     #[error("Wrong length {1} for table {0}.")]
     TableSize(String, usize),
     #[error("Wrong value {1} for table {0}.")]
@@ -95,12 +97,16 @@ impl fg::FactorGraph {
         let mut edges = IndexMap::new();
         let mut publics = Vec::new();
         let mut multi = false;
-        for var in vars {
+        let mut has_res = None;
+        let mut is_var = Vec::new();
+        for (i, var) in vars.enumerate() {
             if let Some((var_id, _, v)) = self.vars.get_full_mut(var) {
+                has_res = Some(has_res.unwrap_or(true));
+                is_var.push(true);
                 let var_id = fg::VarId::from_idx(var_id);
                 let edge_id = fg::EdgeId::from_idx(self.edges.len());
                 if edges.insert(var_id, edge_id).is_some() {
-                    return Err(GraphBuildError::RepeatedOperand(var.to_owned()));
+                    return Err(GraphBuildError::RepeatedOperand(name, var.to_owned()));
                 }
                 v.edges.insert(factor_id, edge_id);
                 self.edges.push(fg::Edge {
@@ -111,28 +117,33 @@ impl fg::FactorGraph {
                 });
                 multi |= v.multi;
             } else if let Some((pub_id, _, public)) = self.publics.get_full(var) {
-                publics.push(pub_id);
+                if has_res == Some(false) {
+                    return Err(GraphBuildError::CstOpRes(name));
+                }
+                has_res = Some(has_res.unwrap_or(false));
+                is_var.push(false);
+                publics.push((pub_id, kind.get_neg(i)));
                 multi |= public.multi;
             } else {
                 return Err(GraphBuildError::UnknownVar(var.to_owned()));
             }
         }
-        let kind = kind.map_table(|t| {
+        let kind = kind.map_vars_neg(|vn| vn.into_iter().zip(is_var.into_iter()).filter(|(_, iv)| *iv).map(|(vn, _)| vn).collect()).map_table(|t| {
             self.tables
                 .get_index_of(t)
                 .ok_or_else(|| GraphBuildError::UnknownTable(t.to_owned()))
         })?;
-        let factor = 
-            fg::Factor {
+        let factor = fg::Factor {
             kind,
             multi,
             edges,
+            has_res: has_res.expect("at least one var"),
             publics,
         };
         if self.factors.contains_key(&name) {
             return Err(GraphBuildError::MultiplePropDecl(name));
         } else {
-            self.factors.insert(name, factor).is_some();
+            self.factors.insert(name, factor);
         }
         Ok(())
     }
@@ -144,7 +155,6 @@ impl fg::FactorGraph {
         {
             Ok(match self {
                 fg::FactorKind::AND { vars_neg } => fg::FactorKind::AND { vars_neg },
-                fg::FactorKind::OR { vars_neg } => fg::FactorKind::OR {vars_neg },
                 fg::FactorKind::XOR => fg::FactorKind::XOR,
                 fg::FactorKind::NOT => fg::FactorKind::NOT,
                 fg::FactorKind::ADD => fg::FactorKind::ADD,
@@ -152,10 +162,25 @@ impl fg::FactorGraph {
                 fg::FactorKind::LOOKUP { table } => fg::FactorKind::LOOKUP { table: f(table)? },
             })
         }
+        fn map_vars_neg<F>(self, f: F) -> Self where F: FnOnce(Vec<bool>) -> Vec<bool> {
+            match self {
+                fg::FactorKind::AND { vars_neg } => fg::FactorKind::AND { vars_neg: f(vars_neg) },
+                x => x,
+            }
+        }
+        fn get_neg(&self, i: usize) -> bool {
+            match self {
+                fg::FactorKind::AND { vars_neg } => vars_neg[i],
+                _ => false,
+            }
+        }
     }
 impl fg_parser::Expr {
     fn as_factor_kind(&self) -> fg::FactorKind<&str> {
-        let get_neg = |vars: &Vec<fg_parser::NVar>| vars.iter().map(|v| v.neg).collect();
+        fn get_neg(vars: &Vec<fg_parser::NVar>, neg: bool) -> Vec<bool> {
+            // Include the result of the operation
+            std::iter::once(neg).chain(vars.iter().map(|v| v.neg ^ neg)).collect()
+        }
         match self {
             Self::Not(_) => fg::FactorKind::NOT,
             Self::Lookup { table, .. } => fg::FactorKind::LOOKUP {
@@ -164,8 +189,9 @@ impl fg_parser::Expr {
             Self::Add(_) => fg::FactorKind::ADD,
             Self::Mul(_) => fg::FactorKind::MUL,
             Self::Xor(_) => fg::FactorKind::XOR,
-            Self::And(vars) => fg::FactorKind::AND { vars_neg: get_neg(vars) },
-            Self::Or(vars) => fg::FactorKind::OR { vars_neg: get_neg(vars) },
+            Self::And(vars) => fg::FactorKind::AND { vars_neg: get_neg(vars, false) },
+            // Use De Morgan's law to convert OR to AND.
+            Self::Or(vars) => fg::FactorKind::AND { vars_neg: get_neg(vars, true) },
         }
     }
     fn vars(&self) -> impl Iterator<Item = &str> {

@@ -61,16 +61,7 @@ impl FactorGraph {
     }
 
     pub fn new_bp(&self, py: Python, nmulti: u32, public_values: PyObject) -> PyResult<BPState> {
-        let mut public_values: HashMap<&str, ClassValOrList> = public_values.extract(py)?;
-        let pub_values = self.get_inner().public_multi().map(|(pub_name, multi)| {
-            let v = public_values.remove(pub_name).ok_or_else(|| PyKeyError::new_err(format!("Missing public value {}.", pub_name)))?;
-            match (v, multi) {
-                (ClassValOrList::Single(v), false) => Ok(sasca::PublicValue::Single(v)),
-                (ClassValOrList::List(v), true) => Ok(sasca::PublicValue::Multi(v)),
-                (ClassValOrList::Single(_), true) => Err(PyTypeError::new_err(format!("Public value {} is multi, found single value.", pub_name))),
-                (ClassValOrList::List(_), false) => Err(PyTypeError::new_err(format!("Public value {} is not multi, found list of values.", pub_name))),
-            }
-        }).collect::<Result<Vec<sasca::PublicValue>, PyErr>>()?;
+        let pub_values = pyobj2pubs(py, public_values, self.get_inner().public_multi())?;
         Ok(BPState { inner: Some(sasca::BPState::new(self.get_inner().clone(), nmulti, pub_values)) })
     }
 
@@ -84,14 +75,22 @@ impl FactorGraph {
         let factor_id = self.get_factor(factor)?;
         Ok(self.get_inner().factor_scope(factor_id).map(|v| self.get_inner().var_name(v)).collect())
     }
+    pub fn sanity_check(&self, py: Python, public_values: PyObject, var_assignments: PyObject) -> PyResult<()> {
+        let inner = self.get_inner();
+        let pub_values = pyobj2pubs(py, public_values, inner.public_multi())?;
+        let var_values = pyobj2pubs(py, var_assignments, inner.vars().map(|(v, vn)| (vn, inner.var_multi(v))))?;
+        inner.sanity_check(pub_values, var_values.into()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
 }
 
-#[derive(Debug, Clone, FromPyObject)]
-enum ClassValOrList {
-    Single(sasca::ClassVal),
-    List(Vec<sasca::ClassVal>),
+fn pyobj2pubs<'a>(py: Python, public_values: PyObject, expected: impl Iterator<Item=(&'a str, bool)>) -> PyResult<Vec<sasca::PublicValue>> {
+    let mut public_values: HashMap<&str, PyObject> = public_values.extract(py)?;
+    expected.map(|(pub_name, multi)| obj2pub(
+            py, 
+            public_values.remove(pub_name).ok_or_else(|| PyKeyError::new_err(format!("Missing value {}.", pub_name)))?,
+            multi,
+    )).collect::<Result<Vec<sasca::PublicValue>, PyErr>>()
 }
-
 
 
 #[pyclass(module = "_scalib_ext")]
@@ -212,6 +211,16 @@ fn obj2distr(py: Python, distr: PyObject, multi: bool) -> PyResult<sasca::Distri
     } else {
         let distr: &PyArray1<f64> = distr.extract(py)?;
         sasca::Distribution::from_array_single(distr.to_owned_array())
+    })
+}
+
+fn obj2pub(py: Python, obj: PyObject, multi: bool) -> PyResult<sasca::PublicValue> {
+    Ok(if multi {
+        let obj: Vec<sasca::ClassVal> = obj.extract(py)?;
+        sasca::PublicValue::Multi(obj)
+    } else {
+        let obj: sasca::ClassVal = obj.extract(py)?;
+        sasca::PublicValue::Single(obj)
     })
 }
 
