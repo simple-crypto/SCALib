@@ -211,7 +211,10 @@ impl Distribution {
     }
     pub fn ensure_full(&mut self) {
         if let DistrRepr::Uniform = self.value {
-            self.value = DistrRepr::Full(ndarray::Array2::ones(self.shape));
+            self.value = DistrRepr::Full(ndarray::Array2::from_elem(
+                self.shape,
+                1.0 / (self.shape.1 as Proba),
+            ));
         }
     }
     pub fn map_table(&self, table: &[ClassVal]) -> Self {
@@ -291,6 +294,9 @@ impl Distribution {
             inv_and_cst_slice(d.as_slice_mut().unwrap(), cst.get(i));
         });
     }
+    pub fn add_cst(&mut self, cst: &PublicValue) -> Self {
+        todo!()
+    }
     fn for_each<F, G>(&mut self, f: F, default: G)
     where
         F: Fn(ndarray::ArrayViewMut1<f64>, usize),
@@ -315,7 +321,7 @@ impl Distribution {
         F: Fn(ndarray::ArrayViewMut1<f64>, usize),
     {
         self.for_each(f, |_| {
-            unimplemented!();
+            unimplemented!("This function must be called on Full distributions.");
         });
     }
 }

@@ -223,7 +223,7 @@ impl BPState {
             }
             FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id], false),
             FactorKind::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32, false),
-            FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id]),
+            FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id], false),
             FactorKind::MUL => prop_factor!(factor_mul, &self.pub_reduced[factor_id]),
             FactorKind::LOOKUP { table } => {
                 prop_factor!(factor_lookup, &self.graph.tables[*table], false)
@@ -520,7 +520,7 @@ fn factor_add<'a>(
                 let i = factor.edges.get_index_of(var).unwrap();
                 let distr = belief_from_var[factor.edges[1 - i]].add_cst(pub_red);
                 if clear_incoming {
-                    belief_from_var[factor.edges[1 - i]].reset()
+                    belief_from_var[factor.edges[1 - i]].reset();
                 }
                 distr
             })
@@ -550,15 +550,17 @@ fn factor_add<'a>(
             // Single uniform op, only compute for that one.
             for e in factor.edges.values() {
                 if e != e_dest {
-                    let d_fft = belief_from_var[*e].fft();
+                    //let d_fft = belief_from_var[*e].fft();
+                    let d_fft = &belief_from_var[*e];
+                    acc.multiply(Some(d_fft).into_iter());
                     if clear_incoming {
-                        belief_from_var[*e].reset()
+                        belief_from_var[*e].reset();
                     }
-                    acc.multiply(Some(&d_fft).into_iter());
                 }
             }
-            let acc = acc.ifft();
-            acc.regularize();
+            acc.ifft();
+            //let acc = acc.ifft();
+            //acc.regularize();
             let mut res = vec![acc.as_uniform(); dest.len()];
             res[i] = acc;
             return res.into_iter();
@@ -569,15 +571,16 @@ fn factor_add<'a>(
         // We do take the product of all factors then divide because some factors could be zero.
         let mut dest_fft = Vec::with_capacity(dest.len());
         for (e, taken) in factor.edges.values().zip(taken_dest.iter()) {
-            let d_fft = belief_from_var[*e].fft();
-            if clear_incoming {
-                belief_from_var[*e].reset()
-            }
+            //let d_fft = belief_from_var[*e].fft();
+            let d_fft = &belief_from_var[*e];
             // We either multiply (non-taken distributions) or we add to the vector of factors.
             if !*taken {
-                acc.multiply(Some(&d_fft).into_iter());
+                acc.multiply(Some(d_fft).into_iter());
             } else {
-                dest_fft.push(d_fft);
+                dest_fft.push(d_fft.clone());
+            }
+            if clear_incoming {
+                belief_from_var[*e].reset();
             }
         }
         // This could be done in O(l log l) instead of O(l^2) where l=dest.len()
@@ -586,7 +589,8 @@ fn factor_add<'a>(
             .map(|i| {
                 let mut res = acc.clone();
                 res.multiply((0..dest.len()).filter(|j| *j != i).map(|j| &dest_fft[j]));
-                let res = res.ifft();
+                //let res = res.ifft();
+                res.ifft();
                 res.regularize();
                 res
             })
