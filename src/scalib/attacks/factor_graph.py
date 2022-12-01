@@ -1,4 +1,3 @@
-
 from typing import Sequence, Mapping, Union, Optional
 
 import numpy as np
@@ -6,7 +5,7 @@ import numpy.typing as npt
 
 from scalib import _scalib_ext
 
-__all__ = ['FactorGraph', 'BPState']
+__all__ = ["FactorGraph", "BPState"]
 
 CstValue = Union[int, Sequence[int]]
 ValsAssign = Mapping[str, CstValue]
@@ -124,11 +123,14 @@ class FactorGraph:
         The graph description.
     """
 
-    def __init__(self, graph_text: str, tables: Optional[Mapping[str, npt.NDArray[np.uint32]]] = None):
+    def __init__(
+        self,
+        graph_text: str,
+        tables: Optional[Mapping[str, npt.NDArray[np.uint32]]] = None,
+    ):
         if tables is None:
             tables = dict()
         self._inner = _scalib_ext.FactorGraph(graph_text, tables)
-
 
     def sanity_check(self, pub_assignment: ValsAssign, var_assignment: ValsAssign):
         """Verify that the graph is compatible with example variable assignments.
@@ -150,7 +152,12 @@ class FactorGraph:
 
 
 class BPState:
-    def __init__(self, factor_graph: FactorGraph, nexec: int, public_values: Optional[ValsAssign] = None):
+    def __init__(
+        self,
+        factor_graph: FactorGraph,
+        nexec: int,
+        public_values: Optional[ValsAssign] = None,
+    ):
         if public_values is None:
             public_values = dict()
         self._inner = factor_graph._inner.new_bp(nexec, public_values)
@@ -194,7 +201,9 @@ class BPState:
         """
         return self._inner.get_state(var)
 
-    def set_distribution(self, var: str, distribution: Optional[npt.NDArray[np.float64]]):
+    def set_distribution(
+        self, var: str, distribution: Optional[npt.NDArray[np.float64]]
+    ):
         r"""Sets current distribution of a variable in the BP.
 
         Parameters
@@ -210,8 +219,10 @@ class BPState:
             self._inner.drop_state(var)
         else:
             self._inner.set_state(var, distribution)
- 
-    def get_belief_to_var(self, var: str, factor: str) -> Optional[npt.NDArray[np.float64]]:
+
+    def get_belief_to_var(
+        self, var: str, factor: str
+    ) -> Optional[npt.NDArray[np.float64]]:
         r"""Returns the current belief from factor to var.
 
         Parameters
@@ -231,7 +242,9 @@ class BPState:
         """
         return self._inner.get_belief_to_var(var, factor)
 
-    def get_belief_from_var(self, var: str, factor: str) -> Optional[npt.NDArray[np.float64]]:
+    def get_belief_from_var(
+        self, var: str, factor: str
+    ) -> Optional[npt.NDArray[np.float64]]:
         r"""Returns the current belief from var to factor.
 
         Parameters
@@ -306,5 +319,3 @@ class BPState:
                 s.append(f"\t{factor} -> {var}")
                 s.append(repr(self.get_belief_to_var(var, factor)))
         return "\n".join(s)
-
-

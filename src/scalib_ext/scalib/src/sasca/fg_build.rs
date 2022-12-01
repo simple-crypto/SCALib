@@ -1,4 +1,3 @@
-
 use super::factor_graph as fg;
 use super::fg_parser;
 use super::{ClassVal, NamedList};
@@ -68,11 +67,7 @@ impl fg::FactorGraph {
         self.publics.insert(name, fg::Public { multi });
         Ok(())
     }
-    fn add_table(
-        &mut self,
-        name: String,
-        values: Vec<ClassVal>,
-    ) -> Result<(), GraphBuildError> {
+    fn add_table(&mut self, name: String, values: Vec<ClassVal>) -> Result<(), GraphBuildError> {
         if self.tables.contains_key(&name) {
             return Err(GraphBuildError::MultipleTableDecl(name));
         }
@@ -128,11 +123,19 @@ impl fg::FactorGraph {
                 return Err(GraphBuildError::UnknownVar(var.to_owned()));
             }
         }
-        let kind = kind.map_vars_neg(|vn| vn.into_iter().zip(is_var.into_iter()).filter(|(_, iv)| *iv).map(|(vn, _)| vn).collect()).map_table(|t| {
-            self.tables
-                .get_index_of(t)
-                .ok_or_else(|| GraphBuildError::UnknownTable(t.to_owned()))
-        })?;
+        let kind = kind
+            .map_vars_neg(|vn| {
+                vn.into_iter()
+                    .zip(is_var.into_iter())
+                    .filter(|(_, iv)| *iv)
+                    .map(|(vn, _)| vn)
+                    .collect()
+            })
+            .map_table(|t| {
+                self.tables
+                    .get_index_of(t)
+                    .ok_or_else(|| GraphBuildError::UnknownTable(t.to_owned()))
+            })?;
         let factor = fg::Factor {
             kind,
             multi,
@@ -148,38 +151,45 @@ impl fg::FactorGraph {
         Ok(())
     }
 }
-    impl<T> fg::FactorKind<T> {
-        fn map_table<S, E, F>(self, f: F) -> Result<fg::FactorKind<S>, E>
-        where
-            F: Fn(T) -> Result<S, E>,
-        {
-            Ok(match self {
-                fg::FactorKind::AND { vars_neg } => fg::FactorKind::AND { vars_neg },
-                fg::FactorKind::XOR => fg::FactorKind::XOR,
-                fg::FactorKind::NOT => fg::FactorKind::NOT,
-                fg::FactorKind::ADD => fg::FactorKind::ADD,
-                fg::FactorKind::MUL => fg::FactorKind::MUL,
-                fg::FactorKind::LOOKUP { table } => fg::FactorKind::LOOKUP { table: f(table)? },
-            })
-        }
-        fn map_vars_neg<F>(self, f: F) -> Self where F: FnOnce(Vec<bool>) -> Vec<bool> {
-            match self {
-                fg::FactorKind::AND { vars_neg } => fg::FactorKind::AND { vars_neg: f(vars_neg) },
-                x => x,
-            }
-        }
-        fn get_neg(&self, i: usize) -> bool {
-            match self {
-                fg::FactorKind::AND { vars_neg } => vars_neg[i],
-                _ => false,
-            }
+impl<T> fg::FactorKind<T> {
+    fn map_table<S, E, F>(self, f: F) -> Result<fg::FactorKind<S>, E>
+    where
+        F: Fn(T) -> Result<S, E>,
+    {
+        Ok(match self {
+            fg::FactorKind::AND { vars_neg } => fg::FactorKind::AND { vars_neg },
+            fg::FactorKind::XOR => fg::FactorKind::XOR,
+            fg::FactorKind::NOT => fg::FactorKind::NOT,
+            fg::FactorKind::ADD => fg::FactorKind::ADD,
+            fg::FactorKind::MUL => fg::FactorKind::MUL,
+            fg::FactorKind::LOOKUP { table } => fg::FactorKind::LOOKUP { table: f(table)? },
+        })
+    }
+    fn map_vars_neg<F>(self, f: F) -> Self
+    where
+        F: FnOnce(Vec<bool>) -> Vec<bool>,
+    {
+        match self {
+            fg::FactorKind::AND { vars_neg } => fg::FactorKind::AND {
+                vars_neg: f(vars_neg),
+            },
+            x => x,
         }
     }
+    fn get_neg(&self, i: usize) -> bool {
+        match self {
+            fg::FactorKind::AND { vars_neg } => vars_neg[i],
+            _ => false,
+        }
+    }
+}
 impl fg_parser::Expr {
     fn as_factor_kind(&self) -> fg::FactorKind<&str> {
         fn get_neg(vars: &Vec<fg_parser::NVar>, neg: bool) -> Vec<bool> {
             // Include the result of the operation
-            std::iter::once(neg).chain(vars.iter().map(|v| v.neg ^ neg)).collect()
+            std::iter::once(neg)
+                .chain(vars.iter().map(|v| v.neg ^ neg))
+                .collect()
         }
         match self {
             Self::Not(_) => fg::FactorKind::NOT,
@@ -189,9 +199,13 @@ impl fg_parser::Expr {
             Self::Add(_) => fg::FactorKind::ADD,
             Self::Mul(_) => fg::FactorKind::MUL,
             Self::Xor(_) => fg::FactorKind::XOR,
-            Self::And(vars) => fg::FactorKind::AND { vars_neg: get_neg(vars, false) },
+            Self::And(vars) => fg::FactorKind::AND {
+                vars_neg: get_neg(vars, false),
+            },
             // Use De Morgan's law to convert OR to AND.
-            Self::Or(vars) => fg::FactorKind::AND { vars_neg: get_neg(vars, true) },
+            Self::Or(vars) => fg::FactorKind::AND {
+                vars_neg: get_neg(vars, true),
+            },
         }
     }
     fn vars(&self) -> impl Iterator<Item = &str> {
@@ -227,7 +241,7 @@ pub(super) fn build_graph(
                 };
                 graph.add_table(name.clone(), val)?;
             }
-            | fg_parser::Statement::End
+            fg_parser::Statement::End
             | fg_parser::Statement::Invalid
             | fg_parser::Statement::Empty
             | fg_parser::Statement::Property { .. }

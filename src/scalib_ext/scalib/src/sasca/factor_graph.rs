@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 
 use thiserror::Error;
 
-use super::{ClassVal, NamedList, };
+use super::{ClassVal, NamedList};
 
 macro_rules! new_id {
     ($it:ident, $vt:ident) => {
@@ -79,12 +79,8 @@ impl FactorKind {
     }
     fn neutral(&self, nc: usize) -> ClassVal {
         match self {
-            FactorKind::AND { vars_neg: _ } => {
-                (nc - 1) as ClassVal
-            }
-            FactorKind::XOR | FactorKind::ADD => {
-                0
-            }
+            FactorKind::AND { vars_neg: _ } => (nc - 1) as ClassVal,
+            FactorKind::XOR | FactorKind::ADD => 0,
             FactorKind::MUL => 1,
             FactorKind::NOT | FactorKind::LOOKUP { .. } => unreachable!(),
         }
@@ -218,7 +214,10 @@ impl FactorGraph {
         self.vars.keys().map(String::as_str)
     }
     pub fn vars(&self) -> impl Iterator<Item = (VarId, &str)> {
-        self.vars.keys().enumerate().map(|(i, vn)| (VarId::from_idx(i), vn.as_str()))
+        self.vars
+            .keys()
+            .enumerate()
+            .map(|(i, vn)| (VarId::from_idx(i), vn.as_str()))
     }
     pub fn var_name(&self, v: VarId) -> &str {
         self.vars.get_index(v.idx()).unwrap().0.as_str()
@@ -232,40 +231,66 @@ impl FactorGraph {
     pub fn factor_scope<'s>(&'s self, factor: FactorId) -> impl Iterator<Item = VarId> + 's {
         self.factor(factor).edges.keys().cloned()
     }
-    pub fn sanity_check(&self, public_values: Vec<PublicValue>, var_assignments: VarVec<PublicValue>) -> FGResult<()> {
+    pub fn sanity_check(
+        &self,
+        public_values: Vec<PublicValue>,
+        var_assignments: VarVec<PublicValue>,
+    ) -> FGResult<()> {
         assert_eq!(public_values.len(), self.publics.len());
         assert_eq!(var_assignments.len(), self.vars.len());
         let reduced_pub = self.reduce_pub(public_values.as_slice());
         for ((factor_name, factor), cst) in self.factors.iter().zip(reduced_pub) {
-            let expected_res = factor.res_id().map(|v_id| &var_assignments[v_id]).unwrap_or(&cst);
+            let expected_res = factor
+                .res_id()
+                .map(|v_id| &var_assignments[v_id])
+                .unwrap_or(&cst);
             let skip_res = if factor.has_res { 1 } else { 0 };
-            let mut ops = factor.edges.keys().skip(skip_res).map(|v_id| &var_assignments[*v_id]);
+            let mut ops = factor
+                .edges
+                .keys()
+                .skip(skip_res)
+                .map(|v_id| &var_assignments[*v_id]);
             let res = match &factor.kind {
-                FactorKind::AND { vars_neg } => self.merge_pubs(&factor.kind, ops.zip(vars_neg.iter().cloned()).chain(std::iter::once((&cst, false)))),
-                FactorKind::XOR | FactorKind::ADD | FactorKind::MUL => self.merge_pubs(&factor.kind, ops.zip(std::iter::repeat(false)).chain(std::iter::once((&cst, false)))),
+                FactorKind::AND { vars_neg } => self.merge_pubs(
+                    &factor.kind,
+                    ops.zip(vars_neg.iter().cloned())
+                        .chain(std::iter::once((&cst, false))),
+                ),
+                FactorKind::XOR | FactorKind::ADD | FactorKind::MUL => self.merge_pubs(
+                    &factor.kind,
+                    ops.zip(std::iter::repeat(false))
+                        .chain(std::iter::once((&cst, false))),
+                ),
                 FactorKind::NOT => ops.next().unwrap().map(|x| self.not(x)),
-                FactorKind::LOOKUP { table } => ops.next().unwrap().map(|x| self.tables[*table].values[x as usize]),
+                FactorKind::LOOKUP { table } => ops
+                    .next()
+                    .unwrap()
+                    .map(|x| self.tables[*table].values[x as usize]),
             };
             if &res != expected_res {
-                return Err(FGError::CheckFail(factor_name.clone(), expected_res.clone(), res));
+                return Err(FGError::CheckFail(
+                    factor_name.clone(),
+                    expected_res.clone(),
+                    res,
+                ));
             }
         }
         Ok(())
     }
     pub(super) fn reduce_pub(&self, public_values: &[PublicValue]) -> FactorVec<PublicValue> {
-        self
-            .factors
+        self.factors
             .values()
             .map(|factor| {
                 match &factor.kind {
                     // Not used
                     FactorKind::NOT | FactorKind::LOOKUP { .. } => PublicValue::Single(0),
-                    _ => self.merge_pubs(&factor.kind,
+                    _ => self.merge_pubs(
+                        &factor.kind,
                         factor
-                        .publics
-                        .iter()
-                        .map(|(pub_id, nv)| (&public_values[*pub_id], *nv))
-                    )
+                            .publics
+                            .iter()
+                            .map(|(pub_id, nv)| (&public_values[*pub_id], *nv)),
+                    ),
                 }
             })
             .collect()
@@ -277,31 +302,36 @@ impl FactorGraph {
         &self,
         factor_kind: &FactorKind,
         // bool is the "invserse" for every item
-        pubs: impl Iterator<Item=(&'a PublicValue, bool)>
+        pubs: impl Iterator<Item = (&'a PublicValue, bool)>,
     ) -> PublicValue {
         let merge_inner = |p1: PublicValue, (p2, nv2): (&PublicValue, bool)| {
-                let f = |x: ClassVal, y: ClassVal| factor_kind.merge(x, if nv2 { self.not(y) } else { y }, self.nc);
-                match (p1, p2) {
-                    (PublicValue::Single(c1), PublicValue::Single(c2)) => {
-                        PublicValue::Single(f(c1, *c2))
-                    }
-                    (PublicValue::Single(c1), PublicValue::Multi(c2)) => {
-                        PublicValue::Multi(c2.iter().map(|c2| f(c1, *c2)).collect())
-                    }
-                    (PublicValue::Multi(mut c1), PublicValue::Single(c2)) => {
-                        for c1 in c1.iter_mut() {
-                            *c1 = f(*c1, *c2);
-                        }
-                        PublicValue::Multi(c1)
-                    }
-                    (PublicValue::Multi(mut c1), PublicValue::Multi(c2)) => {
-                        for (c1, c2) in c1.iter_mut().zip(c2.iter()) {
-                            *c1 = f(*c1, *c2);
-                        }
-                        PublicValue::Multi(c1)
-                    }
-                }
+            let f = |x: ClassVal, y: ClassVal| {
+                factor_kind.merge(x, if nv2 { self.not(y) } else { y }, self.nc)
             };
-        pubs.fold(PublicValue::Single(factor_kind.neutral(self.nc)), merge_inner)
+            match (p1, p2) {
+                (PublicValue::Single(c1), PublicValue::Single(c2)) => {
+                    PublicValue::Single(f(c1, *c2))
+                }
+                (PublicValue::Single(c1), PublicValue::Multi(c2)) => {
+                    PublicValue::Multi(c2.iter().map(|c2| f(c1, *c2)).collect())
+                }
+                (PublicValue::Multi(mut c1), PublicValue::Single(c2)) => {
+                    for c1 in c1.iter_mut() {
+                        *c1 = f(*c1, *c2);
+                    }
+                    PublicValue::Multi(c1)
+                }
+                (PublicValue::Multi(mut c1), PublicValue::Multi(c2)) => {
+                    for (c1, c2) in c1.iter_mut().zip(c2.iter()) {
+                        *c1 = f(*c1, *c2);
+                    }
+                    PublicValue::Multi(c1)
+                }
+            }
+        };
+        pubs.fold(
+            PublicValue::Single(factor_kind.neutral(self.nc)),
+            merge_inner,
+        )
     }
 }

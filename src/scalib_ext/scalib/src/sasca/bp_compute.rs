@@ -209,6 +209,55 @@ impl Distribution {
             DistrRepr::Uniform => false,
         }
     }
+    pub fn ensure_full(&mut self) {
+        if let DistrRepr::Uniform = self.value {
+            self.value = DistrRepr::Full(ndarray::Array2::ones(self.shape));
+        }
+    }
+    pub fn map_table(&self, table: &[ClassVal]) -> Self {
+        let mut value = ndarray::Array2::zeros(self.shape);
+        if let DistrRepr::Full(v_orig) = &self.value {
+            for (mut dest, orig) in value.outer_iter_mut().zip(v_orig.outer_iter()) {
+                for (i, p) in orig.iter().enumerate() {
+                    dest[table[i] as usize] += p;
+                }
+            }
+        } else {
+            // TODO optimize for bijective tables
+            for mut dest in value.outer_iter_mut() {
+                for i in 0..self.shape.1 {
+                    dest[table[i] as usize] += 1.0 / (self.shape.1 as f64);
+                }
+            }
+        }
+        Self {
+            shape: self.shape,
+            multi: self.multi,
+            value: DistrRepr::Full(value),
+        }
+    }
+    pub fn map_table_inv(&self, table: &[ClassVal]) -> Self {
+        let mut value = ndarray::Array2::zeros(self.shape);
+        if let DistrRepr::Full(v_orig) = &self.value {
+            for (mut dest, orig) in value.outer_iter_mut().zip(v_orig.outer_iter()) {
+                for (i, d) in dest.iter_mut().enumerate() {
+                    *d = orig[table[i] as usize];
+                }
+            }
+            Self {
+                shape: self.shape,
+                multi: self.multi,
+                value: DistrRepr::Full(value),
+            }
+        } else {
+            // here we are always uniform
+            Self {
+                shape: self.shape,
+                multi: self.multi,
+                value: DistrRepr::Uniform,
+            }
+        }
+    }
     /// Normalize sum to one, and make values not too small
     pub fn regularize(&mut self) {
         self.for_each_ignore(|mut d, _| {

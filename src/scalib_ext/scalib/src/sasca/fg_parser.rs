@@ -1,7 +1,6 @@
+use super::ClassVal;
 use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
 use chumsky::prelude::*;
-use super::ClassVal;
-
 
 #[derive(Debug, Clone)]
 pub(super) struct Var(pub(super) String);
@@ -28,7 +27,6 @@ pub(super) enum Expr {
     And(Vec<NVar>),
     Or(Vec<NVar>),
 }
-
 
 #[derive(Debug, Clone)]
 pub(super) struct VarDecl {
@@ -69,16 +67,15 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
     };
     let op_nexpr = |c, f| nvar().separated_by(op(c)).at_least(2).map(f);
     let op_expr = |c, f| var.separated_by(op(c)).at_least(2).map(f);
-    let expr = not_var()
-        .map(|v| Expr::Not(v))
-        .or(ident
-            .then(var.delimited_by(op('['), op(']')))
-            .map(|(table, var)| Expr::Lookup { table, var }))
+    let expr = ident
+        .then(var.delimited_by(op('['), op(']')))
+        .map(|(table, var)| Expr::Lookup { table, var })
         .or(op_expr('^', Expr::Xor as fn(_) -> _))
         .or(op_nexpr('&', Expr::And as fn(_) -> _))
         .or(op_nexpr('|', Expr::Or as fn(_) -> _))
         .or(op_expr('+', Expr::Add as fn(_) -> _))
-        .or(op_expr('*', Expr::Mul as fn(_) -> _));
+        .or(op_expr('*', Expr::Mul as fn(_) -> _))
+        .or(not_var().map(|v| Expr::Not(v)));
     let prop = kw("PROPERTY")
         .ignore_then(ident.then_ignore(op(':')).or_not())
         .then(var)
@@ -112,12 +109,12 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
         .or(pub_decl)
         .or(table)
         .or(pad.at_least(0).to(Statement::Empty))
-        .or(end().to(Statement::End))
         .then_ignore(comment.or_not())
         .recover_with(skip_until(['\n', '\r'], |_| Statement::Invalid))
         .separated_by(text::newline())
         .allow_leading()
-        .allow_trailing();
+        .allow_trailing()
+        .then_ignore(end());
     graph
 }
 
@@ -162,7 +159,10 @@ pub(super) fn parse(src: &str) -> Result<Vec<Statement>, Vec<u8>> {
                     })
                     .with_color(Color::Red),
             );
-        report.finish().write(Source::from(&src), &mut err_str).unwrap();
+        report
+            .finish()
+            .write(Source::from(&src), &mut err_str)
+            .unwrap();
     }
     if err {
         return Err(err_str);

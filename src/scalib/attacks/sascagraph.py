@@ -8,7 +8,7 @@ from scalib import _scalib_ext
 from scalib.config import get_config
 import scalib.utils
 
-__all__ = ['SASCAGraph']
+__all__ = ["SASCAGraph"]
 
 _NODE_FN = {
     "AND": lambda a, b: a & b,

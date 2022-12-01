@@ -1,14 +1,13 @@
-
 //! Python binding of SCALib's FactorGraph rust implementation.
 
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use bincode::{deserialize, serialize};
+use numpy::{PyArray, PyArray1, PyArray2};
+use pyo3::exceptions::{PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyTuple};
-use pyo3::exceptions::{PyTypeError, PyKeyError, PyValueError};
-use numpy::{PyArray, PyArray1, PyArray2};
 
 use scalib::sasca;
 
@@ -21,10 +20,14 @@ impl FactorGraph {
         self.inner.as_ref().unwrap()
     }
     fn get_var(&self, var: &str) -> PyResult<sasca::VarId> {
-        self.get_inner().get_varid(var).map_err(|e| PyValueError::new_err(e.to_string()))
+        self.get_inner()
+            .get_varid(var)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
     fn get_factor(&self, factor: &str) -> PyResult<sasca::FactorId> {
-        self.get_inner().get_factorid(factor).map_err(|e| PyValueError::new_err(e.to_string()))
+        self.get_inner()
+            .get_factorid(factor)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 }
 
@@ -38,11 +41,19 @@ impl FactorGraph {
         if args.len() == 0 {
             Ok(Self { inner: None })
         } else {
-            let (description, tables): (&str, std::collections::HashMap<String, &PyArray1<sasca::ClassVal>>) =
-                                         args.extract()?;
-            let tables = tables.into_iter().map(|(k, v)| PyResult::<_>::Ok((k, PyArray::to_vec(v)?))).collect::<Result<std::collections::HashMap<_, _>, _>>()?;
-            let fg = sasca::build_graph(description, tables).map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(Self { inner: Some(Arc::new(fg)) })
+            let (description, tables): (
+                &str,
+                std::collections::HashMap<String, &PyArray1<sasca::ClassVal>>,
+            ) = args.extract()?;
+            let tables = tables
+                .into_iter()
+                .map(|(k, v)| PyResult::<_>::Ok((k, PyArray::to_vec(v)?)))
+                .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
+            let fg = sasca::build_graph(description, tables)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            Ok(Self {
+                inner: Some(Arc::new(fg)),
+            })
         }
     }
 
@@ -62,7 +73,13 @@ impl FactorGraph {
 
     pub fn new_bp(&self, py: Python, nmulti: u32, public_values: PyObject) -> PyResult<BPState> {
         let pub_values = pyobj2pubs(py, public_values, self.get_inner().public_multi())?;
-        Ok(BPState { inner: Some(sasca::BPState::new(self.get_inner().clone(), nmulti, pub_values)) })
+        Ok(BPState {
+            inner: Some(sasca::BPState::new(
+                self.get_inner().clone(),
+                nmulti,
+                pub_values,
+            )),
+        })
     }
 
     pub fn var_names(&self) -> Vec<&str> {
@@ -73,25 +90,49 @@ impl FactorGraph {
     }
     pub fn factor_scope<'s>(&'s self, factor: &str) -> PyResult<Vec<&'s str>> {
         let factor_id = self.get_factor(factor)?;
-        Ok(self.get_inner().factor_scope(factor_id).map(|v| self.get_inner().var_name(v)).collect())
+        Ok(self
+            .get_inner()
+            .factor_scope(factor_id)
+            .map(|v| self.get_inner().var_name(v))
+            .collect())
     }
-    pub fn sanity_check(&self, py: Python, public_values: PyObject, var_assignments: PyObject) -> PyResult<()> {
+    pub fn sanity_check(
+        &self,
+        py: Python,
+        public_values: PyObject,
+        var_assignments: PyObject,
+    ) -> PyResult<()> {
         let inner = self.get_inner();
         let pub_values = pyobj2pubs(py, public_values, inner.public_multi())?;
-        let var_values = pyobj2pubs(py, var_assignments, inner.vars().map(|(v, vn)| (vn, inner.var_multi(v))))?;
-        inner.sanity_check(pub_values, var_values.into()).map_err(|e| PyValueError::new_err(e.to_string()))
+        let var_values = pyobj2pubs(
+            py,
+            var_assignments,
+            inner.vars().map(|(v, vn)| (vn, inner.var_multi(v))),
+        )?;
+        inner
+            .sanity_check(pub_values, var_values.into())
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 }
 
-fn pyobj2pubs<'a>(py: Python, public_values: PyObject, expected: impl Iterator<Item=(&'a str, bool)>) -> PyResult<Vec<sasca::PublicValue>> {
+fn pyobj2pubs<'a>(
+    py: Python,
+    public_values: PyObject,
+    expected: impl Iterator<Item = (&'a str, bool)>,
+) -> PyResult<Vec<sasca::PublicValue>> {
     let mut public_values: HashMap<&str, PyObject> = public_values.extract(py)?;
-    expected.map(|(pub_name, multi)| obj2pub(
-            py, 
-            public_values.remove(pub_name).ok_or_else(|| PyKeyError::new_err(format!("Missing value {}.", pub_name)))?,
-            multi,
-    )).collect::<Result<Vec<sasca::PublicValue>, PyErr>>()
+    expected
+        .map(|(pub_name, multi)| {
+            obj2pub(
+                py,
+                public_values
+                    .remove(pub_name)
+                    .ok_or_else(|| PyKeyError::new_err(format!("Missing value {}.", pub_name)))?,
+                multi,
+            )
+        })
+        .collect::<Result<Vec<sasca::PublicValue>, PyErr>>()
 }
-
 
 #[pyclass(module = "_scalib_ext")]
 pub(crate) struct BPState {
@@ -105,13 +146,22 @@ impl BPState {
         self.inner.as_mut().unwrap()
     }
     fn get_var(&self, var: &str) -> PyResult<sasca::VarId> {
-        self.get_inner().get_graph().get_varid(var).map_err(|e| PyValueError::new_err(e.to_string()))
+        self.get_inner()
+            .get_graph()
+            .get_varid(var)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
     fn get_factor(&self, factor: &str) -> PyResult<sasca::FactorId> {
-        self.get_inner().get_graph().get_factorid(factor).map_err(|e| PyValueError::new_err(e.to_string()))
+        self.get_inner()
+            .get_graph()
+            .get_factorid(factor)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
     fn get_edge(&self, var: sasca::VarId, factor: sasca::FactorId) -> PyResult<sasca::EdgeId> {
-        self.get_inner().get_graph().edge(var, factor).map_err(|e| PyValueError::new_err(e.to_string()))
+        self.get_inner()
+            .get_graph()
+            .edge(var, factor)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
     fn get_edge_named(&self, var: &str, factor: &str) -> PyResult<sasca::EdgeId> {
         self.get_edge(self.get_var(var)?, self.get_factor(factor)?)
@@ -148,7 +198,8 @@ impl BPState {
         let var_id = self.get_var(var)?;
         let bp = self.get_inner_mut();
         let distr = obj2distr(py, distr, bp.get_graph().var_multi(var_id))?;
-        bp.set_evidence(var_id, distr).map_err(|e| PyTypeError::new_err(e.to_string()))?;
+        bp.set_evidence(var_id, distr)
+            .map_err(|e| PyTypeError::new_err(e.to_string()))?;
         Ok(())
     }
     pub fn drop_evidence(&mut self, var: &str) -> PyResult<()> {
@@ -163,7 +214,8 @@ impl BPState {
         let var_id = self.get_var(var)?;
         let bp = self.get_inner_mut();
         let distr = obj2distr(py, distr, bp.get_graph().var_multi(var_id))?;
-        bp.set_state(var_id, distr).map_err(|e| PyTypeError::new_err(e.to_string()))?;
+        bp.set_state(var_id, distr)
+            .map_err(|e| PyTypeError::new_err(e.to_string()))?;
         Ok(())
     }
     pub fn drop_state(&mut self, var: &str) -> PyResult<()> {
@@ -191,18 +243,23 @@ impl BPState {
     }
     pub fn propagate_factor(&mut self, factor: &str, dest: Vec<&str>) -> PyResult<()> {
         let factor_id = self.get_factor(factor)?;
-        let dest = dest.iter().map(|v| self.get_var(v)).collect::<Result<Vec<_>, _>>()?;
-        self.get_inner_mut().propagate_factor(factor_id, dest.as_slice());
+        let dest = dest
+            .iter()
+            .map(|v| self.get_var(v))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.get_inner_mut()
+            .propagate_factor(factor_id, dest.as_slice());
         Ok(())
     }
     pub fn propagate_loopy_step(&mut self, n_steps: u32) {
         self.get_inner_mut().propagate_loopy_step(n_steps);
     }
     pub fn graph(&self) -> FactorGraph {
-        FactorGraph { inner: Some(self.get_inner().get_graph().clone()) }
+        FactorGraph {
+            inner: Some(self.get_inner().get_graph().clone()),
+        }
     }
 }
-
 
 fn obj2distr(py: Python, distr: PyObject, multi: bool) -> PyResult<sasca::Distribution> {
     Ok(if multi {
@@ -229,7 +286,7 @@ fn distr2py(py: Python, distr: &sasca::Distribution) -> PyResult<PyObject> {
         if distr.multi() {
             return Ok(PyArray2::from_array(py, &d).into_py(py));
         } else {
-            return Ok(PyArray1::from_array(py, &d.slice(ndarray::s![0,..])).into_py(py));
+            return Ok(PyArray1::from_array(py, &d.slice(ndarray::s![0, ..])).into_py(py));
         }
     } else {
         return Ok(py.None());

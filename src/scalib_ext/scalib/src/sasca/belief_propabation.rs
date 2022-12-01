@@ -4,7 +4,6 @@ use thiserror::Error;
 use super::factor_graph::{
     EdgeId, EdgeSlice, EdgeVec, Factor, FactorId, FactorKind, FactorVec, Table, VarId, VarVec,
 };
-use super::ClassVal;
 use super::{Distribution, FactorGraph, PublicValue};
 
 // TODO improvements
@@ -219,19 +218,16 @@ impl BPState {
         }
         match &factor.kind {
             // TODO know when to erase incoming
-            FactorKind::AND { vars_neg } => {
-                prop_factor!(
-                    factor_gen_and,
-                    &self.pub_reduced[factor_id],
-                    vars_neg.as_slice(),
-                    false
-                )
+            FactorKind::AND { .. } => {
+                prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], false)
             }
             FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id], false),
             FactorKind::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32, false),
             FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id]),
             FactorKind::MUL => prop_factor!(factor_mul, &self.pub_reduced[factor_id]),
-            FactorKind::LOOKUP { table } => prop_factor!(factor_lookup, &self.graph.tables[*table]),
+            FactorKind::LOOKUP { table } => {
+                prop_factor!(factor_lookup, &self.graph.tables[*table], false)
+            }
         }
     }
 
@@ -273,12 +269,13 @@ fn factor_gen_and<'a>(
     belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
     pub_red: &PublicValue,
-    invert_op: &'a [bool],
     clear_incoming: bool,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    // Special case for single-input AND 
+    let FactorKind::AND { vars_neg } = &factor.kind else { unreachable!() };
+    // Special case for single-input AND
     if factor.has_res & (factor.edges.len() == 2) {
-        return dest.iter()
+        return dest
+            .iter()
             .map(|var| {
                 let i = factor.edges.get_index_of(var).unwrap();
                 let mut distr = if clear_incoming {
@@ -286,17 +283,17 @@ fn factor_gen_and<'a>(
                 } else {
                     belief_from_var[factor.edges[1 - i]].clone()
                 };
-                if invert_op[1-i] {
+                if vars_neg[1 - i] {
                     distr.not();
                 }
                 if i == 0 {
                     // dest is the result of the AND
                     distr.and_cst(pub_red);
                 } else {
-                    // dest is an operand of the AND, original distr is result 
+                    // dest is an operand of the AND, original distr is result
                     distr.inv_and_cst(pub_red);
                 }
-                if invert_op[i] {
+                if vars_neg[i] {
                     distr.not();
                 }
                 distr
@@ -316,7 +313,7 @@ fn factor_gen_and<'a>(
         // constant is operand
         acc.cumt();
     } else {
-        // constant is result 
+        // constant is result
         acc.opandt();
     }
     let mut taken_dest = vec![false; factor.edges.len()];
@@ -332,7 +329,10 @@ fn factor_gen_and<'a>(
         } else {
             belief_from_var[*e].clone()
         };
-        assert!(d.is_full());
+        if vars_neg[i] {
+            d.not();
+        }
+        d.ensure_full();
         if factor.has_res && (i == 0) {
             d.opandt();
         } else {
@@ -350,12 +350,19 @@ fn factor_gen_and<'a>(
     return (0..dest.len())
         .map(|i| {
             let mut res = acc.clone();
-            res.multiply((0..dest.len()).filter(|j| *j != i).map(|j| &dest_transformed[j]));
+            res.multiply(
+                (0..dest.len())
+                    .filter(|j| *j != i)
+                    .map(|j| &dest_transformed[j]),
+            );
             // Inverse transform
-            if factor.has_res && (dest[i] == *factor.edges.get_index(0).unwrap().0) {
+            if Some(dest[i]) == factor.res_id() {
                 res.cumti();
             } else {
                 res.opandt();
+            }
+            if vars_neg[factor.edges.get_index_of(&dest[i]).unwrap()] {
+                res.not();
             }
             res.regularize();
             res
@@ -390,7 +397,8 @@ fn factor_xor<'a>(
 ) -> impl Iterator<Item = Distribution> + 'a {
     // Special case for single-input XOR
     if factor.edges.len() == 2 {
-        return dest.iter()
+        return dest
+            .iter()
             .map(|var| {
                 let i = factor.edges.get_index_of(var).unwrap();
                 let mut distr = if clear_incoming {
@@ -456,6 +464,7 @@ fn factor_xor<'a>(
             };
             assert!(d.is_full());
             d.wht();
+            // TODO remove this ?
             d.make_non_zero_signed();
             // We either multiply (non-taken distributions) or we add to the vector of factors.
             if !*taken {
@@ -495,26 +504,95 @@ fn factor_not<'a>(
     )
 }
 
-// TODO handle subraction too
+// TODO handle subtraction too
 fn factor_add<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a EdgeSlice<Distribution>,
+    belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
     pub_red: &PublicValue,
+    clear_incoming: bool,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
-    for d in factor.edges.values().map(|e| &belief_from_var[*e]) {
-        // TODO re-use a bufer...
-        let mut d = d.clone();
-        d.fft();
-        acc.multiply(Some(&d).into_iter());
+    // Special case for single-input ADD
+    if factor.edges.len() == 2 {
+        return dest
+            .iter()
+            .map(|var| {
+                let i = factor.edges.get_index_of(var).unwrap();
+                let distr = belief_from_var[factor.edges[1 - i]].add_cst(pub_red);
+                if clear_incoming {
+                    belief_from_var[factor.edges[1 - i]].reset()
+                }
+                distr
+            })
+            .collect::<Vec<_>>()
+            .into_iter();
     }
-    dest.iter().map(move |dest| {
-        let mut d = Distribution::divide(&acc, &belief_from_var[factor.edges[dest]]);
-        d.ifft();
-        d.regularize();
-        d
-    })
+    let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
+    let acc_fft = acc.fft();
+    let mut taken_dest = vec![false; factor.edges.len()];
+    for dest in dest {
+        taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
+    }
+    let mut uniform_iter = factor
+        .edges
+        .values()
+        .zip(taken_dest.iter())
+        .enumerate()
+        .filter(|(_, (e, _))| !belief_from_var[**e].is_full());
+    let uniform_op = uniform_iter.next();
+    if let Some((i, (e_dest, t))) = uniform_op {
+        if !*t || uniform_iter.next().is_some() {
+            // At least 2 uniform operands, or single uniform is not in dest,
+            // all dest messages are uniform.
+            reset_incoming(factor, belief_from_var, &taken_dest, clear_incoming);
+            return vec![acc.as_uniform(); dest.len()].into_iter();
+        } else {
+            // Single uniform op, only compute for that one.
+            for e in factor.edges.values() {
+                if e != e_dest {
+                    let d_fft = belief_from_var[*e].fft();
+                    if clear_incoming {
+                        belief_from_var[*e].reset()
+                    }
+                    acc.multiply(Some(&d_fft).into_iter());
+                }
+            }
+            let acc = acc.ifft();
+            acc.regularize();
+            let mut res = vec![acc.as_uniform(); dest.len()];
+            res[i] = acc;
+            return res.into_iter();
+        }
+    } else {
+        // Here we have to actually compute.
+        // Simply make the product if FFT domain
+        // We do take the product of all factors then divide because some factors could be zero.
+        let mut dest_fft = Vec::with_capacity(dest.len());
+        for (e, taken) in factor.edges.values().zip(taken_dest.iter()) {
+            let d_fft = belief_from_var[*e].fft();
+            if clear_incoming {
+                belief_from_var[*e].reset()
+            }
+            // We either multiply (non-taken distributions) or we add to the vector of factors.
+            if !*taken {
+                acc.multiply(Some(&d_fft).into_iter());
+            } else {
+                dest_fft.push(d_fft);
+            }
+        }
+        // This could be done in O(l log l) instead of O(l^2) where l=dest.len()
+        // by better caching product computations.
+        return (0..dest.len())
+            .map(|i| {
+                let mut res = acc.clone();
+                res.multiply((0..dest.len()).filter(|j| *j != i).map(|j| &dest_fft[j]));
+                let res = res.ifft();
+                res.regularize();
+                res
+            })
+            .collect::<Vec<_>>()
+            .into_iter();
+    }
 }
 
 fn factor_mul<'a>(
@@ -530,11 +608,25 @@ fn factor_mul<'a>(
 
 fn factor_lookup<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a EdgeSlice<Distribution>,
+    belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
-    table: &Table,
+    table: &'a Table,
+    clear_incoming: bool,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    #![allow(unreachable_code)]
-    todo!();
-    [].into_iter()
+    // we know that there is not constant involved
+    assert_eq!(factor.edges.len(), 2);
+    dest.iter().map(move |dest| {
+        let i = factor.edges.get_index_of(dest).unwrap();
+        let distr = belief_from_var[factor.edges[1 - i]].clone();
+        let res = if i == 0 {
+            // dest is res
+            distr.map_table(table.values.as_slice())
+        } else {
+            distr.map_table_inv(table.values.as_slice())
+        };
+        if clear_incoming {
+            belief_from_var[factor.edges[1 - i]].reset();
+        }
+        res
+    })
 }
