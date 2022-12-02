@@ -555,3 +555,39 @@ def test_xor():
     distri_z_ref = distri_z_ref / np.sum(distri_z_ref)
     assert np.allclose(distri_z_ref, distri_z)
     assert np.allclose(distri_z_ref, distri_z2)
+
+def test_bad_var_norm():
+    """
+    When normalization of distributions can be bad...
+    Root cause of bug #55.
+    """
+    nc = 2
+    n = 1
+    dy = np.array([[1.0, 1e-100]])
+    dz = np.array([[1e-100, 1.0]])
+    graph = f"""
+        NC {nc}
+        VAR MULTI x
+        VAR MULTI y
+        VAR MULTI z
+        PUB MULTI a
+        PROPERTY s1: x = y^a
+        PROPERTY s2: x = !z
+        """
+
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n, {"a": [0]})
+    bp_state.set_evidence("y", dy)
+    bp_state.set_evidence("z", dz)
+
+    bp_state.propagate_var("y")
+    bp_state.propagate_var("z")
+    bp_state.propagate_factor("s1")
+    bp_state.propagate_factor("s2")
+    bp_state.propagate_var("x")
+
+    s1 = normalize_distr(bp_state.get_belief_from_var("x", "s1"))
+    s2 = normalize_distr(bp_state.get_belief_from_var("x", "s2"))
+
+    assert np.allclose(np.array([[1.0, 1e-40]]), s1)
+    assert np.allclose(np.array([[1.0, 1e-40]]), s2)

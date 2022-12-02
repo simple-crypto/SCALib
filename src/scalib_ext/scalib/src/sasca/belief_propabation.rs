@@ -65,6 +65,7 @@ impl BPState {
             pub_reduced,
         }
     }
+    // TODO FIXNE apparently this is buggy.
     pub fn is_cyclic(&self) -> bool {
         // Let's do something simple here, and revisit it when we need more sophisticated queries.
         // The factor graph is cyclic if either
@@ -186,8 +187,13 @@ impl BPState {
             .map(|e| &self.belief_to_var[*e]);
         self.var_state[var].reset();
         self.var_state[var] = self.evidence[var].clone();
-        self.var_state[var].multiply(distr_iter);
-        self.var_state[var].regularize();
+        // We multiply_reg to avoid having very low values in the product.
+        // Since inputs should not be too big, we should not have any overflow.
+        // Underflow my happen, since probas are lower-bounded by MIN_PROBA**2.
+        self.var_state[var].multiply_reg(distr_iter);
+        // Now we'll make to sum equal one to avoid underflows or overflows in the long run, and keep the exposed probas nice.
+        // Just multiply, don't add anything, underflows are taken care of above.
+        self.var_state[var].normalize();
     }
     pub fn propagate_from_var(&mut self, edge: EdgeId) {
         // Dividing here is ok if we ensure that there is no zero element and no
@@ -196,7 +202,7 @@ impl BPState {
         let var = self.graph.edges[edge].var;
         self.belief_from_var[edge].reset();
         self.belief_from_var[edge] =
-            Distribution::divide(&self.var_state[var], &self.belief_to_var[edge]);
+            Distribution::divide_reg(&self.var_state[var], &self.belief_to_var[edge]);
     }
     pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId]) {
         let factor = self.graph.factor(factor_id);
