@@ -57,7 +57,7 @@ class SASCAGraph:
         # Encode data into the graph
         graph.set_table("sbox",aes_sbox)
         graph.set_public("p",plaintexts)
-        graph.set_distribution("y",x_distribution)
+        graph.set_init_distribution("y",y_distribution)
 
         # Solve graph
         graph.run_bp(it=3)
