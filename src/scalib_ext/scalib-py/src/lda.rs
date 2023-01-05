@@ -1,7 +1,7 @@
 //! Python binding of SCALib's LDA implementation.
 
 use crate::thread_pool::ThreadPool;
-use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
+use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray, IntoPyArray};
 use pyo3::prelude::*;
 
 #[pyclass]
@@ -67,6 +67,37 @@ impl LdaAcc {
             self.inner.n_traces.to_pyarray(py),
         )
     }
+
+    /// Get the matrix sw (debug purpose)
+    fn get_sw<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> 
+        PyResult<&'py PyArray2<f64>>
+    {
+        match self.inner.get_matrices() {
+            Ok((sw, _, _)) => Ok(sw.into_pyarray(py)),
+            Err(()) =>  Err(pyo3::exceptions::PyZeroDivisionError::new_err(
+                "Class without traces.",
+            )), 
+        }
+    }
+
+    /// Get the matrix sb (debug purpose)
+    fn get_sb<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> 
+        PyResult<&'py PyArray2<f64>>
+    {
+        match self.inner.get_matrices() {
+            Ok((_, sb, _)) => Ok(sb.into_pyarray(py)),
+            Err(()) =>  Err(pyo3::exceptions::PyZeroDivisionError::new_err(
+                "Class without traces.",
+            )), 
+        }
+    }
+
     /// Set the accumulator state
     #[staticmethod]
     fn from_state(
