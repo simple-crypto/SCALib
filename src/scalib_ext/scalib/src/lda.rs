@@ -129,7 +129,7 @@ impl LdaAcc {
         self.n = merged_n;
     }
 
-    fn get_matrices(&self) -> Result<(Array2<f64>, Array2<f64>, Array2<f64>), ()> {
+    pub fn get_matrices(&self) -> Result<(Array2<f64>, Array2<f64>, Array2<f64>), ()> {
         if self.n_traces.iter().any(|x| *x == 0) {
             Err(())
         } else {
