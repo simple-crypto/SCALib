@@ -180,6 +180,13 @@ class LDAClassifier:
         r"""Return $S_{B}$ matrix (between-class scatter)."""
         return self.acc.get_sb()
 
+    def get_mus(self):
+        r"""Return means matrix (classes means).
+        - axis-0: classes
+        - axis-1: samples
+        """
+        return self.acc.get_mus()
+
 
 class MultiLDA:
     """Perform LDA on `nv` distinct variables for the same leakage traces.

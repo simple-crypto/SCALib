@@ -1,13 +1,10 @@
 //! Python binding of SCALib's SNR implementation.
 
 use crate::thread_pool::ThreadPool;
+use crate::ScalibError;
 use numpy::{PyArray2, PyReadonlyArray2, ToPyArray};
-use pyo3::create_exception;
-use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use scalib::snr;
-
-create_exception!(_scalib_ext, SnrError, PyException);
 
 enum InnerSnr {
     Snr32bit(snr::SNR<snr::SnrType32bit>),
@@ -50,8 +47,7 @@ impl SNR {
         crate::on_worker(py, thread_pool, || match inner {
             InnerSnr::Snr32bit(inner) => inner.update(x, y),
             InnerSnr::Snr64bit(inner) => inner.update(x, y),
-        })
-        .map_err(|e| SnrError::new_err(e.to_string()))?;
+        }).map_err(|e| ScalibError::from_scalib(e, py))?;
         Ok(())
     }
 

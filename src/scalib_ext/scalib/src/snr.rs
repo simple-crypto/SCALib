@@ -55,6 +55,7 @@
 //! performance, should not be too costly), then $S\_i^2/n\_i$ on 64-bit integer.
 //! For $Sig$, $(n S\_i^2) / n\_i$ can be computed on 128-bit, as well as $S^2$.
 
+use crate::ScalibError;
 use hytra::TrAdder;
 use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use itertools::izip;
@@ -156,34 +157,6 @@ where
     tot_n_samples: u32,
 }
 
-#[derive(Debug)]
-pub enum SnrError {
-    TooManyTraces,
-    ClassOverflow,
-    ClassOutOfBound,
-}
-
-impl std::fmt::Display for SnrError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TooManyTraces => write!(f, "Number of traces accumulated exceeds 2^32"),
-            Self::ClassOverflow => write!(f,
-    "The sum of samples (for a variable value) might overflow (threshold is 2^32 or 2^64)."
-               ),
-            Self::ClassOutOfBound => write!(
-                f,
-                "A class value of a variable is larger than the given number of classes."
-            ),
-        }
-    }
-}
-
-impl std::error::Error for SnrError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
-}
-
 impl<T> SNR<T>
 where
     T: SnrType<Sample = i16> + std::fmt::Debug,
@@ -216,7 +189,7 @@ where
         &mut self,
         traces: ArrayView2<T::Sample>,
         y: ArrayView2<u16>,
-    ) -> Result<(), SnrError> {
+    ) -> Result<(), ScalibError> {
         let x = traces;
 
         let acc: TrAdder<u64> = TrAdder::new();
@@ -247,7 +220,7 @@ where
                 });
 
                 // spawn computing thread
-                let res: Result<(), SnrError> = s
+                let res: Result<(), ScalibError> = s
                     .spawn(move |_| self.update_internal(traces, y, acc_ref))
                     .join()
                     .unwrap();
@@ -266,7 +239,7 @@ where
         traces: ArrayView2<T::Sample>,
         y: ArrayView2<u16>,
         acc_ref: &TrAdder<u64>,
-    ) -> Result<(), SnrError> {
+    ) -> Result<(), ScalibError> {
         assert_eq!(traces.shape()[0], y.shape()[1]);
         assert_eq!(traces.shape()[1], self.ns);
         assert_eq!(y.shape()[0], self.np);
@@ -274,11 +247,11 @@ where
         assert!(y.is_standard_layout());
         let n_traces: u32 = traces.shape()[0]
             .try_into()
-            .map_err(|_| SnrError::TooManyTraces)?;
+            .map_err(|_| ScalibError::SnrTooManyTraces)?;
         self.tot_n_samples = self
             .tot_n_samples
             .checked_add(n_traces)
-            .ok_or(SnrError::TooManyTraces)?;
+            .ok_or(ScalibError::SnrTooManyTraces)?;
         let mut max_n_samples: u32 = 0;
         let nc = self.nc;
         let np = self.np;
@@ -286,7 +259,7 @@ where
             |(mut n_samples, y)| {
                 y.into_iter().try_for_each(|y| {
                     if *y >= nc {
-                        Err(SnrError::ClassOutOfBound)
+                        Err(ScalibError::SnrClassOutOfBound)
                     } else {
                         n_samples[*y as usize] += 1;
                         max_n_samples = std::cmp::max(max_n_samples, n_samples[*y as usize]);
@@ -367,7 +340,7 @@ where
         // max_val does not overflow since max_n_samples < 2^32 and self.bit_width < 16
         let max_val = (max_n_samples as i64) << self.bit_width;
         if max_val > T::acc2i64(T::SumAcc::max_value()) {
-            return Err(SnrError::ClassOverflow);
+            return Err(ScalibError::SnrClassOverflow);
         }
         return Ok(());
     }

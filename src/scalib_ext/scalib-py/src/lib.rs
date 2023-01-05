@@ -1,8 +1,11 @@
+use std::error::Error;
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Axis};
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyList;
+use pyo3::create_exception;
+use pyo3::exceptions::PyException;
 
 mod belief_propagation;
 mod lda;
@@ -10,6 +13,24 @@ mod ranking;
 mod snr;
 mod thread_pool;
 mod ttest;
+
+create_exception!(_scalib_ext, ScalibError, PyException);
+
+impl ScalibError {
+    fn from_scalib(x: scalib::ScalibError, py: Python<'_>) -> PyErr {
+        let mut e = ScalibError::new_err(x.to_string());
+        annotate_cause(x.source(), &mut e, py);
+        e
+    }
+}
+
+fn annotate_cause(err: Option<&(dyn Error + 'static)>, pyerr: &mut PyErr, py: Python) {
+    if let Some(e) = err {
+        let mut sub_pyerr = ScalibError::new_err(e.to_string());
+        annotate_cause(e.source(), &mut sub_pyerr, py);
+        pyerr.set_cause(py, Some(sub_pyerr));
+    }
+}
 
 pub(crate) fn on_worker<OP, R>(py: Python, thread_pool: &thread_pool::ThreadPool, op: OP) -> R
 where

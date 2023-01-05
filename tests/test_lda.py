@@ -120,6 +120,21 @@ def test_lda():
         [parallel_factor(x, y) for x, y in zip(lda_projection.T, lda_ref_projection.T)]
     )
 
+    # Verify value of means by accessor
+    ref_means = lda_ref.means_
+    lda_means = lda.get_mus()
+    assert np.allclose(ref_means,lda_means, rtol=1e-10)
+
+    # Verify scatter matrix by accessor
+    lda_scat = lda.get_sw() / n
+    cov_ref = lda_ref.covariance_
+    assert np.allclose(lda_scat,cov_ref, rtol=1e-5)
+
+    # Not point of comparison with sklearn, but we here call
+    # the accessor for the inter-class scatter matrix just to verify
+    # that its worling. 
+    smat = lda.get_sb()
+
     print("parallel_factors")
     print(parallel_factors)
 
