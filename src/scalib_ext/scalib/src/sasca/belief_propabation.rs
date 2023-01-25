@@ -35,6 +35,8 @@ pub enum BPError {
     WrongDistributionNc(usize, usize),
     #[error("Wrong number of traces for distribution: got {0}, expected {1}.")]
     WrongDistributionNmulti(usize, u32),
+    #[error("The distribution is not is C memory order. Shape: {0:?}, strides: {1:?}.")]
+    DistributionLayout(Vec<usize>, Vec<isize>),
 }
 
 impl BPState {

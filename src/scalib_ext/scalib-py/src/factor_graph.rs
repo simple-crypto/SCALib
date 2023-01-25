@@ -262,13 +262,13 @@ impl BPState {
 }
 
 fn obj2distr(py: Python, distr: PyObject, multi: bool) -> PyResult<sasca::Distribution> {
-    Ok(if multi {
+    if multi {
         let distr: &PyArray2<f64> = distr.extract(py)?;
-        sasca::Distribution::from_array_multi(distr.to_owned_array())
+        sasca::Distribution::from_array_multi(distr.readonly().as_array().as_standard_layout().into_owned())
     } else {
         let distr: &PyArray1<f64> = distr.extract(py)?;
-        sasca::Distribution::from_array_single(distr.to_owned_array())
-    })
+        sasca::Distribution::from_array_single(distr.readonly().as_array().as_standard_layout().into_owned())
+    }.map_err(|e| PyTypeError::new_err(e.to_string()))
 }
 
 fn obj2pub(py: Python, obj: PyObject, multi: bool) -> PyResult<sasca::PublicValue> {

@@ -1,4 +1,5 @@
 use super::factor_graph::PublicValue;
+use super::belief_propabation::BPError;
 use super::ClassVal;
 use ndarray::{azip, s, Zip};
 
@@ -35,20 +36,28 @@ impl Distribution {
             None
         }
     }
-    pub fn from_array_single(array: ndarray::Array1<Proba>) -> Self {
+    pub fn from_array_single(array: ndarray::Array1<Proba>) -> Result<Self, BPError> {
         let l = array.len();
-        let array = array.into_shape((1, l)).expect("Non-contiguous array");
-        Self {
-            multi: false,
-            shape: array.dim(),
-            value: DistrRepr::Full(array),
+        if array.is_standard_layout() {
+            let array = array.into_shape((1, l)).expect("Non-contiguous array");
+            Ok(Self {
+                multi: false,
+                shape: array.dim(),
+                value: DistrRepr::Full(array),
+            })
+        } else {
+            Err(BPError::DistributionLayout(array.shape().to_owned(), array.strides().to_owned()))
         }
     }
-    pub fn from_array_multi(array: ndarray::Array2<Proba>) -> Self {
-        Self {
+    pub fn from_array_multi(array: ndarray::Array2<Proba>) -> Result<Self, BPError> {
+        if array.is_standard_layout() {
+        Ok(Self {
             multi: true,
             shape: array.dim(),
             value: DistrRepr::Full(array),
+        })
+        } else {
+            Err(BPError::DistributionLayout(array.shape().to_owned(), array.strides().to_owned()))
         }
     }
     pub fn new_single(nc: usize) -> Self {
