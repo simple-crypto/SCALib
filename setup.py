@@ -13,9 +13,10 @@ use_avx2 = os.environ.get("SCALIB_AVX2") is not None
 with open("src/scalib/build_config.py", "w") as f:
     f.write(f"REQUIRE_AVX2 = {use_avx2}\n")
 
+# This is useless and should be removed
 rustc_flags = []
-if use_avx2:
-    rustc_flags.extend(["-C", "target-feature=+avx2"])
+# if use_avx2:
+#     rustc_flags.extend(["-C", "target-feature=+avx2"])
 
 scalib_features = ["pyo3/abi3"]
 

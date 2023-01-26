@@ -12,94 +12,106 @@ on:
 
 
 jobs:
-    test:
-        runs-on: ubuntu-latest
-        strategy:
-            matrix:
-                python: ["3.7", "3.11"]
-        steps:
-            - uses: actions/checkout@v3
-            - uses: actions/cache@v3
-              with:
-                  path: |
-                      ~/.cargo
-                      .cargo_build
-                  key: test-cache-rust-build-cargo-v0
-            - name: Setup Python
-              uses: actions/setup-python@v3
-              with:
-                  python-version: ${{ matrix.python }}
-            - name: Install Tox
-              run: pip install tox
-            - name: Run tests
-              # Run tox using the version of Python in `PATH`
-              run: tox -e codestyle,build_docs,test
-              env:
-                RUST_BACKTRACE: full
-                CARGO_TARGET_DIR: ${{ github.workspace }}/cargo_build
-                CARGO_HOME: ${{ github.workspace }}/cargo_home
-
-    build_wheel_windows:
-        name: Build wheel on Windows
-        runs-on: windows-2019
-        steps:
-            - uses: actions/checkout@v3
-            - uses: actions/setup-python@v3
-              with:
-                  python-version: "3.7"
-            - name: wheels Windows ${{ matrix.vers }}
-              uses: pypa/cibuildwheel@v2.5.0
-              env:
-                  CARGO_TARGET_DIR: ${{ github.workspace }}\cargo_build
-                  CIBW_ARCHS_WINDOWS: native
-                  CIBW_BUILD_VERBOSITY: "1"
-                  # add RUSTFLAGS so that deps build with avx2, needed due to likely bug in setuptools_rust
-                  CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full SCALIB_AVX2=1 RUSTFLAGS="-C target-feature=+avx2"'
-                  CIBW_BUILD: "cp37-win_amd64"
-                  # I don't know how to make both normal and doctring tests
-                  # work with only one command, so I use shell &&.
-                  CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scalib
-                  CIBW_TEST_EXTRAS: test
-            - uses: actions/upload-artifact@v2
-              with:
-                  name: dist
-                  path: ./wheelhouse/*.whl
-
     build_wheel_linux:
-        name: Build wheel on linux ${{ matrix.vers }}
-        runs-on: ubuntu-20.04
+        name: Build wheel on linux ${{ matrix.arch }}
+        runs-on: ubuntu-latest
         strategy:
             fail-fast: false
             matrix:
                 include:
-                    - vers: x86_64 
-                    #- vers: aarch64 # This is too slow on github CI
-        env:
-            #CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/simple-crypto/manylinux2014_x86_64:rust-1.51.0"
-            CIBW_MANYLINUX_X86_64_IMAGE: "ghcr.io/simple-crypto/manylinux2014_x86_64-clang:rust-1.60.0"
-            CIBW_BUILD_VERBOSITY: "1"
-            # add RUSTFLAGS so that deps build with avx2, needed due to likely bug in setuptools_rust
-            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full CARGO_TARGET_DIR=/host${{ github.workspace }}/cargo_build CARGO_HOME=/host${{ github.workspace }}/cargo_home SCALIB_AVX2=1 RUSTFLAGS="-C target-feature=+avx2"'
-            CIBW_BUILD: "cp37-manylinux_x86_64*"
-            # I don't know how to make both normal and doctring tests work with only one command,
-            # so I use shell &&.
-            CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scalib
-            CIBW_TEST_EXTRAS: test
-            #CIBW_BEFORE_ALL: "yum -y install "
+                    - arch: x86_64 
+                    #- arch: aarch64 # This is too slow on github CI
         steps:
             - uses: actions/checkout@v3
             - uses: actions/cache@v3
               with:
                   path: |
-                      cargo_build
-                      cargo_home
-                  key: linux-wheel-cache-rust-build-cargo-v0-${{ matrix.vers }}
+                      ${{ runner.temp }}/cargo_build
+                      ${{ runner.temp }}/cargo_home
+                  key: linux-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
             - uses: actions/setup-python@v3
               with:
-                  python-version: "3.7"
-            - name: wheels Linux ${{ matrix.vers }}
-              uses: pypa/cibuildwheel@v2.5.0
-            - uses: actions/upload-artifact@v2
+                  python-version: "3.10"
+            - name: wheels Linux ${{ matrix.arch }}
+              uses: pypa/cibuildwheel@v2.12.0
+              env:
+                CARGO_TARGET_DIR: "/host${{ runner.temp }}/cargo_build"
+                CARGO_HOME: "/host${{ runner.temp }}/cargo_home"
+                CIBW_PLATFORM: "linux"
+            - uses: actions/upload-artifact@v3
+              with:
+                  name: dist
+                  path: ./wheelhouse/*.whl
+    checks:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v3
+            - name: Setup Python
+              uses: actions/setup-python@v3
+              with:
+                  python-version: "3.11"
+            - name: Install Tox
+              run: pip install tox
+            - name: Formatting
+              run:
+                make codestyle
+            - name: Docs
+              run:
+                make docs
+    test:
+        needs: [build_wheel_linux]
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                python: ["3.8", "3.11"]
+        steps:
+            - uses: actions/checkout@v3
+            - uses: actions/download-artifact@v3
+              with:
+                  name: dist
+                  path: dist
+            - name: Setup Python
+              uses: actions/setup-python@v3
+              with:
+                  python-version: ${{ matrix.python }}
+            - name: Install test deps
+              run: pip install -r tests/requirements.txt
+            - name: Install SCALib
+              run: pip install dist/scalib*manylinux*.whl
+            - name: Run tests
+              # Run tox using the version of Python in `PATH`
+              run: pytest
+    # TODO run rust tests (separate job)
+
+    build_wheel_windows:
+        name: Build wheel on Windows
+        runs-on: windows-2019
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - arch: x86_64 
+        steps:
+            - uses: actions/checkout@v3
+            - uses: actions/cache@v3
+              with:
+                  path: |
+                      ${{ runner.temp }}/cargo_build
+                      ${{ runner.temp }}/cargo_home
+                  key: windows-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
+            - uses: actions/setup-python@v3
+              with:
+                  python-version: "3.10"
+            - name: wheels Windows ${{ matrix.arch}}
+              uses: pypa/cibuildwheel@v2.12.0
+              env:
+                CARGO_TARGET_DIR: "${{ runner.temp }}\\cargo_build"
+                CARGO_HOME: "${{ runner.temp }}\\cargo_home"
+                CIBW_PLATFORM: "windows"
+                CIBW_TEST_COMMAND: pytest {project}/tests
+                CIBW_TEST_REQUIRES: "-r tests/requirements.txt"
+            - uses: actions/upload-artifact@v3
               with:
                   name: dist
                   path: ./wheelhouse/*.whl
@@ -176,7 +188,7 @@ jobs:
               run: twine check dist/*
 
     release:
-        needs: [check_dist, test]
+        needs: [check_dist, test, checks]
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         runs-on: ubuntu-latest
         steps:

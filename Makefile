@@ -1,28 +1,47 @@
-.PHONY: dev test devtest coverage docs codestyle fmt wheel
+.PHONY: dev test devtest coverage docs codestyle fmt wheel help
 
+help:
+	@echo "Commands for SCALib development:"
+	@echo "    dev: Build in debug mode and run tests."
+	@echo "         The associated virtualenv in as .tox/dev, and the SCALib install"
+	@echo "         is editable: changes in the python source code are automatically used."
+	@echo "         (You'll still need to re-run if you update rust code.)"
+	@echo "    test: Build in release mode and run tests, also checks formatting."
+	@echo "    coverage: Like test, but also generates detailed coverage report."
+	@echo "    docs: Generate docs."
+	@echo "    codestyle: Check fromatting."
+	@echo "    fmt: Format code."
+	@echo "    wheel_locql: Build a wheel for the local machine."
+	@echo "    wheel_portable: Build a wheel for with maximal portability (at the expense of efficiency)."
+	@echo "    wheel_avx2: Build a wheel with AVX2 instruction (should work on any recent x86-64)."
 
 dev:
-	tox -e dev
-	@echo "Run source .tox/dev/bin/activate to activate development virtualenv."
+	tox run -e dev
 
 test:
-	tox -e test
-
-devtest:
-	tox -e dev pytest
+	tox run -e fmt -- --check
+	tox run -e test
 
 coverage:
-	tox -e test-cov
+	tox run -e test
+	tox run -e coverage
 	@echo "Open htmlcov/index.html to see detailled coverage information."
 
 docs:
-	tox -e build_docs
+	tox run -e docs
 
 codestyle:
-	tox -e codestyle
+	tox run -e fmt -- --check
 
 fmt:
-	tox -e fmt
+	tox run -e fmt
 
-wheel:
+wheel_avx2:
+	SCALIB_AVX2=1 CARGO_TARGET_DIR=.cargo_build_avx2 pip wheel . --no-deps
+
+wheel_local:
 	RUSTFLAGS="-C target-cpu=native" CARGO_TARGET_DIR=.cargo_build pip wheel . --no-deps
+
+wheel_portable:
+	CARGO_TARGET_DIR=.cargo_build_native pip wheel . --no-deps
+

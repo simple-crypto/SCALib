@@ -3,7 +3,7 @@
 # -- Project information -----------------------------------------------------
 
 project = 'SCALib'
-copyright = '2021-2022, UCLouvain'
+copyright = 'SIMPLE Contributors'
 
 
 # Add any Sphinx extension module names here, as strings. They can be
@@ -51,6 +51,7 @@ autodoc_mock_imports = [
         "scalib.version",
         "scalib.build_config",
         "numpy",
+        "cpufeature",
         ]
 
 import sys
