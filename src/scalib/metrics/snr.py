@@ -1,6 +1,8 @@
 import numpy as np
+
 from scalib import _scalib_ext
 from scalib.config.threading import _get_threadpool
+import scalib.utils
 
 SnrError = _scalib_ext.SnrError
 
@@ -99,8 +101,10 @@ class SNR:
         # _scalib_ext uses inverted axes for x.
         # we can copy when needed, as x should be small, so this should be cheap
         x = x.transpose().astype(np.uint16, order="C", casting="equiv", copy=False)
-        self._snr.update(l, x, _get_threadpool())
+        with scalib.utils.interruptible():
+            self._snr.update(l, x, _get_threadpool())
 
     def get_snr(self):
         r"""Return the current SNR estimation with an array of shape `(np,ns)`."""
-        return self._snr.get_snr(_get_threadpool())
+        with scalib.utils.interruptible():
+            return self._snr.get_snr(_get_threadpool())

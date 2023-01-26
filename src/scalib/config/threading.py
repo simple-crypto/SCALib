@@ -23,7 +23,7 @@ the system.
 Examples
 --------
 
-The used `ThreadPool` can also be defined directly in the python scripts. 
+The used `ThreadPool` can also be defined directly in the python scripts.
 
 >>> from scalib.config.threading import thread_context, ThreadPool
 >>> # Example 1: Set a default ThreadPool to 10 threads.
@@ -61,8 +61,10 @@ def thread_context(threads):
     """
     pool = _threads_as_pool(threads)
     restore_token = _thread_pool.set(pool)
-    yield pool
-    _thread_pool.reset(restore_token)
+    try:
+        yield pool
+    finally:
+        _thread_pool.reset(restore_token)
 
 
 def default_threadpool(threads):
