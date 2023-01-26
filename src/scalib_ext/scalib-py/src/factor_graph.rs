@@ -121,7 +121,7 @@ fn pyobj2pubs<'a>(
     expected: impl Iterator<Item = (&'a str, bool)>,
 ) -> PyResult<Vec<sasca::PublicValue>> {
     let mut public_values: HashMap<&str, PyObject> = public_values.extract(py)?;
-    expected
+    let pubs = expected
         .map(|(pub_name, multi)| {
             obj2pub(
                 py,
@@ -131,7 +131,13 @@ fn pyobj2pubs<'a>(
                 multi,
             )
         })
-        .collect::<Result<Vec<sasca::PublicValue>, PyErr>>()
+        .collect::<Result<Vec<sasca::PublicValue>, PyErr>>()?;
+    if public_values.is_empty() {
+        Ok(pubs)
+    } else {
+        let unknown_pubs = public_values.keys().collect::<Vec<_>>();
+        Err(PyKeyError::new_err(if unknown_pubs.len() == 1 {format!("{} is not a public.", unknown_pubs[0]) } else {format!("{:?} are not publics.", unknown_pubs)}))
+    }
 }
 
 #[pyclass(module = "_scalib_ext")]

@@ -47,34 +47,32 @@ class FactorGraph:
 
     An attack attempting to recover the secret key byte `k` is shown below.
 
-    .. code-block::
-
-        # Describe and generate the SASCAGraph
-        graph_desc = '''
-            # Small unprotected Sbox example
-            NC 256 # Graph over GF(256)
-            TABLE sbox   # Sbox
-            VAR SINGLE k # key (to recover !)
-            VAR MULTI p  # plaintext (known)
-            VAR MULTI x # Sbox input
-            VAR MULTI y # Sbox output (whose leakage is targeted)
-            PROPERTY x = k ^ p   # Key addition
-            PROPERTY y = sbox[x] # Sbox lookup
-            '''
-        # n is the number of traces for our attack.
-        graph = FactorGraph(graph_desc,n)
-
-        # Encode data into the graph
-        graph.set_table("sbox",aes_sbox)
-        graph.set_public("p",plaintexts)
-        graph.set_distribution("y",x_distribution)
-
-        # Solve graph
-        graph.run_bp(it=3)
-
-        # Get key distribution and derive key guess
-        k_distri = graph.get_distribution("k")
-        key_guess = np.argmax(k_distri[0,:])
+    >>> # Describe and generate the SASCAGraph
+    >>> graph_desc = '''
+    ...     # Small unprotected Sbox example
+    ...     NC 256 # Graph over GF(256)
+    ...     TABLE sbox   # Sbox
+    ...     VAR SINGLE k # key (to recover !)
+    ...     PUB MULTI p  # plaintext (known)
+    ...     VAR MULTI x # Sbox input
+    ...     VAR MULTI y # Sbox output (whose leakage is targeted)
+    ...     PROPERTY x = k ^ p   # Key addition
+    ...     PROPERTY y = sbox[x] # Sbox lookup
+    ...     '''
+    >>> sbox = np.arange(256, dtype=np.uint32) # don't use this S-box ;)
+    >>> graph = FactorGraph(graph_desc, {"sbox": sbox})
+    >>> # n is the number of traces for our attack.
+    >>> n = 2
+    >>> plaintexts = np.array([0, 1], dtype=np.uint32)
+    >>> bp = BPState(graph, n, {"p": plaintexts})
+    >>> y_leakage = np.random.rand(2, 256) # this might come from an LDA
+    >>> y_leakage = y_leakage / y_leakage.sum(axis=1, keepdims=True)
+    >>> bp.set_evidence("y",y_leakage)
+    >>> # Solve graph
+    >>> bp.bp_loopy(it=4)
+    >>> # Get key distribution and derive key guess
+    >>> k_distri = bp.get_distribution("k")
+    >>> key_guess = np.argmax(k_distri)
 
     By running a belief propagation algorithm (see [1]_), the distributions on all
     the variables are updated based on their initial distributions. The
@@ -93,7 +91,7 @@ class FactorGraph:
 
     - `NC <nc>`: specifies the field size (must be a power of two). There must
       be one `NC` statement in the description.
-    - `PUBLIC SINGLE|MULTI variable_name`: declares a public variable.  `variable_name`
+    - `PUB SINGLE|MULTI variable_name`: declares a public variable.  `variable_name`
       is an identifier of the variable (allowed characters are letters, digits
       and underscore). One of the qualifiers `SINGLE` or `MULTI` must be given.
     - `VAR SINGLE|MULTI variable_name`: declares a variables.
