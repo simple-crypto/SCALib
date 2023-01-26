@@ -1,7 +1,10 @@
-import numpy as np
 from functools import reduce
+
+import numpy as np
+
 from scalib import _scalib_ext
 from scalib.config.threading import _get_threadpool
+import scalib.utils
 
 
 class SASCAGraph:
@@ -236,16 +239,17 @@ class SASCAGraph:
         if self.solved_:
             raise Exception("Cannot run bp twice on a graph.")
         self._init_graph()
-        _scalib_ext.run_bp(
-            self.properties_,
-            [self.var_[x] for x in list(self.var_)],
-            it,
-            self.edge_,
-            self.nc_,
-            self.n_,
-            progress,
-            _get_threadpool(),
-        )
+        with scalib.utils.interruptible():
+            _scalib_ext.run_bp(
+                self.properties_,
+                [self.var_[x] for x in list(self.var_)],
+                it,
+                self.edge_,
+                self.nc_,
+                self.n_,
+                progress,
+                _get_threadpool(),
+            )
         self.solved_ = True
 
     def _share_edge(self, property, v):
