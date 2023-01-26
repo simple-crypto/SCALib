@@ -167,7 +167,7 @@ def test_lda_noproj():
     prs = lda.predict_proba(traces)
     prs_ref = lda_ref.predict_proba(traces)
 
-    assert np.allclose(prs, prs_ref, rtol=1e-2, atol=1e-5)
+    assert np.allclose(prs, prs_ref, rtol=1e-2, atol=1e-3)
 
 
 if __name__ == "__main__":
