@@ -1,13 +1,14 @@
 __all__ = ["metrics", "attacks", "modeling", "postprocessing", "config"]
 
-import cpufeature
+import cpuinfo
 
 from .build_config import REQUIRE_AVX2
 from .version import version as __version__
 
-if REQUIRE_AVX2 and not (
-    cpufeature.CPUFeature["AVX2"] and cpufeature.CPUFeature["OS_AVX"]
-):
+cpu = cpuinfo.get_cpu_info()
+
+
+if REQUIRE_AVX2 and cpu["arch"] == "X68_64" and "avx2" not in cpu["flags"]:
     raise ImportError(
         "SCALib has been compiled with AVX2 instructions, which are not "
         + "supported by your CPU or OS. See "

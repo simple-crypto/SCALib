@@ -9,6 +9,7 @@ Not released
 * Fix deadlock when there is an error in large SNR computations (i.e., when n_vars*n_samples*n_traces > 2**33).
 * Allow LDA to behave like simple pooled gaussian templates (#22)
 * Refresh build system (Tox version 4, improved CI).
+* Not crash anymore on non x86-64 CPUs (no CI for those yet).
 
 v0.4.3 (2022/10/27)
 -------------------
