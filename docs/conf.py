@@ -51,7 +51,7 @@ autodoc_mock_imports = [
         "scalib.version",
         "scalib.build_config",
         "numpy",
-        "cpufeature",
+        "cpuinfo",
         ]
 
 import sys
