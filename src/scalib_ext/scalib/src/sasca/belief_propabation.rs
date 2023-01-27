@@ -13,6 +13,7 @@ use super::{Distribution, FactorGraph, PublicValue};
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BPState {
     graph: std::sync::Arc<FactorGraph>,
+    // number of parallel executions for PARA vars
     nmulti: u32,
     // one public for every factor. Set to 0 if not relevant.
     public_values: FactorVec<PublicValue>,
@@ -67,65 +68,56 @@ impl BPState {
             pub_reduced,
         }
     }
-    // TODO FIXNE apparently this is buggy.
     pub fn is_cyclic(&self) -> bool {
-        // Let's do something simple here, and revisit it when we need more sophisticated queries.
-        // The factor graph is cyclic if either
-        // 1. there is a cycle in a single execution, or
-        // 2. two "single" vars are connected by a path that involves a multi node, and nmulti > 1.
         // Special case to avoid further checks
         if self.graph.vars.len() == 0 {
             return false;
         }
-        // For 1, we do a DFS walk of the graph starting from an arbitrary var and memoize the vars
-        // we've already seen. If we see again a node, there is a cycle.
-        // We start from all not-yet expored vars to cover all connected components.
+        // We do a BFS walk on the graph, remembering the already visited
+        // nodes.
+        // We explore all the connected components of the graph.
+        // If we visit a node we already visited, then the graph is cyclic.
+        // Moreover, if there is more than one 'SINGLE' node in a connected
+        // compoment and nmulti > 1, the graph is cyclic too.
         let mut seen_vars: VarVec<bool> = self.graph.range_vars().map(|_| false).collect();
-        let mut visit_stack = VarVec::new();
-
+        let mut visit_stack: Vec<(VarId, Option<FactorId>)> = Vec::new();
         for start_var in self.graph.range_vars() {
+            dbg!(start_var);
+            dbg!(&seen_vars);
+            dbg!(&visit_stack);
+            let mut n_single_vars = 0;
             if !seen_vars[start_var] {
-                visit_stack.push(start_var);
-            }
-            while let Some(var_id) = visit_stack.pop() {
-                if seen_vars[var_id] {
-                    return true;
+                dbg!(start_var);
+                visit_stack.push((start_var, None));
+                seen_vars[start_var] = true;
+                if !self.graph.var(start_var).multi {
+                    n_single_vars += 1;
                 }
-                seen_vars[var_id] = true;
+            }
+            while let Some((visited_var, parent_factor)) = visit_stack.pop() {
+                dbg!(visited_var);
                 // Enumerate over all incident edges, each edge giving a factor,
                 // then we iter over all adjacent vars to the factor
-                for factor_id in self.graph.var(var_id).edges.keys() {
-                    visit_stack.extend(self.graph.factor(*factor_id).edges.keys());
-                }
-            }
-        }
-        if self.nmulti == 1 {
-            return true;
-        }
-        // For 2., we do the same, but consider all "single" nodes as one:
-        // we start from all the "single" nodes together, we ignore paths that touch only "single"
-        // node (i.e., the !multi factors), and run the DFS.
-        let mut seen_vars: VarVec<bool> = std::iter::repeat(false)
-            .take(self.graph.vars.len())
-            .collect();
-        // start from single vars
-        let mut visit_stack: VarVec<_> = self
-            .graph
-            .vars
-            .values()
-            .positions(|var| !var.multi)
-            .map(VarId::from_idx)
-            .collect();
-        while let Some(var_id) = visit_stack.pop() {
-            if seen_vars[var_id] {
-                return true;
-            }
-            seen_vars[var_id] = true;
-            // Enumerate over all incident edges, each edge giving a factor,
-            // then we iter over all adjacent vars to the factor
-            for factor_id in self.graph.var(var_id).edges.keys() {
-                if self.graph.factor(*factor_id).multi {
-                    visit_stack.extend(self.graph.factor(*factor_id).edges.keys());
+                for factor_id in dbg!(&self.graph.var(visited_var).edges).keys().filter(|f| Some(**f) != parent_factor) {
+                    for var_id in self.graph.factor(*factor_id).edges.keys() {
+                        if *var_id != visited_var {
+                            dbg!(*var_id);
+                            if seen_vars[*var_id] {
+                                dbg!("ret true");
+                                return true;
+                            } else {
+                                seen_vars[*var_id] = true;
+                                visit_stack.push((*var_id, Some(*factor_id)));
+                                if !self.graph.var(*var_id).multi {
+                                    n_single_vars += 1;
+                                    if self.nmulti > 1 && n_single_vars > 1 {
+                                        dbg!("ret true");
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

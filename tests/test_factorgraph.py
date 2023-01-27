@@ -591,3 +591,65 @@ def test_bad_var_norm():
 
     assert np.allclose(np.array([[1.0, 1e-40]]), s1)
     assert np.allclose(np.array([[1.0, 1e-40]]), s2)
+
+
+def test_cyclic():
+    graph_never_cyclic = """
+    NC 2
+    VAR MULTI x
+    VAR MULTI x0
+    VAR MULTI x1
+    VAR MULTI y
+    VAR MULTI y0
+    VAR MULTI y1
+    PUB MULTI p
+    VAR SINGLE k
+    VAR SINGLE k2
+
+    PROPERTY x = p ^ k
+    PROPERTY y = y0 ^ y1
+    PROPERTY x = x0 ^ x1
+    PROPERTY k2  = p ^ y
+    """
+    g = FactorGraph(graph_never_cyclic)
+    assert BPState(g, 1, { "p": np.array([0], dtype=np.uint32) }).is_cyclic() == False
+    assert BPState(g, 2, { "p": np.array([0, 0], dtype=np.uint32) }).is_cyclic() == False
+    graph_always_cyclic = """
+    NC 2
+    VAR MULTI x
+    VAR MULTI x0
+    VAR MULTI x1
+    VAR MULTI y
+    VAR MULTI y0
+    VAR MULTI y1
+    PUB MULTI p
+    VAR SINGLE k
+
+    PROPERTY x = p ^ k
+    PROPERTY y = y0 ^ y1
+    PROPERTY x = x0 ^ x1
+    PROPERTY y  = p ^ y1
+    """
+    g = FactorGraph(graph_always_cyclic)
+    assert BPState(g, 1, { "p": np.array([0], dtype=np.uint32) }).is_cyclic() == True
+    assert BPState(g, 2, { "p": np.array([0, 0], dtype=np.uint32) }).is_cyclic() == True
+    graph_multi_cyclic = """
+    NC 2
+    VAR MULTI x
+    VAR MULTI x0
+    VAR MULTI x1
+    VAR MULTI y
+    VAR MULTI y0
+    VAR MULTI y1
+    PUB MULTI p
+    VAR SINGLE k
+    VAR SINGLE k2
+
+    PROPERTY x = p ^ k
+    PROPERTY y = y0 ^ y1
+    PROPERTY x = x0 ^ x1
+    PROPERTY k2  = x ^ y
+    """
+    g = FactorGraph(graph_multi_cyclic)
+    assert BPState(g, 1, { "p": np.array([0], dtype=np.uint32) }).is_cyclic() == False
+    assert BPState(g, 2, { "p": np.array([0, 0], dtype=np.uint32) }).is_cyclic() == True
