@@ -64,6 +64,7 @@ def snr_run(nc, nv, ns, n, use_64bit, batch=100):
     """
     Test the SNR.
     """
+    print(f"SNR run {nc=} {nv=} {ns=} {n=} {use_64bit=} {batch=}")
     x, y = gen_snr_data(nv, nc, ns, n)
 
     # compute SNR with SCALib
@@ -71,7 +72,7 @@ def snr_run(nc, nv, ns, n, use_64bit, batch=100):
 
     n_samples = np.array([[(y[:, v] == c).sum() for c in range(nc)] for v in range(nv)])
 
-    if (n_samples > (2**16)).any() and not use_64bit:
+    if (n_samples >= (2**16)).any() and not use_64bit:
         with pytest.raises(Exception):
             for i in range(0, n, batch):
                 snr.fit_u(x[i : i + batch, :], y[i : i + batch, :])
