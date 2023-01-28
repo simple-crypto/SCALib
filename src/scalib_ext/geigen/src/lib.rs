@@ -74,6 +74,11 @@ pub enum GeigenError {
     EigenNotConverging,
     #[error("A numerical issue occured during the eigenvalues computation.")]
     EigenNumericalIssue,
+    #[error(
+        "Tridiag decomposition failed. Likely cause: singular leakage traces matrix. \
+        Add more traces or make them (slightly) more noisy."
+    )]
+    TridiagDecompositionFailed,
 }
 
 impl Geigen for GEigenSolverP {
@@ -102,6 +107,7 @@ impl Geigen for GEigenSolverP {
             4 => Err(GeigenError::EigenNotComputed),
             5 => Err(GeigenError::EigenNotConverging),
             6 => Err(GeigenError::EigenNumericalIssue),
+            7 => Err(GeigenError::TridiagDecompositionFailed),
             _ => unreachable!("Invalid error code for geigen::solve_geigenp"),
         }
     }

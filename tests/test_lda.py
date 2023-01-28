@@ -1,5 +1,6 @@
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
+from scalib import ScalibError
 from scalib.modeling import LDAClassifier
 import numpy as np
 import scipy.stats
@@ -161,3 +162,16 @@ def test_lda_noproj():
     prs_ref = lda_ref.predict_proba(traces)
 
     assert np.allclose(prs, prs_ref, rtol=1e-2, atol=1e-3)
+
+
+def test_lda_fail_bad_traces():
+    # Issue #56
+    n = 100
+    ns = 6
+    nc = 4
+    lda = LDAClassifier(nc, 3, ns)
+    traces_bad = np.random.randint(0, 1, (n, ns), dtype=np.int16)
+    y = np.random.randint(0, nc, n, dtype=np.uint16)
+    lda.fit_u(traces_bad, y, 0)
+    with pytest.raises(ScalibError):
+        lda.solve()
