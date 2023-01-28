@@ -115,6 +115,22 @@ def test_lda():
     print("lda_ref_projection")
     print(lda_ref_projection)
     assert projections_similar, (lda_projection, lda_ref_projection)
+
+    # Verify value of means by accessor
+    ref_means = lda_ref.means_
+    lda_means = lda.get_mus()
+    assert np.allclose(ref_means, lda_means, rtol=1e-10)
+
+    # Verify scatter matrix by accessor
+    lda_scat = lda.get_sw() / n
+    cov_ref = lda_ref.covariance_
+    assert np.allclose(lda_scat, cov_ref, rtol=1e-5)
+
+    # Not point of comparison with sklearn, but we here call
+    # the accessor for the inter-class scatter matrix just to verify
+    # that its worling.
+    smat = lda.get_sb()
+
     # We can't do much more since sklearn has no way to reduce dimensionality of LDA.
     # e.g., comparing probas will fail
 

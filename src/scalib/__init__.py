@@ -1,4 +1,4 @@
-__all__ = ["metrics", "attacks", "modeling", "postprocessing", "config"]
+__all__ = ["metrics", "attacks", "modeling", "postprocessing", "config", "ScalibError"]
 
 import cpuinfo
 
@@ -15,3 +15,5 @@ if REQUIRE_AVX2 and cpu["arch"] == "X68_64" and "avx2" not in cpu["flags"]:
         + "https://github.com/simple-crypto/SCALib/blob/main/DEVELOP.rst#local-build "
         + "for compiling without AVX2 instructions."
     )
+
+from scalib._scalib_ext import ScalibError

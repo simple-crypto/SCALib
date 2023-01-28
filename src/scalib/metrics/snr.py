@@ -4,8 +4,6 @@ from scalib import _scalib_ext
 from scalib.config.threading import _get_threadpool
 import scalib.utils
 
-SnrError = _scalib_ext.SnrError
-
 
 class SNR:
     r"""Computes the Signal-to-Noise Ratio (SNR) between the traces and the

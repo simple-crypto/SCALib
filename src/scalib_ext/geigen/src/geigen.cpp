@@ -47,10 +47,26 @@ std::unique_ptr<GEigenPR> solve_geigenp(Matrix a, Matrix b, uint32_t nev, uint32
     // Initialize and compute
     geigs.init();
     geigs.compute(Spectra::SortRule::LargestAlge);
+
+    // Verify Cholesky decomposition
+    if (Bop.info() == Spectra::CompInfo::Successful) {
+        err = 0;
+    } else if (Bop.info() == Spectra::CompInfo::NotComputed) {
+        err = 1;
+    } else if (Bop.info() == Spectra::CompInfo::NotConverging) {
+        err = 2;
+    } else {
+        err = 3;
+    }
+
     if (geigs.info() == Spectra::CompInfo::Successful) {
         err = 0;
+    } else if (geigs.info() == Spectra::CompInfo::NotComputed) {
+        err = 4;
+    } else if (geigs.info() == Spectra::CompInfo::NotConverging) {
+        err = 5;
     } else {
-        err = 1;
+        err = 6;
     }
     return std::make_unique<GEigenPR>(GEigenPR(geigs.eigenvectors(), geigs.eigenvalues()));
 }

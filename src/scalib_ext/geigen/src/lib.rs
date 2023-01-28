@@ -59,15 +59,34 @@ pub struct GEigenSolverP {
     solver: UniquePtr<geigen::GEigenPR>,
 }
 
+use thiserror::Error;
+#[derive(Error, Debug, Copy, Clone, Eq, PartialEq)]
+pub enum GeigenError {
+    #[error("Computation has not been performed. Missing call to compute() at low-level.")]
+    CholeskyNotComputed,
+    #[error("The eigenvalues computation did not converged during the Cholesky decomposition.")]
+    CholeskyNotConverging,
+    #[error("The matrix used in the Cholesky decomposition is not positive definite.")]
+    CholeskyNumericalIssue,
+    #[error("Computation has not been performed. Missing call to compute() at low-level.")]
+    EigenNotComputed,
+    #[error("The eigenvalues computation did not converged during the eigenvalues computation.")]
+    EigenNotConverging,
+    #[error("A numerical issue occured during the eigenvalues computation.")]
+    EigenNumericalIssue,
+}
+
 impl Geigen for GEigenSolverP {
-    type Error = u32;
+    type Error = GeigenError;
     fn new(
         a: &ndarray::ArrayView2<f64>,
         b: &ndarray::ArrayView2<f64>,
         n: usize,
     ) -> Result<Self, Self::Error> {
-        // ncv = 2*nev is recommended by documentation mandatory: n < ncv <= matrix size
-        let ncv = std::cmp::min(2 * n, a.shape()[0]) as u32;
+        // ncv >= 2*nev is recommended by documentation mandatory: n < ncv <= matrix size
+        // Did not work for at least one example with nev == 1, so increaded a bit while not
+        // making it (too) much slower for big 'nev'.
+        let ncv = std::cmp::min(5 + 2 * n, a.shape()[0]) as u32;
         let n = n as u32;
         let a = geigen::array2matrix(a);
         let b = geigen::array2matrix(b);
@@ -75,10 +94,16 @@ impl Geigen for GEigenSolverP {
         // SAFETY: a and b are valid matrices (as generated above) and their lifetime covers this
         // call.
         let solver = unsafe { geigen::solve_geigenp(a, b, n, ncv, &mut err) };
-        if err != 0 {
-            return Err(err);
+        match err {
+            0 => Ok(Self { solver }),
+            1 => Err(GeigenError::CholeskyNotComputed),
+            2 => Err(GeigenError::CholeskyNotConverging),
+            3 => Err(GeigenError::CholeskyNumericalIssue),
+            4 => Err(GeigenError::EigenNotComputed),
+            5 => Err(GeigenError::EigenNotConverging),
+            6 => Err(GeigenError::EigenNumericalIssue),
+            _ => unreachable!("Invalid error code for geigen::solve_geigenp"),
         }
-        Ok(Self { solver })
     }
     fn vecs(&self) -> ArrayView2<f64> {
         // SAFETY: result of eigen::get_eigenvecs_p satisfies the properties of matrix2array_view.
