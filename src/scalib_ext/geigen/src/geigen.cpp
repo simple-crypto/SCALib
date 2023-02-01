@@ -37,6 +37,7 @@ rust::Slice<const double> get_eigenvals(const GEigenSolver& solver) {
 }
 
 std::unique_ptr<GEigenPR> solve_geigenp(Matrix a, Matrix b, uint32_t nev, uint32_t ncv, uint32_t& err) {
+    err = 0;
     MatrixMap am = matrix2map(a);
     MatrixMap bm = matrix2map(b);
     Spectra::DenseSymMatProd<double> op(am);
@@ -46,11 +47,35 @@ std::unique_ptr<GEigenPR> solve_geigenp(Matrix a, Matrix b, uint32_t nev, uint32
 
     // Initialize and compute
     geigs.init();
-    geigs.compute(Spectra::SortRule::LargestAlge);
-    if (geigs.info() == Spectra::CompInfo::Successful) {
-        err = 0;
-    } else {
-        err = 1;
+    try {
+        geigs.compute(Spectra::SortRule::LargestAlge);
+    } catch (const std::runtime_error&) {
+        err = 7;
+    }
+    // Verify Cholesky decomposition
+    if (err == 0) {
+        if (Bop.info() == Spectra::CompInfo::Successful) {
+            err = 0;
+        } else if (Bop.info() == Spectra::CompInfo::NotComputed) {
+            err = 1;
+        } else if (Bop.info() == Spectra::CompInfo::NotConverging) {
+            err = 2;
+        } else {
+            err = 3;
+        }
+    }
+
+    // Verify Eigendecomposition
+    if (err == 0) {
+        if (geigs.info() == Spectra::CompInfo::Successful) {
+            err = 0;
+        } else if (geigs.info() == Spectra::CompInfo::NotComputed) {
+            err = 4;
+        } else if (geigs.info() == Spectra::CompInfo::NotConverging) {
+            err = 5;
+        } else {
+            err = 6;
+        }
     }
     return std::make_unique<GEigenPR>(GEigenPR(geigs.eigenvectors(), geigs.eigenvalues()));
 }

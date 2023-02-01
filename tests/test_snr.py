@@ -1,5 +1,6 @@
 import pytest
-from scalib.metrics import SNR, SnrError
+from scalib import ScalibError
+from scalib.metrics import SNR
 import numpy as np
 
 
@@ -123,5 +124,5 @@ def test_large_snr():
     snr.get_snr()
 
     snr = SNR(nb - 1, ns, nv)
-    with pytest.raises(SnrError):
+    with pytest.raises(ScalibError):
         snr.fit_u(traces, X)

@@ -34,6 +34,7 @@ realfft = "2.0.1"
 rustfft = "6.0.0"
 num-complex = "0.4.0"
 num-traits = "0.2.15"
+thiserror = "1.0"
 
 [lib]
 bench = false

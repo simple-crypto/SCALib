@@ -178,6 +178,21 @@ class LDAClassifier:
         if "lda" in state:
             self.lda = _scalib_ext.LDA.from_state(*state["lda"])
 
+    def get_sw(self):
+        r"""Return $S_{W}$ matrix (within-class scatter)."""
+        return self.acc.get_sw()
+
+    def get_sb(self):
+        r"""Return $S_{B}$ matrix (between-class scatter)."""
+        return self.acc.get_sb()
+
+    def get_mus(self):
+        r"""Return means matrix (classes means).
+        - axis-0: classes
+        - axis-1: samples
+        """
+        return self.acc.get_mus()
+
 
 class MultiLDA:
     """Perform LDA on `nv` distinct variables for the same leakage traces.

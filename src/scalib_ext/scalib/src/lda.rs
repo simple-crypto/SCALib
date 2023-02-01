@@ -9,6 +9,7 @@
 
 #![allow(dead_code)]
 
+use crate::ScalibError;
 use geigen::Geigen;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis, NewAxis};
 use nshare::{ToNalgebra, ToNdarray2};
@@ -129,9 +130,9 @@ impl LdaAcc {
         self.n = merged_n;
     }
 
-    fn get_matrices(&self) -> Result<(Array2<f64>, Array2<f64>, Array2<f64>), ()> {
+    pub fn get_matrices(&self) -> Result<(Array2<f64>, Array2<f64>, Array2<f64>), ScalibError> {
         if self.n_traces.iter().any(|x| *x == 0) {
-            Err(())
+            Err(ScalibError::EmptyClass)
         } else {
             let mus = ndarray::Zip::from(&self.traces_sum)
                 .and_broadcast(self.n_traces.slice(s![.., NewAxis]))
@@ -147,15 +148,9 @@ impl LdaAcc {
     }
 
     /// Compute the LDA with p dimensions in the projected space
-    pub fn lda(&self, p: usize) -> Result<LDA, ()> {
+    pub fn lda(&self, p: usize) -> Result<LDA, ScalibError> {
         let (sw, sb, means_ns) = self.get_matrices()?;
-        Ok(LDA::from_matrices(
-            self.n,
-            p,
-            sw.view(),
-            sb.view(),
-            means_ns.view(),
-        ))
+        LDA::from_matrices(self.n, p, sw.view(), sb.view(), means_ns.view())
     }
 }
 
@@ -208,21 +203,20 @@ impl LDA {
         sw: ArrayView2<f64>,
         sb: ArrayView2<f64>,
         means_ns: ArrayView2<f64>,
-    ) -> Self {
+    ) -> Result<Self, ScalibError> {
         let ns = sw.shape()[0];
         let nc = means_ns.shape()[0];
+        // LDA here
+        // ---- Step 1
         let projection = if p == ns {
             // no LDA, simple pooled gaussian templates
             // This is suboptimal since we then have to pay multiplication with the identity, but
             // it should not matter much (we are probably in a cheap case anyway).
             ndarray::Array2::eye(ns)
         } else {
-            // LDA here
-            // ---- Step 1
             // compute the projection
             // Partial generalized eigenvalue decomposition for sb and sw.
-            let solver =
-                geigen::GEigenSolverP::new(&sb.view(), &sw.view(), p).expect("failed to solve");
+            let solver = geigen::GEigenSolverP::new(&sb.view(), &sw.view(), p)?;
             let projection = solver.vecs().into_owned();
             assert_eq!(projection.dim(), (ns, p));
             projection
@@ -248,14 +242,14 @@ impl LDA {
         let omega = omega.into_ndarray2();
         let pk = -0.5 * (&omega * &means).sum_axis(Axis(0));
 
-        Self {
+        Ok(Self {
             projection,
             ns,
             p,
             nc,
             omega,
             pk,
-        }
+        })
     }
 
     /// return the probability of each of the possible value for leakage samples

@@ -10,6 +10,7 @@ edition = "2018"
 cxx = "1.0"
 ndarray = {version="0.15", features=["approx"]}
 ndarray-rand = "0.14"
+thiserror = "1.0"
 
 [build-dependencies]
 cxx-build = "1.0"

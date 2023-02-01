@@ -1,7 +1,8 @@
 //! Python binding of SCALib's LDA implementation.
 
 use crate::thread_pool::ThreadPool;
-use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
+use crate::ScalibError;
+use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
 #[pyclass]
@@ -38,9 +39,7 @@ impl LdaAcc {
     fn lda(&self, py: Python, p: usize, thread_pool: &ThreadPool) -> PyResult<LDA> {
         match crate::on_worker(py, thread_pool, || self.inner.lda(p)) {
             Ok(inner) => Ok(LDA { inner }),
-            Err(()) => Err(pyo3::exceptions::PyZeroDivisionError::new_err(
-                "Class without traces.",
-            )),
+            Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
     }
 
@@ -67,6 +66,31 @@ impl LdaAcc {
             self.inner.n_traces.to_pyarray(py),
         )
     }
+
+    /// Get the matrix sw (debug purpose)
+    fn get_sw<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
+        match self.inner.get_matrices() {
+            Ok((sw, _, _)) => Ok(sw.into_pyarray(py)),
+            Err(e) => Err(ScalibError::from_scalib(e, py)),
+        }
+    }
+
+    /// Get the matrix sb (debug purpose)
+    fn get_sb<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
+        match self.inner.get_matrices() {
+            Ok((_, sb, _)) => Ok(sb.into_pyarray(py)),
+            Err(e) => Err(ScalibError::from_scalib(e, py)),
+        }
+    }
+
+    /// Get the matrix mus (debug purpose)
+    fn get_mus<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
+        match self.inner.get_matrices() {
+            Ok((_, _, mus)) => Ok(mus.into_pyarray(py)),
+            Err(e) => Err(ScalibError::from_scalib(e, py)),
+        }
+    }
+
     /// Set the accumulator state
     #[staticmethod]
     fn from_state(

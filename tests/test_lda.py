@@ -1,5 +1,6 @@
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
+from scalib import ScalibError
 from scalib.modeling import LDAClassifier
 import numpy as np
 import scipy.stats
@@ -115,6 +116,22 @@ def test_lda():
     print("lda_ref_projection")
     print(lda_ref_projection)
     assert projections_similar, (lda_projection, lda_ref_projection)
+
+    # Verify value of means by accessor
+    ref_means = lda_ref.means_
+    lda_means = lda.get_mus()
+    assert np.allclose(ref_means, lda_means, rtol=1e-10)
+
+    # Verify scatter matrix by accessor
+    lda_scat = lda.get_sw() / n
+    cov_ref = lda_ref.covariance_
+    assert np.allclose(lda_scat, cov_ref, rtol=1e-5)
+
+    # Not point of comparison with sklearn, but we here call
+    # the accessor for the inter-class scatter matrix just to verify
+    # that its worling.
+    smat = lda.get_sb()
+
     # We can't do much more since sklearn has no way to reduce dimensionality of LDA.
     # e.g., comparing probas will fail
 
@@ -145,3 +162,16 @@ def test_lda_noproj():
     prs_ref = lda_ref.predict_proba(traces)
 
     assert np.allclose(prs, prs_ref, rtol=1e-2, atol=1e-3)
+
+
+def test_lda_fail_bad_traces():
+    # Issue #56
+    n = 100
+    ns = 6
+    nc = 4
+    lda = LDAClassifier(nc, 3, ns)
+    traces_bad = np.random.randint(0, 1, (n, ns), dtype=np.int16)
+    y = np.random.randint(0, nc, n, dtype=np.uint16)
+    lda.fit_u(traces_bad, y, 0)
+    with pytest.raises(ScalibError):
+        lda.solve()

@@ -1,3 +1,3 @@
-from .snr import SNR, SnrError
+from .snr import SNR
 from .ttest import Ttest
 from .ttest import MTtest
