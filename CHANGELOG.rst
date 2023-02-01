@@ -5,12 +5,14 @@ Changelog
 Not released
 ------------
 
+* Re-design `scalib.config` to handle more configuration in a single `Config` class. **Breaking change** to `scalib.config` and `scalib.config.threading`.
+* Smarter behavior for progress bars, unified configuration for progress bar. **Breaking change** to `scalib.attack.SASCAGraph`.
 * Add accessors for the internal state of the LDA.
 * Introduce the `scalib.ScalibError` exception and remove `scalib.metrics.SnrError` (**Breaking change**).
 * Improve error reporting in case of LDA solving error.
 * Allow all computations to be interrupted with Ctrl-C.
 * Fix deadlock when there is an error in large SNR computations (i.e., when n_vars*n_samples*n_traces > 2**33).
-* Allow LDA to behave like simple pooled gaussian templates (#22)
+* Allow LDA to behave like simple pooled gaussian templates (#22).
 * Refresh build system (Tox version 4, improved CI).
 * Not crash anymore on non x86-64 CPUs (no CI for those yet).
 

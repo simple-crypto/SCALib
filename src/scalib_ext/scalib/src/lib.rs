@@ -7,6 +7,7 @@ pub mod ttest;
 pub(crate) mod utils;
 
 use thiserror::Error;
+
 #[derive(Error, Debug)]
 pub enum ScalibError {
     #[error("A class is missing data.")]
@@ -25,4 +26,22 @@ pub enum ScalibError {
     },
     #[error("A SNR class value of a variable is larger than the given number of classes.")]
     SnrClassOutOfBound,
+}
+
+#[derive(Clone)]
+pub struct Config {
+    /// Show progress bars
+    pub show_progress: bool,
+    /// Computation time after which a progress bar is displayed.
+    /// This avoids showing progress bars for negligible amounts of time.
+    pub progress_min_time: std::time::Duration,
+}
+
+impl std::default::Default for Config {
+    fn default() -> Self {
+        Self {
+            show_progress: true,
+            progress_min_time: std::time::Duration::from_secs(1),
+        }
+    }
 }

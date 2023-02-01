@@ -186,23 +186,15 @@ where
         &mut self,
         traces: ArrayView2<T::Sample>,
         y: ArrayView2<u16>,
+        config: &crate::Config,
     ) -> Result<(), ScalibError> {
-        let x = traces;
-
         let n_it = (self.sum.shape()[0] as u64 + 3) / 4;
-        let n_updates = x.shape()[0] as u64 * x.shape()[1] as u64 * self.np as u64;
-
-        // Display bar if about 8E9 updates
-        if n_updates > (1 << 33) {
-            crate::utils::with_progress(
-                |it_cnt| self.update_internal(traces, y, it_cnt),
-                n_it,
-                "Update SNR",
-            )
-        } else {
-            let acc: TrAdder<u64> = TrAdder::new();
-            self.update_internal(traces, y, &acc)
-        }
+        crate::utils::with_progress(
+            |it_cnt| self.update_internal(traces, y, it_cnt),
+            n_it,
+            "Update SNR",
+            config,
+        )
     }
 
     #[inline(never)]

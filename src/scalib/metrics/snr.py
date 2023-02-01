@@ -1,7 +1,7 @@
 import numpy as np
 
 from scalib import _scalib_ext
-from scalib.config.threading import _get_threadpool
+from scalib.config import get_config
 import scalib.utils
 
 
@@ -100,9 +100,9 @@ class SNR:
         # we can copy when needed, as x should be small, so this should be cheap
         x = x.transpose().astype(np.uint16, order="C", casting="equiv", copy=False)
         with scalib.utils.interruptible():
-            self._snr.update(l, x, _get_threadpool())
+            self._snr.update(l, x, get_config())
 
     def get_snr(self):
         r"""Return the current SNR estimation with an array of shape `(np,ns)`."""
         with scalib.utils.interruptible():
-            return self._snr.get_snr(_get_threadpool())
+            return self._snr.get_snr(get_config())

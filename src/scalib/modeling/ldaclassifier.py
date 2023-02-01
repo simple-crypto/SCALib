@@ -1,10 +1,9 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
 from scalib import _scalib_ext
-from scalib.config.threading import _get_threadpool, _get_n_threads
+from scalib.config import get_config
 import scalib.utils
 
 
@@ -103,7 +102,7 @@ class LDAClassifier:
         # TODO maybe there is something smarter to do here w.r.t. number of
         # threads + investigate exact BLIS behavior.
         with scalib.utils.interruptible():
-            self.acc.fit(l, x, gemm_mode, _get_threadpool())
+            self.acc.fit(l, x, gemm_mode, get_config())
         self.solved = False
 
     def solve(self, done=False):
@@ -124,7 +123,7 @@ class LDAClassifier:
             not self.done
         ), "Calling LDA.solve() after done flag has been set is not allowed."
         with scalib.utils.interruptible():
-            self.lda = self.acc.lda(self.p, _get_threadpool())
+            self.lda = self.acc.lda(self.p, get_config())
         self.solved = True
         self.done = done
 
@@ -150,7 +149,7 @@ class LDAClassifier:
             self.solved
         ), "Call LDA.solve() before LDA.predict_proba() to compute the model."
         with scalib.utils.interruptible():
-            prs = self.lda.predict_proba(l, _get_threadpool())
+            prs = self.lda.predict_proba(l, get_config())
         return prs
 
     def __getstate__(self):
@@ -256,12 +255,11 @@ class MultiLDA:
             must be `uint16`.
         """
         # Try to avoid the over-subscription of CPUs.
-        if self.gemm_mode == 0:
-            num_threads = _get_n_threads()
-        else:
-            num_threads = max(1, _get_n_threads() // self.gemm_mode)
+        num_threads = get_config().threadpool.n_threads
+        if self.gemm_mode != 0:
+            num_threads = max(1, num_threads // self.gemm_mode)
         with scalib.utils.interruptible():
-            with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            with scalib.utils.ContextExecutor(max_workers=num_threads) as executor:
                 list(
                     executor.map(
                         lambda i: self.ldas[i].fit_u(
@@ -275,7 +273,9 @@ class MultiLDA:
         """See `LDAClassifier.solve`."""
         # Put as much work as needed to fill rayon threadpool
         with scalib.utils.interruptible():
-            with ThreadPoolExecutor(max_workers=_get_n_threads()) as executor:
+            with scalib.utils.ContextExecutor(
+                max_workers=get_config().threadpool.n_threads
+            ) as executor:
                 list(executor.map(lambda lda: lda.solve(done), self.ldas))
 
     def predict_proba(self, l):
@@ -295,7 +295,9 @@ class MultiLDA:
         """
         # Put as much work as needed to fill rayon threadpool
         with scalib.utils.interruptible():
-            with ThreadPoolExecutor(max_workers=_get_n_threads()) as executor:
+            with scalib.utils.ContextExecutor(
+                max_workers=get_config().threadpool.n_threads
+            ) as executor:
                 return list(
                     executor.map(
                         lambda i: self.ldas[i].predict_proba(l[:, self.pois[i]]),

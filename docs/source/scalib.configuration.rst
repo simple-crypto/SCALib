@@ -1,12 +1,6 @@
 Configuration
 =============
 
-This module contains the utilities to configure SCALib at run time. 
-
-
-Threading
----------
-
-.. automodule:: scalib.config.threading
+.. automodule:: scalib.config
    :members:
    :undoc-members:

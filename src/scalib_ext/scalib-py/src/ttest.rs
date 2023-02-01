@@ -1,6 +1,5 @@
 //! Python wrapper for SCALib's Ttest
 
-use crate::thread_pool::ThreadPool;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
@@ -28,11 +27,11 @@ impl Ttest {
         py: Python,
         traces: PyReadonlyArray2<i16>,
         y: PyReadonlyArray1<u16>,
-        thread_pool: &ThreadPool,
+        config: crate::ConfigWrapper,
     ) {
         let traces = traces.as_array();
         let y = y.as_array();
-        crate::on_worker(py, thread_pool, || self.inner.update(traces, y));
+        config.on_worker(py, |_| self.inner.update(traces, y));
     }
 
     /// Generate the actual Ttest metric based on the current state.
@@ -40,9 +39,9 @@ impl Ttest {
     fn get_ttest<'py>(
         &mut self,
         py: Python<'py>,
-        thread_pool: &ThreadPool,
+        config: crate::ConfigWrapper,
     ) -> PyResult<&'py PyArray2<f64>> {
-        let ttest = crate::on_worker(py, thread_pool, || self.inner.get_ttest());
+        let ttest = config.on_worker(py, |_| self.inner.get_ttest());
         Ok(ttest.to_pyarray(py))
     }
 }
@@ -72,11 +71,11 @@ impl MTtest {
         py: Python,
         traces: PyReadonlyArray2<i16>,
         y: PyReadonlyArray1<u16>,
-        thread_pool: &ThreadPool,
+        config: crate::ConfigWrapper,
     ) {
         let traces = traces.as_array();
         let y = y.as_array();
-        crate::on_worker(py, thread_pool, || self.inner.update(traces, y));
+        config.on_worker(py, |_| self.inner.update(traces, y));
     }
 
     /// Generate the actual Ttest metric based on the current state.
@@ -84,9 +83,9 @@ impl MTtest {
     fn get_ttest<'py>(
         &mut self,
         py: Python<'py>,
-        thread_pool: &ThreadPool,
+        config: crate::ConfigWrapper,
     ) -> PyResult<&'py PyArray1<f64>> {
-        let ttest = crate::on_worker(py, thread_pool, || self.inner.get_ttest());
+        let ttest = config.on_worker(py, |_| self.inner.get_ttest());
         Ok(ttest.to_pyarray(py))
     }
 }
