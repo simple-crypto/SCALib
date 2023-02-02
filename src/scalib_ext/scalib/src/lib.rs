@@ -41,7 +41,7 @@ impl std::default::Default for Config {
     fn default() -> Self {
         Self {
             show_progress: true,
-            progress_min_time: std::time::Duration::from_secs(1),
+            progress_min_time: std::time::Duration::from_millis(500),
         }
     }
 }
