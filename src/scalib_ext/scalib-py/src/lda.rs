@@ -1,6 +1,5 @@
 //! Python binding of SCALib's LDA implementation.
 
-use crate::thread_pool::ThreadPool;
 use crate::ScalibError;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
