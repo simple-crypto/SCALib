@@ -1,5 +1,5 @@
-use super::factor_graph::PublicValue;
 use super::belief_propabation::BPError;
+use super::factor_graph::PublicValue;
 use super::ClassVal;
 use ndarray::{azip, s, Zip};
 
@@ -46,18 +46,24 @@ impl Distribution {
                 value: DistrRepr::Full(array),
             })
         } else {
-            Err(BPError::DistributionLayout(array.shape().to_owned(), array.strides().to_owned()))
+            Err(BPError::DistributionLayout(
+                array.shape().to_owned(),
+                array.strides().to_owned(),
+            ))
         }
     }
     pub fn from_array_multi(array: ndarray::Array2<Proba>) -> Result<Self, BPError> {
         if array.is_standard_layout() {
-        Ok(Self {
-            multi: true,
-            shape: array.dim(),
-            value: DistrRepr::Full(array),
-        })
+            Ok(Self {
+                multi: true,
+                shape: array.dim(),
+                value: DistrRepr::Full(array),
+            })
         } else {
-            Err(BPError::DistributionLayout(array.shape().to_owned(), array.strides().to_owned()))
+            Err(BPError::DistributionLayout(
+                array.shape().to_owned(),
+                array.strides().to_owned(),
+            ))
         }
     }
     pub fn new_single(nc: usize) -> Self {
@@ -118,10 +124,15 @@ impl Distribution {
     }
 
     pub fn multiply_reg<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>) {
-        self.multiply_inner(factors, MIN_PROBA, MIN_PROBA*MIN_PROBA);
+        self.multiply_inner(factors, MIN_PROBA, MIN_PROBA * MIN_PROBA);
     }
 
-    fn multiply_inner<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>, offset: Proba, offset_prod: Proba) {
+    fn multiply_inner<'a>(
+        &mut self,
+        factors: impl Iterator<Item = &'a Distribution>,
+        offset: Proba,
+        offset_prod: Proba,
+    ) {
         for factor in factors {
             assert_eq!(self.shape.1, factor.shape.1);
             if self.multi & factor.multi {
@@ -139,7 +150,7 @@ impl Distribution {
                     (false, true, DistrRepr::Uniform) => {
                         let mut v = ndarray::Array2::ones(self.shape);
                         for d in d.axis_iter(ndarray::Axis(0)) {
-                            azip!(v.slice_mut(s![0,..]), d).for_each(|v, d| {
+                            azip!(v.slice_mut(s![0, ..]), d).for_each(|v, d| {
                                 *v = *v * (*d + offset) + offset_prod;
                             });
                         }
@@ -150,12 +161,12 @@ impl Distribution {
                     }
                     (true, _, DistrRepr::Full(ref mut v)) => {
                         azip!(v, d).for_each(|v, d| {
-                                *v = *v * (*d + offset) + offset_prod;
+                            *v = *v * (*d + offset) + offset_prod;
                         });
                     }
                     (false, _, DistrRepr::Full(ref mut v)) => {
                         for d in d.axis_iter(ndarray::Axis(0)) {
-                            azip!(v.slice_mut(s![0,..]), d).for_each(|v, d| {
+                            azip!(v.slice_mut(s![0, ..]), d).for_each(|v, d| {
                                 *v = *v * (*d + offset) + offset_prod;
                             });
                         }
@@ -181,7 +192,14 @@ impl Distribution {
             (DistrRepr::Full(v), DistrRepr::Uniform) => (v, &one),
             (DistrRepr::Full(vst), DistrRepr::Full(vdiv)) => (vst, vdiv),
         };
-        res.value = DistrRepr::Full(Zip::from(vst.broadcast((std::cmp::max(vst.dim().0, vdiv.dim().0), vst.dim().1)).unwrap()).and_broadcast(vdiv).map_collect(|vst, vdiv| *vst / (*vdiv + MIN_PROBA)));
+        res.value = DistrRepr::Full(
+            Zip::from(
+                vst.broadcast((std::cmp::max(vst.dim().0, vdiv.dim().0), vst.dim().1))
+                    .unwrap(),
+            )
+            .and_broadcast(vdiv)
+            .map_collect(|vst, vdiv| *vst / (*vdiv + MIN_PROBA)),
+        );
         return res;
     }
     pub fn dividing_full(&mut self, other: &Distribution) {

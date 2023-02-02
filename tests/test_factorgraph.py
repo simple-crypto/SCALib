@@ -556,6 +556,7 @@ def test_xor():
     assert np.allclose(distri_z_ref, distri_z)
     assert np.allclose(distri_z_ref, distri_z2)
 
+
 def test_bad_var_norm():
     """
     When normalization of distributions can be bad...
@@ -612,8 +613,8 @@ def test_cyclic():
     PROPERTY k2  = p ^ y
     """
     g = FactorGraph(graph_never_cyclic)
-    assert BPState(g, 1, { "p": np.array([0], dtype=np.uint32) }).is_cyclic() == False
-    assert BPState(g, 2, { "p": np.array([0, 0], dtype=np.uint32) }).is_cyclic() == False
+    assert BPState(g, 1, {"p": np.array([0], dtype=np.uint32)}).is_cyclic() == False
+    assert BPState(g, 2, {"p": np.array([0, 0], dtype=np.uint32)}).is_cyclic() == False
     graph_always_cyclic = """
     NC 2
     VAR MULTI x
@@ -631,8 +632,8 @@ def test_cyclic():
     PROPERTY y  = p ^ y1
     """
     g = FactorGraph(graph_always_cyclic)
-    assert BPState(g, 1, { "p": np.array([0], dtype=np.uint32) }).is_cyclic() == True
-    assert BPState(g, 2, { "p": np.array([0, 0], dtype=np.uint32) }).is_cyclic() == True
+    assert BPState(g, 1, {"p": np.array([0], dtype=np.uint32)}).is_cyclic() == True
+    assert BPState(g, 2, {"p": np.array([0, 0], dtype=np.uint32)}).is_cyclic() == True
     graph_multi_cyclic = """
     NC 2
     VAR MULTI x
@@ -651,5 +652,5 @@ def test_cyclic():
     PROPERTY k2  = x ^ y
     """
     g = FactorGraph(graph_multi_cyclic)
-    assert BPState(g, 1, { "p": np.array([0], dtype=np.uint32) }).is_cyclic() == False
-    assert BPState(g, 2, { "p": np.array([0, 0], dtype=np.uint32) }).is_cyclic() == True
+    assert BPState(g, 1, {"p": np.array([0], dtype=np.uint32)}).is_cyclic() == False
+    assert BPState(g, 2, {"p": np.array([0, 0], dtype=np.uint32)}).is_cyclic() == True

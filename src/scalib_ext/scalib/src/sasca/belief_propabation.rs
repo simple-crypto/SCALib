@@ -98,7 +98,10 @@ impl BPState {
                 dbg!(visited_var);
                 // Enumerate over all incident edges, each edge giving a factor,
                 // then we iter over all adjacent vars to the factor
-                for factor_id in dbg!(&self.graph.var(visited_var).edges).keys().filter(|f| Some(**f) != parent_factor) {
+                for factor_id in dbg!(&self.graph.var(visited_var).edges)
+                    .keys()
+                    .filter(|f| Some(**f) != parent_factor)
+                {
                     for var_id in self.graph.factor(*factor_id).edges.keys() {
                         if *var_id != visited_var {
                             dbg!(*var_id);
