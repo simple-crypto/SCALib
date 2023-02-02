@@ -147,7 +147,7 @@ where
     /// number of samples in a trace
     ns: usize,
     /// number of classes
-    nc: u16,
+    nc: u32,
     /// max sample bit width
     bit_width: u32,
     /// total number of accumulated traces
@@ -165,6 +165,7 @@ where
     /// np: number of independent random variable for which SNR must be estimated
     pub fn new(nc: usize, ns: usize, np: usize) -> Self {
         let ns8 = if ns % 8 == 0 { ns / 8 } else { ns / 8 + 1 };
+        assert!(nc <= 1 << 16);
         SNR {
             sum: Array3::from_elem((ns8, np, nc), [Zero::zero(); 8]),
             sum_square: Array1::from_elem((ns8,), [0; 8]),
@@ -223,7 +224,7 @@ where
         izip!(self.n_samples.outer_iter_mut(), y.outer_iter()).try_for_each(
             |(mut n_samples, y)| {
                 y.into_iter().try_for_each(|y| {
-                    if *y >= nc {
+                    if u32::from(*y) >= nc {
                         Err(ScalibError::SnrClassOutOfBound)
                     } else {
                         n_samples[*y as usize] += 1;

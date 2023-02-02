@@ -23,7 +23,7 @@ class SNR:
     ----------
     nc : int
         Number of possible values for the random variable :math:`X` (e.g., 256 for 8-bit
-        target). `nc` must be between :math:`1` and :math:`2^{16}` (included).
+        target). `nc` must be between :math:`2` and :math:`2^{16}` (included).
     ns : int
         Number of samples in a single trace.
     np : int
@@ -60,9 +60,9 @@ class SNR:
     """
 
     def __init__(self, nc, ns, np=1, use_64bit=False):
-        if nc not in range(1, 2**16 + 1):
+        if nc not in range(2, 2**16 + 1):
             raise ValueError(
-                f"SNR can be computed on max 16 bit variable, nc={nc} given"
+                f"SNR can be computed on max 16 bit variable (and at least 2 classes), {nc=} given."
             )
 
         self._ns = ns

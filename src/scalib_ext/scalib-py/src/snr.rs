@@ -1,6 +1,5 @@
 //! Python binding of SCALib's SNR implementation.
 
-use crate::thread_pool::ThreadPool;
 use crate::ScalibError;
 use numpy::{PyArray2, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;

@@ -126,3 +126,12 @@ def test_large_snr():
     snr = SNR(nb - 1, ns, nv)
     with pytest.raises(ScalibError):
         snr.fit_u(traces, X)
+
+
+def test_extreme_nc():
+    # Issue #54
+    for nc in (1, 2**16 + 1):
+        with pytest.raises(Exception):
+            SNR(nc, 10, 1)
+    for nc in (2, 2**16):
+        SNR(nc, 10, 1)
