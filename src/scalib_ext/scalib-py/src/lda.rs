@@ -28,16 +28,16 @@ impl LdaAcc {
         x: PyReadonlyArray2<i16>,
         y: PyReadonlyArray1<u16>,
         gemm_algo: u32,
-        thread_pool: &ThreadPool,
+        config: crate::ConfigWrapper,
     ) {
         let x = x.as_array();
         let y = y.as_array();
-        crate::on_worker(py, thread_pool, || self.inner.update(x, y, gemm_algo));
+        config.on_worker(py, |_| self.inner.update(x, y, gemm_algo));
     }
 
     /// Compute the LDA with p dimensions in the projected space
-    fn lda(&self, py: Python, p: usize, thread_pool: &ThreadPool) -> PyResult<LDA> {
-        match crate::on_worker(py, thread_pool, || self.inner.lda(p)) {
+    fn lda(&self, py: Python, p: usize, config: crate::ConfigWrapper) -> PyResult<LDA> {
+        match config.on_worker(py, |_| self.inner.lda(p)) {
             Ok(inner) => Ok(LDA { inner }),
             Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
@@ -125,10 +125,10 @@ impl LDA {
         &self,
         py: Python<'py>,
         x: PyReadonlyArray2<i16>,
-        thread_pool: &ThreadPool,
+        config: crate::ConfigWrapper,
     ) -> PyResult<&'py PyArray2<f64>> {
         let x = x.as_array();
-        let prs = crate::on_worker(py, thread_pool, || self.inner.predict_proba(x));
+        let prs = config.on_worker(py, |_| self.inner.predict_proba(x));
         Ok(prs.to_pyarray(py))
     }
 

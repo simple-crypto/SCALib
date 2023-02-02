@@ -3,7 +3,7 @@ from functools import reduce
 import numpy as np
 
 from scalib import _scalib_ext
-from scalib.config.threading import _get_threadpool
+from scalib.config import get_config
 import scalib.utils
 
 
@@ -226,15 +226,13 @@ class SASCAGraph:
             )
         self.tables_[table] = values
 
-    def run_bp(self, it, progress=False):
+    def run_bp(self, it):
         r"""Runs belief propagation algorithm on the current state of the graph.
 
         Parameters
         ----------
         it : int
             Number of iterations of belief propagation.
-        progress: bool
-            Show a progress bar (default: False).
         """
         if self.solved_:
             raise Exception("Cannot run bp twice on a graph.")
@@ -247,8 +245,7 @@ class SASCAGraph:
                 self.edge_,
                 self.nc_,
                 self.n_,
-                progress,
-                _get_threadpool(),
+                get_config(),
             )
         self.solved_ = True
 

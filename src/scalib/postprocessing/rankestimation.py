@@ -38,7 +38,7 @@ key is skipped, since it has no impact on the final rank.
 import math
 
 from scalib import _scalib_ext
-from scalib.config.threading import _get_threadpool
+from scalib.config import get_config
 import scalib.utils
 
 
@@ -74,7 +74,7 @@ def rank_nbin(costs, key, nbins, method="hist"):
     """
     with scalib.utils.interruptible():
         return _scalib_ext.rank_nbin(
-            costs, key, nbins, _choose_merge_value(costs), method, _get_threadpool()
+            costs, key, nbins, _choose_merge_value(costs), method, get_config()
         )
 
 
@@ -122,7 +122,7 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist", max_nb_bin=2**26):
             _choose_merge_value(costs),
             method,
             max_nb_bin,
-            _get_threadpool(),
+            get_config(),
         )
 
 

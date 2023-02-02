@@ -39,16 +39,17 @@ impl SNR {
         py: Python,
         traces: PyReadonlyArray2<i16>,
         y: PyReadonlyArray2<u16>,
-        thread_pool: &ThreadPool,
+        config: crate::ConfigWrapper,
     ) -> PyResult<()> {
         let inner = &mut self.inner;
         let x = traces.as_array();
         let y = y.as_array();
-        crate::on_worker(py, thread_pool, || match inner {
-            InnerSnr::Snr32bit(inner) => inner.update(x, y),
-            InnerSnr::Snr64bit(inner) => inner.update(x, y),
-        })
-        .map_err(|e| ScalibError::from_scalib(e, py))?;
+        config
+            .on_worker(py, |cfg| match inner {
+                InnerSnr::Snr32bit(inner) => inner.update(x, y, cfg),
+                InnerSnr::Snr64bit(inner) => inner.update(x, y, cfg),
+            })
+            .map_err(|e| ScalibError::from_scalib(e, py))?;
         Ok(())
     }
 
@@ -57,9 +58,9 @@ impl SNR {
     fn get_snr<'py>(
         &mut self,
         py: Python<'py>,
-        thread_pool: &ThreadPool,
+        config: crate::ConfigWrapper,
     ) -> PyResult<&'py PyArray2<f64>> {
-        let snr = crate::on_worker(py, thread_pool, || match &self.inner {
+        let snr = config.on_worker(py, |_| match &self.inner {
             InnerSnr::Snr32bit(inner) => inner.get_snr(),
             InnerSnr::Snr64bit(inner) => inner.get_snr(),
         });

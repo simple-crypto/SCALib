@@ -31,12 +31,51 @@ fn annotate_cause(err: Option<&(dyn Error + 'static)>, pyerr: &mut PyErr, py: Py
     }
 }
 
-pub(crate) fn on_worker<OP, R>(py: Python, thread_pool: &thread_pool::ThreadPool, op: OP) -> R
-where
-    OP: FnOnce() -> R + Send,
-    R: Send,
-{
-    py.allow_threads(|| thread_pool.pool.install(op))
+#[pyclass]
+#[derive(Clone)]
+pub struct Config {
+    inner: scalib::Config,
+}
+
+#[pymethods]
+impl Config {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: Default::default(),
+        }
+    }
+    fn show_progress(&mut self, show: bool) {
+        self.inner.show_progress = show;
+    }
+    fn progress(&self) -> bool {
+        self.inner.show_progress
+    }
+}
+
+#[derive(FromPyObject)]
+struct ThreadPoolWrapper<'p> {
+    pool: PyRef<'p, thread_pool::ThreadPool>,
+}
+
+#[derive(FromPyObject)]
+pub struct ConfigWrapper<'p> {
+    #[pyo3(attribute("threadpool"))]
+    threadpool: ThreadPoolWrapper<'p>,
+    #[pyo3(attribute("inner"))]
+    config: PyRef<'p, Config>,
+}
+
+impl<'p> ConfigWrapper<'p> {
+    fn on_worker<OP, R>(&self, py: Python, op: OP) -> R
+    where
+        OP: FnOnce(&scalib::Config) -> R + Send,
+        R: Send,
+    {
+        let pool = &self.threadpool.pool.pool;
+        let cfg = &self.config.inner;
+        py.allow_threads(|| pool.install(|| op(cfg)))
+    }
 }
 
 #[pyfunction]
@@ -67,6 +106,7 @@ fn get_n_cpus_physical(_py: Python) -> usize {
 #[pymodule]
 fn _scalib_ext(py: Python, m: &PyModule) -> PyResult<()> {
     m.add("ScalibError", py.get_type::<ScalibError>())?;
+    m.add_class::<Config>()?;
     m.add_class::<snr::SNR>()?;
     m.add_class::<ttest::Ttest>()?;
     m.add_class::<ttest::MTtest>()?;

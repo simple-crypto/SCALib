@@ -8,7 +8,6 @@
 //!
 //! The values on the factor graph are probability distribution of values in GF(2)^n.
 
-use indicatif::{ProgressBar, ProgressFinish, ProgressIterator, ProgressStyle};
 use ndarray::{s, Array1, Array2, Axis};
 use rayon::prelude::*;
 use realfft::RealFftPlanner;
@@ -412,8 +411,7 @@ pub fn run_bp(
     nc: usize,
     // number of copies in the graph (n_runs)
     n: usize,
-    // show a progress bar
-    progress: bool,
+    config: &crate::Config,
 ) -> Result<(), ()> {
     // Scratch array containing all the edge's messages.
     let mut edges: Vec<Array2<f64>> = vec![Array2::<f64>::ones((n, nc)); edge];
@@ -479,22 +477,17 @@ pub fn run_bp(
         update_variables(&mut edge_for_var, variables);
     };
 
-    if progress {
-        // loading bar
-        let pb = ProgressBar::new(it as u64);
-        pb.set_style(ProgressStyle::default_spinner().template(
-        "{msg} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] ({pos}/{len}, ETA {eta})",
-    )
-    .on_finish(ProgressFinish::AndClear));
-        pb.set_message("Calculating BP...");
-        for _ in (0..it).progress_with(pb) {
-            bp_iter();
-        }
-    } else {
-        for _ in 0..it {
-            bp_iter();
-        }
-    }
+    crate::utils::with_progress(
+        |it_cnt| {
+            for _ in 0..it {
+                bp_iter();
+                it_cnt.inc(1);
+            }
+        },
+        it.try_into().unwrap(),
+        "Compute BP",
+        config,
+    );
 
     Ok(())
 }
