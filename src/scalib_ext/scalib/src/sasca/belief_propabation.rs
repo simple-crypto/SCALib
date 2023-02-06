@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use ndarray::{s, ArrayView1};
+
 use thiserror::Error;
 
 use super::factor_graph::{
@@ -8,6 +12,50 @@ use super::{Distribution, FactorGraph, PublicValue};
 // TODO improvements
 // - use a pool for Distribution allocations (can be a simple Vec storing them), to avoid frequent
 // allocations
+
+// Workaround since the plans are not Serialize of Debug
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(from = "FftPlansSer", into = "FftPlansSer")]
+pub(super) struct FftPlans {
+    pub(super) size: usize,
+    pub(super) r2c: Arc<dyn realfft::RealToComplex<f64>>,
+    pub(super) c2r: Arc<dyn realfft::ComplexToReal<f64>>,
+}
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct FftPlansSer {
+    size: usize,
+}
+
+impl From<FftPlansSer> for FftPlans {
+    fn from(p: FftPlansSer) -> Self {
+        Self::new(p.size)
+    }
+}
+
+impl From<FftPlans> for FftPlansSer {
+    fn from(p: FftPlans) -> Self {
+        Self { size: p.size }
+    }
+}
+
+impl std::fmt::Debug for FftPlans {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        f.debug_struct("FftPlans")
+            .field("size", &self.size)
+            .finish_non_exhaustive()
+    }
+}
+
+impl FftPlans {
+    fn new(size: usize) -> Self {
+        let mut planner = realfft::RealFftPlanner::new();
+        Self {
+            size,
+            r2c: planner.plan_fft_forward(size),
+            c2r: planner.plan_fft_inverse(size),
+        }
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BPState {
@@ -27,6 +75,8 @@ pub struct BPState {
     belief_to_var: EdgeVec<Distribution>,
     // save if cyclic
     cyclic: bool,
+    // fft plans
+    plans: FftPlans,
 }
 
 #[derive(Debug, Clone, Error)]
@@ -61,6 +111,7 @@ impl BPState {
             .collect();
         let pub_reduced = graph.reduce_pub(&public_values);
         let cyclic = graph.is_cyclic(nmulti > 1);
+        let plans = FftPlans::new(graph.nc);
         Self {
             evidence: var_state.clone(),
             belief_from_var: beliefs.clone(),
@@ -71,6 +122,7 @@ impl BPState {
             public_values: FactorVec::from_vec(public_values),
             pub_reduced,
             cyclic,
+            plans,
         }
     }
     pub fn is_cyclic(&self) -> bool {
@@ -174,7 +226,7 @@ impl BPState {
             }
             FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id]),
             FactorKind::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32),
-            FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id]),
+            FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id], &self.plans),
             FactorKind::MUL => prop_factor!(factor_mul, &self.pub_reduced[factor_id]),
             FactorKind::LOOKUP { table } => {
                 prop_factor!(factor_lookup, &self.graph.tables[*table])
@@ -468,13 +520,14 @@ fn factor_not<'a>(
     )
 }
 
-// TODO handle subtraction too
+// TODO handle subtraction too (actually, we can re-write it as an addition by moving terms around).
 fn factor_add<'a>(
     factor: &'a Factor,
     belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
     clear_incoming: bool,
     pub_red: &PublicValue,
+    plans: &FftPlans,
 ) -> impl Iterator<Item = Distribution> + 'a {
     // Special case for single-input ADD
     if factor.edges.len() == 2 {
@@ -491,8 +544,6 @@ fn factor_add<'a>(
             .collect::<Vec<_>>()
             .into_iter();
     }
-    let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
-    let acc_fft = acc.fft();
     let mut taken_dest = vec![false; factor.edges.len()];
     for dest in dest {
         taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
@@ -504,28 +555,45 @@ fn factor_add<'a>(
         .enumerate()
         .filter(|(_, (e, _))| !belief_from_var[**e].is_full());
     let uniform_op = uniform_iter.next();
+    let uniform_template = belief_from_var[factor.edges[0]].as_uniform();
+    let (nmulti, nc) = uniform_template.shape();
+    let mut fft_tmp = ndarray::Array2::zeros((nmulti, nc / 2 + 1));
+    let mut acc_fft = ndarray::Array2::zeros((nmulti, nc / 2 + 1));
+    let mut acc_fft_init = false;
+    let mut fft_scratch = plans.r2c.make_scratch_vec();
+    let mut fft_input_scratch = plans.r2c.make_input_vec();
     if let Some((i, (e_dest, t))) = uniform_op {
         if !*t || uniform_iter.next().is_some() {
             // At least 2 uniform operands, or single uniform is not in dest,
             // all dest messages are uniform.
             reset_incoming(factor, belief_from_var, &taken_dest, clear_incoming);
-            return vec![acc.as_uniform(); dest.len()].into_iter();
+            return vec![uniform_template; dest.len()].into_iter();
         } else {
             // Single uniform op, only compute for that one.
             for e in factor.edges.values() {
                 if e != e_dest {
-                    //let d_fft = belief_from_var[*e].fft();
-                    let d_fft = &belief_from_var[*e];
-                    acc.multiply(Some(d_fft).into_iter());
+                    belief_from_var[*e].fft_to(
+                        fft_input_scratch.as_mut_slice(),
+                        fft_tmp.view_mut(),
+                        fft_scratch.as_mut_slice(),
+                        plans,
+                    );
+                    if acc_fft_init {
+                        acc_fft *= &fft_tmp;
+                    } else {
+                        acc_fft.assign(&fft_tmp);
+                        acc_fft_init = true;
+                    }
                     if clear_incoming {
                         belief_from_var[*e].reset();
                     }
                 }
             }
-            acc.ifft();
-            //let acc = acc.ifft();
-            //acc.regularize();
-            let mut res = vec![acc.as_uniform(); dest.len()];
+            let mut acc = uniform_template.clone();
+            let mut fft_scratch = plans.c2r.make_scratch_vec();
+            acc.ifft(acc_fft.view_mut(), fft_scratch.as_mut_slice(), plans);
+            acc.regularize();
+            let mut res = vec![uniform_template; dest.len()];
             res[i] = acc;
             return res.into_iter();
         }
@@ -535,28 +603,50 @@ fn factor_add<'a>(
         // We do take the product of all factors then divide because some factors could be zero.
         let mut dest_fft = Vec::with_capacity(dest.len());
         for (e, taken) in factor.edges.values().zip(taken_dest.iter()) {
-            //let d_fft = belief_from_var[*e].fft();
-            let d_fft = &belief_from_var[*e];
-            // We either multiply (non-taken distributions) or we add to the vector of factors.
-            if !*taken {
-                acc.multiply(Some(d_fft).into_iter());
+            let v = if *taken {
+                let mut fft_e = ndarray::Array2::zeros((nmulti, nc / 2 + 1));
+                belief_from_var[*e].fft_to(
+                    fft_input_scratch.as_mut_slice(),
+                    fft_e.view_mut(),
+                    fft_scratch.as_mut_slice(),
+                    plans,
+                );
+                dest_fft.push(fft_e);
+                dest_fft.last().unwrap()
             } else {
-                dest_fft.push(d_fft.clone());
+                belief_from_var[*e].fft_to(
+                    fft_input_scratch.as_mut_slice(),
+                    fft_tmp.view_mut(),
+                    fft_scratch.as_mut_slice(),
+                    plans,
+                );
+                &fft_tmp
+            };
+            if acc_fft_init {
+                acc_fft *= v;
+            } else {
+                acc_fft.assign(&v);
+                acc_fft_init = true;
             }
             if clear_incoming {
                 belief_from_var[*e].reset();
             }
         }
-        // This could be done in O(l log l) instead of O(l^2) where l=dest.len()
+        // This could be done in O(l) instead of O(l^2) where l=dest.len()
         // by better caching product computations.
+        let mut fft_scratch = plans.c2r.make_scratch_vec();
         return (0..dest.len())
-            .map(|i| {
-                let mut res = acc.clone();
-                res.multiply((0..dest.len()).filter(|j| *j != i).map(|j| &dest_fft[j]));
-                //let res = res.ifft();
-                res.ifft();
-                res.regularize();
-                res
+            .map(move |i| {
+                let mut res = acc_fft.clone();
+                for (j, fft_op) in dest_fft.iter().enumerate() {
+                    if j != i {
+                        res *= fft_op;
+                    }
+                }
+                let mut acc = uniform_template.clone();
+                acc.ifft(res.view_mut(), fft_scratch.as_mut_slice(), plans);
+                acc.regularize();
+                acc
             })
             .collect::<Vec<_>>()
             .into_iter();

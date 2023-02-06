@@ -13,3 +13,4 @@ htmlcov/
 src/scalib/version.py
 src/scalib/build_config.py
 .cargo_build*
+scalib*.whl

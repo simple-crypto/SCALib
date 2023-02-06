@@ -1,7 +1,6 @@
 use std::fmt;
 
 use indexmap::IndexMap;
-use petgraph::visit::Walker;
 use thiserror::Error;
 
 use super::{ClassVal, NamedList};

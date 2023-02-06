@@ -366,17 +366,14 @@ def test_and_not_or():
         assert np.allclose(bp_state2.get_distribution(v), bp_state3.get_distribution(v))
 
 
-@disable
 def test_ADD():
     """
     Test ADD between distributions
     """
     nc = 251
     n = 4
-    distri_x = np.random.randint(1, 10000000, (n, nc))
-    distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
-    distri_y = np.random.randint(1, 10000000, (n, nc))
-    distri_y = (distri_y.T / np.sum(distri_y, axis=1)).T
+    distri_x = make_distri(nc, n)
+    distri_y = make_distri(nc, n)
 
     graph = f"""
         # some comments
@@ -388,7 +385,8 @@ def test_ADD():
 
         """
 
-    graph = FactorGraph(graph, n)
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n)
     bp_state.set_evidence("x", distri_x)
     bp_state.set_evidence("y", distri_y)
 
@@ -406,19 +404,15 @@ def test_ADD():
     assert np.allclose(distri_z_ref, distri_z)
 
 
-@disable
 def test_ADD_multiple():
     """
     Test ADD between distributions
     """
     nc = 17
     n = 4
-    distri_x = np.random.randint(1, 10000000, (n, nc))
-    distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
-    distri_y = np.random.randint(1, 10000000, (n, nc))
-    distri_y = (distri_y.T / np.sum(distri_y, axis=1)).T
-    distri_w = np.random.randint(1, 10000000, (n, nc))
-    distri_w = (distri_w.T / np.sum(distri_w, axis=1)).T
+    distri_x = make_distri(nc, n)
+    distri_y = make_distri(nc, n)
+    distri_w = make_distri(nc, n)
 
     graph = f"""
         # some comments
@@ -430,7 +424,8 @@ def test_ADD_multiple():
         VAR MULTI w
         """
 
-    graph = FactorGraph(graph, n)
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n)
     bp_state.set_evidence("x", distri_x)
     bp_state.set_evidence("y", distri_y)
     bp_state.set_evidence("w", distri_w)

@@ -1,7 +1,8 @@
-use super::belief_propabation::BPError;
+use super::belief_propabation::{BPError, FftPlans};
 use super::factor_graph::PublicValue;
 use super::ClassVal;
-use ndarray::{azip, s, Zip};
+use ndarray::{azip, s, ArrayViewMut2, Zip};
+use num_complex::Complex;
 
 type Proba = f64;
 
@@ -32,6 +33,13 @@ impl Distribution {
     pub fn value(&self) -> Option<ndarray::ArrayView2<Proba>> {
         if let DistrRepr::Full(v) = &self.value {
             Some(v.view())
+        } else {
+            None
+        }
+    }
+    pub fn value_mut(&mut self) -> Option<ndarray::ArrayViewMut2<Proba>> {
+        if let DistrRepr::Full(v) = &mut self.value {
+            Some(v.view_mut())
         } else {
             None
         }
@@ -246,11 +254,41 @@ impl Distribution {
             slice_opandt(d.as_slice_mut().unwrap());
         });
     }
-    pub fn fft(&mut self) {
-        todo!()
+    pub(super) fn fft_to(
+        &self,
+        input_scratch: &mut [f64],
+        mut dest: ArrayViewMut2<Complex<f64>>,
+        fft_scratch: &mut [Complex<f64>],
+        plans: &FftPlans,
+    ) {
+        if let DistrRepr::Full(v) = &self.value {
+            for (distr, mut dest) in v.outer_iter().zip(dest.outer_iter_mut()) {
+                input_scratch.copy_from_slice(distr.as_slice().unwrap());
+                plans
+                    .r2c
+                    .process_with_scratch(input_scratch, dest.as_slice_mut().unwrap(), fft_scratch)
+                    .unwrap();
+            }
+        }
     }
-    pub fn ifft(&mut self) {
-        todo!()
+    pub(super) fn ifft(
+        &mut self,
+        mut input: ArrayViewMut2<Complex<f64>>,
+        fft_scratch: &mut [Complex<f64>],
+        plans: &FftPlans,
+    ) {
+        self.ensure_full();
+        let mut v = self.value_mut().unwrap();
+        for (mut dest, mut input) in v.outer_iter_mut().zip(input.outer_iter_mut()) {
+            plans
+                .c2r
+                .process_with_scratch(
+                    input.as_slice_mut().unwrap(),
+                    dest.as_slice_mut().unwrap(),
+                    fft_scratch,
+                )
+                .unwrap();
+        }
     }
     pub fn is_full(&self) -> bool {
         match &self.value {
@@ -353,10 +391,10 @@ impl Distribution {
     pub fn add_cst(&mut self, cst: &PublicValue) -> Self {
         todo!()
     }
-    fn for_each<F, G>(&mut self, f: F, default: G)
+    pub fn for_each<F, G>(&mut self, mut f: F, default: G)
     where
-        F: Fn(ndarray::ArrayViewMut1<f64>, usize),
-        G: Fn(&mut Self),
+        F: FnMut(ndarray::ArrayViewMut1<f64>, usize),
+        G: FnOnce(&mut Self),
     {
         if let DistrRepr::Full(v) = &mut self.value {
             for (i, d) in v.axis_iter_mut(ndarray::Axis(0)).enumerate() {
@@ -366,15 +404,15 @@ impl Distribution {
             default(self);
         }
     }
-    fn for_each_ignore<F>(&mut self, f: F)
+    pub fn for_each_ignore<F>(&mut self, f: F)
     where
-        F: Fn(ndarray::ArrayViewMut1<f64>, usize),
+        F: FnMut(ndarray::ArrayViewMut1<f64>, usize),
     {
         self.for_each(f, |_| {});
     }
-    fn for_each_error<F>(&mut self, f: F)
+    pub fn for_each_error<F>(&mut self, f: F)
     where
-        F: Fn(ndarray::ArrayViewMut1<f64>, usize),
+        F: FnMut(ndarray::ArrayViewMut1<f64>, usize),
     {
         self.for_each(f, |_| {
             unimplemented!("This function must be called on Full distributions.");
