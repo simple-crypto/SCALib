@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use ndarray::{s, ArrayView1};
-
 use thiserror::Error;
 
 use super::factor_graph::{
@@ -535,10 +533,8 @@ fn factor_add<'a>(
             .iter()
             .map(|var| {
                 let i = factor.edges.get_index_of(var).unwrap();
-                let distr = belief_from_var[factor.edges[1 - i]].add_cst(pub_red);
-                if clear_incoming {
-                    belief_from_var[factor.edges[1 - i]].reset();
-                }
+                let mut distr = belief_from_var[factor.edges[1 - i]].take_or_clone(clear_incoming);
+                distr.add_cst(pub_red, i != 0);
                 distr
             })
             .collect::<Vec<_>>()
@@ -632,8 +628,8 @@ fn factor_add<'a>(
                 belief_from_var[*e].reset();
             }
         }
-        // This could be done in O(l) instead of O(l^2) where l=dest.len()
-        // by better caching product computations.
+        // This could be done in O(l) instead of O(l^2) where l=dest.len() by
+        // better caching product computations.
         let mut fft_scratch = plans.c2r.make_scratch_vec();
         return (0..dest.len())
             .map(move |i| {
@@ -653,6 +649,7 @@ fn factor_add<'a>(
     }
 }
 
+#[allow(unused_variables)]
 fn factor_mul<'a>(
     factor: &'a Factor,
     belief_from_var: &'a EdgeSlice<Distribution>,

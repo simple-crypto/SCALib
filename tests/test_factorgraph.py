@@ -404,6 +404,48 @@ def test_ADD():
     assert np.allclose(distri_z_ref, distri_z)
 
 
+def test_add_cst():
+    """
+    Test ADD of a constant
+    """
+    nc = 251
+    y_cases = [0, 1, 2, 58, 249, 250, 251, 2345]
+    n = len(y_cases)
+    distri_x = make_distri(nc, n)
+
+    graph = f"""
+        # some comments
+        NC {nc}
+        PROPERTY z = x+y+w
+        VAR MULTI z
+        VAR MULTI x
+        PUB MULTI y
+        PUB SINGLE w
+        """
+    y_cases = np.array(y_cases, dtype=np.uint32)
+    graph = FactorGraph(graph)
+    w = 5
+    for evidence_var, target_var, sub in [("x", "z", False), ("z", "x", True)]:
+        print("sub", sub)
+        bp_state = BPState(graph, n, {"y": y_cases, "w": w})
+        bp_state.set_evidence(evidence_var, distri_x)
+
+        bp_state.bp_loopy(1, True)
+        distri_z = bp_state.get_distribution(target_var)
+
+        distri_z_ref = np.zeros(distri_z.shape)
+
+        for x in range(nc):
+            for j in range(n):
+                if sub:
+                    new_idx = (x - y_cases[j] - w) % nc
+                else:
+                    new_idx = (x + y_cases[j] + w) % nc
+                distri_z_ref[j, new_idx] = distri_x[j, x]
+
+        assert np.allclose(distri_z_ref, distri_z)
+
+
 def test_ADD_multiple():
     """
     Test ADD between distributions

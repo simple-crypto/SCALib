@@ -388,8 +388,22 @@ impl Distribution {
             inv_and_cst_slice(d.as_slice_mut().unwrap(), cst.get(i));
         });
     }
-    pub fn add_cst(&mut self, cst: &PublicValue) -> Self {
-        todo!()
+    pub fn add_cst(&mut self, cst: &PublicValue, sub: bool) {
+        let nc = self.shape.1;
+        if let DistrRepr::Full(v) = &mut self.value {
+            let mut tmp = vec![0.0f64; nc];
+            for (mut d, cst) in v.outer_iter_mut().zip(cst.iter(self.shape.0)) {
+                let d = d.as_slice_mut().unwrap();
+                let mut cst = usize::try_from(cst).unwrap() % nc;
+                if sub {
+                    cst = (nc - cst) % nc;
+                }
+                let size_first_block = self.shape.1 - cst;
+                tmp[cst..].copy_from_slice(&d[..size_first_block]);
+                tmp[..cst].copy_from_slice(&d[size_first_block..]);
+                d.copy_from_slice(tmp.as_slice());
+            }
+        }
     }
     pub fn for_each<F, G>(&mut self, mut f: F, default: G)
     where
