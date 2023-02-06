@@ -246,19 +246,28 @@ impl BPState {
         self.get_inner_mut().propagate_var(var_id);
         Ok(())
     }
+    pub fn propagate_all_vars(&mut self) -> PyResult<()> {
+        self.get_inner_mut().propagate_all_vars();
+        Ok(())
+    }
     pub fn propagate_factor_all(&mut self, factor: &str) -> PyResult<()> {
         let factor_id = self.get_factor(factor)?;
         self.get_inner_mut().propagate_factor_all(factor_id);
         Ok(())
     }
-    pub fn propagate_factor(&mut self, factor: &str, dest: Vec<&str>) -> PyResult<()> {
+    pub fn propagate_factor(
+        &mut self,
+        factor: &str,
+        dest: Vec<&str>,
+        clear_incoming: bool,
+    ) -> PyResult<()> {
         let factor_id = self.get_factor(factor)?;
         let dest = dest
             .iter()
             .map(|v| self.get_var(v))
             .collect::<Result<Vec<_>, _>>()?;
         self.get_inner_mut()
-            .propagate_factor(factor_id, dest.as_slice());
+            .propagate_factor(factor_id, dest.as_slice(), clear_incoming);
         Ok(())
     }
     pub fn propagate_loopy_step(&mut self, n_steps: u32) {
@@ -268,6 +277,17 @@ impl BPState {
         FactorGraph {
             inner: Some(self.get_inner().get_graph().clone()),
         }
+    }
+    pub fn propagate_acyclic(
+        &mut self,
+        dest: &str,
+        clear_intermediates: bool,
+        clear_evidence: bool,
+    ) -> PyResult<()> {
+        let var = self.get_var(dest)?;
+        self.get_inner_mut()
+            .propagate_acyclic(var, clear_intermediates, clear_evidence)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 }
 

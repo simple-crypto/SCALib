@@ -1,6 +1,7 @@
 use super::factor_graph as fg;
+use super::factor_graph::{FactorId, FactorVec, Node, VarVec};
 use super::fg_parser;
-use super::{ClassVal, NamedList};
+use super::{ClassVal, NamedList, VarId};
 use indexmap::IndexMap;
 use thiserror::Error;
 
@@ -43,6 +44,9 @@ impl fg::FactorGraph {
             edges: fg::EdgeVec::new(),
             publics: NamedList::new(),
             tables: NamedList::new(),
+            petgraph: petgraph::Graph::new_undirected(),
+            var_graph_ids: VarVec::new(),
+            factor_graph_ids: FactorVec::new(),
         }
     }
     fn check_new_var(&self, name: &String) -> Result<(), GraphBuildError> {
@@ -53,13 +57,15 @@ impl fg::FactorGraph {
     }
     fn add_var(&mut self, name: String, multi: bool) -> Result<(), GraphBuildError> {
         self.check_new_var(&name)?;
-        self.vars.insert(
+        let (var_idx, _) = self.vars.insert_full(
             name,
             fg::Var {
                 multi,
                 edges: IndexMap::new(),
             },
         );
+        self.var_graph_ids
+            .push(self.petgraph.add_node(Node::Var(VarId::from_idx(var_idx))));
         Ok(())
     }
     fn add_pub(&mut self, name: String, multi: bool) -> Result<(), GraphBuildError> {
@@ -88,7 +94,11 @@ impl fg::FactorGraph {
         kind: fg::FactorKind<&str>,
         vars: impl Iterator<Item = &'a str>,
     ) -> Result<(), GraphBuildError> {
-        let factor_id = fg::FactorId::from_idx(self.factors.len());
+        if self.factors.contains_key(&name) {
+            return Err(GraphBuildError::MultiplePropDecl(name));
+        }
+        let factor_entry = self.factors.entry(name.clone());
+        let factor_id = FactorId::from_idx(factor_entry.index());
         let mut edges = IndexMap::new();
         let mut publics = Vec::new();
         let mut multi = false;
@@ -143,12 +153,19 @@ impl fg::FactorGraph {
             has_res: has_res.expect("at least one var"),
             publics,
         };
-        if self.factors.contains_key(&name) {
-            return Err(GraphBuildError::MultiplePropDecl(name));
-        } else {
-            self.factors.insert(name, factor);
-        }
+        factor_entry.or_insert(factor);
+        self.factor_graph_ids
+            .push(self.petgraph.add_node(Node::Factor(factor_id)));
         Ok(())
+    }
+    fn add_graph_edges(&mut self) {
+        for (i, e) in self.edges.iter_enumerated() {
+            self.petgraph.add_edge(
+                self.var_graph_ids[e.var],
+                self.factor_graph_ids[e.factor],
+                i,
+            );
+        }
     }
 }
 impl<T> fg::FactorKind<T> {
@@ -259,6 +276,7 @@ pub(super) fn build_graph(
             )?;
         }
     }
+    graph.add_graph_edges();
     Ok(graph)
 }
 

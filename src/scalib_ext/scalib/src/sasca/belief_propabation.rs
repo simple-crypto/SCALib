@@ -1,8 +1,7 @@
-use itertools::Itertools;
 use thiserror::Error;
 
 use super::factor_graph::{
-    EdgeId, EdgeSlice, EdgeVec, Factor, FactorId, FactorKind, FactorVec, Table, VarId, VarVec,
+    EdgeId, EdgeSlice, EdgeVec, Factor, FactorId, FactorKind, FactorVec, Node, Table, VarId, VarVec,
 };
 use super::{Distribution, FactorGraph, PublicValue};
 
@@ -26,6 +25,8 @@ pub struct BPState {
     // beliefs on each edge
     belief_from_var: EdgeVec<Distribution>,
     belief_to_var: EdgeVec<Distribution>,
+    // save if cyclic
+    cyclic: bool,
 }
 
 #[derive(Debug, Clone, Error)]
@@ -38,6 +39,8 @@ pub enum BPError {
     WrongDistributionNmulti(usize, u32),
     #[error("The distribution is not is C memory order. Shape: {0:?}, strides: {1:?}.")]
     DistributionLayout(Vec<usize>, Vec<isize>),
+    #[error("Cannot run acyclic BP on a cyclic graph.")]
+    NotAcyclic,
 }
 
 impl BPState {
@@ -57,6 +60,7 @@ impl BPState {
             .map(|e| Distribution::new(graph.factor(e.factor).multi, graph.nc, nmulti))
             .collect();
         let pub_reduced = graph.reduce_pub(&public_values);
+        let cyclic = graph.is_cyclic(nmulti > 1);
         Self {
             evidence: var_state.clone(),
             belief_from_var: beliefs.clone(),
@@ -66,65 +70,11 @@ impl BPState {
             nmulti,
             public_values: FactorVec::from_vec(public_values),
             pub_reduced,
+            cyclic,
         }
     }
     pub fn is_cyclic(&self) -> bool {
-        // Special case to avoid further checks
-        if self.graph.vars.len() == 0 {
-            return false;
-        }
-        // We do a BFS walk on the graph, remembering the already visited
-        // nodes.
-        // We explore all the connected components of the graph.
-        // If we visit a node we already visited, then the graph is cyclic.
-        // Moreover, if there is more than one 'SINGLE' node in a connected
-        // compoment and nmulti > 1, the graph is cyclic too.
-        let mut seen_vars: VarVec<bool> = self.graph.range_vars().map(|_| false).collect();
-        let mut visit_stack: Vec<(VarId, Option<FactorId>)> = Vec::new();
-        for start_var in self.graph.range_vars() {
-            dbg!(start_var);
-            dbg!(&seen_vars);
-            dbg!(&visit_stack);
-            let mut n_single_vars = 0;
-            if !seen_vars[start_var] {
-                dbg!(start_var);
-                visit_stack.push((start_var, None));
-                seen_vars[start_var] = true;
-                if !self.graph.var(start_var).multi {
-                    n_single_vars += 1;
-                }
-            }
-            while let Some((visited_var, parent_factor)) = visit_stack.pop() {
-                dbg!(visited_var);
-                // Enumerate over all incident edges, each edge giving a factor,
-                // then we iter over all adjacent vars to the factor
-                for factor_id in dbg!(&self.graph.var(visited_var).edges)
-                    .keys()
-                    .filter(|f| Some(**f) != parent_factor)
-                {
-                    for var_id in self.graph.factor(*factor_id).edges.keys() {
-                        if *var_id != visited_var {
-                            dbg!(*var_id);
-                            if seen_vars[*var_id] {
-                                dbg!("ret true");
-                                return true;
-                            } else {
-                                seen_vars[*var_id] = true;
-                                visit_stack.push((*var_id, Some(*factor_id)));
-                                if !self.graph.var(*var_id).multi {
-                                    n_single_vars += 1;
-                                    if self.nmulti > 1 && n_single_vars > 1 {
-                                        dbg!("ret true");
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return false;
+        self.cyclic
     }
     pub fn get_graph(&self) -> &std::sync::Arc<FactorGraph> {
         &self.graph
@@ -175,15 +125,14 @@ impl BPState {
     // belief to var -> var
     // var -> belief to func
     // trhough func: towards all vars, towards a subset of vars
-    pub fn propagate_to_var(&mut self, var: VarId) {
+    pub fn propagate_to_var(&mut self, var: VarId, clear_evidence: bool) {
         let distr_iter = self
             .graph
             .var(var)
             .edges
             .values()
             .map(|e| &self.belief_to_var[*e]);
-        self.var_state[var].reset();
-        self.var_state[var] = self.evidence[var].clone();
+        self.var_state[var] = self.evidence[var].take_or_clone(clear_evidence);
         // We multiply_reg to avoid having very low values in the product.
         // Since inputs should not be too big, we should not have any overflow.
         // Underflow my happen, since probas are lower-bounded by MIN_PROBA**2.
@@ -201,7 +150,7 @@ impl BPState {
         self.belief_from_var[edge] =
             Distribution::divide_reg(&self.var_state[var], &self.belief_to_var[edge]);
     }
-    pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId]) {
+    pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId], clear_incoming: bool) {
         let factor = self.graph.factor(factor_id);
         // Pre-erase to have buffers available in cache allocator.
         for d in dest {
@@ -212,7 +161,7 @@ impl BPState {
         macro_rules! prop_factor {
             ($f:ident, $($arg:expr),*) => {
                 {
-                    let it = $f(factor, &mut self.belief_from_var, dest, $($arg,)*);
+                    let it = $f(factor, &mut self.belief_from_var, dest, clear_incoming, $($arg,)*);
                     for (distr, dest) in it.zip(dest.iter()) {
                         self.belief_to_var[factor.edges[dest]] = distr;
                     }
@@ -220,16 +169,15 @@ impl BPState {
             };
         }
         match &factor.kind {
-            // TODO know when to erase incoming
             FactorKind::AND { .. } => {
-                prop_factor!(factor_gen_and, &self.pub_reduced[factor_id], false)
+                prop_factor!(factor_gen_and, &self.pub_reduced[factor_id])
             }
-            FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id], false),
-            FactorKind::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32, false),
-            FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id], false),
+            FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id]),
+            FactorKind::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32),
+            FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id]),
             FactorKind::MUL => prop_factor!(factor_mul, &self.pub_reduced[factor_id]),
             FactorKind::LOOKUP { table } => {
-                prop_factor!(factor_lookup, &self.graph.tables[*table], false)
+                prop_factor!(factor_lookup, &self.graph.tables[*table])
             }
         }
     }
@@ -237,7 +185,7 @@ impl BPState {
     // Higher-level
     pub fn propagate_factor_all(&mut self, factor: FactorId) {
         let dest: Vec<_> = self.graph.factor(factor).edges.keys().cloned().collect();
-        self.propagate_factor(factor, dest.as_slice());
+        self.propagate_factor(factor, dest.as_slice(), false);
     }
     pub fn propagate_from_var_all(&mut self, var: VarId) {
         for i in 0..self.graph.var(var).edges.len() {
@@ -248,22 +196,55 @@ impl BPState {
         }
     }
     pub fn propagate_var(&mut self, var: VarId) {
-        self.propagate_to_var(var);
+        self.propagate_to_var(var, false);
         self.propagate_from_var_all(var);
+    }
+    pub fn propagate_all_vars(&mut self) {
+        for var_id in self.graph.range_vars() {
+            self.propagate_var(var_id);
+        }
     }
     pub fn propagate_loopy_step(&mut self, n_steps: u32) {
         for _ in 0..n_steps {
-            for var_id in self.graph.range_vars() {
-                self.propagate_var(var_id);
-            }
             for factor_id in self.graph.range_factors() {
                 self.propagate_factor_all(factor_id);
             }
+            self.propagate_all_vars();
         }
     }
-    pub fn propagate_full(&mut self) {
-        // for non-cyclic graph
-        todo!()
+    pub fn propagate_acyclic(
+        &mut self,
+        var: VarId,
+        clear_intermediates: bool,
+        clear_evidence: bool,
+    ) -> Result<(), BPError> {
+        if self.is_cyclic() {
+            return Err(BPError::NotAcyclic);
+        }
+        for (node, parent) in self.graph.propagation_order(var) {
+            dbg!(&self);
+            dbg!(node);
+            dbg!(parent);
+            match node {
+                Node::Var(var_id) => {
+                    self.propagate_to_var(var_id, clear_evidence);
+                    if let Some(dest_factor) = parent {
+                        let edge_id = self.graph.var(var_id).edges[&dest_factor.factor().unwrap()];
+                        self.propagate_from_var(edge_id);
+                    }
+                    if clear_intermediates {
+                        for e in self.graph.var(var_id).edges.values() {
+                            self.belief_to_var[*e].reset();
+                        }
+                    }
+                }
+                Node::Factor(factor_id) => {
+                    let parent_var = parent.unwrap().var().unwrap();
+                    self.propagate_factor(factor_id, &[parent_var], clear_intermediates);
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -271,8 +252,8 @@ fn factor_gen_and<'a>(
     factor: &'a Factor,
     belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
-    pub_red: &PublicValue,
     clear_incoming: bool,
+    pub_red: &PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
     let FactorKind::AND { vars_neg } = &factor.kind else { unreachable!() };
     // Special case for single-input AND
@@ -281,11 +262,7 @@ fn factor_gen_and<'a>(
             .iter()
             .map(|var| {
                 let i = factor.edges.get_index_of(var).unwrap();
-                let mut distr = if clear_incoming {
-                    belief_from_var[factor.edges[1 - i]].reset()
-                } else {
-                    belief_from_var[factor.edges[1 - i]].clone()
-                };
+                let mut distr = belief_from_var[factor.edges[1 - i]].take_or_clone(clear_incoming);
                 if vars_neg[1 - i] {
                     distr.not();
                 }
@@ -327,11 +304,7 @@ fn factor_gen_and<'a>(
     // We do not take the product of all factors then divide because some factors could be zero.
     let mut dest_transformed = Vec::with_capacity(dest.len());
     for ((i, e), taken) in factor.edges.values().enumerate().zip(taken_dest.iter()) {
-        let mut d = if clear_incoming {
-            belief_from_var[*e].reset()
-        } else {
-            belief_from_var[*e].clone()
-        };
+        let mut d = belief_from_var[*e].take_or_clone(clear_incoming);
         if vars_neg[i] {
             d.not();
         }
@@ -395,8 +368,8 @@ fn factor_xor<'a>(
     factor: &'a Factor,
     belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
-    pub_red: &PublicValue,
     clear_incoming: bool,
+    pub_red: &PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
     // Special case for single-input XOR
     if factor.edges.len() == 2 {
@@ -404,11 +377,7 @@ fn factor_xor<'a>(
             .iter()
             .map(|var| {
                 let i = factor.edges.get_index_of(var).unwrap();
-                let mut distr = if clear_incoming {
-                    belief_from_var[factor.edges[1 - i]].reset()
-                } else {
-                    belief_from_var[factor.edges[1 - i]].clone()
-                };
+                let mut distr = belief_from_var[factor.edges[1 - i]].take_or_clone(clear_incoming);
                 distr.xor_cst(pub_red);
                 distr
             })
@@ -438,11 +407,7 @@ fn factor_xor<'a>(
             // Single uniform op, only compute for that one.
             for e in factor.edges.values() {
                 if e != e_dest {
-                    let mut d = if clear_incoming {
-                        belief_from_var[*e].reset()
-                    } else {
-                        belief_from_var[*e].clone()
-                    };
+                    let mut d = belief_from_var[*e].take_or_clone(clear_incoming);
                     d.wht();
                     d.make_non_zero_signed();
                     acc.multiply(Some(&d).into_iter());
@@ -460,11 +425,7 @@ fn factor_xor<'a>(
         // We do take the product of all factors then divide because some factors could be zero.
         let mut dest_wht = Vec::with_capacity(dest.len());
         for (e, taken) in factor.edges.values().zip(taken_dest.iter()) {
-            let mut d = if clear_incoming {
-                belief_from_var[*e].reset()
-            } else {
-                belief_from_var[*e].clone()
-            };
+            let mut d = belief_from_var[*e].take_or_clone(clear_incoming);
             assert!(d.is_full());
             d.wht();
             // TODO remove this ?
@@ -495,15 +456,15 @@ fn factor_not<'a>(
     factor: &'a Factor,
     belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
-    inv_cst: u32,
     clear_incoming: bool,
+    inv_cst: u32,
 ) -> impl Iterator<Item = Distribution> + 'a {
     factor_xor(
         factor,
         belief_from_var,
         dest,
-        &PublicValue::Single(inv_cst),
         clear_incoming,
+        &PublicValue::Single(inv_cst),
     )
 }
 
@@ -512,8 +473,8 @@ fn factor_add<'a>(
     factor: &'a Factor,
     belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
-    pub_red: &PublicValue,
     clear_incoming: bool,
+    pub_red: &PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
     // Special case for single-input ADD
     if factor.edges.len() == 2 {
@@ -606,6 +567,7 @@ fn factor_mul<'a>(
     factor: &'a Factor,
     belief_from_var: &'a EdgeSlice<Distribution>,
     dest: &'a [VarId],
+    clear_incoming: bool,
     pub_red: &PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
     #![allow(unreachable_code)]
@@ -617,8 +579,8 @@ fn factor_lookup<'a>(
     factor: &'a Factor,
     belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
-    table: &'a Table,
     clear_incoming: bool,
+    table: &'a Table,
 ) -> impl Iterator<Item = Distribution> + 'a {
     // we know that there is not constant involved
     assert_eq!(factor.edges.len(), 2);

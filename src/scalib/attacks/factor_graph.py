@@ -69,7 +69,7 @@ class FactorGraph:
     >>> y_leakage = y_leakage / y_leakage.sum(axis=1, keepdims=True)
     >>> bp.set_evidence("y",y_leakage)
     >>> # Solve graph
-    >>> bp.bp_loopy(it=4)
+    >>> bp.bp_loopy(it=3, initialize_states=True)
     >>> # Get key distribution and derive key guess
     >>> k_distri = bp.get_distribution("k")
     >>> key_guess = np.argmax(k_distri)
@@ -290,15 +290,39 @@ class BPState:
         """
         return self._inner.propagate_factor_all(factor)
 
-    def bp_loopy(self, it: int):
+    def bp_loopy(self, it: int, initialize_states: bool):
         """Runs belief propagation algorithm on the current state of the graph.
 
         Parameters
         ----------
         it :
             Number of iterations of belief propagation.
+        initialize_states:
+            Update variable distributions before running the BP iterations.
         """
+        if initialize_states:
+            self._inner.propagate_all_vars()
         self._inner.propagate_loopy_step(it)
+
+    def bp_acyclic(
+        self,
+        dest: str,
+        *,
+        clear_intermediates: bool = True,
+        clear_evidence: bool = False,
+    ):
+        """Runs belief propagation algorithm on the current state of the graph.
+
+        Parameters
+        ----------
+        dest:
+            Variable for which the belief propagation is computed.
+        clear_intermediates:
+            Drop the intermetidate distributions and beliefs that are computed.
+        clear_evidence:
+            Drop the evidence for the variables, once used in the algorithm.
+        """
+        self._inner.propagate_acyclic(dest, clear_intermediates, clear_evidence)
 
     def debug(self):
         s = []

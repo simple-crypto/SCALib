@@ -1,7 +1,7 @@
 use std::fmt;
 
 use indexmap::IndexMap;
-
+use petgraph::visit::Walker;
 use thiserror::Error;
 
 use super::{ClassVal, NamedList};
@@ -105,6 +105,12 @@ pub(super) struct Table {
     pub(super) values: Vec<ClassVal>,
 }
 
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
+pub(super) enum Node {
+    Var(VarId),
+    Factor(FactorId),
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FactorGraph {
     pub(super) nc: usize,
@@ -113,6 +119,9 @@ pub struct FactorGraph {
     pub(super) edges: EdgeVec<Edge>,
     pub(super) publics: NamedList<Public>,
     pub(super) tables: NamedList<Table>,
+    pub(super) petgraph: petgraph::Graph<Node, EdgeId, petgraph::Undirected>,
+    pub(super) var_graph_ids: VarVec<petgraph::graph::NodeIndex>,
+    pub(super) factor_graph_ids: FactorVec<petgraph::graph::NodeIndex>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -333,5 +342,57 @@ impl FactorGraph {
             PublicValue::Single(factor_kind.neutral(self.nc)),
             merge_inner,
         )
+    }
+
+    pub(super) fn is_cyclic(&self, multi_exec: bool) -> bool {
+        if petgraph::algo::is_cyclic_undirected(&self.petgraph) {
+            return true;
+        }
+        if multi_exec {
+            return petgraph::algo::kosaraju_scc(&self.petgraph)
+                .into_iter()
+                .any(|scc| {
+                    scc.into_iter()
+                        .filter(|n| match self.petgraph[*n] {
+                            Node::Var(var_id) => {
+                                !self.vars.get_index(var_id.index()).unwrap().1.multi
+                            }
+                            Node::Factor(_) => false,
+                        })
+                        .count()
+                        > 1
+                });
+        } else {
+            return false;
+        }
+    }
+
+    pub(super) fn propagation_order(&self, var: VarId) -> Vec<(Node, Option<Node>)> {
+        let mut propagations = vec![(Node::Var(var), None)];
+        petgraph::visit::depth_first_search(&self.petgraph, [self.var_graph_ids[var]], |event| {
+            if let petgraph::visit::DfsEvent::TreeEdge(parent, node) = event {
+                propagations.push((self.petgraph[node], Some(self.petgraph[parent])));
+            }
+            petgraph::visit::Control::<()>::Continue
+        });
+        propagations.reverse();
+        propagations
+    }
+}
+
+impl Node {
+    pub(super) fn var(self) -> Option<VarId> {
+        if let Node::Var(id) = self {
+            Some(id)
+        } else {
+            None
+        }
+    }
+    pub(super) fn factor(self) -> Option<FactorId> {
+        if let Node::Factor(id) = self {
+            Some(id)
+        } else {
+            None
+        }
     }
 }

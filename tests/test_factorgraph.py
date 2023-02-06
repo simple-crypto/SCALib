@@ -44,7 +44,7 @@ def test_table():
 
     bp_state.set_evidence("x", distri_x)
 
-    bp_state.bp_loopy(2)
+    bp_state.bp_loopy(1, True)
     distri_y = bp_state.get_distribution("y")
 
     distri_y_ref = np.zeros(distri_x.shape)
@@ -80,7 +80,7 @@ def test_table_non_bij():
     bp_state.set_evidence("x", distri_x)
     bp_state.set_evidence("y", distri_y)
 
-    bp_state.bp_loopy(2)
+    bp_state.bp_loopy(1, True)
     distri_x = bp_state.get_distribution("x")
     distri_y = bp_state.get_distribution("y")
 
@@ -115,7 +115,7 @@ def test_not():
     bp_state.set_evidence("x", distri_x)
     bp_state.set_evidence("y", distri_y)
 
-    bp_state.bp_loopy(2)
+    bp_state.bp_loopy(1, True)
     distri_x_bp = bp_state.get_distribution("x")
     distri_y_bp = bp_state.get_distribution("y")
 
@@ -149,7 +149,7 @@ def test_and_public():
     bp_state = BPState(graph, n, {"p": public})
     bp_state.set_evidence("x", distri_x)
 
-    bp_state.bp_loopy(2)
+    bp_state.bp_loopy(2, False)
 
     distri_y = bp_state.get_distribution("y")
     distri_y_ref = np.zeros(distri_x.shape)
@@ -158,6 +158,11 @@ def test_and_public():
         distri_y_ref[np.arange(n), y] += distri_x[np.arange(n), x]
 
     assert np.allclose(distri_y_ref, distri_y)
+
+    bp_state2 = BPState(graph, n, {"p": public})
+    bp_state2.set_evidence("x", distri_x)
+    bp_state2.bp_acyclic("y")
+    assert np.allclose(distri_y_ref, bp_state2.get_distribution("y"))
 
 
 def test_xor_public():
@@ -183,7 +188,7 @@ def test_xor_public():
     bp_state = BPState(graph, n, {"p": public, "p2": public2})
     bp_state.set_evidence("x", distri_x)
 
-    bp_state.bp_loopy(2)
+    bp_state.bp_loopy(2, False)
 
     distri_y = bp_state.get_distribution("y")
     distri_y_ref = np.zeros(distri_x.shape)
@@ -271,7 +276,7 @@ def test_AND():
         print(distri_y_ref)
         print(distri_z_ref)
 
-        bp_state.bp_loopy(2)
+        bp_state.bp_loopy(1, True)
         distri_x = bp_state.get_distribution("x")
         distri_y = bp_state.get_distribution("y")
         distri_z = bp_state.get_distribution("z")
@@ -333,7 +338,7 @@ def test_and_not_or():
     bp_state.set_evidence("x", distri_x)
     bp_state.set_evidence("y", distri_y)
     bp_state.set_evidence("z", distri_z)
-    bp_state.bp_loopy(2)
+    bp_state.bp_loopy(1, True)
     import sys
 
     print("BP2", file=sys.stderr)
@@ -343,13 +348,22 @@ def test_and_not_or():
     bp_state2.set_evidence("x", distri_x)
     bp_state2.set_evidence("y", distri_y)
     bp_state2.set_evidence("z", distri_z)
-    bp_state2.bp_loopy(8)
+    bp_state2.bp_loopy(8, False)
 
     for v in ["x", "y", "z"]:
         print(v)
         d = bp_state.get_distribution(v)
         d2 = bp_state2.get_distribution(v)
         assert np.allclose(d, d2)
+
+    bp_state3 = BPState(graph, n, {"p": p, "t": t})
+    bp_state3.set_evidence("x", distri_x)
+    bp_state3.set_evidence("y", distri_y)
+    bp_state3.set_evidence("z", distri_z)
+    for v in ["x", "y", "z"]:
+        print(v)
+        bp_state3.bp_acyclic(v)
+        assert np.allclose(bp_state2.get_distribution(v), bp_state3.get_distribution(v))
 
 
 @disable
@@ -378,7 +392,7 @@ def test_ADD():
     bp_state.set_evidence("x", distri_x)
     bp_state.set_evidence("y", distri_y)
 
-    bp_state.bp_loopy(1)
+    bp_state.bp_loopy(1, True)
     distri_z = bp_state.get_distribution("z")
 
     distri_z_ref = np.zeros(distri_z.shape)
@@ -421,7 +435,7 @@ def test_ADD_multiple():
     bp_state.set_evidence("y", distri_y)
     bp_state.set_evidence("w", distri_w)
 
-    bp_state.bp_loopy(1)
+    bp_state.bp_loopy(1, True)
     distri_z = bp_state.get_distribution("z")
 
     distri_z_ref = np.zeros(distri_z.shape)
@@ -464,7 +478,7 @@ def test_MUL():
     bp_state.set_evidence("x", distri_x)
     bp_state.set_evidence("y", distri_y)
 
-    bp_state.bp_loopy(1)
+    bp_state.bp_loopy(1, True)
     distri_z = bp_state.get_distribution("z")
 
     distri_z_ref = np.zeros(distri_z.shape)
@@ -527,7 +541,7 @@ def test_xor():
     bp_state.propagate_factor("s2")
     bp_state.propagate_var("z")
 
-    bp_state2.bp_loopy(3)
+    bp_state2.bp_loopy(2, True)
 
     distri_z = bp_state.get_distribution("z")
     distri_z2 = bp_state2.get_distribution("z")

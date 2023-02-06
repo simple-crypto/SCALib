@@ -119,6 +119,14 @@ impl Distribution {
         new
     }
 
+    pub fn take_or_clone(&mut self, reset: bool) -> Self {
+        if reset {
+            self.reset()
+        } else {
+            self.clone()
+        }
+    }
+
     pub fn multiply<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>) {
         self.multiply_inner(factors, 0.0, 0.0);
     }
