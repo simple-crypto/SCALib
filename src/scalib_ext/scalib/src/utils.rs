@@ -37,15 +37,15 @@ where
                 // Let's now create the progress bar.
                 // indicatif::ProgressBar does not seem to offer a way to set the
                 // start time, so we ignore the slight start timing offset.
-                let pb = ProgressBar::new(n_iter);
-                pb.set_style(
-                    ProgressStyle::default_spinner()
-                        .template("{msg} [{elapsed_precise}] [{bar:40.cyan/blue}] (ETA {eta})")
-                        .on_finish(ProgressFinish::AndClear),
-                );
-                pb.set_message(pb_msg);
-                pb.set_position(it_cnt_ref.get());
-                pb.reset_eta();
+                let pb = ProgressBar::new(n_iter)
+                    .with_style(
+                        ProgressStyle::default_spinner()
+                            .template("{msg} [{elapsed_precise}] [{bar:40.cyan/blue}] (ETA {eta})")
+                            .unwrap(),
+                    )
+                    .with_finish(ProgressFinish::AndClear)
+                    .with_message(pb_msg)
+                    .with_position(it_cnt_ref.get());
                 while !finished_ref.load(std::sync::atomic::Ordering::Acquire) {
                     pb.set_position(it_cnt_ref.get());
                     thread::park_timeout(Duration::from_millis(50));
