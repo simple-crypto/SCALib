@@ -11,7 +11,7 @@ help:
 	@echo "    docs: Generate docs."
 	@echo "    codestyle: Check fromatting."
 	@echo "    fmt: Format code."
-	@echo "    wheel_locql: Build a wheel for the local machine."
+	@echo "    wheel_local: Build a wheel for the local machine."
 	@echo "    wheel_portable: Build a wheel for with maximal portability (at the expense of efficiency)."
 	@echo "    wheel_avx2: Build a wheel with AVX2 instruction (should work on any recent x86-64)."
 
@@ -40,8 +40,8 @@ wheel_avx2:
 	SCALIB_AVX2=1 CARGO_TARGET_DIR=.cargo_build_avx2 pip wheel . --no-deps
 
 wheel_local:
-	RUSTFLAGS="-C target-cpu=native" CARGO_TARGET_DIR=.cargo_build pip wheel . --no-deps
+	CARGO_TARGET_DIR=.cargo_build pip wheel . --no-deps
 
 wheel_portable:
-	CARGO_TARGET_DIR=.cargo_build_native pip wheel . --no-deps
+	SCALIB_PORTABLE=1 CARGO_TARGET_DIR=.cargo_build_portable pip wheel . --no-deps
 

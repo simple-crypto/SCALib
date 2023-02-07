@@ -5,22 +5,21 @@ contains state-of-the-art tools for side-channel evaluation. It focuses on
 providing efficient implementations of analysis methods widely used by the
 side-channel community and maintaining a flexible and simple interface.
 
-The source code is available on `GitHub <https://github.com/simple-crypto/SCALib>`_!
+SCALib is on `GitHub <https://github.com/simple-crypto/SCALib>`_!
 
 Usability & Efficiency
 ----------------------
-SCALib main advantages are:
+SCALib main characteristics are:
 
-1. **High Performances**: Despite SCALib is a Python package, it embeds a Rust
-   back-end which enables a fine grain control of the implementation. Thanks to
-   the Rust back-end, SCALib enables efficient parallelism. This is obtained
-   thanks to `rayon <https://docs.rs/crate/rayon/latest>`_.
-2. **Flexible & Simple Interface**: The interface provided by SCALib aims to be
-   as simple and flexible as possible. As an example, the API is mostly based
-   on numpy arrays. 
-3. **Incremental APIs**: SCALib leverages as much as possible incremental APIs. That is, 
-   it is possible to feed the data in multiple chunks to avoid loading multiple times
-   the same data into RAM. 
+1. **High Performances**: Under its Python interface, most of SCALib
+   functionality is implemented in optimized and highly parallel Rust code.
+2. **Flexible & Simple Interface**: SCALib is a simple library. It provides a
+   simple `numpy`-based interface, therefore it is simple to use (see `examples
+   <https://github.com/simple-crypto/scalib/tree/main/examples>`_) while giving
+   you freedom: you can simply call it in any Python workflow.
+3. **Streaming APIs**: Most SCALib APIs allow for incremenal processing of chunks of data.
+   This enables streaming implementations: with large datasets, no neeed to load everything at once of load multiple times.
+   You don't even need to store datasets: you can compute on-the-fly.
 
 Available features
 ------------------
@@ -29,76 +28,54 @@ workflow`_ for more details:
 
 - :doc:`source/scalib.metrics`:
 
-  - `SNR`: Signal-to-noise ratio.
-  - `Ttest`: T-test estimation.
+  - Signal-to-noise ratio (SNR).
+  - Uni- and Multi-variate, arbitrary-order T-test estimation.
 
 - :doc:`source/scalib.modeling`: 
 
-  - `LDAClassifier`: Template in linear subspaces.
+  - Templates in linear subspaces (LDA).
+
 - :doc:`source/scalib.attacks`:
 
-  - `SASCAGraph`: Generalization of `Divide & Conquer` with Soft Analytical Attacks.
+  - Generalization of `Divide & Conquer` with Soft Analytical Attacks (SASCA).
+
 - :doc:`source/scalib.postprocessing`:
 
-  - `rankestimation`: Histogram based full key rank estimation.
-- :doc:`source/scalib.configuration`:
-
-  - `threading`: provides a fine control on the number of threads used by SCALib.  
+  - Full key rank estimation.
 
 Getting started
 ===============
 
 Install
 -------
-You can install SCALib by using PyPi packages and running:
+
+See the `README <https://github.com/simple-crypto/SCALib>`_. TL;DR:
 
 .. code-block::
 
    pip install scalib
 
-Wheels for Windows and Linux are provided. More information about source
-compilation, checkout `DEVELOP
-<https://github.com/simple-crypto/SCALib/blob/main/DEVELOP.rst>`_ page.
-Especially, we recommand to compile SCALib to get maximal performances.
-
 
 SCALib workflow
 ---------------
 
-The current version of SCALib contains modules for all the necessary steps for a
-profiled side-channel attack. Even if modules of SCALib can be used
-independently, a typical usage of SCALib for it goes in four steps:
+The current version of SCALib contains algorithms for many steps of a
+side-channel security evaluation.
+These are grouped in four categories:
 
-1. **Metrics**: In this step, standard metrics are evaluated from the
-   measurements. This helps to find point-of-interest (POIs), quantify avaiable information, etc. 
-   When applicable, these metrics are implemented with a one-pass
-   algorithm to save the cost of data load / store.
+1. **Metrics**: Standard metrics leakage metrics.
+   This helps to find point-of-interest (POIs), quantify avaiable information, etc. 
 
-2. **Modeling**: In this step, models are built to extract information about a
-   variable `y` from the leakage. Modeling methods work in two phases. The
-   first one is to `fit(t,x)` with traces `t` and target values `x`. This creates the
-   model parameters. In the second step, this model can be used to 
-   `predict_proba(t)` that returns the probability of every possible target values based on the
-   traces `t` and the model.
+2. **Modeling**: Tools to mount profiled attacks first ``.fit(...)``, then ``.predict_proba(...)``.
 
-3. **Attacks**: This modules contains attack methodologies. It essentially uses
-   the probabilities from the `modeling` step in order and recombine them to
-   recover a key. The module `SASCAGraph` is an extension of Divide & Conquer attacks that leverage `soft analytical side-channel attacks`. It allows to define `PROPERTY` that link intermediate varibles within an implementation.
-   By providing the `SASCAGraph` with the distributions of these variables, it propagates information on all the variables (e.g. secret keys).
+3. **Attacks**: Once your have profiles, find the key. This currently contains
+   an implementation the SASCA.
 
-4. **PostProcessing**: Once the attack has been performed, the postprocessing
-   allows to evaluate the efficiency of the attack. Namely by estimating the
-   rank of the correct key with `rank_accuracy`, it allows to quantify what is
-   the remaining computational power that is needed by the adversary to recover
-   the correct key.
-
-Full example of SCALib is available `here <https://github.com/simple-crypto/scalib/tree/main/examples/aes_simulation>`_ for an unprotected simulated AES. 
+4. **PostProcessing**: Show the results of a trial attack.
+   This currently contains key rank-estimation routines.
 
 Pseudo-example
---------------
-
-Next, we detail a short pseudo example which illustrates the usage of SCALib. 
-For a full running example, please visit `this example <https://github.com/simple-crypto/scalib/tree/main/examples/aes_simulation>`_. 
+##############
 
 .. code-block::
 
@@ -137,13 +114,15 @@ For a full running example, please visit `this example <https://github.com/simpl
      key_guess = np.argmax(k_distri[0,:])
 
 
+See the `full examples <https://github.com/simple-crypto/scalib/tree/main/examples>`_. 
 
 Where is SCALib used ?
 ======================
 
 We strongly appreciate if you could mention to us your usage SCALib 
 for concrete projects so that we can add you to the lists below. Please send 
-an email to Olivier Bronchain and Gaëtan Cassiers, or directly open a pull request.
+an email to Olivier Bronchain and Gaëtan Cassiers, or directly
+`open a pull request <https://github.com/simple-crypto/SCALib/edit/main/docs/index.rst>`_.
 
 Scientific publications
 -----------------------
@@ -186,26 +165,9 @@ Concrete evaluations
 
 About us
 ========
-SCALib has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored
-of SCALib starting from the first version. The SCALib project is part of `SIMPLE-Crypto
-<https://www.simple-crypto.dev/>`_ and is now maintained in that context.
-
-
-Contributions and issues
-========================
-
-We are happy to take any suggestion for features would be useful for
-side-channel evaluators.
-We very much welcome code, documentation, examples, etc. contributions.
-`DEVELOP <https://github.com/simple-crypto/SCALib/blob/main/DEVELOP.rst>`_
-contains a few informations and guides for working with SCALib code.
-Please open an `issue <https://github.com/simple-crypto/SCALib/issues>`_ on the
-GitHub repository for further questions, bug report or feature requests. 
-
-All code contributions are subject to the Contributor License Agreement (`CLA
-<https://www.simple-crypto.dev/organization>`_) of SIMPLE-Crypto, which ensures
-a thriving future for open-source hardware security.
+SCALib was initiated by Olivier Bronchain and Gaëtan Cassiers during their PhD
+at UCLouvain. It is now developed as a project of
+`SIMPLE-Crypto <https://www.simple-crypto.dev/>`_ and maintained by Gaëtan Cassiers.
 
 License
 =======

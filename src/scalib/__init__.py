@@ -12,7 +12,7 @@ if REQUIRE_AVX2 and cpu["arch"] == "X68_64" and "avx2" not in cpu["flags"]:
     raise ImportError(
         "SCALib has been compiled with AVX2 instructions, which are not "
         + "supported by your CPU or OS. See "
-        + "https://github.com/simple-crypto/SCALib/blob/main/DEVELOP.rst#local-build "
+        + "https://github.com/simple-crypto/SCALib/blob/main/README.rst "
         + "for compiling without AVX2 instructions."
     )
 
