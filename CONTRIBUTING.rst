@@ -144,6 +144,21 @@ Also, when you develop, looking at generated assembly may help
     # or
     RUSTFLAGS="-C target-cpu=native" cargo asm scalib::module::function --rust
 
+Dependencies upgrade policy
+---------------------------
+
+- For python and python packages, we follow NEP29_.
+- For rust: latest stable version.
+- OS support:
+
+  * Pre-built wheels for manylinux_ (supporting last two Ubuntu LTS) on x86_64.
+  * Pre-built wheels for Windows 10 on x86_64.
+  * Other: build yourself (CI configuration welcome).
+
+.. _NEP29: https://numpy.org/neps/nep-0029-deprecation_policy.html
+.. _manylinux: https://github.com/pypa/manylinux
+
+
 Make a release
 --------------
 
