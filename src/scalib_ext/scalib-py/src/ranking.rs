@@ -1,6 +1,7 @@
 use pyo3::prelude::{pyfunction, PyResult, Python};
 
 #[pyfunction]
+#[pyo3(signature = (costs, key, acc, merge, method, max_nb_bin, config))]
 pub fn rank_accuracy(
     py: Python,
     costs: Vec<Vec<f64>>,
@@ -24,6 +25,7 @@ pub fn rank_accuracy(
 }
 
 #[pyfunction]
+#[pyo3(signature = (costs, key, nb_bin, merge, method, config))]
 pub fn rank_nbin(
     py: Python,
     costs: Vec<Vec<f64>>,

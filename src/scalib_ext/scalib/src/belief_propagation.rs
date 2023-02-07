@@ -10,8 +10,8 @@
 
 use ndarray::{s, Array1, Array2, Axis};
 use rayon::prelude::*;
+use realfft::num_complex::Complex;
 use realfft::RealFftPlanner;
-use rustfft::num_complex::Complex;
 use std::convert::TryInto;
 
 /// Statistical distribution of a Para node.

@@ -5,24 +5,21 @@ authors = ["obronchain <olivier.bronchain@uclouvain.be>"]
 edition = "2018"
 
 [dependencies.pyo3]
-version = "0.13.2"
+version = "0.18.0"
 features = ["extension-module"]
 
 [features]
 blis = ["blis-src", "blis-sys"]
 
 [dependencies]
-numpy = "0.13.0"
+numpy = "0.18.0"
 rayon = "1.5.0"
 num-integer = "0.1.42"
-indicatif = { version = "0.16.2", features = ["rayon"] }
+indicatif = { version = "0.17.3" }
 ndarray = { version = "0.15.1", features = ["rayon", "approx"] }
 itertools = "0.10.0"
 ndarray-stats = "0.5.0"
-lapacke = "0.3.0"
-lazy_static = "1.4.0"
 nalgebra = "0.26.1"
-approx = "0.4.0"
 geigen = { path = "../geigen" }
 nshare = { git= "https://github.com/cassiersg/nshare", branch="rm_lt", features=["nalgebra", "ndarray", "std"] }
 blis-src = { version = "0.2.1-alpha.0", default-features=false, features=["static", "pthreads"], optional = true }
@@ -31,8 +28,6 @@ matrixmultiply = "0.3.1"
 hytra = "0.1.2"
 crossbeam-utils = "0.8.3"
 realfft = "2.0.1"
-rustfft = "6.0.0"
-num-complex = "0.4.0"
 num-traits = "0.2.15"
 thiserror = "1.0"
 
@@ -42,6 +37,7 @@ bench = false
 [dev-dependencies]
 criterion = "0.3.4"
 ndarray-rand = "0.14.0"
+approx = "0.4.0"
 
 [[bench]]
 name = "belief_propagation"
