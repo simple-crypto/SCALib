@@ -8,15 +8,32 @@ from setuptools_rust import Binding, RustExtension
 # system).
 import setuptools_scm
 
-use_avx2 = os.environ.get("SCALIB_AVX2") is not None
+def env_true(env):
+    return env == '1'
 
+noflags = env_true(os.environ.get("SCALIB_NOFLAGS"))
+portable = not noflags and env_true(os.environ.get("SCALIB_PORTABLE"))
+use_avx2 = not noflags and env_true(os.environ.get("SCALIB_AVX2"))
+
+if portable and use_avx2:
+    raise ValueError("Cannot have both SCALIB_PORTABLE and SCALIB_AVX2.")
+
+# We check only for AVX2, as this is the CI default, otherwise we assume local
+# builds.
 with open("src/scalib/build_config.py", "w") as f:
     f.write(f"REQUIRE_AVX2 = {use_avx2}\n")
 
-# This is useless and should be removed
-rustc_flags = []
-# if use_avx2:
-#     rustc_flags.extend(["-C", "target-feature=+avx2"])
+if noflags or portable:
+    rustflags = None
+elif use_avx2:
+    rustflags = "-C target-feature=+avx2"
+else:
+    rustflags = "-C target-cpu=native"
+
+if rustflags:
+    rustflags = os.environ.get('RUSTFLAGS', '') + ' ' + rustflags
+    os.environ["RUSTFLAGS"] = rustflags
+
 
 scalib_features = ["pyo3/abi3"]
 
@@ -34,7 +51,6 @@ setup(
             binding=Binding.PyO3,
             features=scalib_features,
             py_limited_api=True,
-            rustc_flags=rustc_flags,
         )
     ],
 )

@@ -19,15 +19,33 @@ SCALib contains various features for side-channel analysis, see the documentatio
 Install
 =======
 
-SCALib is on PyPi!
+SCALib is on PyPi! Simple install:
 
 .. code-block::
 
     pip install scalib
 
-See install_ for details.
- 
-.. _install: https://scalib.readthedocs.io/en/stable/index.html#install
+We provide pre-built wheels for any recent python on Linux and Windows (x86).
+Be sure to use a **recent pip**.
+For other plateforms, this will build SCALib (see below for dependencies).
+
+Local build
+-----------
+
+To get **best performance**, you want to build locally (this will optimize
+SCALib for your CPU).
+
+**Depdendencies:** You need a C/C++ compiler and the latest stable
+release of the `rust toolchain <https://rustup.rs/>`_.
+
+To install from source:
+
+.. code-block::
+
+    git clone https://github.com/simple-crypto/SCALib
+    cd SCALib
+    pip install .
+
 
 Dependencies upgrade policy
 ===========================
@@ -45,19 +63,23 @@ Dependencies upgrade policy
 
 About us
 ========
-SCALib has been initiated by Olivier Bronchain during his PhD at Crypto Group,
-UCLouvain, Belgium. His colleague Gaëtan Cassiers co-authored SCALib. The SCALib
-project is part of `SIMPLE-Crypto <https://www.simple-crypto.dev/>`_ and is
-maintained in that context.
-
+SCALib was initiated by Olivier Bronchain and Gaëtan Cassiers during their PhD
+at UCLouvain. It is now developed as a project of
+`SIMPLE-Crypto <https://www.simple-crypto.dev/>`_ and maintained by Gaëtan Cassiers (@cassiersg).
 
 Contributions and Issues
 ========================
 
 Contributions welcome !
-See contribution_ and `DEVELOP.rst <DEVELOP.rst>`_.
 
-.. _contribution: https://scalib.readthedocs.io/en/stable/index.html#contributions-and-issues
+Please file a bug report for any issue you encounter (even bad documentation is
+a bug !), and let us know your suggestions (preferably through github, but
+email works too).
+We also welcome code contributions, see `CONTRIBUTING.rst <CONTRIBUTING.rst>`_.
+
+All code contributions are subject to the Contributor License Agreement (`CLA
+<https://www.simple-crypto.dev/organization>`_) of SIMPLE-Crypto, which ensures
+a thriving future for open-source hardware security.
 
 License
 =======
@@ -70,4 +92,6 @@ Acknowledgements
 This work is supported by the Belgian Fund for Scientific Research
 (F.R.S.-FNRS) through the Equipment Project SCALAB and by the ERC through the
 Consolidator Grant SWORD.
+This work has been funded in part by the European Union (EU) and the Walloon Region through the FEDER project USERMedia (convention number 501907-379156).
+This work has been funded in part by the European Union (EU) through the ERC project 724725 (acronym SWORD).
 
