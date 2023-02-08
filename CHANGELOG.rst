@@ -5,6 +5,9 @@ Changelog
 Not released
 ------------
 
+v0.5.0 (2023/02/08)
+-------------------
+
 * Deprecate ``SASCAGraph`` in favor of the new ``FactorGraph`` which provides:
 
     - Overall much less restrictions on operations, including suport for:
