@@ -36,7 +36,7 @@ impl FactorGraph {
 #[pymethods]
 impl FactorGraph {
     #[new]
-    #[args(args = "*")]
+    #[pyo3(signature = (*args))]
     fn new(args: &PyTuple) -> PyResult<Self> {
         if args.len() == 0 {
             Ok(Self { inner: None })
@@ -181,7 +181,7 @@ impl BPState {
 #[pymethods]
 impl BPState {
     #[new]
-    #[args(_args = "*")]
+    #[pyo3(signature = (*_args))]
     fn new(_args: &PyTuple) -> PyResult<Self> {
         Ok(Self { inner: None })
     }
