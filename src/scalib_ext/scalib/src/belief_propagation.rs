@@ -8,7 +8,7 @@
 //!
 //! The values on the factor graph are probability distribution of values in GF(2)^n.
 
-use ndarray::{s, Array1, Array2, Axis};
+use ndarray::{s, Array1, Array2, ArrayView1, ArrayViewMut1, Axis};
 use rayon::prelude::*;
 use realfft::num_complex::Complex;
 use realfft::RealFftPlanner;
@@ -52,6 +52,8 @@ pub enum FuncType {
     AND,
     /// Bitwise XOR of variables
     XOR,
+    /// Bitwise NOT of variables
+    NOT,
     /// Modular ADD of variables
     ADD,
     /// Modular MUL of variables
@@ -65,7 +67,7 @@ pub enum FuncType {
     /// Modular MUL of variables, MULing additionally a public variable.
     MULCST(Array1<u32>),
     /// Lookup table function.
-    LOOKUP(Array1<u32>),
+    LOOKUP { table: Array1<u32> },
 }
 
 /// A function node in the graph.
@@ -76,13 +78,28 @@ pub struct Func {
 }
 
 /// The minimum non-zero probability (to avoid denormalization, etc.)
-const MIN_PROBA: f64 = 1e-20;
+const MIN_PROBA: f64 = 1e-40;
 
 /// Clip down to `MIN_PROBA`
 fn make_non_zero<S: ndarray::DataMut + ndarray::RawData<Elem = f64>, D: ndarray::Dimension>(
     x: &mut ndarray::ArrayBase<S, D>,
 ) {
     x.mapv_inplace(|y| y.max(MIN_PROBA));
+}
+
+fn make_non_zero_signed<
+    S: ndarray::DataMut + ndarray::RawData<Elem = f64>,
+    D: ndarray::Dimension,
+>(
+    x: &mut ndarray::ArrayBase<S, D>,
+) {
+    x.mapv_inplace(|y| {
+        if y.is_sign_positive() {
+            y.max(MIN_PROBA)
+        } else {
+            y.min(-MIN_PROBA)
+        }
+    });
 }
 
 /// Walsh-Hadamard transform (non-normalized).
@@ -99,6 +116,69 @@ fn fwht(a: &mut [f64], len: usize) {
                 let x = a[j];
                 let y = a[j + h];
                 a[j] = x + y;
+                a[j + h] = x - y;
+            }
+        }
+        h *= 2;
+    }
+}
+
+/// Cumulative transform (U in RLDA paper)
+#[inline(always)]
+fn cumt(a: &mut [f64], len: usize) {
+    // Note: the speed of this can probably be much improved, with the following techiques
+    // * use (auto-)vectorization
+    // * generate small static kernels
+    let mut h = 1;
+    while h < len {
+        for mut i in 0..(len / (2 * h) as usize) {
+            i *= 2 * h;
+            for j in i..(i + h) {
+                let x = a[j];
+                let y = a[j + h];
+                a[j] = x + y;
+                a[j + h] = y;
+            }
+        }
+        h *= 2;
+    }
+}
+
+/// Cumulative inverse transform (U^-1 in RLDA paper)
+#[inline(always)]
+fn cumti(a: &mut [f64], len: usize) {
+    // Note: the speed of this can probably be much improved, with the following techiques
+    // * use (auto-)vectorization
+    // * generate small static kernels
+    let mut h = 1;
+    while h < len {
+        for mut i in 0..(len / (2 * h) as usize) {
+            i *= 2 * h;
+            for j in i..(i + h) {
+                let x = a[j];
+                let y = a[j + h];
+                a[j] = x - y;
+                a[j + h] = y;
+            }
+        }
+        h *= 2;
+    }
+}
+
+/// Tansform for operand of AND (V in RLDA paper), involutive
+#[inline(always)]
+fn opandt(a: &mut [f64], len: usize) {
+    // Note: the speed of this can probably be much improved, with the following techiques
+    // * use (auto-)vectorization
+    // * generate small static kernels
+    let mut h = 1;
+    while h < len {
+        for mut i in 0..(len / (2 * h) as usize) {
+            i *= 2 * h;
+            for j in i..(i + h) {
+                let x = a[j];
+                let y = a[j + h];
+                a[j] = x;
                 a[j + h] = x - y;
             }
         }
@@ -200,7 +280,8 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
         .for_each(|(function, edge)| match &function.functype {
             // TODO: if nc is prime, the update for MUL can be computed more efficiently by mapping
             // classes to their discrete logarithm, and by applying FFT.
-            FuncType::AND | FuncType::MUL => {
+            // If not prime, use CRT.
+            FuncType::MUL => {
                 let [output_msg, input1_msg, input2_msg]: &mut [_; 3] =
                     edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
@@ -223,13 +304,7 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             for i1 in 0..nc {
                                 for i2 in 0..nc {
                                     // Unifies operators that can only be binary
-                                    let o = match &function.functype {
-                                        FuncType::AND => i1 & i2,
-                                        FuncType::MUL => {
-                                            (((i1 * i2) as u32) % (nc as u32)) as usize
-                                        }
-                                        _ => unreachable!(),
-                                    };
+                                    let o = (((i1 * i2) as u32) % (nc as u32)) as usize;
                                     in1_msg_scratch[i1] += input2_msg[i2] * output_msg[o];
                                     in2_msg_scratch[i2] += input1_msg[i1] * output_msg[o];
                                     out_msg_scratch[o] += input1_msg[i1] * input2_msg[i2];
@@ -241,11 +316,32 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                         },
                     );
             }
+            FuncType::AND => {
+                ands(edge.as_mut());
+            }
             FuncType::ADD => {
                 adds(edge.as_mut());
             }
             FuncType::XOR => {
                 xors(edge.as_mut());
+            }
+            FuncType::NOT => {
+                let [output_msg, input_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
+                let nc = input_msg.shape()[1];
+                (input_msg.outer_iter_mut(), output_msg.outer_iter_mut())
+                    .into_par_iter()
+                    .for_each_init(
+                        || (Array1::zeros(nc), Array1::zeros(nc)),
+                        |(in_msg_scratch, out_msg_scratch), (mut input_msg, mut output_msg)| {
+                            for i in 0..nc {
+                                let o = (nc - 1) ^ i as usize;
+                                in_msg_scratch[i] = output_msg[o];
+                                out_msg_scratch[o] = input_msg[i];
+                            }
+                            input_msg.assign(in_msg_scratch);
+                            output_msg.assign(out_msg_scratch);
+                        },
+                    );
             }
             FuncType::XORCST(values)
             | FuncType::ANDCST(values)
@@ -286,7 +382,7 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                         },
                     );
             }
-            FuncType::LOOKUP(table) => {
+            FuncType::LOOKUP { table } => {
                 let [output_msg, input1_msg]: &mut [_; 2] = edge.as_mut_slice().try_into().unwrap();
                 let nc = input1_msg.shape()[1];
                 (input1_msg.outer_iter_mut(), output_msg.outer_iter_mut())
@@ -298,9 +394,6 @@ pub fn update_functions(functions: &[Func], edges: &mut [Vec<&mut Array2<f64>>])
                             out_msg_scratch.fill(0.0);
                             for i1 in 0..nc {
                                 let o: usize = table[i1] as usize;
-                                // This requires table to be bijective. Otherwise, we would have to
-                                // divide the messge on the output by the number of matching inputs
-                                // to get the message to forward on the input edge.
                                 in1_msg_scratch[i1] += output_msg[o];
                                 out_msg_scratch[o] += input1_msg[i1];
                             }
@@ -397,6 +490,59 @@ pub fn xors(inputs: &mut [&mut Array2<f64>]) {
             input /= s;
             make_non_zero(&mut input);
         });
+    }
+}
+
+/// Compute a AND function node between all edges.
+pub fn ands(inputs: &mut [&mut Array2<f64>]) {
+    let n_runs = inputs[0].shape()[0];
+    let nc = inputs[0].shape()[1];
+    let (input_0, input_1, input_2) = match inputs {
+        [i0, i1, i2] => (i0, i1, i2),
+        _ => panic!("Current implementation limit AND to 2 inputs."),
+    };
+    for run in 0..n_runs {
+        let mut cum_t1 = input_1.slice(s![run, ..]).to_owned();
+        let mut cum_t2 = input_2.slice(s![run, ..]).to_owned();
+        let cum_transform = |mut x: ArrayViewMut1<f64>| {
+            let x_slice = x.as_slice_mut().unwrap();
+            cumt(x_slice, nc);
+            make_non_zero(&mut x);
+        };
+        let opand_transform = |mut x: ArrayViewMut1<f64>| {
+            let x_slice = x.as_slice_mut().unwrap();
+            opandt(x_slice, nc);
+            make_non_zero_signed(&mut x);
+        };
+        cum_transform(cum_t1.view_mut());
+        cum_transform(cum_t2.view_mut());
+        opand_transform(input_0.slice_mut(s![run, ..]));
+        let icumt_norm = |mut x: ArrayViewMut1<f64>| {
+            let x_slice = x.as_slice_mut().unwrap();
+            cumti(x_slice, nc);
+            let s = 1e-100f64.max(x.sum());
+            x /= s;
+        };
+        let v0 = input_0.slice(s![run, ..]);
+        let set_input_distr = |mut op: ArrayViewMut1<f64>, t_other: ArrayView1<f64>| {
+            ndarray::Zip::from(op.view_mut())
+                .and(v0)
+                .and(t_other)
+                .for_each(|input, res, other| *input = *res * *other);
+            make_non_zero_signed(&mut op);
+            let op_slice = op.as_slice_mut().unwrap();
+            opandt(op_slice, nc);
+            let s = op.sum();
+            op /= s;
+            make_non_zero_signed(&mut op);
+        };
+        set_input_distr(input_1.slice_mut(s![run, ..]), cum_t2.view());
+        set_input_distr(input_2.slice_mut(s![run, ..]), cum_t1.view());
+        ndarray::Zip::from(input_0.slice_mut(s![run, ..]))
+            .and(cum_t1.view())
+            .and(cum_t2.view())
+            .for_each(|res, in1, in2| *res = *in1 * *in2);
+        icumt_norm(input_0.slice_mut(s![run, ..]));
     }
 }
 

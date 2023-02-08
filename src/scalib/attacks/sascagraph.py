@@ -1,4 +1,6 @@
+import copy
 from functools import reduce
+import math
 
 import numpy as np
 
@@ -6,9 +8,29 @@ from scalib import _scalib_ext
 from scalib.config import get_config
 import scalib.utils
 
+__all__ = ["SASCAGraph"]
+
+_NODE_FN = {
+    "AND": lambda a, b: a & b,
+    "XOR": lambda a, b: a ^ b,
+    "ADD": lambda a, b: (a + b) % self.nc_,
+    "MUL": lambda a, b: (a * b) % self.nc_,
+}
+
+
+def _node_reduce(node, values):
+    l = [v for v in values if v is not None]
+    if l:
+        return reduce(_NODE_FN[node], l)
+    else:
+        return None
+
 
 class SASCAGraph:
     r"""SASCAGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
+
+     .. deprecated:: 0.5.0
+         Use :class:`scalib.attacks.FactorGraph` instead.
 
     A `SASCAGraph` attack is based on a set of variables, on knowledge of
     relationships between those variables and information about the values of
@@ -95,6 +117,8 @@ class SASCAGraph:
       exactly two operands, with at most one public operand.
     - `LOOKUP x = t[y]`: declares a LOOKUP property (`y` is the lookup of the
       table `t` at index `y`). No public variable is allowed in this property.
+    - `LOOKUP x = !y`: declares a bitwise NOT property.
+      No public variable is allowed in this property.
     - `TABLE` t = [0, 3, 2, 1]`: Declares a table that can be used in a LOOKUP.
       The values provided in the table must belong to the interval [0, nc).
       The initialization expression can be omitted from the graph description
@@ -118,6 +142,16 @@ class SASCAGraph:
     """
 
     def __init__(self, graph, n):
+        import warnings
+
+        warnings.simplefilter("once", DeprecationWarning)  # turn off filter
+        warnings.warn(
+            "SASCAGraph is deprecated and will be removed in a next release. Use FactorGraph instead.",
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        warnings.simplefilter("default", DeprecationWarning)  # reset filter
+
         self.n_ = n
         self.solved_ = False
 
@@ -129,6 +163,48 @@ class SASCAGraph:
         self.properties_ = self.graph.properties
         self.var_ = self.graph.var
         self.publics_ = {}
+
+    def sanity_check(self, var_assignment):
+        """Verify that the graph is compatible with example variable assignments.
+
+        If the graph is not compatible, raise a SACAGraphError.
+
+        Parameters
+        ----------
+        var_assignment: dict[var_name -> np.array (int)]
+            For each non-public variable its value for all test executions.
+        """
+        for k in self.var_:
+            if k not in var_assignment:
+                raise ValueError(f"Missing value for variable {k}.")
+        for k in self.publics_:
+            if k in var_assignment:
+                raise ValueError(f"Value given for public variable {k}.")
+
+        def get_var_values(var):
+            if var in self.publics_:
+                return self.publics_[var]
+            else:
+                if self.var_[var]["para"]:
+                    return var_assignment[var]
+                else:
+                    return var_assignment[var] * np.ones((self.n_,), dtype=np.uint32)
+
+        for property in self.properties_:
+            inp_values = [get_var_values(inp) for inp in property["inputs"]]
+            if property["property"] == "LOOKUP":
+                output = self.tables_[property["tab"]][inp_values[0]]
+            elif property["property"] == "NOT":
+                output = (self.nc_ - 1) ^ inp_values[0]
+            elif property["property"] in _NODE_FN:
+                output = _node_reduce(property["property"], inp_values)
+            else:
+                assert False
+            output_val = get_var_values(property["output"])
+            if (output != output_val).any():
+                raise SASCAGraphError(
+                    f"Property {property} fail, expected: {output}, given: {output_val}."
+                )
 
     def set_init_distribution(self, var, distribution):
         r"""Sets initial distribution of a variables.
@@ -220,10 +296,6 @@ class SASCAGraph:
             raise ValueError("Table has wrong shape")
         elif values.dtype != np.uint32:
             raise ValueError("Table must be np.uint32")
-        elif set(values) != set(range(self.nc_)):
-            raise ValueError(
-                "In current implementation, table is not a bijection over the set of values [0, nc)."
-            )
         self.tables_[table] = values
 
     def run_bp(self, it):
@@ -261,18 +333,11 @@ class SASCAGraph:
 
     def _init_graph(self):
         self._check_fully_init()
-        # mapping to Rust functions
-        AND = 0
-        XOR = 1
-        XOR_CST = 2
-        LOOKUP = 3
-        AND_CST = 4
-        ADD = 5
-        ADD_CST = 6
-        MUL = 7
-        MUL_CST = 8
-        property_map_binary = {"AND": (AND, AND_CST), "MUL": (MUL, MUL_CST)}
-        property_map_nary = {"XOR": (XOR, XOR_CST), "ADD": (ADD, ADD_CST)}
+        unary_properties = [
+            "NOT",
+        ]
+        binary_properties = ["AND", "MUL"]
+        nary_properties = ["XOR", "ADD"]
 
         # edge id
         self.edge_ = 0
@@ -285,13 +350,9 @@ class SASCAGraph:
         for property in self.properties_:
             if property["output"] in self.publics_:
                 raise ValueError(
-                    "In current implementation public vars can only be ^ or & operands.\n"
+                    "In current implementation public vars can only be operands.\n"
                     + "Cannot assign "
                     + property["output"]
-                )
-            if len([inp for inp in property["inputs"] if inp in self.publics_]) > 1:
-                raise ValueError(
-                    "In current implementation there can only be one public operand."
                 )
             for inp in property["inputs"]:
                 if inp in self.publics_ and property["property"] == "LOOKUP":
@@ -319,85 +380,41 @@ class SASCAGraph:
                 )
             )
 
+            property["func"] = property["property"]
+
             if property["property"] == "LOOKUP":
-                property["func"] = LOOKUP
                 # get the table into the function
                 property["table"] = self.tables_[property["tab"]]
                 # set edge to input and output
                 self._share_edge(property, property["output"])
                 self._share_edge(property, property["inputs"][0])
-
-            elif property["property"] in property_map_binary.keys():
-                op, op_cst = property_map_binary[property["property"]]
-                # If no public inputs
-                if all(x in self.var_ for x in property["inputs"]):
-                    property["func"] = op
-                    self._share_edge(property, property["output"])
-                    for i in property["inputs"]:
-                        self._share_edge(property, i)
-
-                # if and with public input
-                elif len(property["inputs"]) == 2:
-                    # OP with one public
-                    property["func"] = op_cst
-
-                    self._share_edge(property, property["output"])
-
-                    # which of both inputs is public
-                    if property["inputs"][0] in self.var_:
-                        i = (0, 1)
-                    elif property["inputs"][1] in self.var_:
-                        i = (1, 0)
-                    else:
-                        assert False
-
-                    # share edge with non public input
-                    self._share_edge(property, property["inputs"][i[0]])
-
-                    # merge public input in the property
-                    property["values"] = self.publics_[property["inputs"][i[1]]]
-
-            elif property["property"] in property_map_nary.keys():
-                op, op_cst = property_map_nary[property["property"]]
-                # if no inputs are public
-                if all(x in self.var_ for x in property["inputs"]):
-                    # OP with no public
-                    property["func"] = op
-
-                    # share edge with the output
-                    self._share_edge(property, property["output"])
-
-                    # share edge with all the inputs
-                    for i in property["inputs"]:
-                        self._share_edge(property, i)
-
-                elif len(property["inputs"]) == 2:
-                    # OP with one public
-                    property["func"] = op_cst
-
-                    # which of both inputs is public
-                    if property["inputs"][0] in self.var_:
-                        i = (0, 1)
-                    elif property["inputs"][1] in self.var_:
-                        i = (1, 0)
-                    else:
-                        assert False
-
-                    # share edges with variables
-                    self._share_edge(property, property["output"])
-                    self._share_edge(property, property["inputs"][i[0]])
-
-                    # merge public into the property
-                    property["values"] = self.publics_[property["inputs"][i[1]]]
-
-                else:
-                    key = property["property"]
-                    raise ValueError(
-                        f"{key} must have two operands when one operand is public."
+            elif property["property"] in unary_properties:
+                assert len(property["inputs"]) == 1
+                self._share_edge(property, property["output"])
+                self._share_edge(property, property["inputs"][0])
+            elif (
+                property["property"] in binary_properties
+                or property["property"] in nary_properties
+            ):
+                if (
+                    property["property"] in binary_properties
+                    and len(property["inputs"]) != 2
+                ):
+                    raise SASCAGraphError(
+                        f"Too many inputs. output: {property['output']}"
                     )
-
+                property["values"] = _node_reduce(
+                    property["property"],
+                    (self.publics_.get(x) for x in property["inputs"]),
+                )
+                self._share_edge(property, property["output"])
+                for inp in property["inputs"]:
+                    if inp in self.var_:
+                        self._share_edge(property, inp)
+                if any(inp in self.publics_ for inp in property["inputs"]):
+                    property["func"] = property["property"] + "CST"
             else:
-                assert False, "Property must be either LOOKUP, AND or XOR."
+                assert False, "Property non-implemented."
 
         for v in self.var_:
             v = self.var_[v]
@@ -429,6 +446,16 @@ class SASCAGraphParser:
         self._build_var_set()
         self._build_tables()
         self._build_properties()
+        self._check_nc_bitwise()
+
+    def _check_nc_bitwise(self):
+        if bin(self.nc).count("1") == 1:
+            return
+        if any(prop["property"] in ("NOT", "XOR", "AND") for prop in self.properties):
+            self.errors.append(
+                "Use of bitwise operators with NC not a power of 2 is not supported."
+            )
+            self._raise_errors()
 
     def _build_properties(self):
         for prop_kind, res, inputs in self.prop_decls:
@@ -476,8 +503,8 @@ class SASCAGraphParser:
             self.errors.append("NC appears multiple times, can only appear once.")
         elif len(self.nc_decls) == 0:
             self.errors.append("NC not declared.")
-        elif self.nc_decls[0] not in range(1, 2**16 + 1):
-            self.errors.append("NC not in admissible range [1, 2^16].")
+        elif self.nc_decls[0] not in range(1, 2**32 + 1):
+            self.errors.append("NC not in admissible range [1, 2^32].")
         else:
             self.nc = self.nc_decls[0]
         self._raise_errors()
@@ -535,6 +562,12 @@ class SASCAGraphParser:
             inputs = prop.split("&")
             if len(inputs) != 2:
                 raise SASCAGraphError("Wrong number of & operands: must be 2.")
+        elif "!" in prop:
+            prop_kind = "NOT"
+            inputs = prop.split("!")
+            if len(inputs) != 2 or inputs[0] != "":
+                raise SASCAGraphError("Wrong number of ! operands: must be 1 (post).")
+            inputs = [inputs[1]]
         elif "[" in prop and "]" in prop:
             prop_kind = "LOOKUP"
             tab, in_ = prop.split("[")

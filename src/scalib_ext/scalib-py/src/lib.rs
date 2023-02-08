@@ -7,6 +7,7 @@ use pyo3::prelude::*;
 use std::error::Error;
 
 mod belief_propagation;
+mod factor_graph;
 mod lda;
 mod ranking;
 mod snr;
@@ -112,6 +113,8 @@ fn _scalib_ext(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<ttest::MTtest>()?;
     m.add_class::<lda::LDA>()?;
     m.add_class::<lda::LdaAcc>()?;
+    m.add_class::<factor_graph::FactorGraph>()?;
+    m.add_class::<factor_graph::BPState>()?;
     m.add_class::<thread_pool::ThreadPool>()?;
     m.add_function(wrap_pyfunction!(ranking::rank_accuracy, m)?)?;
     m.add_function(wrap_pyfunction!(ranking::rank_nbin, m)?)?;

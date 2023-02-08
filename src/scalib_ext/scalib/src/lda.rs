@@ -57,7 +57,12 @@ impl LdaAcc {
     }
 
     /// Traces: shape (n, ns). Classes shape: (n,)
-    fn new(nc: usize, traces: ArrayView2<i16>, classes: ArrayView1<u16>, gemm_algo: u32) -> Self {
+    pub fn new(
+        nc: usize,
+        traces: ArrayView2<i16>,
+        classes: ArrayView1<u16>,
+        gemm_algo: u32,
+    ) -> Self {
         let mut res = Self::from_dim(nc, traces.shape()[1]);
         res.update(traces, classes, gemm_algo);
         return res;
