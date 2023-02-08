@@ -75,9 +75,9 @@ See `COPYING <COPYING>`_ for more information.
 Acknowledgements
 ================
 
-This work is supported by the Belgian Fund for Scientific Research
-(F.R.S.-FNRS) through the Equipment Project SCALAB and by the ERC through the
-Consolidator Grant SWORD.
-This work has been funded in part by the European Union (EU) and the Walloon Region through the FEDER project USERMedia (convention number 501907-379156).
-This work has been funded in part by the European Union (EU) through the ERC project 724725 (acronym SWORD).
+This work has been funded in part by the Belgian Fund for Scientific Research
+(F.R.S.-FNRS) through the Equipment Project SCALAB, by the European Union (EU)
+and the Walloon Region through the FEDER project USERMedia (convention number
+501907-379156), and by the European Union (EU) through the ERC project 724725
+(acronym SWORD).
 
