@@ -304,6 +304,13 @@ impl Distribution {
             ));
         }
     }
+    pub fn full_zeros(&self) -> Self {
+        Self {
+            multi: self.multi,
+            shape: self.shape,
+            value: DistrRepr::Full(ndarray::Array2::zeros(self.shape)),
+        }
+    }
     pub fn map_table(&self, table: &[ClassVal]) -> Self {
         let mut value = ndarray::Array2::zeros(self.shape);
         if let DistrRepr::Full(v_orig) = &self.value {
@@ -404,6 +411,74 @@ impl Distribution {
                 d.copy_from_slice(tmp.as_slice());
             }
         }
+    }
+    pub fn op_multiply(&self, other: &Self) -> Self {
+        let mut res = self.full_zeros();
+        let nc = self.shape().1;
+        let u = 1.0f64 / (nc as f64);
+        for (k, mut res) in res.value_mut().unwrap().outer_iter_mut().enumerate() {
+            for i1 in 0..nc {
+                for i2 in 0..nc {
+                    let o = (((i1 * i2) as u32) % (nc as u32)) as usize;
+                    res[o] += self.value().map(|d| d[(k, i1)]).unwrap_or(u)
+                        * other.value().map(|d| d[(k, i2)]).unwrap_or(u);
+                }
+            }
+        }
+        res
+    }
+    pub fn op_multiply_factor(&self, other: &Self) -> Self {
+        let mut res = self.full_zeros();
+        let nc = self.shape().1;
+        let u = 1.0f64 / (nc as f64);
+        for (k, mut res) in res.value_mut().unwrap().outer_iter_mut().enumerate() {
+            for i1 in 0..nc {
+                for i2 in 0..nc {
+                    let o = (((i1 * i2) as u32) % (nc as u32)) as usize;
+                    res[i1] += self.value().map(|d| d[(k, o)]).unwrap_or(u)
+                        * other.value().map(|d| d[(k, i2)]).unwrap_or(u);
+                }
+            }
+        }
+        res
+    }
+    pub fn op_multiply_cst(&self, other: &PublicValue) -> Self {
+        let mut res = self.full_zeros();
+        let nc = self.shape().1;
+        let u = 1.0f64 / (nc as f64);
+        for (k, (mut res, i2)) in res
+            .value_mut()
+            .unwrap()
+            .outer_iter_mut()
+            .zip(other.iter(self.shape().0))
+            .enumerate()
+        {
+            let i2 = i2 as usize;
+            for i1 in 0..nc {
+                let o = (((i1 * i2) as u32) % (nc as u32)) as usize;
+                res[o] += self.value().map(|d| d[(k, i1)]).unwrap_or(u);
+            }
+        }
+        res
+    }
+    pub fn op_multiply_cst_factor(&self, other: &PublicValue) -> Self {
+        let mut res = self.full_zeros();
+        let nc = self.shape().1;
+        let u = 1.0f64 / (nc as f64);
+        for (k, (mut res, i2)) in res
+            .value_mut()
+            .unwrap()
+            .outer_iter_mut()
+            .zip(other.iter(self.shape().0))
+            .enumerate()
+        {
+            let i2 = i2 as usize;
+            for i1 in 0..nc {
+                let o = (((i1 * i2) as u32) % (nc as u32)) as usize;
+                res[i1] += self.value().map(|d| d[(k, o)]).unwrap_or(u);
+            }
+        }
+        res
     }
     pub fn for_each<F, G>(&mut self, mut f: F, default: G)
     where

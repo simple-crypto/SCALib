@@ -13,13 +13,6 @@ def make_distri(nc, n):
     return normalize_distr(np.random.randint(1, 10000000, (n, nc)).astype(np.float64))
 
 
-def disable(x):
-    def f():
-        pass
-
-    return f
-
-
 def test_table():
     """
     Test Table lookup
@@ -489,17 +482,14 @@ def test_ADD_multiple():
     assert np.allclose(distri_z_ref, distri_z)
 
 
-@disable
 def test_MUL():
     """
     Test MUL between distributions
     """
     nc = 251
     n = 4
-    distri_x = np.random.randint(1, 10000000, (n, nc))
-    distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
-    distri_y = np.random.randint(1, 10000000, (n, nc))
-    distri_y = (distri_y.T / np.sum(distri_y, axis=1)).T
+    distri_x = make_distri(nc, n)
+    distri_y = make_distri(nc, n)
 
     graph = f"""
         # some comments
@@ -511,7 +501,8 @@ def test_MUL():
 
         """
 
-    graph = FactorGraph(graph, n)
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n)
     bp_state.set_evidence("x", distri_x)
     bp_state.set_evidence("y", distri_y)
 

@@ -649,17 +649,47 @@ fn factor_add<'a>(
     }
 }
 
-#[allow(unused_variables)]
 fn factor_mul<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a EdgeSlice<Distribution>,
+    belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
     clear_incoming: bool,
-    pub_red: &PublicValue,
+    pub_red: &'a PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    #![allow(unreachable_code)]
-    todo!();
-    [].into_iter()
+    // This is a simple, non-optimized algorithm.
+    let mut dest_iter = dest.iter();
+    std::iter::from_fn(move || {
+        if let Some(var) = dest_iter.next() {
+            // We compute the product and not a factor.
+            let is_product = factor.edges.get_index_of(var).unwrap() == 0;
+            let mut res: Option<Distribution> = None;
+            for (v, e) in factor.edges.iter() {
+                if v != var {
+                    res = Some(if let Some(res) = res {
+                        if is_product {
+                            res.op_multiply(&belief_from_var[*e])
+                        } else {
+                            res.op_multiply_factor(&belief_from_var[*e])
+                        }
+                    } else {
+                        belief_from_var[*e].take_or_clone(clear_incoming)
+                    });
+                }
+            }
+            Some(if is_product {
+                res.unwrap().op_multiply_cst(pub_red)
+            } else {
+                res.unwrap().op_multiply_cst_factor(pub_red)
+            })
+        } else {
+            if clear_incoming {
+                for e in factor.edges.values() {
+                    belief_from_var[*e].reset();
+                }
+            }
+            None
+        }
+    })
 }
 
 fn factor_lookup<'a>(
@@ -669,7 +699,7 @@ fn factor_lookup<'a>(
     clear_incoming: bool,
     table: &'a Table,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    // we know that there is not constant involved
+    // we know that there is no constant involved
     assert_eq!(factor.edges.len(), 2);
     dest.iter().map(move |dest| {
         let i = factor.edges.get_index_of(dest).unwrap();
