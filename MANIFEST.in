@@ -1,9 +1,10 @@
 include README.rst
 include CHANGELOG.rst
-include DEVELOP.rst
+include CONTRIBUTING.rst
 include setup.cfg
 include setup.py
 include COPYING
+include COPYRIGHT
 include MANIFEST.in
 include pyproject.toml
 include tox.ini

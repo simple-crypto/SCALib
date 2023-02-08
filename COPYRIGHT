@@ -1,0 +1,21 @@
+Copyright for SCALib (2018 - 2023) retained by the contributors.
+Copyright and licensing enquiries should be directed to SIMPLE-Crypto <info@simple-crypto.dev>.
+
+Some files include explicit copyright notices and/or license notices. For full
+authorship information, see the version control history
+<https://github.com/simple-crypto/SCALib>.
+
+Except as noted otherwise (below and/or in individual files), SCALib is
+licensed under the GNU Affero General Public License as published by the Free
+Software Foundation, version 3 <COPYING>.
+
+The copyright holders for SCALib are:
+- UCLouvain
+- SIMPLE-Crypto
+- Gaëtan Cassiers
+
+SCALib includes packages written by third parties. Besides files with
+individual notices, the following third party packages are included:
+
+* (none currently)
+
