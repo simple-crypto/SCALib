@@ -258,8 +258,7 @@ pub(super) fn build_graph(
                 };
                 graph.add_table(name.clone(), val)?;
             }
-            fg_parser::Statement::End
-            | fg_parser::Statement::Invalid
+            fg_parser::Statement::Invalid
             | fg_parser::Statement::Empty
             | fg_parser::Statement::Property { .. }
             | fg_parser::Statement::NC(_) => {}

@@ -36,7 +36,6 @@ pub(super) struct VarDecl {
 
 #[derive(Debug, Clone)]
 pub(super) enum Statement {
-    End, // only to appease parser
     Invalid,
     Empty,
     Property {
