@@ -5,19 +5,24 @@ Changelog
 Not released
 ------------
 
-* SASCA: add `SASCAGraph.sanity_check`.
-* SASCA: allow tables to not be bijective.
-* SASCA: support NOT gate.
-* SASCA: allow multiple public operands.
-* Optimize bitwise AND in SASCA: O(nc*log(nc)) instead of O(nc^2).
-* Bitwise AND in SASCA: use a more correct law for computing input distribution.
-* Re-design `scalib.config` to handle more configuration in a single `Config` class. **Breaking change** to `scalib.config` and `scalib.config.threading`.
-* Smarter behavior for progress bars, unified configuration for progress bar. **Breaking change** to `scalib.attack.SASCAGraph`.
+* Deprecate ``SASCAGraph`` in favor of the new ``FactorGraph`` which provides:
+
+    - Overall much less restrictions on operations, including suport for:
+
+        + non-bijective tables
+        + multiple public operands
+        + NOT gate
+
+    - A ``sanity_check`` feature: verify that the graph is compatible with known value assignment (useful for debugging a graph).
+    - Optimized bitwise AND: ``O(nc*log(nc))`` instead of ``O(nc^2)``.
+
+* Re-design ``scalib.config`` to handle more configuration in a single ``Config`` class. **Breaking change** to ``scalib.config`` and ``scalib.config.threading``.
+* Smarter behavior for progress bars, unified configuration for progress bar. **Breaking change** to ``scalib.attack.SASCAGraph``.
 * Add accessors for the internal state of the LDA.
-* Introduce the `scalib.ScalibError` exception and remove `scalib.metrics.SnrError` (**Breaking change**).
+* Introduce the ``scalib.ScalibError`` exception and remove ``scalib.metrics.SnrError`` (**Breaking change**).
 * Improve error reporting in case of LDA solving error.
 * Allow all computations to be interrupted with Ctrl-C.
-* Fix deadlock when there is an error in large SNR computations (i.e., when n_vars*n_samples*n_traces > 2**33).
+* Fix deadlock when there is an error in large SNR computations (i.e., when ``n_vars*n_samples*n_traces > 2**33``).
 * Allow LDA to behave like simple pooled gaussian templates (#22).
 * Refresh build system (Tox version 4, improved CI), build by default with native machine optimizations.
 * Not crash anymore on non x86-64 CPUs (no CI for those yet).

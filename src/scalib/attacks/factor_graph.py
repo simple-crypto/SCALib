@@ -133,7 +133,7 @@ class FactorGraph:
     def sanity_check(self, pub_assignment: ValsAssign, var_assignment: ValsAssign):
         """Verify that the graph is compatible with example variable assignments.
 
-        If the graph is not compatible, raise a ValueError.
+        If the graph is not compatible, raise a ``ValueError``.
 
         Parameters
         ----------
@@ -144,12 +144,18 @@ class FactorGraph:
 
         Returns
         -------
-        None if the assignment is compatible
+        None
         """
         self._inner.sanity_check(pub_assignment, var_assignment)
 
 
 class BPState:
+    """Belief propagation state.
+
+    This is a stateful object on which belief propagation operations can be run.
+    See :class:`scalib.attacks.FactorGraph` for usage example.
+    """
+
     def __init__(
         self,
         factor_graph: FactorGraph,
@@ -159,9 +165,6 @@ class BPState:
         if public_values is None:
             public_values = dict()
         self._inner = factor_graph._inner.new_bp(nexec, public_values)
-
-    def is_cyclic(self) -> bool:
-        return self._inner.is_cyclic()
 
     def set_evidence(self, var: str, distribution: Optional[npt.NDArray[np.float64]]):
         r"""Sets prior distribution of a variable.
@@ -179,6 +182,42 @@ class BPState:
             self._inner.drop_evidence(var)
         else:
             self._inner.set_evidence(var, distribution)
+
+    def bp_loopy(self, it: int, initialize_states: bool):
+        """Runs belief propagation algorithm on the current state of the graph.
+
+        Parameters
+        ----------
+        it :
+            Number of iterations of belief propagation.
+        initialize_states:
+            Whether to update variable distributions before running the BP iterations.
+            Recommended after using :func:`BPState.set_evidence`.
+        """
+        if initialize_states:
+            self._inner.propagate_all_vars()
+        self._inner.propagate_loopy_step(it)
+
+    def bp_acyclic(
+        self,
+        dest: str,
+        *,
+        clear_intermediates: bool = True,
+        clear_evidence: bool = False,
+    ):
+        """Runs the non-loopy belief propagation algorithm on the current state of the graph.
+        This only works if the graph is not cyclic.
+
+        Parameters
+        ----------
+        dest:
+            Variable for which the belief propagation is computed.
+        clear_intermediates:
+            Drop the intermetidate distributions and beliefs that are computed.
+        clear_evidence:
+            Drop the evidence for the variables, once used in the algorithm.
+        """
+        self._inner.propagate_acyclic(dest, clear_intermediates, clear_evidence)
 
     def get_distribution(self, var: str) -> Optional[npt.NDArray[np.float64]]:
         r"""Returns the current distribution of a variable `var`.
@@ -198,6 +237,10 @@ class BPState:
             (but this is not guaranteed).
         """
         return self._inner.get_state(var)
+
+    def is_cyclic(self) -> bool:
+        """Test is the graph is cyclic."""
+        return self._inner.is_cyclic()
 
     def set_distribution(
         self, var: str, distribution: Optional[npt.NDArray[np.float64]]
@@ -290,41 +333,8 @@ class BPState:
         """
         return self._inner.propagate_factor_all(factor)
 
-    def bp_loopy(self, it: int, initialize_states: bool):
-        """Runs belief propagation algorithm on the current state of the graph.
-
-        Parameters
-        ----------
-        it :
-            Number of iterations of belief propagation.
-        initialize_states:
-            Update variable distributions before running the BP iterations.
-        """
-        if initialize_states:
-            self._inner.propagate_all_vars()
-        self._inner.propagate_loopy_step(it)
-
-    def bp_acyclic(
-        self,
-        dest: str,
-        *,
-        clear_intermediates: bool = True,
-        clear_evidence: bool = False,
-    ):
-        """Runs belief propagation algorithm on the current state of the graph.
-
-        Parameters
-        ----------
-        dest:
-            Variable for which the belief propagation is computed.
-        clear_intermediates:
-            Drop the intermetidate distributions and beliefs that are computed.
-        clear_evidence:
-            Drop the evidence for the variables, once used in the algorithm.
-        """
-        self._inner.propagate_acyclic(dest, clear_intermediates, clear_evidence)
-
     def debug(self):
+        """Debug-print the current state."""
         s = []
         s.append("VAR DISTRIBUTION")
         for var in self._inner.graph().var_names():

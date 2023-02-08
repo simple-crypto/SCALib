@@ -29,6 +29,9 @@ def _node_reduce(node, values):
 class SASCAGraph:
     r"""SASCAGraph allows to run Soft Analytical Side-Channel Attacks (SASCA).
 
+     .. deprecated:: 0.5.0
+         Use :class:`scalib.attacks.FactorGraph` instead.
+
     A `SASCAGraph` attack is based on a set of variables, on knowledge of
     relationships between those variables and information about the values of
     the variables.
@@ -139,6 +142,16 @@ class SASCAGraph:
     """
 
     def __init__(self, graph, n):
+        import warnings
+
+        warnings.simplefilter("once", DeprecationWarning)  # turn off filter
+        warnings.warn(
+            "SASCAGraph is deprecated and will be removed in a next release. Use FactorGraph instead.",
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        warnings.simplefilter("default", DeprecationWarning)  # reset filter
+
         self.n_ = n
         self.solved_ = False
 
