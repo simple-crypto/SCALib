@@ -1,4 +1,4 @@
-mod belief_propabation;
+mod belief_propagation;
 mod bp_compute;
 mod factor_graph;
 mod fg_build;
@@ -9,7 +9,7 @@ pub use bp_compute::Distribution;
 pub type ClassVal = u32;
 type NamedList<T> = indexmap::IndexMap<String, T>;
 
-pub use belief_propabation::{BPError, BPState};
+pub use belief_propagation::{BPError, BPState};
 pub use factor_graph::{EdgeId, FactorGraph, FactorId, PublicValue, VarId};
 pub use fg_build::GraphBuildError;
 

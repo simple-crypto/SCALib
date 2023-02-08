@@ -1,8 +1,8 @@
-use super::belief_propabation::{BPError, FftPlans};
+use super::belief_propagation::{BPError, FftPlans};
 use super::factor_graph::PublicValue;
 use super::ClassVal;
 use ndarray::{azip, s, ArrayViewMut2, Zip};
-use num_complex::Complex;
+use realfft::num_complex::Complex;
 
 type Proba = f64;
 
