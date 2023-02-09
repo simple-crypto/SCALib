@@ -21,6 +21,7 @@ addopts = [
 testpaths = [
     "tests",
     "scalib",
+    "examples",
 ]
 
 [tool.cibuildwheel]
