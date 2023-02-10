@@ -5,6 +5,8 @@ Changelog
 Not released
 ------------
 
+* Fix bug in ``rank_estimation``.
+
 v0.5.0 (2023/02/08)
 -------------------
 
