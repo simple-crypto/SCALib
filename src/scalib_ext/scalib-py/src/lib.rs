@@ -100,8 +100,13 @@ fn partial_cp(
 }
 
 #[pyfunction]
-fn get_n_cpus_physical(_py: Python) -> usize {
-    num_cpus::get_physical()
+fn usable_parallelism(_py: Python) -> usize {
+    // Concepturally, num_cpus::get() gives the available parallelism, like
+    // std::thread::available_parallelism.
+    // However, this counts hyper-threading, which is most likely that not to
+    // harm SCALib's performance.
+    // We therefore clip the parallelism to the number of physical cpus.
+    std::cmp::min(num_cpus::get(), num_cpus::get_physical())
 }
 
 #[pymodule]
@@ -120,7 +125,7 @@ fn _scalib_ext(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ranking::rank_nbin, m)?)?;
     m.add_function(wrap_pyfunction!(belief_propagation::run_bp, m)?)?;
     m.add_function(wrap_pyfunction!(partial_cp, m)?)?;
-    m.add_function(wrap_pyfunction!(get_n_cpus_physical, m)?)?;
+    m.add_function(wrap_pyfunction!(usable_parallelism, m)?)?;
 
     Ok(())
 }

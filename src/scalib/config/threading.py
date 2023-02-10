@@ -21,7 +21,7 @@ class ThreadPool:
 def _default_num_threads():
     num_threads = os.environ.get("SCALIB_NUM_THREADS")
     if num_threads is None:
-        num_threads = _scalib_ext.get_n_cpus_physical()
+        num_threads = _scalib_ext.usable_parallelism()
     else:
         try:
             num_threads = int(num_threads)
