@@ -31,8 +31,8 @@ pub struct RankEstimation {
 }
 impl RankEstimation {
     pub fn new(min: f64, est: f64, max: f64) -> Self {
-        debug_assert!(min <= est);
-        debug_assert!(est <= max);
+        debug_assert!(min <= est, "{min:?} {est:?} {max:?}");
+        debug_assert!(est <= max, "{min:?} {est:?} {max:?}");
         Self { min, est, max }
     }
     pub fn contains(&self, rank: f64) -> bool {
@@ -260,7 +260,9 @@ pub mod tests {
                 );
                 assert_eq!(rank_est.min, rank_est.max);
                 assert!(rank_est.contains(rank));
-                let rank_est = method.rank_accuracy(&*costs, &*key, 1.1, Some(1)).unwrap();
+                let rank_est = method
+                    .rank_accuracy(&*costs, &*key, 1.1, Some(1), 1 << 10)
+                    .unwrap();
                 assert_eq!(rank_est.min, rank_est.max);
                 assert!(rank_est.contains(rank));
             }
@@ -271,6 +273,7 @@ pub mod tests {
         key: &[usize],
         merge: usize,
         nb_bin: usize,
+        acc_req: f64,
     ) -> Result<(), RankError> {
         let rank = RankProblem::new(costs, key)?.naive_rank();
         for method in RANKING_METHODS {
@@ -286,8 +289,22 @@ pub mod tests {
                 key,
                 method
             );
-            let rank_est = method.rank_accuracy(costs, key, 1.9, Some(merge))?;
-            assert!(rank_est.max / rank_est.min < 2.0);
+            let rank_est = method.rank_accuracy(costs, key, 1.0, Some(merge), 1 << 10)?;
+            assert!(
+                rank_est.contains(rank),
+                "rank: {}, rank_est: {:?}, merge: {}, nb_bin: {}, costs: {:?}, key: {:?} method: {:?}",
+                rank,
+                rank_est,
+                merge,
+                nb_bin,
+                costs,
+                key,
+                method
+            );
+            assert!(
+                rank_est.max / rank_est.min <= acc_req,
+                "{rank_est:?} {acc_req:?}"
+            );
         }
         return Ok(());
     }
@@ -301,7 +318,7 @@ pub mod tests {
                         "Simple Testcase merge={}, nb_bin={}, key: {:?}",
                         merge, nb_bin, key
                     );
-                    let _ = rank2_vs_naive(&costs, &key, merge, nb_bin);
+                    let _ = rank2_vs_naive(&costs, &key, merge, nb_bin, 2.0);
                 }
             }
         }
@@ -311,38 +328,42 @@ pub mod tests {
         key: Vec<usize>,
         nb_bin: usize,
         merge: usize,
+        acc: f64,
     }
     #[test]
     fn test_manycases() {
-        let _t = TestCase {
-            costs: vec![
-                vec![
-                    -256.0, -1.0, -16641.0, -1.0, -1.0, -1.0, -1.0, -189.0, 32511.0, -1.0, -1.0,
-                    -1.0, -1.0, -1.0, 4112.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -20481.0,
-                    -12113.0, 13039.0, 14135.0, 55.0,
-                ],
-                vec![13621.0, 13621.0, 13621.0, 13749.0, -4113.0],
-                vec![
-                    -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0,
-                    -1.0, -1.0, -1.0,
-                ],
-            ],
-            key: vec![0, 0, 0],
-            nb_bin: 32,
-            merge: 1,
-        };
         let test_cases = vec![
+            TestCase {
+                costs: vec![
+                    vec![
+                        -256.0, -1.0, -16641.0, -1.0, -1.0, -1.0, -1.0, -189.0, 32511.0, -1.0,
+                        -1.0, -1.0, -1.0, -1.0, 4112.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0,
+                        -20481.0, -12113.0, 13039.0, 14135.0, 55.0,
+                    ],
+                    vec![13621.0, 13621.0, 13621.0, 13749.0, -4113.0],
+                    vec![
+                        -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0,
+                        -1.0, -1.0, -1.0, -1.0,
+                    ],
+                ],
+                key: vec![0, 0, 0],
+                nb_bin: 32,
+                merge: 1,
+                acc: 20.0,
+            },
             TestCase {
                 costs: vec![vec![0.0, 0.0]],
                 key: vec![0],
                 nb_bin: 10,
                 merge: 1,
+                acc: 2.0,
             },
             TestCase {
                 costs: vec![vec![1.0, 0.0, 1.00001, 2.0]],
                 key: vec![0],
                 nb_bin: 4,
                 merge: 1,
+                acc: 2.0,
             },
             TestCase {
                 costs: vec![
@@ -353,29 +374,40 @@ pub mod tests {
                 key: vec![0, 0, 0],
                 nb_bin: 32,
                 merge: 1,
+                acc: 2.0,
             },
             TestCase {
                 costs: vec![vec![-1.0, 32511.0], vec![-1.0], vec![-1.0, 0.0, -26315.0]],
                 key: vec![0, 0, 0],
                 nb_bin: 32,
                 merge: 1,
+                acc: 2.0,
             },
             TestCase {
                 costs: vec![vec![0.0], vec![0.0], vec![2.0, 0.0, 1.0]],
                 key: vec![0, 0, 0],
                 nb_bin: 4,
                 merge: 1,
+                acc: 1.0,
+            },
+            TestCase {
+                costs: vec![vec![10.0, 0.0], vec![30.0, 0.0]],
+                key: vec![0, 0],
+                nb_bin: 4,
+                merge: 1,
+                acc: 2.0,
             },
             TestCase {
                 costs: vec![vec![10.0, 0.0], vec![30.0, 0.0], vec![13.0, 0.0, 12.0]],
                 key: vec![0, 0, 0],
                 nb_bin: 4,
                 merge: 1,
+                acc: 2.0,
             },
         ];
         for (i, case) in test_cases.into_iter().enumerate() {
             println!("Testcase {}", i);
-            let _ = rank2_vs_naive(&case.costs, &case.key, case.merge, case.nb_bin);
+            let _ = rank2_vs_naive(&case.costs, &case.key, case.merge, case.nb_bin, case.acc);
         }
     }
 }
