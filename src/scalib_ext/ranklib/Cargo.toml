@@ -2,7 +2,7 @@
 name = "ranklib"
 version = "0.1.0"
 authors = ["Gaëtan Cassiers <gaetan.cassiers@uclouvain.be>"]
-edition = "2018"
+edition = "2021"
 
 [features]
 ntl = []

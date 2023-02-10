@@ -8,8 +8,11 @@ const MAX_NB_BINS: usize = 1 << 14;
 #[cfg(not(fuzzing))]
 const MAX_NB_BINS: usize = 1 << 29;
 
+fn cost2bin_f(cost: f64, bin_size: f64) -> f64 {
+    cost / bin_size
+}
 fn cost2bin(cost: f64, bin_size: f64) -> usize {
-    (cost / bin_size).round() as usize
+    cost2bin_f(cost, bin_size).round() as usize
 }
 
 /// A rank estimation problem.
@@ -222,21 +225,30 @@ fn rank_in_histogram<H: Histogram>(
     bin_size: f64,
     nb_subkeys: usize,
 ) -> RankEstimation {
-    // Values can be shifted by at most nb_subkeys*bin_size/2
-    let margin = ((nb_subkeys as f64) * bin_size) / 2.0;
-    let max_bound_cost = real_key_cost + margin;
-    let min_bound_cost = (real_key_cost - margin).max(0.0);
+    // Values can be shifted by at most nb_subkeys/2 bins.
+    // We add a small amount to compensate for rounding errors.
+    let margin = (nb_subkeys as f64) / 2.0 + 1e-20;
     let coefs = histo.coefs_f64();
     // bound by histo.len is needed due to greedy histogram growth
     let bin_real_key = std::cmp::min(coefs.len() - 1, cost2bin(real_key_cost, bin_size));
-    let bin_bound_max = std::cmp::min(coefs.len() - 1, cost2bin(max_bound_cost, bin_size));
-    let bin_bound_min = std::cmp::min(coefs.len() - 1, cost2bin(min_bound_cost, bin_size));
+    let bin_bound_max = std::cmp::min(
+        coefs.len() - 1,
+        (cost2bin_f(real_key_cost, bin_size) + margin).floor() as usize,
+    );
+    let bin_bound_min = std::cmp::min(
+        coefs.len() - 1,
+        (cost2bin_f(real_key_cost, bin_size) - margin).ceil() as usize,
+    );
+    debug_assert!(bin_bound_min <= bin_real_key);
+    debug_assert!(bin_real_key <= bin_bound_max);
     let sum_hist = |end| coefs[..end].iter().copied().sum::<f64>();
     // We must add one to the minimum rank to include the real key.
-    // It is already included in the est and the max.
+    let rank_min = 1.0 + sum_hist(bin_bound_min);
+    // It is already included in the max.
+    // For the est, it might not be included, if the real key is between the real bin and the max.
     return RankEstimation::new(
-        1.0 + sum_hist(bin_bound_min),
-        sum_hist(bin_real_key) + (coefs[bin_real_key] / 2.0).ceil(),
+        rank_min,
+        rank_min.max(sum_hist(bin_real_key) + (coefs[bin_real_key] / 2.0).ceil()),
         sum_hist(bin_bound_max + 1),
     );
 }
