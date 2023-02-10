@@ -1,15 +1,18 @@
-Simulated unprotected AES examples
-==================================
+SCALib examples
+===============
+
+Simulated unprotected AES
+-------------------------
 
 This directory contains an example of attack against an simple AES
 implementation leaking with an HW model and with Gaussian noise addition. We
 note that this code can simply be reused for a real implementation by replacing
 the simulated traces by real measurements. The example can simply be executed
-by running `main.py` with:
+by running `aes_simulation.py` with:
 
 .. code-block::
 
-    python3 main.py
+    python3 aes_simulation.py
 
 
 The simulations goes in multiple steps: 

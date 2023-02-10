@@ -6,7 +6,8 @@ from scalib.postprocessing import rank_accuracy
 from utils import sbox, gen_traces
 import numpy as np
 
-if __name__ == "__main__":
+
+def main():
     nc = 256
     npoi = 2
 
@@ -134,3 +135,7 @@ if __name__ == "__main__":
     print("")
     print(f"        {lrmin} < {lr} < {lrmax}")
     print("")
+
+
+if __name__ == "__main__":
+    main()
