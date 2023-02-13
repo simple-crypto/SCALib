@@ -21,11 +21,17 @@ two distributions.
 because of its qualitative nature. See [2]_ and [3]_ for cautionary notes.
 
 
-T-test Modules
-^^^^^^^^^^^^^^
+Univariate T-test
+^^^^^^^^^^^^^^^^^
 
-.. automodule:: scalib.metrics.ttest
-   :members: Ttest, MTtest
+.. autoclass:: scalib.metrics.Ttest
+   :members:
+
+Multivariate T-test
+^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: scalib.metrics.MTtest
+   :members:
 
 Implementations Details
 ^^^^^^^^^^^^^^^^^^^^^^^
