@@ -1,7 +1,7 @@
 Signal-to-Noise Ratio (SNR)
 ===========================
 
-.. automodule:: scalib.metrics.snr
+.. autoclass:: scalib.metrics.SNR
    :members:
 
 

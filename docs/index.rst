@@ -23,21 +23,20 @@ SCALib main characteristics are:
 
 Available features
 ------------------
-SCALib contains various features for side-channel analysis. Please read `SCALib
-workflow`_ for more details:
+SCALib contains various features for side-channel analysis:
 
 - :doc:`source/scalib.metrics`:
 
-  - Signal-to-noise ratio (SNR).
-  - Uni- and Multi-variate, arbitrary-order T-test estimation.
+  - Signal-to-noise ratio (:class:`scalib.metrics.SNR`).
+  - Uni- and Multi-variate, arbitrary-order T-test estimation (:class:`scalib.metrics.Ttest` and :class:`scalib.metrics.MTtest`).
 
 - :doc:`source/scalib.modeling`: 
 
-  - Templates in linear subspaces (LDA).
+  - Templates in linear subspaces (:class:`scalib.modeling.LDAClassifier`).
 
 - :doc:`source/scalib.attacks`:
 
-  - Generalization of `Divide & Conquer` with Soft Analytical Attacks (SASCA).
+  - Generalization of `Divide & Conquer` with Soft Analytical Attacks (:class:`SASCA <scalib.attacks.FactorGraph>`).
 
 - :doc:`source/scalib.postprocessing`:
 

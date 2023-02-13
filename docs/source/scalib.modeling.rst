@@ -4,5 +4,5 @@ Modeling
 LDAClassifier
 -------------
 
-.. automodule:: scalib.modeling.ldaclassifier
+.. autoclass:: scalib.modeling.LDAClassifier
    :members:

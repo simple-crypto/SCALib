@@ -2,17 +2,24 @@ Welcome to SCALib
 =================
 
 .. image:: https://badge.fury.io/py/scalib.svg
-    :target: https://badge.fury.io/py/scalib
+    :target: https://pypi.org/project/scalib/
+    :alt: PyPI
 .. image:: https://readthedocs.org/projects/scalib/badge/?version=stable
     :target: https://scalib.readthedocs.io/en/stable/
     :alt: Documentation Status
+.. image:: https://img.shields.io/matrix/scalib:matrix.org
+    :target: https://matrix.to/#/#scalib:matrix.org
+    :alt: Matrix room
 
 The Side-Channel Analysis Library (SCALib) is a Python package that
-contains state-of-the-art tools for side-channel evaluation. It focuses on
-providing efficient implementations of analysis methods widely used by the
-side-channel community and maintaining a flexible and simple interface.
+contains state-of-the-art tools for side-channel security evaluation. It focuses on
+
+- simple interface,
+- state-of-the art algorithms,
+- excellent performance (see `benchmarks <https://github.com/cassiersg/SCABench>`). 
 
 SCALib contains various features for side-channel analysis, see the documentation_.
+Come on **`matrix <https://matrix.to/#/#scalib:matrix.org>`** do discuss!
 
 .. _documentation: https://scalib.readthedocs.io/en/stable
 
@@ -46,6 +53,14 @@ To install from source:
     cd SCALib
     pip install .
 
+Alternatives
+============
+
+If your needs are not covered by SCALib, you might be more lucky with 
+`lascar <https://github.com/Ledger-Donjon/lascar>` or `scared <https://gitlab.com/eshard/scared>`.
+
+Please also let us know your needs by opening a 
+`feature request <https://github.com/simple-crypto/SCALib/issues/new?assignees=&labels=&template=feature_request.md&title=>`.
 
 About us
 ========
@@ -58,10 +73,12 @@ Contributions and Issues
 
 Contributions welcome !
 
-Please file a bug report for any issue you encounter (even bad documentation is
-a bug !), and let us know your suggestions (preferably through github, but
-email works too).
+Please file a **bug report** for any issue you encounter (even bad documentation is
+a bug !), and let us know your **suggestions** (open a `github issue
+<https://github.com/simple-crypto/SCALib/issues/new/choose>`, email works too).
 We also welcome code contributions, see `CONTRIBUTING.rst <CONTRIBUTING.rst>`_.
+
+You can also come discuss on `matrix <https://matrix.to/#/#scalib:matrix.org>`.
 
 All code contributions are subject to the Contributor License Agreement (`CLA
 <https://www.simple-crypto.dev/organization>`_) of SIMPLE-Crypto, which ensures
