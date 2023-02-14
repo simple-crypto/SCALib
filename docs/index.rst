@@ -161,6 +161,7 @@ Concrete evaluations
 
 1. `CHES 2020 CTF <https://github.com/obronchain/BS21_ches2020CTF>`_ published in TCHES2021.
 2. `Attack against ASCAD <https://github.com/cassiersg/ASCAD-5minutes>`_ eprint 2021/817.
+3. `TVLA On Selected NIST LWC Finalists <https://cryptography.gmu.edu/athena/LWC/Reports/TUGraz/TUGraz_Report_HW_5_candidates_RUB.pdf>`_.
 
 About us
 ========
