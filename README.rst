@@ -18,8 +18,14 @@ contains state-of-the-art tools for side-channel security evaluation. It focuses
 - state-of-the art algorithms,
 - excellent performance (see `benchmarks <https://github.com/cassiersg/SCABench>`_).
 
-SCALib contains various features for side-channel analysis, see the documentation_.
-Come on `matrix <https://matrix.to/#/#scalib:matrix.org>`_ to discuss!
+SCALib should be useful for any side-channel practitionner who wants to
+evaluate, but not necessarily attack, protected or non-protected
+implementations.
+
+See the documentation_ for the list of implemented tools.
+
+We have a `matrix chat <https://matrix.to/#/#scalib:matrix.org>`_ for
+announcements, questions, community support and discussions.
 
 .. _documentation: https://scalib.readthedocs.io/en/stable
 
@@ -95,8 +101,10 @@ a thriving future for open-source hardware security.
 
 License
 =======
-This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`.
-See `COPYING <COPYING>`_ for more information.
+This project is licensed under GNU AFFERO GENERAL PUBLIC LICENSE, Version 3.
+See `COPYRIGHT <COPYRIGHT>`_ and `COPYING <COPYING>`_ for more information.
+
+For licensing-related matters, please contact info@simple-crypto.dev.
 
 Acknowledgements
 ================
