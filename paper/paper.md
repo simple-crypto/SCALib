@@ -1,9 +1,10 @@
 ---
 title: 'SCALib: A Side-Channel Analysis Library'
 tags:
-  - Python
-  - Side-Channel
+  - Side-channel evaluation
   - Security
+  - Python
+  - Rust
 authors:
   - name: Olivier Bronchain
     orcid: 0000-0001-7595-718X
