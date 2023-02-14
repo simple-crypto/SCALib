@@ -113,7 +113,8 @@ Pseudo-example
      key_guess = np.argmax(k_distri[0,:])
 
 
-See the `full examples <https://github.com/simple-crypto/scalib/tree/main/examples>`_. 
+See the `full examples <https://github.com/simple-crypto/scalib/tree/main/examples>`_
+and an `attack on ASCADv1 <https://github.com/cassiersg/ASCAD-5minutes>`_.
 
 Where is SCALib used ?
 ======================
