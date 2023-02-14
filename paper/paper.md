@@ -21,7 +21,7 @@ affiliations:
    index: 2
  - name: Lamarr Security Research, Austria
    index: 3
-date: 14 February 2023
+date: 15 February 2023
 bibliography: paper.bib
 
 ---
@@ -115,7 +115,7 @@ faster than the ones of `lascar` and `SCAred` [@scabench].
 Moreover, our t-test implementation includes so-called higher-order and
 multivariate evaluations [@DBLP:conf/ches/SchneiderM15].
 Regarding profiled attacks, `SCALib` includes an implementation of
-linear-discriminant analysis (LDA) with a dimensionality reduction step (this
+LDA with a dimensionality reduction step (this
 provides a regularization and improves classification performance) [@DBLP:conf/ches/StandaertA08].
 We also implement the soft analytical side-channel attack (SASCA), which is a
 dedicated variant of the belief propagation algorithm [@DBLP:conf/asiacrypt/Veyrat-CharvillonGS14].
