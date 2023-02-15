@@ -22,7 +22,7 @@ affiliations:
    index: 2
  - name: Lamarr Security Research, Austria
    index: 3
-date: 15 February 2023
+date: 16 February 2023
 bibliography: paper.bib
 
 ---
@@ -95,7 +95,9 @@ needed, as they can potentially be exploited to mount an attack.
 Besides this requirement, leakage traces contain many points (typically
 thousands) and many metrics have to be computed for each of these points,
 providing parallelization opportunities.
-As a result of these characteristics, dedicated implementations can achieve excellent accuracy.
+As a result of these characteristics, dedicated implementations can achieve
+much better accuracy and performance than generic or naive (e.g., pure `numpy`)
+ones.
 
 On the other hand, security-specific algorithms are also used, such as key rank
 estimation (which allows to know the computational cost of the last part of a
@@ -119,7 +121,7 @@ Regarding profiled attacks, `SCALib` includes an implementation of
 LDA with a dimensionality reduction step (this
 provides a regularization and improves classification performance) [@DBLP:conf/ches/StandaertA08].
 We also implement the soft analytical side-channel attack (SASCA), which is a
-dedicated variant of the belief propagation algorithm [@DBLP:conf/asiacrypt/Veyrat-CharvillonGS14].
+variant of the belief propagation algorithm [@DBLP:conf/asiacrypt/Veyrat-CharvillonGS14].
 Finally, our key-rank estimation implementation relies an efficient histogram-based algorithm [@DBLP:conf/ches/PoussierSG16].
 
 `SCALib` has been used in many recent papers as a tool to validate new protected
