@@ -9,6 +9,7 @@ dist/
 .tox/
 .coverage
 docs/_build/
+docs/source/_generated/
 htmlcov/
 src/scalib/version.py
 src/scalib/build_config.py
