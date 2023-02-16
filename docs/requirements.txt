@@ -1,7 +1,5 @@
 # Do not add SCALib dependencies here.
 # Instead, mock them in conf.py
-pydata-sphinx-theme == 0.12.0
+# pydata-sphinx-theme == 0.12.0
+furo == 2022.12.7
 sphinx == 5.3.0
-numpydoc == 1.5.0
-matplotlib == 3.6.3
-ipython == 8.8.0

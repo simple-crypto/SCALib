@@ -1,5 +1,5 @@
-For developers
-==============
+Contributing
+============
 
 SCALib is developped on github_.
 
@@ -12,7 +12,7 @@ The minimum dependencies for building SCALib are
 
 - A C/C++ compiler.
 - The latest stable release of the `rust toolchain <https://rustup.rs/>`_.
-- Python (see `setup.cfg </setup.cfg>`_ for supported versions).
+- Python (see ``setup.cfg`` for supported versions).
 - :code:`pip`
 
 Moreover, for development, we use
@@ -23,7 +23,7 @@ Moreover, for development, we use
 Development commands
 --------------------
 
-The `Makefile </Makefile>`_ contains aliases for frequently-used commands, including
+The ``Makefile`` contains aliases for frequently-used commands, including
 building (with various compile optioms), running tests, etc.
 See
 
@@ -51,6 +51,7 @@ Multiple builds with misc. trade-offs can be used, depending on what you are wor
    make fmt # Nicely formats your code
    make test # Build SCALib and run tests
    # `make dev` can also be used: better debuginfo, but tests are slower
+
 - When developping Python code, you don't have to wait for the build:
 
 .. code-block::
@@ -63,6 +64,7 @@ Multiple builds with misc. trade-offs can be used, depending on what you are wor
    pytest
    # or, to focus on one feature test:
    pytest tests/test_X.py
+
 - When developping tests, you can do the same as for Python development, but
   using the ``test`` environment to run the test faster!
 
@@ -73,7 +75,7 @@ Before committing or pull request
 
 1. Ensure that your new code is poperly **tested and documented**.
 
-2. Ensure that your changes are documented in `CHANGELOG.rst <CHANGELOG.rst>`_.
+2. Ensure that your changes are documented in ``CHANGELOG.rst``.
 
 3. Nicely format the code:
 

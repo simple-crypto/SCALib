@@ -9,8 +9,9 @@ import scalib.utils
 
 class LDAClassifier:
     r"""Models the leakage :math:`\mathbf{l}` with :math:`n_s` dimensions using
-    linear discriminant analysis dimentionality reduction and gaussian
-    templates.
+    the linear discriminant analysis classifier (LDA) with integrated
+    dimensionality reduction.
+
     Based on the training data, linear discriminant analysis build a linear
     dimentionality reduction to :math:`p` dimensions that maximizes class
     separation.
@@ -35,15 +36,15 @@ class LDAClassifier:
     :math:`\mathbf{\Sigma}` its covariance (:math:`\mathbf{\Sigma} =
     \mathbb{Cov}(\mathbf{W}\mathbf{l}_x - \mathbf{\mu}_x)`).
 
-    `LDAClassifier` provides the probability of each class with `predict_proba`
+    :class:`LDAClassifier` provides the probability of each class with :meth:`predict_proba`
     thanks to Bayes' law such that
 
     .. math::
         \hat{\mathsf{pr}}(x|\mathbf{l}) = \frac{\hat{\mathsf{f}}(\mathbf{l}|x)}
                     {\sum_{x^*=0}^{n_c-1} \hat{\mathsf{f}}(\mathbf{l}|x^*)}.
 
-    Examples
-    --------
+    Example
+    -------
     >>> from scalib.modeling import LDAClassifier
     >>> import numpy as np
     >>> x = np.random.randint(0,256,(5000,10),dtype=np.int16)
@@ -56,8 +57,10 @@ class LDAClassifier:
 
     Notes
     -----
-    This should have similar behavior as `sklearn.LDA`, but it has better
-    performance (and lower flexibility).
+    This should have similar behavior as scikit-learn's `LDA
+    <https://scikit-learn.org/stable/modules/lda_qda.html#lda-qda>`_, but it
+    has better performance and numerical properties (at the cost of
+    flexibility).
 
     .. [1] François-Xavier Standaert and Cédric Archambeau, "Using
        Subspace-Based Template Attacks to Compare and Combine Power and
@@ -178,23 +181,21 @@ class LDAClassifier:
             self.lda = _scalib_ext.LDA.from_state(*state["lda"])
 
     def get_sw(self):
-        r"""Return $S_{W}$ matrix (within-class scatter)."""
+        r"""Return :math:`S_{W}` matrix (within-class scatter)."""
         return self.acc.get_sw()
 
     def get_sb(self):
-        r"""Return $S_{B}$ matrix (between-class scatter)."""
+        r"""Return :math:`S_{B}` matrix (between-class scatter)."""
         return self.acc.get_sb()
 
     def get_mus(self):
-        r"""Return means matrix (classes means).
-        - axis-0: classes
-        - axis-1: samples
-        """
+        r"""Return means matrix (classes means). Shape: ``(nc, ns)``."""
         return self.acc.get_mus()
 
 
 class MultiLDA:
     """Perform LDA on `nv` distinct variables for the same leakage traces.
+
     While functionally similar to a simple for loop, this enables solving the
     LDA problems in parallel in a simple fashion. This also enable easy
     handling of Points Of Interest (POIs) in long traces.

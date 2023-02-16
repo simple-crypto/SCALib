@@ -150,7 +150,7 @@ class FactorGraph:
 
 
 class BPState:
-    """Belief propagation state.
+    """Belief propagation state associated to a :class:`FactorGraph`.
 
     This is a stateful object on which belief propagation operations can be run.
     See :class:`scalib.attacks.FactorGraph` for usage example.

@@ -25,20 +25,20 @@ Available features
 ------------------
 SCALib contains various features for side-channel analysis:
 
-- :doc:`source/scalib.metrics`:
+- :mod:`scalib.metrics`:
 
   - Signal-to-noise ratio (:class:`scalib.metrics.SNR`).
   - Uni- and Multi-variate, arbitrary-order T-test estimation (:class:`scalib.metrics.Ttest` and :class:`scalib.metrics.MTtest`).
 
-- :doc:`source/scalib.modeling`: 
+- :mod:`scalib.modeling`: 
 
   - Templates in linear subspaces (:class:`scalib.modeling.LDAClassifier`).
 
-- :doc:`source/scalib.attacks`:
+- :mod:`scalib.attacks`:
 
-  - Generalization of `Divide & Conquer` with Soft Analytical Attacks (:class:`SASCA <scalib.attacks.FactorGraph>`).
+  - Generalization of "Divide & Conquer" with Soft Analytical Attacks (:class:`SASCA <scalib.attacks.FactorGraph>`).
 
-- :doc:`source/scalib.postprocessing`:
+- :mod:`scalib.postprocessing`:
 
   - Full key rank estimation.
 
@@ -54,67 +54,11 @@ See the `README <https://github.com/simple-crypto/SCALib>`_. TL;DR:
 
    pip install scalib
 
+Examples
+--------
 
-SCALib workflow
----------------
-
-The current version of SCALib contains algorithms for many steps of a
-side-channel security evaluation.
-These are grouped in four categories:
-
-1. **Metrics**: Standard metrics leakage metrics.
-   This helps to find point-of-interest (POIs), quantify avaiable information, etc. 
-
-2. **Modeling**: Tools to mount profiled attacks first ``.fit(...)``, then ``.predict_proba(...)``.
-
-3. **Attacks**: Once your have profiles, find the key. This currently contains
-   an implementation the SASCA.
-
-4. **PostProcessing**: Show the results of a trial attack.
-   This currently contains key rank-estimation routines.
-
-Pseudo-example
-##############
-
-.. code-block::
-
-     # compute snr
-     snr = SNR(nc=256,ns=ns,p=1) 
-     snr.fit(traces_p,x_p)
-     
-     # build model
-     pois_x = np.argsort(snr.get_snr()[0][:-npoi])
-     lda = LDAClassifier(nc=256,ns=npoi,p=1)
-     lda.fit(traces_p[:,pois_x],x_p)
-
-     # Describe and generate the SASCAGraph
-     graph_desc = ´´´
-        # Small unprotected Sbox example
-        TABLE sbox   # The Sbox
-        VAR SINGLE k # The key
-        VAR MULTI p  # The plaintext
-        VAR MULTI x  # Sbox input
-        VAR MULTI y  # Sbox output
-        PROPERTY x = k ^ p   # Key addition
-        PROPERTY y = sbox[x] # Sbox lookup
-        ´´´
-     graph = SASCAGraph(graph_desc,256,len(traces_a))
-
-     # Encode data into the graph
-     graph.set_table("sbox",aes_sbox)
-     graph.set_public("p",plaintexts)
-     graph.set_distribution("x",lda.predict_proba(traces_a))
-
-     # Solve graph
-     graph.run_bp(it=3)
-
-     # Get key distribution and derive key guess
-     k_distri = graph.get_distribution("k")
-     key_guess = np.argmax(k_distri[0,:])
-
-
-See the `full examples <https://github.com/simple-crypto/scalib/tree/main/examples>`_
-and an `attack on ASCADv1 <https://github.com/cassiersg/ASCAD-5minutes>`_.
+See our `examples <https://github.com/simple-crypto/scalib/tree/main/examples>`_
+and a more complete `attack on ASCADv1 <https://github.com/cassiersg/ASCAD-5minutes>`_.
 
 Where is SCALib used ?
 ======================
@@ -170,19 +114,22 @@ SCALib was initiated by Olivier Bronchain and Gaëtan Cassiers during their PhD
 at UCLouvain. It is now developed as a project of
 `SIMPLE-Crypto <https://www.simple-crypto.dev/>`_ and maintained by Gaëtan Cassiers.
 
-License
-=======
-This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`.
-See `COPYING <https://github.com/simple-crypto/scalib/blob/main/COPYING>`_ for
-more information. 
-
 
 .. toctree::
-   :maxdepth: 2
+    :hidden:
+
+    self
+
+.. toctree::
+    :caption: API Reference
+    :hidden:
+
+    source/api_ref.rst
+
+.. toctree::
+   :caption: Development
    :hidden:
 
-   source/scalib.metrics.rst
-   source/scalib.modeling.rst
-   source/scalib.attacks.rst
-   source/scalib.postprocessing.rst
-   source/scalib.configuration.rst
+   source/changelog.rst
+   source/contributing.rst
+   source/copyright.rst

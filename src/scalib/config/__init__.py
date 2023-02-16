@@ -63,8 +63,19 @@ Example
 >>> with config.activate():
 ...     pass
 
-Module Contents
----------------
+Reference
+---------
+
+.. currentmodule:: scalib.config
+
+.. autosummary::
+   :toctree:
+   :recursive:
+   :nosignatures:
+
+   Config
+   default_config
+   ThreadPool
 """
 
 __all__ = ["default_config", "Config", "ThreadPool"]

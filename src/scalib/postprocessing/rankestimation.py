@@ -25,11 +25,28 @@ Examples
 >>> (rmin,r,rmax) = rank_accuracy(-np.log(scores),key)
 >>> assert r == 1
 
+
+Reference
+---------
+
+.. currentmodule:: scalib.postprocessing.rankestimation
+
+.. autosummary::
+    :toctree:
+    :nosignatures:
+    :recursive:
+
+    rank_accuracy
+    rank_nbin
+
 Notes
 -----
 The rank estimation algorithm is based on [1]_, with the following
 optimization: computation of histogram bins with higher score than the expected
 key is skipped, since it has no impact on the final rank.
+
+References
+----------
 
 .. [1] "Simple Key Enumeration (and Rank Estimation) Using Histograms: An
    Integrated Approach", R. Poussier, F.-X. Standaert, V. Grosso in CHES2016.

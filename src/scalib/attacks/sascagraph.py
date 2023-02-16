@@ -90,7 +90,7 @@ class SASCAGraph:
     >>> k_distri = graph.get_distribution("k")
     >>> key_guess = np.argmax(k_distri[0,:])
 
-    By running a belief propagation algorithm (see [1]_), the distributions on all
+    By running a belief propagation algorithm (see [VGS14]_), the distributions on all
     the variables are updated based on their initial distributions. The
     `SASCAGraph` can be solved by using `run_bp()`.
 
@@ -129,7 +129,7 @@ class SASCAGraph:
     `SINGLE` variables works.
 
 
-    .. [1] "Soft Analytical Side-Channel Attacks". N. Veyrat-Charvillon, B.
+    .. [VGS14] "Soft Analytical Side-Channel Attacks". N. Veyrat-Charvillon, B.
        Gérard, F.-X. Standaert, ASIACRYPT2014.
 
     Parameters

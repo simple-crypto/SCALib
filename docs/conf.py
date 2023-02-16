@@ -11,17 +11,12 @@ copyright = 'SIMPLE Contributors'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
-    'numpydoc',
+    'sphinx.ext.napoleon',
     'sphinx.ext.intersphinx',
     'sphinx.ext.coverage',
-    'sphinx.ext.doctest',
     'sphinx.ext.autosummary',
-    'sphinx.ext.graphviz',
-    'sphinx.ext.ifconfig',
-    'matplotlib.sphinxext.plot_directive',
-    'IPython.sphinxext.ipython_console_highlighting',
-    'IPython.sphinxext.ipython_directive',
     'sphinx.ext.mathjax',
+    'sphinx.ext.viewcode',
 ]
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -33,7 +28,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 
 # -- Options for HTML output -------------------------------------------------
-html_theme = 'pydata_sphinx_theme'
+html_theme = 'furo'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -41,7 +36,16 @@ html_theme = 'pydata_sphinx_theme'
 # html_static_path = ['_static']
 
 autoclass_content = 'both'
-numpydoc_show_class_members = False
+
+autosummary_ignore_module_all = False
+
+autodoc_default_options = {
+    'member-order': 'bysource',
+    'undoc-members': True,
+    'special-members': False,
+}
+
+autodoc_typehints = 'description'
 
 # We do not need to install an build the package to generate the doc.
 # We only have to mock dependencies, binary packages, and add the source to the
