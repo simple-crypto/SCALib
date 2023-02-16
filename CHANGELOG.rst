@@ -6,6 +6,9 @@ Not released
 ------------
 
 * Fix bug in ``rank_estimation``.
+* Improve documentation and README.
+* Run rust tests.
+* Better selection of default threadpool size.
 
 v0.5.0 (2023/02/08)
 -------------------
