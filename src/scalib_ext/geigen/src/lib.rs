@@ -125,7 +125,9 @@ impl Geigen for GEigenSolverP {
 mod tests {
     use super::*;
     use ndarray::Array2;
+    use ndarray_rand::rand::SeedableRng;
     use ndarray_rand::RandomExt;
+    use rand_xoshiro::Xoshiro256StarStar;
     fn test_solver<S: Geigen>(a: &ArrayView2<f64>, b: &ArrayView2<f64>, n: usize) {
         let solver = S::new(&a.view(), &b.view(), n).expect("Fail to solve");
         let vecs = solver.vecs();
@@ -145,10 +147,19 @@ mod tests {
         );
     }
     fn gen_problem(n: usize) -> (Array2<f64>, Array2<f64>) {
-        let x: ndarray::Array2<f64> =
-            ndarray::Array2::random((n, n), ndarray_rand::rand_distr::Uniform::from(0.0..1.0));
-        let y: ndarray::Array2<f64> =
-            ndarray::Array2::random((n, n), ndarray_rand::rand_distr::Uniform::from(0.0..1.0));
+        // Get a seeded random number generator for reproducibility
+        let seed = 42;
+        let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
+        let x: ndarray::Array2<f64> = ndarray::Array2::random_using(
+            (n, n),
+            ndarray_rand::rand_distr::Uniform::from(0.0..1.0),
+            &mut rng,
+        );
+        let y: ndarray::Array2<f64> = ndarray::Array2::random_using(
+            (n, n),
+            ndarray_rand::rand_distr::Uniform::from(0.0..1.0),
+            &mut rng,
+        );
         // make it symmetric
         let a = &x + &x.t();
         // make it semipositive-definite

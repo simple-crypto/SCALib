@@ -57,6 +57,7 @@ bench = false
 [dev-dependencies]
 criterion = "0.3.4"
 ndarray-rand = "0.14.0"
+rand_xoshiro = "0.6"
 approx = "0.4.0"
 ndarray-stats = "0.5.0"
 

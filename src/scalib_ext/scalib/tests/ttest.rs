@@ -1,9 +1,18 @@
 use itertools::izip;
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis};
+use ndarray_rand::rand::SeedableRng;
 use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::RandomExt;
-//use ndarray_stats::QuantileExt;
+use rand_xoshiro::Xoshiro256StarStar;
 use scalib::ttest;
+
+fn gen_problem(n: usize, ns: i16, nc: u16) -> (Array2<i16>, Array1<u16>) {
+    let seed = 42;
+    let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
+    let traces = Array2::<i16>::random_using((n, ns as usize), Uniform::new(0, ns), &mut rng);
+    let y = Array1::<u16>::random_using((n,), Uniform::new(0, nc), &mut rng);
+    return (traces, y);
+}
 
 #[test]
 fn ttestacc_simple() {
@@ -12,8 +21,7 @@ fn ttestacc_simple() {
     let n = 100;
     let nc = 2;
 
-    let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
-    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
+    let (traces, y) = gen_problem(n, ns, nc);
 
     let mut ttacc = ttest::UniCSAcc::new(ns as usize, order, nc as usize);
     ttacc.update(traces.view(), y.view());
@@ -37,8 +45,7 @@ fn ttestacc_simple_chuncks() {
     let step = 10;
     let nc = 2;
 
-    let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
-    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
+    let (traces, y) = gen_problem(n, ns, nc);
 
     // perform ttacc
     let mut ttacc = ttest::UniCSAcc::new(ns as usize, order, nc as usize);
@@ -68,8 +75,7 @@ fn ttestacc_merge_and_reset_chuncks() {
     let step = 10;
     let nc = 2;
 
-    let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
-    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
+    let (traces, y) = gen_problem(n, ns, nc);
 
     // perform ttacc
     let mut ttacc = ttest::UniCSAcc::new(ns as usize, order, nc as usize);
@@ -102,8 +108,7 @@ fn ttestacc_merge_chuncks() {
     let step = 10;
     let nc = 2;
 
-    let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
-    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
+    let (traces, y) = gen_problem(n, ns, nc);
 
     // perform ttacc
     let mut ttacc = ttest::UniCSAcc::new(ns as usize, order, nc as usize);
