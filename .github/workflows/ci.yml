@@ -82,7 +82,30 @@ jobs:
             - name: Run tests
               # Run tox using the version of Python in `PATH`
               run: pytest
-    # TODO run rust tests (separate job)
+
+    # Separate job because debug build.
+    rust_tests:
+        name: Run rust tests
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v3
+            - uses: actions/cache@v3
+              with:
+                  path: |
+                      ${{ runner.temp }}/cargo_build
+                      ${{ runner.temp }}/cargo_home
+                  key: linux-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
+            # Even though we don't explicitly run python, we install it to be
+            # sure that PyO3 can build properly (if needed).
+            - uses: actions/setup-python@v3
+              with:
+                  python-version: "3.10"
+            - name: Run tests
+              run: cargo test --workspace --manifest-path src/scalib_ext/Cargo.toml
+              env:
+                CARGO_TARGET_DIR: "${{ runner.temp }}/cargo_build"
+                CARGO_HOME: "${{ runner.temp }}/cargo_home"
+                RUST_BACKTRACE: "1"
 
     build_wheel_windows:
         name: Build wheel on Windows
@@ -116,7 +139,6 @@ jobs:
                   name: dist
                   path: ./wheelhouse/*.whl
 
-# Mac Os wheels do not work currently (maybe due to missing LAPACK in OpenBLAS build.
 #    build_wheel_macos:
 #        name: Build wheels on macos ${{ matrix.vers }}
 #        runs-on: macos-10.15
