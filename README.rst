@@ -77,6 +77,12 @@ If your needs are not covered by SCALib, you might be more lucky with
 Please also let us know your needs by opening a 
 `feature request <https://github.com/simple-crypto/SCALib/issues/new?assignees=&labels=&template=feature_request.md&title=>`_.
 
+Versioning policy
+=================
+
+SCALib uses `semantic versioing <https://semver.org/>`_, see the `CHANGELOG
+<CHANGELOG.rst>`_ for breaking changes and novelties.
+
 About us
 ========
 SCALib was initiated by Olivier Bronchain and Gaëtan Cassiers during their PhD
