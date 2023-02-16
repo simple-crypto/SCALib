@@ -5,6 +5,9 @@ Changelog
 Not released
 ------------
 
+v0.5.1 (2023/02/16)
+-------------------
+
 * Fix bug in ``rank_estimation``.
 * Improve documentation and README.
 * Run rust tests.
