@@ -9,8 +9,11 @@ edition = "2018"
 [dependencies]
 cxx = "1.0"
 ndarray = {version="0.15", features=["approx"]}
-ndarray-rand = "0.14"
 thiserror = "1.0"
+
+[dev-dependencies]
+ndarray-rand = "0.14"
+rand_xoshiro = "0.6"
 
 [build-dependencies]
 cxx-build = "1.0"

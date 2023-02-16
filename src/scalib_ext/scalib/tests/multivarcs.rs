@@ -10,10 +10,27 @@
 //   - number of traces nc
 use itertools::izip;
 use ndarray::{s, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayView3, Axis};
+use ndarray_rand::rand::SeedableRng;
 use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::RandomExt;
+use rand_xoshiro::Xoshiro256StarStar;
 use scalib::mttest;
 extern crate approx;
+
+fn gen_problem(
+    n: usize,
+    ns: i16,
+    order: usize,
+    npois: usize,
+    nc: u16,
+) -> (Array2<i16>, Array2<u32>, Array1<u16>) {
+    let seed = 42;
+    let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
+    let traces = Array2::<i16>::random_using((n, ns as usize), Uniform::new(0, ns), &mut rng);
+    let pois = Array2::<u32>::random_using((order, npois), Uniform::new(0, ns as u32), &mut rng);
+    let y = Array1::<u16>::random_using((n,), Uniform::new(0, nc), &mut rng);
+    return (traces, pois, y);
+}
 
 #[test]
 fn multivarcs_simple() {
@@ -23,9 +40,7 @@ fn multivarcs_simple() {
     let nc = 2;
     let npois = 20;
 
-    let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
-    let pois = Array2::<u32>::random((order, npois), Uniform::new(0, ns as u32));
-    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
+    let (traces, pois, y) = gen_problem(n, ns, order, npois, nc);
 
     let mut ttacc = mttest::MultivarCSAcc::new(pois.view(), order);
     ttacc.update(traces.view(), y.view());
@@ -52,9 +67,7 @@ fn multivarcs_simple_chuncks() {
     let npois = 20;
     let step = 10;
 
-    let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
-    let pois = Array2::<u32>::random((order, npois), Uniform::new(0, ns as u32));
-    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
+    let (traces, pois, y) = gen_problem(n, ns, order, npois, nc);
 
     let mut ttacc = mttest::MultivarCSAcc::new(pois.view(), order);
 
@@ -87,9 +100,7 @@ fn multivarcs_simple_chuncks_step1() {
     let npois = 20;
     let step = 1;
 
-    let traces = Array2::<i16>::random((n, ns as usize), Uniform::new(0, ns));
-    let pois = Array2::<u32>::random((order, npois), Uniform::new(0, ns as u32));
-    let y = Array1::<u16>::random((n,), Uniform::new(0, nc));
+    let (traces, pois, y) = gen_problem(n, ns, order, npois, nc);
 
     let mut ttacc = mttest::MultivarCSAcc::new(pois.view(), order);
 
