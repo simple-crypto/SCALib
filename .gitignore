@@ -14,3 +14,5 @@ src/scalib/version.py
 src/scalib/build_config.py
 .cargo_build*
 scalib*.whl
+paper/paper.pdf
+paper/paper.jats

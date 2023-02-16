@@ -16,10 +16,16 @@ contains state-of-the-art tools for side-channel security evaluation. It focuses
 
 - simple interface,
 - state-of-the art algorithms,
-- excellent performance (see `benchmarks <https://github.com/cassiersg/SCABench>`). 
+- excellent performance (see `benchmarks <https://github.com/cassiersg/SCABench>`_).
 
-SCALib contains various features for side-channel analysis, see the documentation_.
-Come on **`matrix <https://matrix.to/#/#scalib:matrix.org>`** do discuss!
+SCALib should be useful for any side-channel practitionner who wants to
+evaluate, but not necessarily attack, protected or non-protected
+implementations.
+
+See the documentation_ for the list of implemented tools.
+
+We have a `matrix chat <https://matrix.to/#/#scalib:matrix.org>`_ for
+announcements, questions, community support and discussions.
 
 .. _documentation: https://scalib.readthedocs.io/en/stable
 
@@ -53,14 +59,23 @@ To install from source:
     cd SCALib
     pip install .
 
+
+Usage
+=====
+
+See `API documentation <https://scalib.readthedocs.io/en/stable/#available-features>`_,
+`example <https://github.com/simple-crypto/scalib/tree/main/examples>`_ and
+`real-world usages <https://scalib.readthedocs.io/en/stable/#concrete-evaluations>`_.
+
+
 Alternatives
 ============
 
 If your needs are not covered by SCALib, you might be more lucky with 
-`lascar <https://github.com/Ledger-Donjon/lascar>` or `scared <https://gitlab.com/eshard/scared>`.
+`lascar <https://github.com/Ledger-Donjon/lascar>`_ or `scared <https://gitlab.com/eshard/scared>`_.
 
 Please also let us know your needs by opening a 
-`feature request <https://github.com/simple-crypto/SCALib/issues/new?assignees=&labels=&template=feature_request.md&title=>`.
+`feature request <https://github.com/simple-crypto/SCALib/issues/new?assignees=&labels=&template=feature_request.md&title=>`_.
 
 About us
 ========
@@ -75,10 +90,10 @@ Contributions welcome !
 
 Please file a **bug report** for any issue you encounter (even bad documentation is
 a bug !), and let us know your **suggestions** (open a `github issue
-<https://github.com/simple-crypto/SCALib/issues/new/choose>`, email works too).
+<https://github.com/simple-crypto/SCALib/issues/new/choose>`_, email works too).
 We also welcome code contributions, see `CONTRIBUTING.rst <CONTRIBUTING.rst>`_.
 
-You can also come discuss on `matrix <https://matrix.to/#/#scalib:matrix.org>`.
+You can also come discuss on `matrix <https://matrix.to/#/#scalib:matrix.org>`_.
 
 All code contributions are subject to the Contributor License Agreement (`CLA
 <https://www.simple-crypto.dev/organization>`_) of SIMPLE-Crypto, which ensures
@@ -86,8 +101,10 @@ a thriving future for open-source hardware security.
 
 License
 =======
-This project is licensed under `GNU AFFERO GENERAL PUBLIC LICENSE, Version 3`.
-See `COPYING <COPYING>`_ for more information.
+This project is licensed under GNU AFFERO GENERAL PUBLIC LICENSE, Version 3.
+See `COPYRIGHT <COPYRIGHT>`_ and `COPYING <COPYING>`_ for more information.
+
+For licensing-related matters, please contact info@simple-crypto.dev.
 
 Acknowledgements
 ================
