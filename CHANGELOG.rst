@@ -5,6 +5,9 @@ Changelog
 Not released
 ------------
 
+v0.5.2 (2023/02/17)
+-------------------
+
 * Restructure and expand generated docs.
 * Refactor doc generation.
 * Change docs style.
