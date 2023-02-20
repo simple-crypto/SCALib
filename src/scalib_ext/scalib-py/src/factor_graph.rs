@@ -257,6 +257,34 @@ impl BPState {
         self.get_inner_mut().propagate_factor_all(factor_id);
         Ok(())
     }
+    pub fn set_belief_from_var(
+        &mut self,
+        py: Python,
+        var: &str,
+        factor: &str,
+        distr: PyObject,
+    ) -> PyResult<()> {
+        let edge_id = self.get_edge_named(var, factor)?;
+        let bp = self.get_inner_mut();
+        let distr = obj2distr(py, distr, bp.get_graph().edge_multi(edge_id))?;
+        bp.set_belief_from_var(edge_id, distr)
+            .map_err(|e| PyTypeError::new_err(e.to_string()))?;
+        Ok(())
+    }
+    pub fn set_belief_to_var(
+        &mut self,
+        py: Python,
+        var: &str,
+        factor: &str,
+        distr: PyObject,
+    ) -> PyResult<()> {
+        let edge_id = self.get_edge_named(var, factor)?;
+        let bp = self.get_inner_mut();
+        let distr = obj2distr(py, distr, bp.get_graph().edge_multi(edge_id))?;
+        bp.set_belief_to_var(edge_id, distr)
+            .map_err(|e| PyTypeError::new_err(e.to_string()))?;
+        Ok(())
+    }
     pub fn propagate_factor(
         &mut self,
         factor: &str,

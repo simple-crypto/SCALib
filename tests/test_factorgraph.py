@@ -727,3 +727,180 @@ def test_cyclic():
     g = FactorGraph(graph_multi_cyclic)
     assert BPState(g, 1, {"p": np.array([0], dtype=np.uint32)}).is_cyclic() == False
     assert BPState(g, 2, {"p": np.array([0, 0], dtype=np.uint32)}).is_cyclic() == True
+
+
+def test_and_rounding_error_simple():
+    # simple reproduction of issue #86
+    factor_graph = """NC 16
+    VAR MULTI A
+    VAR MULTI B
+    VAR MULTI C
+    PROPERTY P: C = A & B
+    """
+    priors = {
+        "A": [
+            1.0 + 2**-52,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        ],
+        "C": [
+            0.0,
+            2.666666666666667,
+            2.666666666666667,
+            0.0,
+            2.666666666666667,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ],
+    }
+    fg = FactorGraph(factor_graph)
+    bp = BPState(fg, 1)
+    for k, v in priors.items():
+        bp._inner.set_belief_from_var(k, "P", np.array([v]))
+    bp.propagate_factor("P")
+    assert (bp.get_belief_to_var("B", "P") >= 0.0).all()
+
+
+def test_and_rounding_error_simple():
+    # test case of issue #86
+    factor_graph = """NC 16
+    VAR MULTI K0
+    VAR MULTI K1
+    VAR MULTI L1
+    VAR MULTI N1
+    VAR MULTI B
+    VAR MULTI C
+    VAR MULTI N0
+    VAR MULTI A
+    VAR MULTI L2
+    VAR MULTI L3
+    PUB SINGLE IV
+    PROPERTY P1: L1 = K0 ^ K1
+    PROPERTY P2: N1 = !K1
+    PROPERTY P3: B = N1 & IV
+    PROPERTY P4: C = B ^ K0
+    PROPERTY P5: N0 = !K0
+    PROPERTY P6: A = N0 & K1
+    PROPERTY P7: L2 = A ^ C
+    PROPERTY P8: L3 = K1 ^ C"""
+    priors = {
+        "A": [
+            0.0,
+            0.25,
+            0.25,
+            0.0,
+            0.25,
+            0.0,
+            0.0,
+            0.0,
+            0.25,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ],
+        "C": [
+            0.0,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.0,
+        ],
+        "L1": [
+            0.0,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.0,
+        ],
+        "L2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.25,
+            0.0,
+            0.0,
+            0.0,
+            0.25,
+            0.0,
+            0.25,
+            0.25,
+            0.0,
+        ],
+        "L3": [
+            0.0,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.0,
+        ],
+    }
+    fg = FactorGraph(factor_graph)
+    bp = BPState(fg, 1, public_values={"IV": 0xC})
+    for k, v in priors.items():
+        bp.set_evidence(k, distribution=np.array([v]))
+    bp.bp_loopy(5, initialize_states=False)
+    assert (bp.get_distribution("K0") >= 0.0).all()
+    assert (bp.get_distribution("K1") >= 0.0).all()
