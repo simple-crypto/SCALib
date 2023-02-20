@@ -58,13 +58,15 @@ impl FactorGraph {
     }
 
     pub fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
-        Ok(PyBytes::new(py, &serialize(&self.inner.as_deref()).unwrap()).to_object(py))
+        let to_ser: Option<&sasca::FactorGraph> = self.inner.as_deref();
+        Ok(PyBytes::new(py, &serialize(&to_ser).unwrap()).to_object(py))
     }
 
     pub fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
         match state.extract::<&PyBytes>(py) {
             Ok(s) => {
-                self.inner = Some(Arc::new(deserialize(s.as_bytes()).unwrap()));
+                let deser: Option<sasca::FactorGraph> = deserialize(s.as_bytes()).unwrap();
+                self.inner = deser.map(Arc::new);
                 Ok(())
             }
             Err(e) => Err(e),

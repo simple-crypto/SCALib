@@ -13,6 +13,37 @@ def make_distri(nc, n):
     return normalize_distr(np.random.randint(1, 10000000, (n, nc)).astype(np.float64))
 
 
+def test_copy_fg():
+    graph = """
+        NC 2
+        PROPERTY s1: x = a^b
+        VAR MULTI x
+        VAR MULTI a
+        VAR MULTI b
+        """
+    graph = FactorGraph(graph)
+    graph2 = copy.deepcopy(graph)
+
+
+def test_copy_bp():
+    graph = """
+        NC 2
+        PROPERTY s1: x = a^b
+        VAR MULTI x
+        VAR MULTI a
+        VAR MULTI b
+        """
+    graph = FactorGraph(graph)
+    n = 5
+    bp_state = BPState(graph, n)
+    distri_a = make_distri(2, 5)
+    distri_b = make_distri(2, 5)
+    bp_state.set_evidence("a", distri_a)
+    bp_state.set_evidence("b", distri_b)
+    bp_state.bp_loopy(1, initialize_states=True)
+    bp_state2 = copy.deepcopy(bp_state)
+
+
 def test_table():
     """
     Test Table lookup
