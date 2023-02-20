@@ -365,8 +365,12 @@ impl Distribution {
     /// Normalize sum to one, and make values not too small
     pub fn regularize(&mut self) {
         self.for_each_ignore(|mut d, _| {
-            let norm_f = 1.0 / (d.sum() + MIN_PROBA * d.len() as f64);
-            d.mapv_inplace(|x| (x + MIN_PROBA) * norm_f);
+            let (sum, min) = d
+                .iter()
+                .fold((0.0f64, 0.0f64), |(sum, min), x| (sum + x, min.min(*x)));
+            let offset = -min + MIN_PROBA;
+            let norm_f = 1.0 / (sum + offset * d.len() as f64);
+            d.mapv_inplace(|x| (x + offset) * norm_f);
         })
     }
     pub fn make_non_zero_signed(&mut self) {

@@ -171,6 +171,20 @@ impl BPState {
     pub fn get_belief_from_var(&self, edge: EdgeId) -> &Distribution {
         &self.belief_from_var[edge]
     }
+    pub fn set_belief_from_var(
+        &mut self,
+        edge: EdgeId,
+        belief: Distribution,
+    ) -> Result<(), BPError> {
+        self.check_distribution(&belief, self.graph.edge_multi(edge))?;
+        self.belief_from_var[edge] = belief;
+        Ok(())
+    }
+    pub fn set_belief_to_var(&mut self, edge: EdgeId, belief: Distribution) -> Result<(), BPError> {
+        self.check_distribution(&belief, self.graph.edge_multi(edge))?;
+        self.belief_to_var[edge] = belief;
+        Ok(())
+    }
     // Propagation type:
     // belief to var -> var
     // var -> belief to func

@@ -203,6 +203,12 @@ impl FactorGraph {
     pub fn var_multi(&self, var: VarId) -> bool {
         self.var(var).multi
     }
+    pub fn factor_multi(&self, factor: FactorId) -> bool {
+        self.factor(factor).multi
+    }
+    pub fn edge_multi(&self, edge: EdgeId) -> bool {
+        self.factor_multi(self.edges[edge].factor)
+    }
     pub fn range_vars(&self) -> impl Iterator<Item = VarId> {
         (0..self.vars.len()).map(VarId::from_idx)
     }
