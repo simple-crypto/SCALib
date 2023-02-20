@@ -148,6 +148,14 @@ class FactorGraph:
         """
         self._inner.sanity_check(pub_assignment, var_assignment)
 
+    def vars(self) -> Sequence[str]:
+        """Return the names of the variables in the graph."""
+        return self._inner.var_names()
+
+    def factors(self) -> Sequence[str]:
+        """Return the names of the factors in the graph."""
+        return self._inner.factor_names()
+
 
 class BPState:
     """Belief propagation state associated to a :class:`FactorGraph`.
@@ -164,7 +172,13 @@ class BPState:
     ):
         if public_values is None:
             public_values = dict()
+        self._fg = factor_graph
         self._inner = factor_graph._inner.new_bp(nexec, public_values)
+
+    @property
+    def fg(self) -> FactorGraph:
+        """The associated factor graph."""
+        self._fg
 
     def set_evidence(self, var: str, distribution: Optional[npt.NDArray[np.float64]]):
         r"""Sets prior distribution of a variable.
@@ -185,6 +199,19 @@ class BPState:
 
     def bp_loopy(self, it: int, initialize_states: bool):
         """Runs belief propagation algorithm on the current state of the graph.
+
+        This is a shortcut for calls to :meth:`propagate_var` and :meth:`propagate_factor`. It is equivalent to:
+
+        .. code-block:: python
+
+            if initialize_states:
+                for var in self.fg.vars():
+                    self.propagate_var(var)
+            for _ in range(it):
+                for factor in self.fg.factors():
+                    self.propagate_factor(factor)
+                for var in self.fg.vars():
+                    self.propagate_var(var)
 
         Parameters
         ----------

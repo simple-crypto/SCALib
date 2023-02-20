@@ -5,6 +5,9 @@ Changelog
 Not released
 ------------
 
+* Add ``vars`` and ``factors`` methods on `FactorGraph`.
+* Add ``fg`` property on `BPState`.
+
 v0.5.2 (2023/02/17)
 -------------------
 
