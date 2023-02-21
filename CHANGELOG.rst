@@ -5,8 +5,13 @@ Changelog
 Not released
 ------------
 
+v0.5.3 (2023/02/21)
+-------------------
+
 * Add ``vars`` and ``factors`` methods on `FactorGraph`.
 * Add ``fg`` property on `BPState`.
+* Fix bug in belief propagation. Numerical instabilities could lead to negative
+  probabilities for AND (and probably XOR and ADD) factors.
 
 v0.5.2 (2023/02/17)
 -------------------
