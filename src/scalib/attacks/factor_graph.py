@@ -224,7 +224,7 @@ class BPState:
             Recommended after using :func:`BPState.set_evidence`.
         """
         if initialize_states:
-            self._inner.propagate_all_vars()
+            self._inner.propagate_all_vars(self._alpha)
         self._inner.propagate_loopy_step(it, self._alpha)
 
     def bp_acyclic(
@@ -346,7 +346,7 @@ class BPState:
             Identifier of the variable.
 
         """
-        return self._inner.propagate_var(var)
+        return self._inner.propagate_var(var, self._alpha)
 
     def propagate_factor(self, factor: str):
         """Run belief propagation on the given factor.
