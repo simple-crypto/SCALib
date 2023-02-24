@@ -904,3 +904,30 @@ def test_and_rounding_error_simple():
     bp.bp_loopy(5, initialize_states=False)
     assert (bp.get_distribution("K0") >= 0.0).all()
     assert (bp.get_distribution("K1") >= 0.0).all()
+
+
+def test_dampening_nochange():
+    graph = """
+        NC 2
+        PROPERTY s1: x = a^b
+        VAR MULTI x
+        VAR MULTI a
+        VAR MULTI b
+        """
+    distri_a = np.array([[0.6, 0.4]])
+    distri_b = np.array([[0.8, 0.2]])
+    graph = FactorGraph(graph)
+    n = 1
+    bp_state_no_dampen = BPState(graph, n)
+    bp_state_no_dampen.set_evidence("a", distri_a)
+    bp_state_no_dampen.set_evidence("b", distri_b)
+    bp_state_full_dampen = BPState(graph, n, alpha=1.0)
+    bp_state_full_dampen.set_evidence("a", distri_a)
+    bp_state_full_dampen.set_evidence("b", distri_b)
+
+    bp_state_no_dampen.bp_loopy(5, initialize_states=False)
+    bp_state_full_dampen.bp_loopy(5, initialize_states=False)
+    assert np.allclose(
+        bp_state_no_dampen.get_distribution("x"),
+        bp_state_full_dampen.get_distribution("x"),
+    )

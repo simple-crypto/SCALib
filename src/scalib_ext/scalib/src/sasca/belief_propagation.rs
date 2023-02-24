@@ -210,7 +210,7 @@ impl BPState {
         // underflow (or denormalization).
         // This is guaranteed as long as min_proba > var_degree * MIN_POSITIVE
         let var = self.graph.edges[edge].var;
-        if alpha == 0.0 {
+        if alpha == 0.0 || !self.belief_from_var[edge].is_full() {
             self.belief_from_var[edge].reset();
             self.belief_from_var[edge] =
                 Distribution::divide_reg(&self.var_state[var], &self.belief_to_var[edge]);

@@ -1,5 +1,3 @@
-use std::f64::MIN;
-
 use super::belief_propagation::{BPError, FftPlans};
 use super::factor_graph::PublicValue;
 use super::ClassVal;
@@ -234,10 +232,12 @@ impl Distribution {
         let num_arr = numerator
             .value()
             .expect("update_dampen needs full dist num");
-        let denom_arr = denominator
-            .value()
-            .expect("update_dampen needs full dist denom");
-        azip!((x in &mut self_arr, y in &num_arr, z in &denom_arr) *x = alpha * (y/(z + MIN_PROBA)) + (1.0 - alpha)* *x);
+
+        if let Some(denom_arr) = denominator.value() {
+            azip!((x in &mut self_arr, y in &num_arr, z in &denom_arr) *x = alpha * (y/(z + MIN_PROBA)) + (1.0 - alpha)* *x)
+        } else {
+            azip!((x in &mut self_arr, y in &num_arr) *x = alpha * (y) + (1.0 - alpha)* *x)
+        }
     }
 
     pub fn dividing_full(&mut self, other: &Distribution) {
