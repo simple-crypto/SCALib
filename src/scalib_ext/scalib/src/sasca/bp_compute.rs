@@ -1,3 +1,5 @@
+use std::f64::MIN;
+
 use super::belief_propagation::{BPError, FftPlans};
 use super::factor_graph::PublicValue;
 use super::ClassVal;
@@ -218,6 +220,26 @@ impl Distribution {
         );
         return res;
     }
+
+    // Update belief with weight average of new and previous value
+    pub fn update_dampen(
+        &mut self,
+        numerator: &Distribution,
+        denominator: &Distribution,
+        alpha: f64,
+    ) {
+        let mut self_arr = self
+            .value_mut()
+            .expect("update_dampen needs full dist self");
+        let num_arr = numerator
+            .value()
+            .expect("update_dampen needs full dist num");
+        let denom_arr = denominator
+            .value()
+            .expect("update_dampen needs full dist denom");
+        azip!((x in &mut self_arr, y in &num_arr, z in &denom_arr) *x = alpha * (y/(z + MIN_PROBA)) + (1.0 - alpha)* *x);
+    }
+
     pub fn dividing_full(&mut self, other: &Distribution) {
         match (&mut self.value, &other.value) {
             (DistrRepr::Full(div), DistrRepr::Full(st)) => {

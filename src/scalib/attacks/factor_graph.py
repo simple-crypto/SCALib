@@ -169,11 +169,13 @@ class BPState:
         factor_graph: FactorGraph,
         nexec: int,
         public_values: Optional[ValsAssign] = None,
+        alpha: float = 0.0,
     ):
         if public_values is None:
             public_values = dict()
         self._fg = factor_graph
         self._inner = factor_graph._inner.new_bp(nexec, public_values)
+        self._alpha = alpha
 
     @property
     def fg(self) -> FactorGraph:
@@ -223,7 +225,7 @@ class BPState:
         """
         if initialize_states:
             self._inner.propagate_all_vars()
-        self._inner.propagate_loopy_step(it)
+        self._inner.propagate_loopy_step(it, self._alpha)
 
     def bp_acyclic(
         self,

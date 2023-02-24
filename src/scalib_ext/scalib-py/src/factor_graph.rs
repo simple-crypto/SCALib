@@ -243,13 +243,13 @@ impl BPState {
         let edge_id = self.get_edge_named(var, factor)?;
         distr2py(py, self.get_inner().get_belief_from_var(edge_id))
     }
-    pub fn propagate_var(&mut self, var: &str) -> PyResult<()> {
+    pub fn propagate_var(&mut self, var: &str, alpha: f64) -> PyResult<()> {
         let var_id = self.get_var(var)?;
-        self.get_inner_mut().propagate_var(var_id);
+        self.get_inner_mut().propagate_var(var_id, alpha);
         Ok(())
     }
-    pub fn propagate_all_vars(&mut self) -> PyResult<()> {
-        self.get_inner_mut().propagate_all_vars();
+    pub fn propagate_all_vars(&mut self, alpha: f64) -> PyResult<()> {
+        self.get_inner_mut().propagate_all_vars(alpha);
         Ok(())
     }
     pub fn propagate_factor_all(&mut self, factor: &str) -> PyResult<()> {
@@ -300,8 +300,8 @@ impl BPState {
             .propagate_factor(factor_id, dest.as_slice(), clear_incoming);
         Ok(())
     }
-    pub fn propagate_loopy_step(&mut self, n_steps: u32) {
-        self.get_inner_mut().propagate_loopy_step(n_steps);
+    pub fn propagate_loopy_step(&mut self, n_steps: u32, alpha: f64) {
+        self.get_inner_mut().propagate_loopy_step(n_steps, alpha);
     }
     pub fn graph(&self) -> FactorGraph {
         FactorGraph {

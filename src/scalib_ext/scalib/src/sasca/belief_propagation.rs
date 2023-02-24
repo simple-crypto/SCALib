@@ -205,14 +205,22 @@ impl BPState {
         // Just multiply, don't add anything, underflows are taken care of above.
         self.var_state[var].normalize();
     }
-    pub fn propagate_from_var(&mut self, edge: EdgeId) {
+    pub fn propagate_from_var(&mut self, edge: EdgeId, alpha: f64) {
         // Dividing here is ok if we ensure that there is no zero element and no
         // underflow (or denormalization).
         // This is guaranteed as long as min_proba > var_degree * MIN_POSITIVE
         let var = self.graph.edges[edge].var;
-        self.belief_from_var[edge].reset();
-        self.belief_from_var[edge] =
-            Distribution::divide_reg(&self.var_state[var], &self.belief_to_var[edge]);
+        if alpha == 0.0 {
+            self.belief_from_var[edge].reset();
+            self.belief_from_var[edge] =
+                Distribution::divide_reg(&self.var_state[var], &self.belief_to_var[edge]);
+        } else {
+            self.belief_from_var[edge].update_dampen(
+                &self.var_state[var],
+                &self.belief_to_var[edge],
+                alpha,
+            )
+        }
     }
     pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId], clear_incoming: bool) {
         let factor = self.graph.factor(factor_id);
@@ -251,29 +259,29 @@ impl BPState {
         let dest: Vec<_> = self.graph.factor(factor).edges.keys().cloned().collect();
         self.propagate_factor(factor, dest.as_slice(), false);
     }
-    pub fn propagate_from_var_all(&mut self, var: VarId) {
+    pub fn propagate_from_var_all(&mut self, var: VarId, alpha: f64) {
         for i in 0..self.graph.var(var).edges.len() {
-            self.propagate_from_var(self.graph.var(var).edges[i]);
+            self.propagate_from_var(self.graph.var(var).edges[i], alpha);
         }
         for i in 0..self.graph.var(var).edges.len() {
             self.belief_to_var[self.graph.var(var).edges[i]].reset();
         }
     }
-    pub fn propagate_var(&mut self, var: VarId) {
+    pub fn propagate_var(&mut self, var: VarId, alpha: f64) {
         self.propagate_to_var(var, false);
-        self.propagate_from_var_all(var);
+        self.propagate_from_var_all(var, alpha);
     }
-    pub fn propagate_all_vars(&mut self) {
+    pub fn propagate_all_vars(&mut self, alpha: f64) {
         for var_id in self.graph.range_vars() {
-            self.propagate_var(var_id);
+            self.propagate_var(var_id, alpha);
         }
     }
-    pub fn propagate_loopy_step(&mut self, n_steps: u32) {
+    pub fn propagate_loopy_step(&mut self, n_steps: u32, alpha: f64) {
         for _ in 0..n_steps {
             for factor_id in self.graph.range_factors() {
                 self.propagate_factor_all(factor_id);
             }
-            self.propagate_all_vars();
+            self.propagate_all_vars(alpha);
         }
     }
     pub fn propagate_acyclic(
@@ -294,7 +302,7 @@ impl BPState {
                     self.propagate_to_var(var_id, clear_evidence);
                     if let Some(dest_factor) = parent {
                         let edge_id = self.graph.var(var_id).edges[&dest_factor.factor().unwrap()];
-                        self.propagate_from_var(edge_id);
+                        self.propagate_from_var(edge_id, 0.0);
                     }
                     if clear_intermediates {
                         for e in self.graph.var(var_id).edges.values() {
