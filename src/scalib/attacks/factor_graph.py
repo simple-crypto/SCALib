@@ -170,12 +170,14 @@ class BPState:
         nexec: int,
         public_values: Optional[ValsAssign] = None,
         alpha: float = 0.0,
+        clear_beliefs: bool = True,
     ):
         if public_values is None:
             public_values = dict()
         self._fg = factor_graph
         self._inner = factor_graph._inner.new_bp(nexec, public_values)
         self._alpha = alpha
+        self._clear_beliefs = clear_beliefs
 
     @property
     def fg(self) -> FactorGraph:
@@ -224,8 +226,8 @@ class BPState:
             Recommended after using :func:`BPState.set_evidence`.
         """
         if initialize_states:
-            self._inner.propagate_all_vars(self._alpha)
-        self._inner.propagate_loopy_step(it, self._alpha)
+            self._inner.propagate_all_vars(self._alpha, self._clear_beliefs)
+        self._inner.propagate_loopy_step(it, self._alpha, self._clear_beliefs)
 
     def bp_acyclic(
         self,
@@ -346,7 +348,7 @@ class BPState:
             Identifier of the variable.
 
         """
-        return self._inner.propagate_var(var, self._alpha)
+        return self._inner.propagate_var(var, self._alpha, self._clear_beliefs)
 
     def propagate_factor(self, factor: str):
         """Run belief propagation on the given factor.

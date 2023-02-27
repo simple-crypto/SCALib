@@ -259,29 +259,31 @@ impl BPState {
         let dest: Vec<_> = self.graph.factor(factor).edges.keys().cloned().collect();
         self.propagate_factor(factor, dest.as_slice(), false);
     }
-    pub fn propagate_from_var_all(&mut self, var: VarId, alpha: f64) {
+    pub fn propagate_from_var_all(&mut self, var: VarId, alpha: f64, clear_beliefs: bool) {
         for i in 0..self.graph.var(var).edges.len() {
             self.propagate_from_var(self.graph.var(var).edges[i], alpha);
         }
-        for i in 0..self.graph.var(var).edges.len() {
-            self.belief_to_var[self.graph.var(var).edges[i]].reset();
+        if clear_beliefs {
+            for i in 0..self.graph.var(var).edges.len() {
+                self.belief_to_var[self.graph.var(var).edges[i]].reset();
+            }
         }
     }
-    pub fn propagate_var(&mut self, var: VarId, alpha: f64) {
+    pub fn propagate_var(&mut self, var: VarId, alpha: f64, clear_beliefs: bool) {
         self.propagate_to_var(var, false);
-        self.propagate_from_var_all(var, alpha);
+        self.propagate_from_var_all(var, alpha, clear_beliefs);
     }
-    pub fn propagate_all_vars(&mut self, alpha: f64) {
+    pub fn propagate_all_vars(&mut self, alpha: f64, clear_beliefs: bool) {
         for var_id in self.graph.range_vars() {
-            self.propagate_var(var_id, alpha);
+            self.propagate_var(var_id, alpha, clear_beliefs);
         }
     }
-    pub fn propagate_loopy_step(&mut self, n_steps: u32, alpha: f64) {
+    pub fn propagate_loopy_step(&mut self, n_steps: u32, alpha: f64, clear_beliefs: bool) {
         for _ in 0..n_steps {
             for factor_id in self.graph.range_factors() {
                 self.propagate_factor_all(factor_id);
             }
-            self.propagate_all_vars(alpha);
+            self.propagate_all_vars(alpha, clear_beliefs);
         }
     }
     pub fn propagate_acyclic(
