@@ -931,3 +931,135 @@ def test_dampening_nochange():
         bp_state_no_dampen.get_distribution("x"),
         bp_state_full_dampen.get_distribution("x"),
     )
+
+#TODO add clear_beliefs test
+
+def test_dampening_correctness():
+    factor_graph = """NC 16
+    VAR MULTI K0
+    VAR MULTI K1
+    VAR MULTI L1
+    VAR MULTI N1
+    VAR MULTI B
+    VAR MULTI C
+    VAR MULTI N0
+    VAR MULTI A
+    VAR MULTI L2
+    VAR MULTI L3
+    PUB SINGLE IV
+    PROPERTY P1: L1 = K0 ^ K1
+    PROPERTY P2: N1 = !K1
+    PROPERTY P3: B = N1 & IV
+    PROPERTY P4: C = B ^ K0
+    PROPERTY P5: N0 = !K0
+    PROPERTY P6: A = N0 & K1
+    PROPERTY P7: L2 = A ^ C
+    PROPERTY P8: L3 = K1 ^ C"""
+    priors = {
+        "A": [
+            0.0,
+            0.25,
+            0.25,
+            0.0,
+            0.25,
+            0.0,
+            0.0,
+            0.0,
+            0.25,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        ],
+        "C": [
+            0.0,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.0,
+        ],
+        "L1": [
+            0.0,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.0,
+        ],
+        "L2": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.25,
+            0.0,
+            0.0,
+            0.0,
+            0.25,
+            0.0,
+            0.25,
+            0.25,
+            0.0,
+        ],
+        "L3": [
+            0.0,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.1666666667,
+            0.1666666667,
+            0.0,
+            0.1666666667,
+            0.0,
+            0.0,
+            0.0,
+        ],
+    }
+    fg = FactorGraph(factor_graph)
+    bp_dampen = BPState(
+        fg, 1, public_values={"IV": 0xC}, alpha=0.9, clear_beliefs=False
+    )
+    bp_no_dampen = BPState(fg, 1, public_values={"IV": 0xC}, clear_beliefs=False)
+    for k, v in priors.items():
+        bp_no_dampen.set_evidence(k, distribution=np.array([v]))
+        bp_dampen.set_evidence(k, distribution=np.array([v]))
+    for i in range(5):
+        bp_no_dampen.bp_loopy(1, False)
+        print(bp_no_dampen.debug())
+    # bp_no_dampen.propagate_factor("P7")
+    # print(bp_no_dampen.get_belief_to_var("A", "P7"))
+    # print(bp_no_dampen.get_belief_from_var("C", "P7"))
+    # print(bp_dampen.get_distribution("K0"))
+    assert False
