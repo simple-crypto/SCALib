@@ -371,7 +371,7 @@ class BPState:
         for var in self._inner.graph().var_names():
             s.append(f"\tVar {var}")
             s.append(repr(self.get_distribution(var)))
-        s.append("FACTORS FROM VARS")
+        s.append("VARS TO FACTORS")
         for factor in self._inner.graph().factor_names():
             for var in self._inner.graph().factor_scope(factor):
                 s.append(f"\t{var} -> {factor}")

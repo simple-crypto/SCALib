@@ -932,7 +932,10 @@ def test_dampening_nochange():
         bp_state_full_dampen.get_distribution("x"),
     )
 
-#TODO add clear_beliefs test
+
+# TODO add clear_beliefs test
+# TODO move alpha/clear_beliefs param to bp_loopy
+
 
 def test_dampening_correctness():
     factor_graph = """NC 16
@@ -955,111 +958,36 @@ def test_dampening_correctness():
     PROPERTY P6: A = N0 & K1
     PROPERTY P7: L2 = A ^ C
     PROPERTY P8: L3 = K1 ^ C"""
-    priors = {
-        "A": [
-            0.0,
-            0.25,
-            0.25,
-            0.0,
-            0.25,
-            0.0,
-            0.0,
-            0.0,
-            0.25,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-        ],
-        "C": [
-            0.0,
-            0.0,
-            0.0,
-            0.1666666667,
-            0.0,
-            0.1666666667,
-            0.1666666667,
-            0.0,
-            0.0,
-            0.1666666667,
-            0.1666666667,
-            0.0,
-            0.1666666667,
-            0.0,
-            0.0,
-            0.0,
-        ],
-        "L1": [
-            0.0,
-            0.0,
-            0.0,
-            0.1666666667,
-            0.0,
-            0.1666666667,
-            0.1666666667,
-            0.0,
-            0.0,
-            0.1666666667,
-            0.1666666667,
-            0.0,
-            0.1666666667,
-            0.0,
-            0.0,
-            0.0,
-        ],
-        "L2": [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.25,
-            0.0,
-            0.0,
-            0.0,
-            0.25,
-            0.0,
-            0.25,
-            0.25,
-            0.0,
-        ],
-        "L3": [
-            0.0,
-            0.0,
-            0.0,
-            0.1666666667,
-            0.0,
-            0.1666666667,
-            0.1666666667,
-            0.0,
-            0.0,
-            0.1666666667,
-            0.1666666667,
-            0.0,
-            0.1666666667,
-            0.0,
-            0.0,
-            0.0,
-        ],
-    }
+
     fg = FactorGraph(factor_graph)
+    alpha = 0.9
     bp_dampen = BPState(
-        fg, 1, public_values={"IV": 0xC}, alpha=0.9, clear_beliefs=False
+        fg, 1, public_values={"IV": 0xC}, alpha=alpha, clear_beliefs=False
     )
     bp_no_dampen = BPState(fg, 1, public_values={"IV": 0xC}, clear_beliefs=False)
-    for k, v in priors.items():
-        bp_no_dampen.set_evidence(k, distribution=np.array([v]))
-        bp_dampen.set_evidence(k, distribution=np.array([v]))
-    for i in range(5):
-        bp_no_dampen.bp_loopy(1, False)
-        print(bp_no_dampen.debug())
-    # bp_no_dampen.propagate_factor("P7")
-    # print(bp_no_dampen.get_belief_to_var("A", "P7"))
-    # print(bp_no_dampen.get_belief_from_var("C", "P7"))
-    # print(bp_dampen.get_distribution("K0"))
-    assert False
+    for k in fg.vars():
+        d = make_distri(16, 1)
+        bp_no_dampen.set_evidence(k, distribution=d)
+        bp_dampen.set_evidence(k, distribution=d)
+
+    for v in fg.vars():
+        bp_dampen.propagate_var(v)
+        bp_no_dampen.propagate_var(v)
+    prev = bp_no_dampen.get_belief_from_var("A", "P7")
+    prev2 = bp_no_dampen.get_belief_from_var("C", "P4")
+    prev3 = bp_no_dampen.get_belief_from_var("K0", "P1")
+    bp_dampen.bp_loopy(1, False)
+    bp_no_dampen.bp_loopy(1, False)
+
+    assert np.allclose(
+        ((1 - alpha) * prev + (alpha) * bp_no_dampen.get_belief_from_var("A", "P7")),
+        bp_dampen.get_belief_from_var("A", "P7"),
+    )
+    assert np.allclose(
+        ((1 - alpha) * prev2 + (alpha) * bp_no_dampen.get_belief_from_var("C", "P4")),
+        bp_dampen.get_belief_from_var("C", "P4"),
+    )
+    assert np.allclose(
+        ((1 - alpha) * prev3 + (alpha) * bp_no_dampen.get_belief_from_var("K0", "P1")),
+        bp_dampen.get_belief_from_var("K0", "P1"),
+    )
