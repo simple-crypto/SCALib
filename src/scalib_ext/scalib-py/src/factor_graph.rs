@@ -68,13 +68,21 @@ impl FactorGraph {
         }
     }
 
-    pub fn new_bp(&self, py: Python, nmulti: u32, public_values: PyObject) -> PyResult<BPState> {
+    pub fn new_bp(
+        &self,
+        py: Python,
+        nmulti: u32,
+        public_values: PyObject,
+        gen_factors: PyObject,
+    ) -> PyResult<BPState> {
         let pub_values = pyobj2pubs(py, public_values, self.get_inner().public_multi())?;
+        let gen_factors = pyobj2factors(py, gen_factors, self.get_inner().gf_multi())?;
         Ok(BPState {
             inner: Some(sasca::BPState::new(
                 self.get_inner().clone(),
                 nmulti,
                 pub_values,
+                gen_factors,
             )),
         })
     }
@@ -137,6 +145,45 @@ fn pyobj2pubs<'a>(
             format!("{} is not a public.", unknown_pubs[0])
         } else {
             format!("{:?} are not publics.", unknown_pubs)
+        }))
+    }
+}
+
+fn pyobj2factors<'a>(
+    py: Python,
+    gen_factors: PyObject,
+    expected: impl Iterator<Item = (&'a str, bool)>,
+) -> PyResult<Vec<sasca::GenFactor>> {
+    // TODO validate single/para, dimensionality and dimensions.
+    let mut gen_factors: HashMap<&str, PyObject> = gen_factors.extract(py)?;
+    let res = expected
+        .map(|(name, multi)| {
+            let gf = gen_factors
+                .remove(name)
+                .ok_or_else(|| PyKeyError::new_err(format!("Missing gen factor {}.", name)))?;
+            if multi {
+                let obj: Vec<&numpy::PyArrayDyn<f64>> = gf.extract(py)?;
+                Ok(sasca::GenFactor::Multi(
+                    obj.into_iter()
+                        .map(|obj| obj.readonly().as_array().as_standard_layout().into_owned())
+                        .collect(),
+                ))
+            } else {
+                let obj: &numpy::PyArrayDyn<f64> = gf.extract(py)?;
+                Ok(sasca::GenFactor::Single(
+                    obj.readonly().as_array().as_standard_layout().into_owned(),
+                ))
+            }
+        })
+        .collect::<Result<Vec<sasca::GenFactor>, PyErr>>()?;
+    if gen_factors.is_empty() {
+        Ok(res)
+    } else {
+        let unknown = gen_factors.keys().collect::<Vec<_>>();
+        Err(PyKeyError::new_err(if unknown.len() == 1 {
+            format!("{} is not a generalized factor.", unknown[0])
+        } else {
+            format!("{:?} are not generalized factors.", unknown)
         }))
     }
 }
