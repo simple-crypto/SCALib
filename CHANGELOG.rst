@@ -5,6 +5,9 @@ Changelog
 Not released
 ------------
 
+* Add ``scalib.tools.ContextExecutor``, as a solution to ``LookupError`` in
+  ``get_config()``.
+
 v0.5.3 (2023/02/21)
 -------------------
 

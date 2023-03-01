@@ -14,4 +14,5 @@ API Reference
    attacks
    postprocessing
    config
+   tools
 
