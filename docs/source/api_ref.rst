@@ -7,7 +7,7 @@ API Reference
 .. autosummary::
    :recursive:
    :nosignatures:
-   :toctree: _generated
+   :toctree: api
 
    metrics
    modeling
