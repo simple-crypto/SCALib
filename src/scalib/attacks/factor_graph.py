@@ -169,15 +169,11 @@ class BPState:
         factor_graph: FactorGraph,
         nexec: int,
         public_values: Optional[ValsAssign] = None,
-        alpha: float = 0.0,
-        clear_beliefs: bool = True,
     ):
         if public_values is None:
             public_values = dict()
         self._fg = factor_graph
         self._inner = factor_graph._inner.new_bp(nexec, public_values)
-        self._alpha = alpha
-        self._clear_beliefs = clear_beliefs
 
     @property
     def fg(self) -> FactorGraph:
@@ -201,7 +197,13 @@ class BPState:
         else:
             self._inner.set_evidence(var, distribution)
 
-    def bp_loopy(self, it: int, initialize_states: bool):
+    def bp_loopy(
+        self,
+        it: int,
+        initialize_states: bool,
+        alpha: float = 0.0,
+        clear_beliefs: bool = True,
+    ):
         """Runs belief propagation algorithm on the current state of the graph.
 
         This is a shortcut for calls to :meth:`propagate_var` and :meth:`propagate_factor`. It is equivalent to:
@@ -226,8 +228,8 @@ class BPState:
             Recommended after using :func:`BPState.set_evidence`.
         """
         if initialize_states:
-            self._inner.propagate_all_vars(self._alpha, self._clear_beliefs)
-        self._inner.propagate_loopy_step(it, self._alpha, self._clear_beliefs)
+            self._inner.propagate_all_vars(alpha, clear_beliefs)
+        self._inner.propagate_loopy_step(it, alpha, clear_beliefs)
 
     def bp_acyclic(
         self,
@@ -336,7 +338,7 @@ class BPState:
         """
         return self._inner.get_belief_from_var(var, factor)
 
-    def propagate_var(self, var: str):
+    def propagate_var(self, var: str, alpha: float = 0.0, clear_beliefs: bool = True):
         """Run belief propagation on variable var.
 
         This fetches beliefs from adjacent factors, computes the var
@@ -348,7 +350,7 @@ class BPState:
             Identifier of the variable.
 
         """
-        return self._inner.propagate_var(var, self._alpha, self._clear_beliefs)
+        return self._inner.propagate_var(var, alpha, clear_beliefs)
 
     def propagate_factor(self, factor: str):
         """Run belief propagation on the given factor.

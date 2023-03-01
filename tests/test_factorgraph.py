@@ -921,20 +921,35 @@ def test_dampening_nochange():
     bp_state_no_dampen = BPState(graph, n)
     bp_state_no_dampen.set_evidence("a", distri_a)
     bp_state_no_dampen.set_evidence("b", distri_b)
-    bp_state_full_dampen = BPState(graph, n, alpha=1.0)
+    bp_state_full_dampen = BPState(graph, n)
     bp_state_full_dampen.set_evidence("a", distri_a)
     bp_state_full_dampen.set_evidence("b", distri_b)
 
     bp_state_no_dampen.bp_loopy(5, initialize_states=False)
-    bp_state_full_dampen.bp_loopy(5, initialize_states=False)
+    bp_state_full_dampen.bp_loopy(5, initialize_states=False, alpha=1.0)
     assert np.allclose(
         bp_state_no_dampen.get_distribution("x"),
         bp_state_full_dampen.get_distribution("x"),
     )
 
 
-# TODO add clear_beliefs test
-# TODO move alpha/clear_beliefs param to bp_loopy
+def test_clear_beliefs():
+    graph = """
+    NC 2
+    PROPERTY s1: x = a^b
+    VAR MULTI x
+    VAR MULTI a
+    VAR MULTI b
+    """
+    fg = FactorGraph(graph)
+    bp = BPState(fg, 1)
+    for k in fg.vars():
+        bp.set_evidence(k, make_distri(2, 1))
+    bp.bp_loopy(1, False, clear_beliefs=False)
+
+    assert bp.get_belief_from_var("x", "s1") is not None
+    assert bp.get_belief_from_var("a", "s1") is not None
+    assert bp.get_belief_from_var("b", "s1") is not None
 
 
 def test_dampening_correctness():
@@ -961,10 +976,8 @@ def test_dampening_correctness():
 
     fg = FactorGraph(factor_graph)
     alpha = 0.9
-    bp_dampen = BPState(
-        fg, 1, public_values={"IV": 0xC}, alpha=alpha, clear_beliefs=False
-    )
-    bp_no_dampen = BPState(fg, 1, public_values={"IV": 0xC}, clear_beliefs=False)
+    bp_dampen = BPState(fg, 1, public_values={"IV": 0xC})
+    bp_no_dampen = BPState(fg, 1, public_values={"IV": 0xC})
     for k in fg.vars():
         d = make_distri(16, 1)
         bp_no_dampen.set_evidence(k, distribution=d)
@@ -976,8 +989,8 @@ def test_dampening_correctness():
     prev = bp_no_dampen.get_belief_from_var("A", "P7")
     prev2 = bp_no_dampen.get_belief_from_var("C", "P4")
     prev3 = bp_no_dampen.get_belief_from_var("K0", "P1")
-    bp_dampen.bp_loopy(1, False)
-    bp_no_dampen.bp_loopy(1, False)
+    bp_dampen.bp_loopy(1, False, alpha=alpha, clear_beliefs=False)
+    bp_no_dampen.bp_loopy(1, False, clear_beliefs=False)
 
     assert np.allclose(
         ((1 - alpha) * prev + (alpha) * bp_no_dampen.get_belief_from_var("A", "P7")),
