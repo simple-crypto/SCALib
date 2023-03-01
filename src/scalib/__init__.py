@@ -1,4 +1,12 @@
-__all__ = ["metrics", "attacks", "modeling", "postprocessing", "config", "ScalibError"]
+__all__ = [
+    "config",
+    "attacks",
+    "metrics",
+    "modeling",
+    "postprocessing",
+    "tools",
+    "ScalibError",
+]
 
 import cpuinfo
 

@@ -260,7 +260,7 @@ class MultiLDA:
         if self.gemm_mode != 0:
             num_threads = max(1, num_threads // self.gemm_mode)
         with scalib.utils.interruptible():
-            with scalib.utils.ContextExecutor(max_workers=num_threads) as executor:
+            with scalib.tools.ContextExecutor(max_workers=num_threads) as executor:
                 list(
                     executor.map(
                         lambda i: self.ldas[i].fit_u(
@@ -274,7 +274,7 @@ class MultiLDA:
         """See `LDAClassifier.solve`."""
         # Put as much work as needed to fill rayon threadpool
         with scalib.utils.interruptible():
-            with scalib.utils.ContextExecutor(
+            with scalib.tools.ContextExecutor(
                 max_workers=get_config().threadpool.n_threads
             ) as executor:
                 list(executor.map(lambda lda: lda.solve(done), self.ldas))
@@ -296,7 +296,7 @@ class MultiLDA:
         """
         # Put as much work as needed to fill rayon threadpool
         with scalib.utils.interruptible():
-            with scalib.utils.ContextExecutor(
+            with scalib.tools.ContextExecutor(
                 max_workers=get_config().threadpool.n_threads
             ) as executor:
                 return list(

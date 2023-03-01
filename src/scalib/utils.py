@@ -2,9 +2,7 @@
 Misc. internal SCALib utils.
 """
 
-from concurrent.futures import ThreadPoolExecutor
 import contextlib
-import contextvars
 import signal
 import threading
 
@@ -28,15 +26,3 @@ def interruptible():
             signal.signal(signal.SIGINT, restore_sig)
     else:
         yield
-
-
-class ContextExecutor(ThreadPoolExecutor):
-    """ThreadPoolExecutor with automatic handling of contextvars."""
-
-    def __init__(self, *args, **kwargs):
-        self.context = contextvars.copy_context()
-        super().__init__(*args, **kwargs, initializer=self._set_child_context)
-
-    def _set_child_context(self):
-        for var, value in self.context.items():
-            var.set(value)
