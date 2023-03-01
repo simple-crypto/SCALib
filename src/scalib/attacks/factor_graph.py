@@ -226,6 +226,11 @@ class BPState:
         initialize_states:
             Whether to update variable distributions before running the BP iterations.
             Recommended after using :func:`BPState.set_evidence`.
+        alpha:
+            Dampening factor. When set to 0, dampening is disabled, otherwise a new message from a var -> factor is the weighted average of the current and previous message e.g. alpha*m_{v->f} + (1-alpha)*mprev_{v->f}
+            alpha must be in the interval [0.0, 1.0]. Default value is 0.
+        clear_beliefs:
+            Whether to clear beliefs between vars -> factors. Setting to False can help debugging. Default value is True.
         """
         if initialize_states:
             self._inner.propagate_all_vars(alpha, clear_beliefs)
@@ -348,6 +353,11 @@ class BPState:
         ----------
         var : string
             Identifier of the variable.
+        alpha:
+            Dampening factor. When set to 0, dampening is disabled, otherwise a new message from a var -> factor is the weighted average of the current and previous message e.g. alpha*m_{v->f} + (1-alpha)*mprev_{v->f}
+            alpha must be in the interval [0.0, 1.0]. Default value is 0.
+        clear_beliefs:
+            Whether to clear beliefs between vars -> factors. Setting to False can help debugging. Default value is True.
 
         """
         return self._inner.propagate_var(var, alpha, clear_beliefs)
