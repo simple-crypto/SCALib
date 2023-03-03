@@ -4,6 +4,7 @@ import numpy as np
 
 from scalib import _scalib_ext
 from scalib.config import get_config
+import scalib.tools
 import scalib.utils
 
 
