@@ -20,6 +20,7 @@ dev:
 
 test:
 	tox run -e fmt -- --check
+	RUST_BACKTRACE=1 CARGO_TARGET_DIR=.cargo_build cargo test --workspace --manifest-path src/scalib_ext/Cargo.toml
 	tox run -e test
 
 coverage:
