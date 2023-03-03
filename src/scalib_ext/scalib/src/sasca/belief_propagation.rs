@@ -200,10 +200,8 @@ impl BPState {
         // We multiply_reg to avoid having very low values in the product.
         // Since inputs should not be too big, we should not have any overflow.
         // Underflow my happen, since probas are lower-bounded by MIN_PROBA**2.
+        // This also normalizes the result.
         self.var_state[var].multiply_reg(distr_iter);
-        // Now we'll make to sum equal one to avoid underflows or overflows in the long run, and keep the exposed probas nice.
-        // Just multiply, don't add anything, underflows are taken care of above.
-        self.var_state[var].normalize();
     }
     pub fn propagate_from_var(&mut self, edge: EdgeId, alpha: f64) {
         // Dividing here is ok if we ensure that there is no zero element and no
@@ -296,9 +294,6 @@ impl BPState {
             return Err(BPError::NotAcyclic);
         }
         for (node, parent) in self.graph.propagation_order(var) {
-            dbg!(&self);
-            dbg!(node);
-            dbg!(parent);
             match node {
                 Node::Var(var_id) => {
                     self.propagate_to_var(var_id, clear_evidence);

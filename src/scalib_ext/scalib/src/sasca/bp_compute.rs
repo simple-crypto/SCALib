@@ -136,19 +136,14 @@ impl Distribution {
     }
 
     pub fn multiply<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>) {
-        self.multiply_inner(factors, 0.0, 0.0);
+        self.multiply_inner(factors, false);
     }
 
     pub fn multiply_reg<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>) {
-        self.multiply_inner(factors, MIN_PROBA, MIN_PROBA * MIN_PROBA);
+        self.multiply_inner(factors, true);
     }
 
-    fn multiply_inner<'a>(
-        &mut self,
-        factors: impl Iterator<Item = &'a Distribution>,
-        offset: Proba,
-        offset_prod: Proba,
-    ) {
+    fn multiply_inner<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>, reg: bool) {
         for factor in factors {
             assert_eq!(self.shape.1, factor.shape.1);
             if self.multi & factor.multi {
@@ -160,34 +155,57 @@ impl Distribution {
                     (_, false, DistrRepr::Uniform) => {
                         self.value = DistrRepr::Full(ndarray::Array::from_shape_fn(
                             self.shape,
-                            |(_i, j)| d[(0, j)] + offset,
+                            |(_i, j)| d[(0, j)],
                         ));
                     }
                     (false, true, DistrRepr::Uniform) => {
                         let mut v = ndarray::Array2::ones(self.shape);
-                        for d in d.axis_iter(ndarray::Axis(0)) {
-                            azip!(v.slice_mut(s![0, ..]), d).for_each(|v, d| {
-                                *v = *v * (*d + offset) + offset_prod;
-                            });
+                        // Here we can't simply rely on the normalization at
+                        // the end of the factors loop, since we could multiply
+                        // many distributions at once.
+                        // We therefore compute the maximum at every iteration,
+                        // and correct to keep the maximum at 1. at the next
+                        // iteration.
+                        if reg {
+                            let mut max_proba = 1.0f64;
+                            for d in d.axis_iter(ndarray::Axis(0)) {
+                                let norm_factor = 1.0 / max_proba;
+                                max_proba = 0.0;
+                                azip!(v.slice_mut(s![0, ..]), d).for_each(|v, d| {
+                                    *v = *v * norm_factor * *d;
+                                    max_proba = max_proba.max(*v);
+                                });
+                            }
+                        } else {
+                            for d in d.axis_iter(ndarray::Axis(0)) {
+                                azip!(v.slice_mut(s![0, ..]), d).for_each(|v, d| {
+                                    *v = *v * *d;
+                                });
+                            }
                         }
                         self.value = DistrRepr::Full(v);
                     }
                     (true, true, DistrRepr::Uniform) => {
-                        self.value = DistrRepr::Full(d.map(|d| *d + offset));
+                        self.value = DistrRepr::Full(d.map(|d| *d));
                     }
                     (true, _, DistrRepr::Full(ref mut v)) => {
                         azip!(v, d).for_each(|v, d| {
-                            *v = *v * (*d + offset) + offset_prod;
+                            *v = *v * *d;
                         });
                     }
                     (false, _, DistrRepr::Full(ref mut v)) => {
                         for d in d.axis_iter(ndarray::Axis(0)) {
                             azip!(v.slice_mut(s![0, ..]), d).for_each(|v, d| {
-                                *v = *v * (*d + offset) + offset_prod;
+                                *v = *v * *d;
                             });
                         }
                     }
                 }
+            }
+            // Now we'll make to sum equal one to avoid underflows or overflows in the long run, and keep the exposed probas nice.
+            // Just multiply, don't add anything, underflows are taken care of above.
+            if reg {
+                self.normalize();
             }
         }
     }
