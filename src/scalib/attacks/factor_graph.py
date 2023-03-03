@@ -4,6 +4,7 @@ import numpy as np
 import numpy.typing as npt
 
 from scalib import _scalib_ext
+from scalib.config import get_config
 
 __all__ = ["FactorGraph", "BPState"]
 
@@ -222,8 +223,8 @@ class BPState:
             Recommended after using :func:`BPState.set_evidence`.
         """
         if initialize_states:
-            self._inner.propagate_all_vars()
-        self._inner.propagate_loopy_step(it)
+            self._inner.propagate_all_vars(get_config())
+        self._inner.propagate_loopy_step(it, get_config())
 
     def bp_acyclic(
         self,
@@ -244,7 +245,9 @@ class BPState:
         clear_evidence:
             Drop the evidence for the variables, once used in the algorithm.
         """
-        self._inner.propagate_acyclic(dest, clear_intermediates, clear_evidence)
+        self._inner.propagate_acyclic(
+            dest, clear_intermediates, clear_evidence, get_config()
+        )
 
     def get_distribution(self, var: str) -> Optional[npt.NDArray[np.float64]]:
         r"""Returns the current distribution of a variable `var`.
@@ -344,7 +347,7 @@ class BPState:
             Identifier of the variable.
 
         """
-        return self._inner.propagate_var(var)
+        return self._inner.propagate_var(var, get_config())
 
     def propagate_factor(self, factor: str):
         """Run belief propagation on the given factor.
@@ -358,7 +361,7 @@ class BPState:
             Identifier of the variable.
 
         """
-        return self._inner.propagate_factor_all(factor)
+        return self._inner.propagate_factor_all(factor, get_config())
 
     def debug(self):
         """Debug-print the current state."""
