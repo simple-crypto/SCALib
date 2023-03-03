@@ -9,6 +9,7 @@ Not released
   ``get_config()``.
 * Fix numerical underflow in ``BPState`` when multiple traces are used.
 * Fix missing import in ``MultiLDA``.
+* Run ``BPState`` methods on the threadpool.
 
 v0.5.3 (2023/02/21)
 -------------------

@@ -19,11 +19,6 @@ impl FactorGraph {
     fn get_inner(&self) -> &Arc<sasca::FactorGraph> {
         self.inner.as_ref().unwrap()
     }
-    fn get_var(&self, var: &str) -> PyResult<sasca::VarId> {
-        self.get_inner()
-            .get_varid(var)
-            .map_err(|e| PyValueError::new_err(e.to_string()))
-    }
     fn get_factor(&self, factor: &str) -> PyResult<sasca::FactorId> {
         self.get_inner()
             .get_factorid(factor)
@@ -243,21 +238,37 @@ impl BPState {
         let edge_id = self.get_edge_named(var, factor)?;
         distr2py(py, self.get_inner().get_belief_from_var(edge_id))
     }
-    pub fn propagate_var(&mut self, var: &str, alpha: f64, clear_beliefs: bool) -> PyResult<()> {
-        let var_id = self.get_var(var)?;
-        self.get_inner_mut()
+    pub fn propagate_var(
+        &mut self,
+        py: Python,
+        var: &str,
+        config: crate::ConfigWrapper,
+        alpha: f64, clear_beliefs: bool) -> PyResult<()> {
+        config.on_worker(py, |_| {
+            let var_id = self.get_var(var)?;
+            self.get_inner_mut()
             .propagate_var(var_id, alpha, clear_beliefs);
-        Ok(())
+            Ok(())
+        })
     }
-    pub fn propagate_all_vars(&mut self, alpha: f64, clear_beliefs: bool) -> PyResult<()> {
-        self.get_inner_mut()
+    pub fn propagate_all_vars(&mut self, py: Python, config: crate::ConfigWrapper, alpha: f64, clear_beliefs: bool) -> PyResult<()> {
+        config.on_worker(py, |_| {
+            self.get_inner_mut()
             .propagate_all_vars(alpha, clear_beliefs);
-        Ok(())
+            Ok(())
+        })
     }
-    pub fn propagate_factor_all(&mut self, factor: &str) -> PyResult<()> {
-        let factor_id = self.get_factor(factor)?;
-        self.get_inner_mut().propagate_factor_all(factor_id);
-        Ok(())
+    pub fn propagate_factor_all(
+        &mut self,
+        py: Python,
+        factor: &str,
+        config: crate::ConfigWrapper,
+    ) -> PyResult<()> {
+        config.on_worker(py, |_| {
+            let factor_id = self.get_factor(factor)?;
+            self.get_inner_mut().propagate_factor_all(factor_id);
+            Ok(())
+        })
     }
     pub fn set_belief_from_var(
         &mut self,
@@ -289,22 +300,28 @@ impl BPState {
     }
     pub fn propagate_factor(
         &mut self,
+        py: Python,
         factor: &str,
         dest: Vec<&str>,
         clear_incoming: bool,
+        config: crate::ConfigWrapper,
     ) -> PyResult<()> {
-        let factor_id = self.get_factor(factor)?;
-        let dest = dest
-            .iter()
-            .map(|v| self.get_var(v))
-            .collect::<Result<Vec<_>, _>>()?;
-        self.get_inner_mut()
-            .propagate_factor(factor_id, dest.as_slice(), clear_incoming);
-        Ok(())
+        config.on_worker(py, |_| {
+            let factor_id = self.get_factor(factor)?;
+            let dest = dest
+                .iter()
+                .map(|v| self.get_var(v))
+                .collect::<Result<Vec<_>, _>>()?;
+            self.get_inner_mut()
+                .propagate_factor(factor_id, dest.as_slice(), clear_incoming);
+            Ok(())
+        })
     }
-    pub fn propagate_loopy_step(&mut self, n_steps: u32, alpha: f64, clear_beliefs: bool) {
-        self.get_inner_mut()
+    pub fn propagate_loopy_step(&mut self, py: Python, n_steps: u32, config: crate::ConfigWrapper, alpha: f64, clear_beliefs: bool) {
+        config.on_worker(py, |_| {
+            self.get_inner_mut()
             .propagate_loopy_step(n_steps, alpha, clear_beliefs);
+        });
     }
     pub fn graph(&self) -> FactorGraph {
         FactorGraph {
@@ -313,14 +330,18 @@ impl BPState {
     }
     pub fn propagate_acyclic(
         &mut self,
+        py: Python,
         dest: &str,
         clear_intermediates: bool,
         clear_evidence: bool,
+        config: crate::ConfigWrapper,
     ) -> PyResult<()> {
-        let var = self.get_var(dest)?;
-        self.get_inner_mut()
-            .propagate_acyclic(var, clear_intermediates, clear_evidence)
-            .map_err(|e| PyValueError::new_err(e.to_string()))
+        config.on_worker(py, |_| {
+            let var = self.get_var(dest)?;
+            self.get_inner_mut()
+                .propagate_acyclic(var, clear_intermediates, clear_evidence)
+                .map_err(|e| PyValueError::new_err(e.to_string()))
+        })
     }
 }
 
