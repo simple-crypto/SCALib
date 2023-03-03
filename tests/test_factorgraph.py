@@ -904,3 +904,35 @@ def test_and_rounding_error_simple():
     bp.bp_loopy(5, initialize_states=False)
     assert (bp.get_distribution("K0") >= 0.0).all()
     assert (bp.get_distribution("K1") >= 0.0).all()
+
+
+def test_manytraces():
+    """No numerical underflow with many traces."""
+    nc = 8
+    n = 500
+    distri_x = np.ones((n, nc))
+    distri_x[:, 0] = 2.0
+    distri_x[:, 1] = 1.5
+    distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
+
+    graph = f"""
+            NC {nc}
+            VAR MULTI x
+            VAR SINGLE y
+            PUB SINGLE c
+            PROPERTY y = x ^ c
+            """
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n, {"c": 0})
+
+    bp_state.set_evidence("x", distri_x)
+
+    bp_state.bp_acyclic("y")
+    distri_y = bp_state.get_distribution("y")
+
+    distri_y_ref = np.log2(distri_x).sum(axis=0, keepdims=True)
+    distri_y_ref = distri_y_ref - np.max(distri_y_ref[0, :])
+    distri_y_ref = 2**distri_y_ref
+    distri_y_ref = distri_y_ref / distri_y_ref.sum(axis=1, keepdims=True)
+
+    assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
