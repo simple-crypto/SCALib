@@ -8,6 +8,7 @@ Not released
 * Add ``scalib.tools.ContextExecutor``, as a solution to ``LookupError`` in
   ``get_config()``.
 * Fix numerical underflow in ``BPState`` when multiple traces are used.
+* Fix missing import in ``MultiLDA``.
 
 v0.5.3 (2023/02/21)
 -------------------
