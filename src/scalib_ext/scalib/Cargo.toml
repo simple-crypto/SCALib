@@ -7,59 +7,55 @@ authors = [
 ]
 edition = "2021"
 
-[dependencies.pyo3]
-version = "0.18.0"
-features = ["extension-module"]
-
 [features]
-blis = ["blis-src", "blis-sys"]
+blis = ["blis-src", "blis-sys2"]
 
 [dependencies]
 
 # Utilities
 thiserror = "1.0"
-itertools = "0.10.0"
-rayon = "1.5.0"
-num-integer = "0.1.42"
-index_vec = { version = "0.1.3", features = ["serde"] } # Type-safe indices in FactorGraph
-indexmap = { version = "1.9.1", features = ["serde"] } # Factor graph data
+itertools = "0.10"
+rayon = "1.7"
+num-integer = "0.1"
+index_vec = { version = "0.1", features = ["serde"] } # Type-safe indices in FactorGraph
+indexmap = { version = "1.9", features = ["serde"] } # Factor graph data
 serde = { version = "1.0", features = ["derive", "rc"] } # Serialization for pickle support
 
 # Factor graph parsing and error display
-chumsky = "0.8.0"
-ariadne = "0.1.5"
+chumsky = "0.9"
+ariadne = "0.1"
 
 # analysis of factor graphs
-petgraph = {version = "0.6.2", default-features=false, features = ["serde-1"]}
+petgraph = {version = "0.6", default-features=false, features = ["serde-1"]}
 
 
 # Progress bars
-indicatif = { version = "0.17.3" }
-hytra = "0.1.2"
-crossbeam-utils = "0.8.3"
+indicatif = { version = "0.17" }
+hytra = "0.1"
+crossbeam-utils = "0.8"
 
 geigen = { path = "../geigen" }
 
 # Numerical libs
-ndarray = { version = "0.15.1", features = ["rayon", "approx", "serde"] }
-blis-src = { version = "0.2.1-alpha.0", default-features=false, features=["static", "pthreads"], optional = true }
-blis-sys = { git="https://github.com/cassiersg/blis-sys", optional = true }
-matrixmultiply = "0.3.1"
-nalgebra = "0.26.1"
-nshare = { git= "https://github.com/cassiersg/nshare", branch="rm_lt", features=["nalgebra", "ndarray", "std"] }
+ndarray = { version = "0.15", features = ["rayon", "approx", "serde"] }
+blis-src = { version = "0.2.1", default-features=false, features=["static", "pthreads"], optional = true }
+blis-sys2 = { version = "0.2.1", optional = true }
+matrixmultiply = "0.3"
+nalgebra = "0.32"
+nshare = { version="0.9", features=["nalgebra", "ndarray"] }
 
-realfft = "2.0.1"
-num-traits = "0.2.15"
+realfft = "2.0"
+num-traits = "0.2"
 
 [lib]
 bench = false
 
 [dev-dependencies]
-criterion = "0.3.4"
-ndarray-rand = "0.14.0"
+criterion = "0.4"
+ndarray-rand = "0.14"
 rand_xoshiro = "0.6"
-approx = "0.4.0"
-ndarray-stats = "0.5.0"
+approx = "0.5"
+ndarray-stats = "0.5"
 
 [[bench]]
 name = "belief_propagation"
