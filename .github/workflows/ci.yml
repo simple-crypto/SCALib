@@ -59,6 +59,7 @@ jobs:
               run:
                 make docs
     test:
+        name: Run tests (on linux).
         needs: [build_wheel_linux]
         runs-on: ubuntu-latest
         strategy:
@@ -125,7 +126,7 @@ jobs:
                   key: windows-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
             - uses: actions/setup-python@v3
               with:
-                  python-version: "3.10"
+                  python-version: "3.8"
             - name: wheels Windows ${{ matrix.arch}}
               uses: pypa/cibuildwheel@v2.12.0
               env:
@@ -139,43 +140,43 @@ jobs:
                   name: dist
                   path: ./wheelhouse/*.whl
 
-#    build_wheel_macos:
-#        name: Build wheels on macos ${{ matrix.vers }}
-#        runs-on: macos-10.15
-#        strategy:
-#            fail-fast: false
-#            matrix:
-#                include:
-#                   #- vers: arm64
-#                   - vers: x86_64
-#        env:
-#            CIBW_BUILD_VERBOSITY: "1"
-#            CIBW_ENVIRONMENT: 'RUST_BACKTRACE=full'
-#            CIBW_BUILD: "cp36-*"
-#            # I don't know how to make both normal and doctring tests work with only one command,
-#            # so I use shell &&.
-#            CIBW_TEST_COMMAND: pytest -ra {project}/tests && pytest -ra --pyargs --doctest-modules scalib
-#            CIBW_TEST_EXTRAS: test
-#            CIBW_ARCHS_MACOS: ${{ matrix.vers }}
-#            CARGO_TARGET_DIR: ${{ github.workspace }}/cargo_build
-#        steps:
-#            - uses: actions/checkout@v2
-#            - uses: actions/cache@v2
-#              with:
-#                  path: |
-#                      ~/.cargo/registry
-#                      ~/.cargo/git
-#                      ${{ github.workspace }}/cargo_build
-#                  key: cache-macos-cargo-v0
-#            - uses: actions/setup-python@v2
-#              with:
-#                  python-version: "3.6"
-#            - name: wheels Macos ${{ matrix.vers }}
-#              uses: joerick/cibuildwheel@v1.10.0
-#            - uses: actions/upload-artifact@v2
-#              with:
-#                  name: dist
-#                  path: ./wheelhouse/*.whl
+    build_wheel_macos:
+        name: Build wheels on Mac Os (${{ matrix.vers }})
+        runs-on: macos-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                   - vers: arm64
+                   - vers: x86_64
+        steps:
+            - uses: actions/checkout@v3
+            - uses: actions/cache@v3
+              with:
+                  path: |
+                      ${{ runner.temp }}/cargo_build
+                      ${{ runner.temp }}/cargo_home
+                  key: macos-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
+            - uses: actions/setup-python@v3
+              with:
+                  python-version: "3.8"
+            - name: add aarch64 lib
+              if: ${{ matrix.vers }} == 'arm64'
+              run: "rustup target add aarch64-apple-darwin"
+            - name: wheels Mac Os ${{ matrix.vers }}
+              uses: joerick/cibuildwheel@v2.12.0
+              env:
+                CARGO_TARGET_DIR: "${{ runner.temp }}\\cargo_build"
+                CARGO_HOME: "${{ runner.temp }}\\cargo_home"
+                CIBW_PLATFORM: "macos"
+                CIBW_TEST_COMMAND: pytest {project}/tests
+                CIBW_TEST_REQUIRES: "-r tests/requirements.txt"
+                CIBW_ARCHS_MACOS: "${{ matrix.vers}}"
+                CIBW_ENVIRONMENT_MACOS: "SCALIB_AVX2=0"
+            - uses: actions/upload-artifact@v3
+              with:
+                  name: dist
+                  path: ./wheelhouse/*.whl
 
     build_sdist:
         name: Build source distribution
@@ -192,7 +193,7 @@ jobs:
                   path: dist/*.tar.gz
 
     check_dist:
-        needs: [build_wheel_linux, build_wheel_windows, build_sdist]
+        needs: [build_wheel_linux, build_wheel_windows, build_wheel_macos, build_sdist]
         runs-on: ubuntu-latest
         steps:
             - uses: actions/download-artifact@v3
