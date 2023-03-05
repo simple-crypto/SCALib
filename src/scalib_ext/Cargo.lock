@@ -161,13 +161,14 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "blis-src"
-version = "0.2.1-alpha.0"
-source = "git+https://github.com/cassiersg/blis-src?branch=include#b8b63235d1dc79fd2011e357bac7026314646da2"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "890f81b2cda67a66e45ae13a35363502e84d6a7da86e429d609ede4f3463d086"
 
 [[package]]
-name = "blis-sys"
-version = "0.2.1-alpha.0"
-source = "git+https://github.com/cassiersg/blis-sys#900fbede9a0a05c8e9a4415d1aa12680daaee68e"
+name = "blis-sys2"
+version = "0.2.1"
+source = "git+https://github.com/cassiersg/blis-sys2#2640cdd18cb13289110afded44045b2ee44083a5"
 dependencies = [
  "bindgen 0.58.1",
  "blis-src",
@@ -184,6 +185,12 @@ name = "bytemuck"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17febce684fd15d89027105661fec94afb475cb995fbc59d2865198446ba2eea"
+
+[[package]]
+name = "byteorder"
+version = "1.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "cast"
@@ -314,6 +321,12 @@ dependencies = [
  "termcolor",
  "unicode-width",
 ]
+
+[[package]]
+name = "color_quant"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
 name = "console"
@@ -575,6 +588,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "image"
+version = "0.24.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b7ea949b537b0fd0af141fff8c77690f2ce96f4f41f042ccb6c69c6c965945"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "color_quant",
+ "num-rational",
+ "num-traits",
+]
+
+[[package]]
 name = "index_vec"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -739,16 +765,16 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "nalgebra"
-version = "0.26.2"
+version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "476d1d59fe02fe54c86356e91650cd892f392782a1cb9fc524ec84f7aa9e1d06"
+checksum = "4fb2d0de08694bed883320212c18ee3008576bfe8c306f4c3c4a58b4876998be"
 dependencies = [
- "approx 0.4.0",
+ "approx 0.5.1",
  "matrixmultiply",
- "num-complex 0.3.1",
- "num-rational 0.3.2",
+ "num-complex",
+ "num-rational",
  "num-traits",
- "simba 0.4.0",
+ "simba 0.7.3",
  "typenum",
 ]
 
@@ -761,8 +787,8 @@ dependencies = [
  "approx 0.5.1",
  "matrixmultiply",
  "nalgebra-macros",
- "num-complex 0.4.3",
- "num-rational 0.4.1",
+ "num-complex",
+ "num-rational",
  "num-traits",
  "simba 0.8.0",
  "typenum",
@@ -787,7 +813,7 @@ checksum = "adb12d4e967ec485a5f71c6311fe28158e9d6f4bc4a447b474184d0f91a8fa32"
 dependencies = [
  "approx 0.4.0",
  "matrixmultiply",
- "num-complex 0.4.3",
+ "num-complex",
  "num-integer",
  "num-traits",
  "rawpointer",
@@ -852,20 +878,13 @@ dependencies = [
 
 [[package]]
 name = "nshare"
-version = "0.5.1-alpha.0"
-source = "git+https://github.com/cassiersg/nshare?branch=rm_lt#5b449afd22d9a8afb4d6c6af107d15d5a354c5c4"
-dependencies = [
- "nalgebra 0.26.2",
- "ndarray",
-]
-
-[[package]]
-name = "num-complex"
-version = "0.3.1"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "747d632c0c558b87dbabbe6a82f3b4ae03720d0646ac5b7b4dae89394be5f2c5"
+checksum = "4447657cd40e3107416ec4f2ac3e61a18781b00061789e3b8f4bbcbccb26c4c6"
 dependencies = [
- "num-traits",
+ "image",
+ "nalgebra 0.30.1",
+ "ndarray",
 ]
 
 [[package]]
@@ -884,17 +903,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
 dependencies = [
  "autocfg",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12ac428b1cb17fce6f731001d307d351ec70a6d202fc2e60f7d4c5e42d8f4f07"
-dependencies = [
- "autocfg",
- "num-integer",
  "num-traits",
 ]
 
@@ -943,7 +951,7 @@ checksum = "96b0fee4571867d318651c24f4a570c3f18408cf95f16ccb576b3ce85496a46e"
 dependencies = [
  "libc",
  "ndarray",
- "num-complex 0.4.3",
+ "num-complex",
  "num-integer",
  "num-traits",
  "pyo3",
@@ -1295,7 +1303,7 @@ version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17d4f6cbdb180c9f4b2a26bbf01c4e647f1e1dea22fe8eb9db54198b32f9434"
 dependencies = [
- "num-complex 0.4.3",
+ "num-complex",
  "num-integer",
  "num-traits",
  "primal-check",
@@ -1335,7 +1343,7 @@ dependencies = [
  "approx 0.5.1",
  "ariadne",
  "blis-src",
- "blis-sys",
+ "blis-sys2",
  "chumsky",
  "criterion",
  "crossbeam-utils",
@@ -1427,14 +1435,15 @@ checksum = "43b2853a4d09f215c24cc5489c992ce46052d359b5109343cbafbf26bc62f8a3"
 
 [[package]]
 name = "simba"
-version = "0.4.0"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5132a955559188f3d13c9ba831e77c802ddc8782783f050ed0c52f5988b95f4c"
+checksum = "2f3fd720c48c53cace224ae62bef1bbff363a70c68c4802a78b5cc6159618176"
 dependencies = [
- "approx 0.4.0",
- "num-complex 0.3.1",
+ "approx 0.5.1",
+ "num-complex",
  "num-traits",
  "paste",
+ "wide",
 ]
 
 [[package]]
@@ -1444,7 +1453,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50582927ed6f77e4ac020c057f37a268fc6aebc29225050365aacbb9deeeddc4"
 dependencies = [
  "approx 0.5.1",
- "num-complex 0.4.3",
+ "num-complex",
  "num-traits",
  "paste",
  "wide",

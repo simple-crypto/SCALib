@@ -21,7 +21,7 @@ pub fn opt_dgemm(
             let csb = b.stride_of(ndarray::Axis(1));
             let rsc = c.stride_of(ndarray::Axis(0));
             let csc = c.stride_of(ndarray::Axis(1));
-            let mut rntm = blis_sys::rntm_t {
+            let mut rntm = blis_sys2::rntm_t {
                 auto_factor: true,
                 num_threads: num_threads as i64,
                 thrloop: [-1; 6usize],
@@ -29,27 +29,27 @@ pub fn opt_dgemm(
                 pack_b: false,
                 l3_sup: true,
                 sba_pool: std::ptr::null_mut(),
-                membrk: std::ptr::null_mut(),
+                pba: std::ptr::null_mut(),
             };
             rntm.thrloop[0] = 1;
-            blis_sys::bli_dgemm_ex(
-                blis_sys::trans_t_BLIS_NO_TRANSPOSE,
-                blis_sys::trans_t_BLIS_NO_TRANSPOSE,
-                m as blis_sys::dim_t,
-                n as blis_sys::dim_t,
-                k as blis_sys::dim_t,
+            blis_sys2::bli_dgemm_ex(
+                blis_sys2::trans_t_BLIS_NO_TRANSPOSE,
+                blis_sys2::trans_t_BLIS_NO_TRANSPOSE,
+                m as blis_sys2::dim_t,
+                n as blis_sys2::dim_t,
+                k as blis_sys2::dim_t,
                 &alpha as *const _ as *mut _,
                 a.as_ptr() as *mut _,
-                rsa as blis_sys::dim_t,
-                csa as blis_sys::dim_t,
+                rsa as blis_sys2::dim_t,
+                csa as blis_sys2::dim_t,
                 b.as_ptr() as *mut _,
-                rsb as blis_sys::dim_t,
-                csb as blis_sys::dim_t,
+                rsb as blis_sys2::dim_t,
+                csb as blis_sys2::dim_t,
                 &beta as *const _ as *mut _,
                 c.as_mut_ptr(),
-                rsc as blis_sys::dim_t,
-                csc as blis_sys::dim_t,
-                blis_sys::bli_gks_query_cntx(),
+                rsc as blis_sys2::dim_t,
+                csc as blis_sys2::dim_t,
+                blis_sys2::bli_gks_query_cntx(),
                 &mut rntm,
             );
         }

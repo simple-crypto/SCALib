@@ -8,7 +8,7 @@ authors = [
 edition = "2021"
 
 [features]
-blis = ["blis-src", "blis-sys"]
+blis = ["blis-src", "blis-sys2"]
 
 [dependencies]
 
@@ -38,11 +38,11 @@ geigen = { path = "../geigen" }
 
 # Numerical libs
 ndarray = { version = "0.15", features = ["rayon", "approx", "serde"] }
-blis-src = { version = "0.2.1-alpha.0", default-features=false, features=["static", "pthreads"], optional = true }
-blis-sys = { git="https://github.com/cassiersg/blis-sys", optional = true }
+blis-src = { version = "0.2.1", default-features=false, features=["static", "pthreads"], optional = true }
+blis-sys2 = { git="https://github.com/cassiersg/blis-sys2", version = "0.2.1", optional = true }
 matrixmultiply = "0.3"
 nalgebra = "0.32"
-nshare = { git= "https://github.com/cassiersg/nshare", branch="rm_lt", features=["nalgebra", "ndarray", "std"] }
+nshare = { version="0.9", features=["nalgebra", "ndarray"] }
 
 realfft = "2.0"
 num-traits = "0.2"
