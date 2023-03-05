@@ -168,7 +168,8 @@ checksum = "890f81b2cda67a66e45ae13a35363502e84d6a7da86e429d609ede4f3463d086"
 [[package]]
 name = "blis-sys2"
 version = "0.2.1"
-source = "git+https://github.com/cassiersg/blis-sys2#2640cdd18cb13289110afded44045b2ee44083a5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d718a14b1fd18063a14830fea23025a6c5b9f521fe8a641279790eaca0f8ab29"
 dependencies = [
  "bindgen 0.58.1",
  "blis-src",
