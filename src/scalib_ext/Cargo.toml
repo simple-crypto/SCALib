@@ -8,8 +8,5 @@ members = [
 ]
 resolver = "2"
 
-[patch.crates-io]
-blis-src = { git = 'https://github.com/cassiersg/blis-src', branch = 'include' }
-
 [profile.release]
 debug = true
