@@ -23,6 +23,7 @@ if portable and use_avx2:
 with open("src/scalib/build_config.py", "w") as f:
     f.write(f"REQUIRE_AVX2 = {use_avx2}\n")
 
+
 if noflags or portable:
     rustflags = None
 elif use_avx2:
@@ -34,6 +35,7 @@ if rustflags:
     rustflags = os.environ.get('RUSTFLAGS', '') + ' ' + rustflags
     os.environ["RUSTFLAGS"] = rustflags
 
+print(f"Build config: {noflags=} {portable=} {use_avx2=} {rustflags=}.")
 
 scalib_features = ["pyo3/abi3"]
 
