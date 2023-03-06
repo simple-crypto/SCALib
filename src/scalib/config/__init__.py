@@ -149,7 +149,7 @@ def get_config():
         # TODO: use add_note on the orignal exception once we drop support for python 3.10.
         raise Exception(
             "Using SCALib from a thread without contextvars propagation is not supported.\n"
-            + "We provide contextvars-aware replacements for ThreadPoolExecutor and Thread\n"
-            + "at scalib.tools.ContextExecutor and scalib.tools.ContextThread.\n"
+            + "We provide scalib.tools.ContextExecutor as a contextvars-aware replacement\n"
+            + "for concurrent.futures.ThreadPoolExecutor.\n"
             + "See https://github.com/simple-crypto/SCALib/issues/89 for more information."
         )
