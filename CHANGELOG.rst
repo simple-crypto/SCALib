@@ -5,6 +5,7 @@ Changelog
 Not released
 ------------
 
+* Run CI on Mac Os and build wheels (x86_64 and arm64, but we test only x86_64). No AVX2 due to old runner in github CI.
 * Add ``scalib.tools.ContextExecutor``, as a solution to ``LookupError`` in
   ``get_config()``.
 * Fix numerical underflow in ``BPState`` when multiple traces are used.
