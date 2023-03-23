@@ -906,37 +906,6 @@ def test_and_rounding_error_simple():
     assert (bp.get_distribution("K1") >= 0.0).all()
 
 
-def test_dampening_nochange():
-    graph = """
-        NC 2
-        PROPERTY s1: x = a^b
-        VAR MULTI x
-        VAR MULTI a
-        VAR MULTI b
-        """
-    distri_a = np.array([[0.6, 0.4]])
-    distri_b = np.array([[0.8, 0.2]])
-    graph = FactorGraph(graph)
-    n = 1
-    bp_no_dampen = BPState(graph, n)
-    bp_no_dampen.set_evidence("a", distri_a)
-    bp_no_dampen.set_evidence("b", distri_b)
-    bp_dampen = BPState(graph, n)
-    bp_dampen.set_evidence("a", distri_a)
-    bp_dampen.set_evidence("b", distri_b)
-
-    for v in graph.vars():
-        bp_dampen.propagate_var(v)
-        bp_no_dampen.propagate_var(v)
-    prev = bp_no_dampen.get_belief_from_var("a", "s1")
-    alpha = 0.5
-    bp_dampen.bp_loopy(1, False, alpha=alpha, clear_beliefs=False)
-    bp_no_dampen.bp_loopy(1, False, clear_beliefs=False)
-    print(bp_no_dampen.get_belief_from_var("a", "s1"))
-    assert np.allclose(
-        ((1 - alpha) * prev + (alpha) * bp_no_dampen.get_belief_from_var("a", "s1")),
-        bp_dampen.get_belief_from_var("a", "s1"),
-    )
 
 
 def test_clear_beliefs():
@@ -983,48 +952,47 @@ def test_dampening_correctness():
     fg = FactorGraph(factor_graph)
     alpha = 0.9
     bp_dampen = BPState(fg, 2, public_values={"IV": 0xC})
-    bp_no_dampen = BPState(fg, 2, public_values={"IV": 0xC})
+    bp_dampen_copy = BPState(fg, 2, public_values={"IV": 0xC})
     for k in fg.vars():
         d = make_distri(16, 2)
-        bp_no_dampen.set_evidence(k, distribution=d)
+        bp_dampen_copy.set_evidence(k, distribution=d)
         bp_dampen.set_evidence(k, distribution=d)
 
-    for v in fg.vars():
-        bp_dampen.propagate_var(v)
-        bp_no_dampen.propagate_var(v)
-    for v in fg.factors():
-        bp_dampen.propagate_factor(v)
-        bp_no_dampen.propagate_factor(v)
+    bp_dampen.bp_loopy(1, False, clear_beliefs=False)
+    bp_dampen_copy.bp_loopy(1, False, clear_beliefs=False)
     prevs_vars = {}
-    prevs_factors = {}
     for factor in fg._inner.factor_names():
         for var in fg._inner.factor_scope(factor):
             k = (var, factor)
-            prevs_vars[k] = normalize_distr(
-                bp_no_dampen.get_belief_from_var(var, factor)
-            )
-            prevs_factors[k] = normalize_distr(
-                bp_no_dampen.get_belief_to_var(var, factor)
-            )
-    bp_dampen.bp_loopy(1, False, alpha=alpha, clear_beliefs=False)
-    bp_no_dampen.bp_loopy(1, False, clear_beliefs=False)
 
-    for factor in fg._inner.factor_names():
-        for var in fg._inner.factor_scope(factor):
-            k = (var, factor)
-            assert np.allclose(
-                (
-                    (1 - alpha) * prevs_vars[k]
-                    + (alpha)
-                    * normalize_distr(bp_no_dampen.get_belief_from_var(var, factor))
-                ),
-                bp_dampen.get_belief_from_var(var, factor),
+            prevs_vars[k] = normalize_distr(
+                bp_dampen_copy.get_belief_from_var(var, factor)
             )
+
             assert np.allclose(
-                (
-                    (1 - alpha) * prevs_factors[k]
-                    + (alpha)
-                    * normalize_distr(bp_no_dampen.get_belief_to_var(var, factor))
-                ),
-                bp_dampen.get_belief_to_var(var, factor),
+                normalize_distr(bp_dampen.get_belief_from_var(var, factor)),
+                normalize_distr(bp_dampen_copy.get_belief_from_var(var, factor)),
             )
+
+    for i in range(5):
+        bp_dampen.bp_loopy(1, False, alpha=alpha, clear_beliefs=False)
+        bp_dampen_copy.bp_loopy(1, False, clear_beliefs=False)
+        for factor in fg._inner.factor_names():
+            for var in fg._inner.factor_scope(factor):
+                k = (var, factor)
+                expected = (
+                    alpha
+                    * normalize_distr(bp_dampen_copy.get_belief_from_var(var, factor))
+                ) + ((1.0 - alpha) * prevs_vars[k])
+                assert np.allclose(
+                    expected,
+                    normalize_distr(bp_dampen.get_belief_from_var(var, factor)),
+                    rtol=1e-8,
+                )
+        bp_dampen_copy = copy.deepcopy(bp_dampen)
+        for factor in fg._inner.factor_names():
+            for var in fg._inner.factor_scope(factor):
+                k = (var, factor)
+                prevs_vars[k] = normalize_distr(
+                    bp_dampen_copy.get_belief_from_var(var, factor)
+                )

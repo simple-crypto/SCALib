@@ -232,15 +232,15 @@ impl Distribution {
         let num_arr = numerator
             .value()
             .expect("update_dampen needs full dist num");
-        let v_arr = self_arr.sum_axis(ndarray::Axis(1));
+        let sigma_s = &self_arr.sum_axis(ndarray::Axis(1));
+
         if let Some(denom_arr) = denominator.value() {
-            let u_arr = (&num_arr / (&denom_arr + MIN_PROBA)).sum_axis(ndarray::Axis(1));
+            let sigma_nd = (&num_arr / (&denom_arr + MIN_PROBA)).sum_axis(ndarray::Axis(1));
 
-            azip!((index (i, j), x in &mut self_arr, n in &num_arr, d in &denom_arr) *x = ((alpha / u_arr[i]) * (n / (d + MIN_PROBA))) + (((1.0 - alpha) / v_arr[i]) * *x))
+            azip!((index (i, _j), x in &mut self_arr, n in &num_arr, d in &denom_arr) *x = (alpha/sigma_nd[i]) * (n/(d+MIN_PROBA)) + (((1.0 - alpha)/sigma_s[i]) * *x));
         } else {
-            let u_arr = num_arr.sum_axis(ndarray::Axis(1));
-
-            azip!((index (i, j), x in &mut self_arr, n in &num_arr) *x = ((alpha / u_arr[i]) * (n)) + (((1.0 - alpha) / v_arr[i]) * *x))
+            let sigma_n = (&num_arr).sum_axis(ndarray::Axis(1));
+            azip!((index (i, _j), x in &mut self_arr, n in &num_arr) *x = ((alpha / sigma_n[i]) * (n)) + (((1.0 - alpha) / sigma_s[i]) * (*x)))
         }
     }
 
