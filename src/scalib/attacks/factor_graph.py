@@ -105,7 +105,7 @@ class FactorGraph:
       table `t` at index `y`). No public variable is allowed in this property.
     - `PROPERTY x = !y`: declares a bitwise NOT property.
       No public variable is allowed in this property.
-    - `PROPERTY z = f(x,y)`: declares a "Generic factor" property, f must be declared.
+    - `PROPERTY f(x, y, z)`: declares a "Generic factor" property, f must be declared.
     - `TABLE` t = [0, 3, 2, 1]`: Declares a table that can be used in a LOOKUP.
       The values provided in the table must belong to the interval [0, nc).
       The initialization expression can be omitted from the graph description
