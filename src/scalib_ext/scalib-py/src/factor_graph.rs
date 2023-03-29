@@ -7,7 +7,7 @@ use bincode::{deserialize, serialize};
 use numpy::{PyArray, PyArray1, PyArray2};
 use pyo3::exceptions::{PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyTuple};
+use pyo3::types::{PyBytes, PyList, PyTuple};
 
 use scalib::sasca;
 
@@ -162,6 +162,12 @@ fn pyobj2factors<'a>(
                 .remove(name)
                 .ok_or_else(|| PyKeyError::new_err(format!("Missing gen factor {}.", name)))?;
             if multi {
+                if gf.downcast::<'_, PyList>(py).is_err() {
+                    return Err(PyTypeError::new_err(format!(
+                        "Generalized factor {} must be a list, as it is MULTI.",
+                        name
+                    )));
+                }
                 let obj: Vec<&numpy::PyArrayDyn<f64>> = gf.extract(py)?;
                 Ok(sasca::GenFactor::Multi(
                     obj.into_iter()

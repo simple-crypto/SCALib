@@ -773,6 +773,7 @@ fn factor_gen_factor<'a>(
                 GenFactor::Single(x) => x,
                 GenFactor::Multi(x) => &x[i],
             };
+            assert_eq!(gen_factor.shape().len(), operands.len());
             // First slice the array with the constants.
             let gen_factor = gen_factor.slice_each_axis(|ax| match operands[ax.axis.index()] {
                 fg::GenFactorOperand::Var(_, _) => ndarray::Slice::new(0, None, 1),
@@ -810,6 +811,13 @@ fn factor_gen_factor<'a>(
                         gen_factor = new_gen_factor;
                     }
                 }
+            }
+            // Drop useless axes.
+            for _ in 0..dest_idx {
+                gen_factor.index_axis_inplace(ndarray::Axis(0), 0);
+            }
+            for _ in (dest_idx+1)..operands.len() {
+                gen_factor.index_axis_inplace(ndarray::Axis(1), 0);
             }
             distr.value_mut().unwrap().slice_mut(s![i,..]).assign(&gen_factor);
         }

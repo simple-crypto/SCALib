@@ -936,3 +936,36 @@ def test_manytraces():
     distri_y_ref = distri_y_ref / distri_y_ref.sum(axis=1, keepdims=True)
 
     assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
+
+
+def test_generic_factor():
+    fg1 = FactorGraph(
+        """NC 2
+    VAR MULTI K0
+    VAR MULTI K1
+    VAR MULTI N1
+    VAR MULTI L1
+    PROPERTY P1: L1 = K0 & !K1
+    """
+    )
+    fg2 = FactorGraph(
+        """NC 2
+    VAR MULTI K0
+    VAR MULTI K1
+    VAR MULTI L1
+    GENERIC MULTI f
+    PROPERTY P1: f(K0, K1, L1)
+    """
+    )
+
+    bp1 = BPState(fg1, 1)
+    bp2 = BPState(fg2, 1, gen_factors={"f": [np.ones((2, 2, 2), dtype=np.float64)]})
+    for k in ["K0", "K1"]:
+        d = make_distri(2, 1)
+        bp1.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+        bp2.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+    bp1.bp_loopy(3, False)
+    bp2.bp_loopy(3, False)
+
+    print(bp1.debug())
+    print(bp2.debug())
