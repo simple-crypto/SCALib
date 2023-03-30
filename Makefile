@@ -45,4 +45,3 @@ wheel_local:
 
 wheel_portable:
 	SCALIB_PORTABLE=1 CARGO_TARGET_DIR=.cargo_build_portable  python3 -m build -w -o dist/portable
-
