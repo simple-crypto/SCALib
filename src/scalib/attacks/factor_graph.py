@@ -369,7 +369,7 @@ class BPState:
 
         Parameters
         ----------
-        var : string
+        factor:
             Identifier of the variable.
 
         """

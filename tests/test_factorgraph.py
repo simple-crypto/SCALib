@@ -969,3 +969,39 @@ def test_generic_factor():
 
     print(bp1.debug())
     print(bp2.debug())
+
+
+def test_generic_factor2():
+    fg1 = FactorGraph(
+        """NC 2
+    VAR MULTI K0
+    VAR MULTI K1
+    VAR MULTI L1
+    PROPERTY P1: L1 = K0 & !K1
+    """
+    )
+    fg2 = FactorGraph(
+        """NC 2
+    VAR MULTI K0
+    VAR MULTI K1
+    VAR MULTI L1
+    GENERIC SINGLE f
+    PROPERTY P1: f(K0, K1, L1)
+    """
+    )
+    factor = np.zeros((2, 2, 2))
+    factor[0, 0, 0] = 1.0
+    factor[0, 1, 0] = 1.0
+    factor[1, 0, 1] = 1.0
+    factor[1, 1, 0] = 1.0
+    bp1 = BPState(fg1, 1)
+    bp2 = BPState(fg2, 1, gen_factors={"f": factor})
+    for k in ["K0", "K1"]:
+        d = make_distri(2, 1)
+        bp1.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+        bp2.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+
+    bp1.bp_loopy(1, True)
+    bp2.bp_loopy(1, True)
+
+    assert np.allclose(bp1.get_distribution("L1"), bp2.get_distribution("L1"))
