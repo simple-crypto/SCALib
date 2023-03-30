@@ -1,7 +1,9 @@
 pub mod belief_propagation;
+pub mod information;
 pub mod lda;
 pub(crate) mod matrixmul;
 pub mod mttest;
+pub mod rlda;
 pub mod sasca;
 pub mod snr;
 pub mod ttest;
@@ -27,6 +29,12 @@ pub enum ScalibError {
     },
     #[error("A SNR class value of a variable is larger than the given number of classes.")]
     SnrClassOutOfBound,
+    #[error("Clustering failed due to maximum number of centroids reached.")]
+    MaxCentroidNumber,
+    #[error("Empty KdTree, cannot get nearest centroid")]
+    EmptyKdTree,
+    #[error("No associated classes stored")]
+    NoAssociatedClassesStored,
 }
 
 #[derive(Clone)]
