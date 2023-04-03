@@ -11,6 +11,7 @@ Not released
 * Fix numerical underflow in ``BPState`` when multiple traces are used.
 * Fix missing import in ``MultiLDA``.
 * Run ``BPState`` methods on the threadpool.
+* Make threadpool initalization lazy -- makes SCALib play more nicely with ``ProcessPoolExecutor``.
 
 v0.5.3 (2023/02/21)
 -------------------

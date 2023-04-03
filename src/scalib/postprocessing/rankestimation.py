@@ -79,7 +79,8 @@ def rank_nbin(costs, key, nbins, method="hist"):
         Method used to estimate the rank. Can be the following:
 
         * "hist": using histograms (default).
-        * "ntl": using NTL library, allows better precision.
+        * "naive": enumerate possible keys (very slow).
+        * "histbignum": using NTL library, allows better precision.
 
     Returns
     -------
