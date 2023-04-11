@@ -188,7 +188,7 @@ impl BPState {
     // Propagation type:
     // belief to var -> var
     // var -> belief to func
-    // trhough func: towards all vars, towards a subset of vars
+    // through func: towards all vars, towards a subset of vars
     pub fn propagate_to_var(&mut self, var: VarId, clear_evidence: bool) {
         let distr_iter = self
             .graph
