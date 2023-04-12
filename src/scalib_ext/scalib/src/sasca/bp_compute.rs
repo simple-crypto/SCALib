@@ -387,7 +387,7 @@ impl Distribution {
                 .iter()
                 .fold((0.0f64, 0.0f64), |(sum, min), x| (sum + x, min.min(*x)));
             let offset = -min;
-            let norm_f = 1.0 / (dbg!((sum + offset) + MIN_PROBA) * d.len() as f64);
+            let norm_f = 1.0 / (((sum + offset) + MIN_PROBA) * d.len() as f64);
             d.mapv_inplace(|x| ((x + offset) + MIN_PROBA) * norm_f);
         })
     }
