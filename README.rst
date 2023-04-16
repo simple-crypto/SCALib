@@ -18,7 +18,7 @@ contains state-of-the-art tools for side-channel security evaluation. It focuses
 - state-of-the art algorithms,
 - excellent performance (see `benchmarks <https://github.com/cassiersg/SCABench>`_).
 
-SCALib should be useful for any side-channel practitionner who wants to
+SCALib should be useful for any side-channel practitioner who wants to
 evaluate, but not necessarily attack, protected or non-protected
 implementations.
 
@@ -80,7 +80,7 @@ Please also let us know your needs by opening a
 Versioning policy
 =================
 
-SCALib uses `semantic versioing <https://semver.org/>`_, see the `CHANGELOG
+SCALib uses `semantic versioning <https://semver.org/>`_, see the `CHANGELOG
 <CHANGELOG.rst>`_ for breaking changes and novelties.
 
 About us
