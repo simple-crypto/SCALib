@@ -227,12 +227,9 @@ impl Distribution {
             (DistrRepr::Full(vst), DistrRepr::Full(vdiv)) => (vst, vdiv),
         };
         res.value = DistrRepr::Full(
-            Zip::from(
-                vst.broadcast((std::cmp::max(vst.dim().0, vdiv.dim().0), vst.dim().1))
-                    .unwrap(),
-            )
-            .and_broadcast(vdiv)
-            .map_collect(|vst, vdiv| *vst / (*vdiv + MIN_PROBA)),
+            Zip::from(vst.broadcast((res.shape.0, vst.dim().1)).unwrap())
+                .and_broadcast(vdiv)
+                .map_collect(|vst, vdiv| *vst / (*vdiv + MIN_PROBA)),
         );
         return res;
     }

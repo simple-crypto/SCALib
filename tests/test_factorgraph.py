@@ -938,6 +938,7 @@ def test_manytraces():
     assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
 
 
+<<<<<<< HEAD
 
 
 def test_clear_beliefs():
@@ -1028,3 +1029,59 @@ def test_dampening_correctness():
                 prevs_vars[k] = normalize_distr(
                     bp_dampen_copy.get_belief_from_var(var, factor)
                 )
+=======
+def test_mix_single_multi():
+    graph_desc = """
+    NC 2
+    TABLE t
+    VAR SINGLE s
+
+    VAR MULTI a
+    VAR MULTI b
+
+    PROPERTY TABLE: a = t[s]
+    PROPERTY XOR: b = a ^ s
+    """
+
+    graph_desc2 = """
+    NC 2
+    TABLE t
+    VAR SINGLE s
+
+    VAR SINGLE a0
+    VAR SINGLE b0
+
+    PROPERTY a0 = t[s]
+    PROPERTY b0 = a0 ^ s
+
+    VAR SINGLE a1
+    VAR SINGLE b1
+
+    PROPERTY a1 = t[s]
+    PROPERTY b1 = a1 ^ s
+    """
+
+    graph = FactorGraph(graph_desc, {"t": np.arange(2, dtype=np.uint32)})
+    graph2 = FactorGraph(graph_desc2, {"t": np.arange(2, dtype=np.uint32)})
+
+    sasca = BPState(graph, 2)
+    sasca.bp_loopy(4, initialize_states=True)  # check no crash
+
+    sasca = BPState(graph, 2)
+    sasca2 = BPState(graph2, 1)
+
+    for _ in range(10):
+        sasca.bp_loopy(1, initialize_states=False)
+        sasca2.bp_loopy(1, initialize_states=False)
+        for v in ("a", "b"):
+            d = sasca.get_distribution(v)
+            d0 = sasca2.get_distribution(f"{v}0")
+            d1 = sasca2.get_distribution(f"{v}0")
+            if d is not None:
+                assert np.allclose(d[0, :], d0, rtol=1e-5, atol=1e-19)
+                assert np.allclose(d[1, :], d1, rtol=1e-5, atol=1e-19)
+        d = sasca.get_distribution("s")
+        d2 = sasca2.get_distribution("s")
+        if d is not None:
+            assert np.allclose(d, d2, rtol=1e-5, atol=1e-19)
+>>>>>>> 9a84d17 (Fix incorrect size of distribution in BP.)
