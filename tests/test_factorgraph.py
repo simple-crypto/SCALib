@@ -982,7 +982,75 @@ def test_manytraces():
     assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
 
 
-<<<<<<< HEAD
+def test_ADD3():
+    nc = 13
+    graph = f"""NC {nc}
+    TABLE SUB = [0, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+    VAR MULTI a0
+    VAR MULTI x0
+    VAR MULTI x1
+
+
+
+    PROPERTY F0: a0 = x0 + x1
+    """
+    a0_distr = np.array(
+        [[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+    )
+    x0_distr = np.array(
+        [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]]
+    )
+    x1_distr = np.array(
+        [[0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+    )
+    fg = FactorGraph(graph)
+    bp_state = BPState(fg, 1)
+    bp_state.set_evidence("x0", x0_distr)
+    bp_state.set_evidence("x1", x1_distr)
+    bp_state.set_evidence("a0", a0_distr)
+    # bp_state.bp_loopy(1, initialize_states=True)
+    #  print(bp_state.debug())
+    distr = []
+    for x in ['x0', 'x1', 'a0']:
+        distr.append(bp_state.get_distribution(x))
+
+    assert not np.isnan(distr).any()
+
+
+def test_ADD3():
+    nc = 13
+    graph = f"""NC {nc}
+    TABLE SUB = [0, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+    VAR MULTI a0
+    VAR MULTI x0
+    VAR MULTI x1
+
+
+
+    PROPERTY F0: a0 = x0 + x1
+    """
+    a0_distr = np.array(
+        [[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+    )
+    x0_distr = np.array(
+        [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]]
+    )
+    x1_distr = np.array(
+        [[0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+    )
+    fg = FactorGraph(graph)
+    bp_state = BPState(fg, 1)
+    bp_state.set_evidence("x0", x0_distr)
+    bp_state.set_evidence("x1", x1_distr)
+    bp_state.set_evidence("a0", a0_distr)
+    # bp_state.bp_loopy(1, initialize_states=True)
+    #  print(bp_state.debug())
+    distr = []
+    for x in ['x0', 'x1', 'a0']:
+        distr.append(bp_state.get_distribution(x))
+
+    assert not np.isnan(distr).any()
+
 
 
 def test_clear_beliefs():
@@ -1073,7 +1141,7 @@ def test_dampening_correctness():
                 prevs_vars[k] = normalize_distr(
                     bp_dampen_copy.get_belief_from_var(var, factor)
                 )
-=======
+
 def test_mix_single_multi():
     graph_desc = """
     NC 2
@@ -1128,4 +1196,3 @@ def test_mix_single_multi():
         d2 = sasca2.get_distribution("s")
         if d is not None:
             assert np.allclose(d, d2, rtol=1e-5, atol=1e-19)
->>>>>>> 9a84d17 (Fix incorrect size of distribution in BP.)
