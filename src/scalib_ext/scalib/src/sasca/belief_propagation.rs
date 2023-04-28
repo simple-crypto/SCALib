@@ -550,6 +550,8 @@ fn factor_add<'a>(
             .into_iter();
     }
     let mut taken_dest = vec![false; factor.edges.len()];
+    let mut negated_vars = vec![false; factor.edges.len()];
+    negated_vars[0] = true;
     for dest in dest {
         taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
     }
@@ -607,7 +609,7 @@ fn factor_add<'a>(
         // Simply make the product if FFT domain
         // We do take the product of all factors then divide because some factors could be zero.
         let mut dest_fft = Vec::with_capacity(dest.len());
-        for (e, taken) in factor.edges.values().zip(taken_dest.iter()) {
+        for (i, (e, taken)) in factor.edges.values().zip(taken_dest.iter()).enumerate() {
             if *taken {
                 let mut fft_e = ndarray::Array2::zeros((nmulti, nc / 2 + 1));
                 belief_from_var[*e].fft_to(
@@ -616,6 +618,11 @@ fn factor_add<'a>(
                     fft_scratch.as_mut_slice(),
                     plans,
                 );
+                if negated_vars[i] {
+                    for x in fft_e.iter_mut() {
+                        *x = 1.0 / *x;
+                    }
+                }
                 dest_fft.push(fft_e);
             } else {
                 belief_from_var[*e].fft_to(
@@ -626,8 +633,17 @@ fn factor_add<'a>(
                 );
 
                 if acc_fft_init {
-                    acc_fft *= &fft_tmp;
+                    if negated_vars[i] {
+                        acc_fft /= &fft_tmp;
+                    } else {
+                        acc_fft *= &fft_tmp;
+                    }
                 } else {
+                    if negated_vars[i] {
+                        for x in fft_tmp.iter_mut() {
+                            *x = 1.0 / *x;
+                        }
+                    }
                     acc_fft.assign(&fft_tmp);
                     acc_fft_init = true;
                 }
@@ -651,6 +667,12 @@ fn factor_add<'a>(
                 for (j, fft_op) in dest_fft.iter().enumerate() {
                     if j != i {
                         res *= fft_op;
+                    }
+                }
+                let idx = factor.edges.get_index_of(&dest[i]).unwrap();
+                if !negated_vars[idx] {
+                    for x in res.iter_mut() {
+                        *x = 1.0 / *x;
                     }
                 }
                 let mut acc = uniform_template.clone();
