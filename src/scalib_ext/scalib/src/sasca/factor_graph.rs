@@ -72,7 +72,7 @@ impl FactorKind {
             FactorKind::AND { vars_neg: _ } => a & b,
             FactorKind::XOR => a ^ b,
             FactorKind::ADD => (((a as u64) + (b as u64)) % (nc as u64)) as ClassVal,
-            FactorKind::MUL => (((a as u64) + (b as u64)) % (nc as u64)) as ClassVal,
+            FactorKind::MUL => (((a as u64) * (b as u64)) % (nc as u64)) as ClassVal,
             FactorKind::NOT | FactorKind::LOOKUP { .. } => unreachable!(),
         }
     }
