@@ -998,23 +998,61 @@ def test_ADD3():
         [[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
     )
     x0_distr = np.array(
-        [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]]
+        [
+            [
+                0.0,
+                0.0,
+                0.0,
+                0.1666666667,
+                0.0,
+                0.1666666667,
+                0.1666666667,
+                0.0,
+                0.0,
+                0.1666666667,
+                0.1666666667,
+                0.0,
+                0.1666666667,
+            ]
+        ]
     )
     x1_distr = np.array(
-        [[0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+        [
+            [
+                0.0,
+                0.0,
+                0.0,
+                0.1666666667,
+                0.0,
+                0.1666666667,
+                0.1666666667,
+                0.0,
+                0.0,
+                0.1666666667,
+                0.1666666667,
+                0.0,
+                0.1666666667,
+            ]
+        ]
     )
     fg = FactorGraph(graph)
     bp_state = BPState(fg, 1)
     bp_state.set_evidence("x0", x0_distr)
     bp_state.set_evidence("x1", x1_distr)
     bp_state.set_evidence("a0", a0_distr)
-    # bp_state.bp_loopy(1, initialize_states=True)
-    #  print(bp_state.debug())
+    bp_state.bp_loopy(2, initialize_states=False)
+    print(bp_state.debug())
+    bp_state.bp_loopy(2, initialize_states=False)
+    print(bp_state.debug())
+    bp_state.bp_loopy(2, initialize_states=False)
+    print(bp_state.debug())
+    bp_state.bp_loopy(2, initialize_states=False)
+    print(bp_state.debug())
     distr = []
-    for x in ['x0', 'x1', 'a0']:
+    for x in ["x0", "x1", "a0"]:
         distr.append(bp_state.get_distribution(x))
-
-    assert not np.isnan(distr).any()
+    assert not np.isnan(np.array(distr)).any()
+    assert False
 
 
 def test_ADD3():

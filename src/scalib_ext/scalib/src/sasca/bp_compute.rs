@@ -149,9 +149,10 @@ impl Distribution {
             if self.multi & factor.multi {
                 assert_eq!(self.shape.0, factor.shape.0);
             }
+            dbg!(&factor);
             if let DistrRepr::Full(d) = &factor.value {
                 assert_eq!(d.dim(), factor.shape);
-                match (self.multi, factor.multi, &mut self.value) {
+                match dbg!(self.multi, factor.multi, &mut self.value) {
                     (_, false, DistrRepr::Uniform) => {
                         self.value = DistrRepr::Full(ndarray::Array::from_shape_fn(
                             self.shape,
@@ -189,8 +190,10 @@ impl Distribution {
                         self.value = DistrRepr::Full(d.map(|d| *d));
                     }
                     (true, _, DistrRepr::Full(ref mut v)) => {
+                        dbg!(&v);
+                        dbg!(&d);
                         azip!(v, d).for_each(|v, d| {
-                            *v = *v * *d;
+                            *v = dbg!(*v * *d);
                         });
                     }
                     (false, _, DistrRepr::Full(ref mut v)) => {
