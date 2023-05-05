@@ -209,7 +209,7 @@ impl BPState {
         // This is guaranteed as long as min_proba > var_degree * MIN_POSITIVE
         let var = self.graph.edges[edge].var;
         if alpha == 0.0 || !self.belief_from_var[edge].is_full() {
-        self.belief_from_var[edge].reset();
+            self.belief_from_var[edge].reset();
             self.belief_from_var[edge] =
                 Distribution::divide_reg(&self.var_state[var], &self.belief_to_var[edge]);
         } else {
@@ -548,6 +548,7 @@ fn factor_add<'a>(
 ) -> impl Iterator<Item = Distribution> + 'a {
     // Special case for single-input ADD
     if factor.edges.len() == 2 {
+        // FIXME check for negative operand
         return dest
             .iter()
             .map(|var| {
@@ -567,10 +568,10 @@ fn factor_add<'a>(
     }
     let mut uniform_iter = factor
         .edges
-        .values()
+        .iter()
         .zip(taken_dest.iter())
-        .enumerate()
-        .filter(|(_, (e, _))| !belief_from_var[**e].is_full());
+        .zip(negated_vars.iter())
+        .filter(|(((_, e), _), _)| !belief_from_var[**e].is_full());
     let uniform_op = uniform_iter.next();
     let uniform_template = belief_from_var[factor.edges[0]].as_uniform();
     let (nmulti, nc) = uniform_template.shape();
@@ -579,7 +580,7 @@ fn factor_add<'a>(
     let mut acc_fft_init = false;
     let mut fft_scratch = plans.r2c.make_scratch_vec();
     let mut fft_input_scratch = plans.r2c.make_input_vec();
-    if let Some((i, (e_dest, t))) = uniform_op {
+    if let Some((((v_dest, e_dest), t), dest_negated)) = uniform_op {
         if !*t || uniform_iter.next().is_some() {
             // At least 2 uniform operands, or single uniform is not in dest,
             // all dest messages are uniform.
@@ -587,33 +588,37 @@ fn factor_add<'a>(
             return vec![uniform_template; dest.len()].into_iter();
         } else {
             // Single uniform op, only compute for that one.
-            for e in factor.edges.values() {
+            for (e_idx, e) in factor.edges.values().enumerate() {
                 if e != e_dest {
+                    let negate = !(dest_negated ^ negated_vars[e_idx]);
                     belief_from_var[*e].fft_to(
                         fft_input_scratch.as_mut_slice(),
                         fft_tmp.view_mut(),
                         fft_scratch.as_mut_slice(),
                         plans,
+                        negate,
                     );
+
                     if acc_fft_init {
                         acc_fft *= &fft_tmp;
-                    } else {
-                        acc_fft.assign(&fft_tmp);
-                        acc_fft_init = true;
                     }
-                    if clear_incoming {
-                        belief_from_var[*e].reset();
-                    }
+                } else {
+                    acc_fft.assign(&fft_tmp);
+                    acc_fft_init = true;
+                }
+                if clear_incoming {
+                    belief_from_var[*e].reset();
                 }
             }
-            let mut acc = uniform_template.clone();
-            let mut fft_scratch = plans.c2r.make_scratch_vec();
-            acc.ifft(acc_fft.view_mut(), fft_scratch.as_mut_slice(), plans);
-            acc.regularize();
-            let mut res = vec![uniform_template; dest.len()];
-            res[i] = acc;
-            return res.into_iter();
         }
+        let mut acc = uniform_template.clone();
+        let mut fft_scratch = plans.c2r.make_scratch_vec();
+        acc.ifft(acc_fft.view_mut(), fft_scratch.as_mut_slice(), plans, false);
+
+        acc.regularize();
+        let mut res = vec![uniform_template; dest.len()];
+        res[dest.iter().position(|v| v == v_dest).unwrap()] = acc;
+        return res.into_iter();
     } else {
         // Here we have to actually compute.
         // Simply make the product if FFT domain
@@ -627,12 +632,8 @@ fn factor_add<'a>(
                     fft_e.view_mut(),
                     fft_scratch.as_mut_slice(),
                     plans,
+                    negated_vars[i],
                 );
-                if negated_vars[i] {
-                    for x in fft_e.iter_mut() {
-                        *x = 1.0 / *x;
-                    }
-                }
                 dest_fft.push(fft_e);
             } else {
                 belief_from_var[*e].fft_to(
@@ -640,20 +641,12 @@ fn factor_add<'a>(
                     fft_tmp.view_mut(),
                     fft_scratch.as_mut_slice(),
                     plans,
+                    negated_vars[i],
                 );
 
                 if acc_fft_init {
-                    if negated_vars[i] {
-                        acc_fft /= &fft_tmp;
-                    } else {
-                        acc_fft *= &fft_tmp;
-                    }
+                    acc_fft *= &fft_tmp;
                 } else {
-                    if negated_vars[i] {
-                        for x in fft_tmp.iter_mut() {
-                            *x = 1.0 / *x;
-                        }
-                    }
                     acc_fft.assign(&fft_tmp);
                     acc_fft_init = true;
                 }
@@ -680,13 +673,13 @@ fn factor_add<'a>(
                     }
                 }
                 let idx = factor.edges.get_index_of(&dest[i]).unwrap();
-                if !negated_vars[idx] {
-                    for x in res.iter_mut() {
-                        *x = 1.0 / *x;
-                    }
-                }
                 let mut acc = uniform_template.clone();
-                acc.ifft(res.view_mut(), fft_scratch.as_mut_slice(), plans);
+                acc.ifft(
+                    res.view_mut(),
+                    fft_scratch.as_mut_slice(),
+                    plans,
+                    !negated_vars[idx],
+                );
                 acc.regularize();
                 acc
             })

@@ -1000,19 +1000,38 @@ def test_ADD3():
     x0_distr = np.array(
         [
             [
-                0.0,
-                0.0,
-                0.0,
-                0.1666666667,
-                0.0,
-                0.1666666667,
-                0.1666666667,
-                0.0,
-                0.0,
-                0.1666666667,
-                0.1666666667,
-                0.0,
-                0.1666666667,
+                0.0,  #  0
+                0.0,  #  1
+                0.0,  #  2
+                0.1666666667,  #  3
+                0.0,  #  4
+                0.1666666667,  #  5
+                0.1666666667,  #  6
+                0.0,  #  7
+                0.0,  #  8
+                0.1666666667,  #  9
+                0.1666666667,  # 10
+                0.0,  # 11
+                0.1666666667,  # 12
+            ]
+        ]
+    )
+    x0_distr = np.array(
+        [
+            [
+                0.1666666667,  #  3
+                0.1666666667,  #  5
+                0.0,  #  0
+                0.0,  #  1
+                0.0,  #  2
+                0.0,  #  4
+                0.0,  #  6
+                0.0,  #  7
+                0.0,  #  8
+                0.0,  #  9
+                0.0,  # 10
+                0.0,  # 11
+                0.0,  # 12
             ]
         ]
     )
@@ -1035,19 +1054,33 @@ def test_ADD3():
             ]
         ]
     )
+    import sys
+
     fg = FactorGraph(graph)
     bp_state = BPState(fg, 1)
     bp_state.set_evidence("x0", x0_distr)
-    bp_state.set_evidence("x1", x1_distr)
+    # bp_state.set_evidence("x1", x1_distr)
     bp_state.set_evidence("a0", a0_distr)
-    bp_state.bp_loopy(2, initialize_states=False)
-    print(bp_state.debug())
-    bp_state.bp_loopy(2, initialize_states=False)
-    print(bp_state.debug())
-    bp_state.bp_loopy(2, initialize_states=False)
-    print(bp_state.debug())
-    bp_state.bp_loopy(2, initialize_states=False)
-    print(bp_state.debug())
+    bp_state.bp_acyclic("x1", clear_intermediates=False, clear_evidence=False)
+    x1_ref_distr = normalize_distr(
+        np.array([[1.0 if x0_distr[0, -i % nc] > 1e-3 else 0.0 for i in range(nc)]])
+    )
+    print(bp_state.debug(), file=sys.stderr)
+    print(normalize_distr(bp_state.get_distribution("x1")))
+    print(x1_ref_distr)
+    assert np.allclose(normalize_distr(bp_state.get_distribution("x1")), x1_ref_distr)
+    print(f"=============== {0} ==========", file=sys.stderr)
+    bp_state.bp_loopy(1, initialize_states=False, clear_beliefs=False)
+    print(bp_state.debug(), file=sys.stderr)
+    print(f"=============== {1} ==========", file=sys.stderr)
+    bp_state.bp_loopy(1, initialize_states=False, clear_beliefs=False)
+    print(bp_state.debug(), file=sys.stderr)
+
+    print(bp_state.debug(), file=sys.stderr)
+    for i in range(4):
+        print(f"=============== {i} ==========", file=sys.stderr)
+        bp_state.bp_loopy(2, initialize_states=False, clear_beliefs=False)
+        print(bp_state.debug(), file=sys.stderr)
     distr = []
     for x in ["x0", "x1", "a0"]:
         distr.append(bp_state.get_distribution(x))
@@ -1055,7 +1088,7 @@ def test_ADD3():
     assert False
 
 
-def test_ADD3():
+def test_ADD4():
     nc = 13
     graph = f"""NC {nc}
     TABLE SUB = [0, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
@@ -1084,11 +1117,10 @@ def test_ADD3():
     # bp_state.bp_loopy(1, initialize_states=True)
     #  print(bp_state.debug())
     distr = []
-    for x in ['x0', 'x1', 'a0']:
+    for x in ["x0", "x1", "a0"]:
         distr.append(bp_state.get_distribution(x))
 
     assert not np.isnan(distr).any()
-
 
 
 def test_clear_beliefs():
@@ -1179,6 +1211,7 @@ def test_dampening_correctness():
                 prevs_vars[k] = normalize_distr(
                     bp_dampen_copy.get_belief_from_var(var, factor)
                 )
+
 
 def test_mix_single_multi():
     graph_desc = """

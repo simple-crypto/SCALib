@@ -304,10 +304,14 @@ impl Distribution {
         mut dest: ArrayViewMut2<Complex<f64>>,
         fft_scratch: &mut [Complex<f64>],
         plans: &FftPlans,
+        negated: bool,
     ) {
         if let DistrRepr::Full(v) = &self.value {
             for (distr, mut dest) in v.outer_iter().zip(dest.outer_iter_mut()) {
                 input_scratch.copy_from_slice(distr.as_slice().unwrap());
+                if negated {
+                    negate_slice_distr(input_scratch);
+                }
                 plans
                     .r2c
                     .process_with_scratch(input_scratch, dest.as_slice_mut().unwrap(), fft_scratch)
@@ -320,6 +324,7 @@ impl Distribution {
         mut input: ArrayViewMut2<Complex<f64>>,
         fft_scratch: &mut [Complex<f64>],
         plans: &FftPlans,
+        negated: bool,
     ) {
         self.ensure_full();
         let mut v = self.value_mut().unwrap();
@@ -332,6 +337,9 @@ impl Distribution {
                     fft_scratch,
                 )
                 .unwrap();
+            if negated {
+                negate_slice_distr(dest.as_slice_mut().unwrap());
+            }
         }
     }
     pub fn is_full(&self) -> bool {
@@ -557,6 +565,16 @@ impl Distribution {
     }
 }
 
+fn negate_slice_distr(a: &mut [f64]) {
+    let n = if a.len() % 2 == 0 {
+        (a.len() / 2) - 1
+    } else {
+        a.len() / 2
+    };
+    for i in 1..=n {
+        a.swap(i, a.len() - i);
+    }
+}
 /// Walsh-Hadamard transform (non-normalized).
 fn slice_wht(a: &mut [f64]) {
     // The speed of this can be much improved, with the following techiques
