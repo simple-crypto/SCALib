@@ -28,6 +28,7 @@ new_id!(EdgeId, EdgeVec);
 pub type EdgeSlice<T> = index_vec::IndexSlice<EdgeId, [T]>;
 pub type PublicId = usize;
 pub type TableId = usize;
+pub type GenFactorId = usize;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct Var {
@@ -41,8 +42,6 @@ pub(super) struct Factor {
     pub(super) multi: bool,
     // res is first element (if there is a res), operands come next
     pub(super) edges: IndexMap<VarId, EdgeId>,
-    // Is the result a variable (and not a public) ?
-    pub(super) has_res: bool,
     // May not be allowed for all factor kinds
     pub(super) publics: Vec<(PublicId, bool)>,
 }
@@ -52,36 +51,59 @@ impl Factor {
         *self.edges.get_index(var_order).unwrap().0
     }
     pub(super) fn res_id(&self) -> Option<VarId> {
-        self.has_res.then_some(self.var_id(0))
+        if let FactorKind::Assign { has_res, .. } = &self.kind {
+            has_res.then_some(self.var_id(0))
+        } else {
+            None
+        }
     }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub(super) enum FactorKind<T = TableId> {
+pub(super) enum ExprFactor {
     AND { vars_neg: Vec<bool> },
     XOR,
     NOT,
     ADD,
     MUL,
-    LOOKUP { table: T },
+    LOOKUP { table: TableId },
 }
 
-impl FactorKind {
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(super) enum GenFactorOperand {
+    Var(usize, bool),
+    Pub(usize),
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(super) enum FactorKind {
+    Assign {
+        expr: ExprFactor,
+        // Is the result a variable (and not a public) ?
+        has_res: bool,
+    },
+    GenFactor {
+        id: GenFactorId,
+        operands: Vec<GenFactorOperand>,
+    },
+}
+
+impl ExprFactor {
     fn merge(&self, a: ClassVal, b: ClassVal, nc: usize) -> ClassVal {
         match self {
-            FactorKind::AND { vars_neg: _ } => a & b,
-            FactorKind::XOR => a ^ b,
-            FactorKind::ADD => (((a as u64) + (b as u64)) % (nc as u64)) as ClassVal,
-            FactorKind::MUL => (((a as u64) * (b as u64)) % (nc as u64)) as ClassVal,
-            FactorKind::NOT | FactorKind::LOOKUP { .. } => unreachable!(),
+            Self::AND { vars_neg: _ } => a & b,
+            Self::XOR => a ^ b,
+            Self::ADD => (((a as u64) + (b as u64)) % (nc as u64)) as ClassVal,
+            Self::MUL => (((a as u64) * (b as u64)) % (nc as u64)) as ClassVal,
+            Self::NOT | Self::LOOKUP { .. } => unreachable!(),
         }
     }
     fn neutral(&self, nc: usize) -> ClassVal {
         match self {
-            FactorKind::AND { vars_neg: _ } => (nc - 1) as ClassVal,
-            FactorKind::XOR | FactorKind::ADD => 0,
-            FactorKind::MUL => 1,
-            FactorKind::NOT | FactorKind::LOOKUP { .. } => unreachable!(),
+            Self::AND { vars_neg: _ } => (nc - 1) as ClassVal,
+            Self::XOR | Self::ADD => 0,
+            Self::MUL => 1,
+            Self::NOT | Self::LOOKUP { .. } => unreachable!(),
         }
     }
 }
@@ -96,6 +118,11 @@ pub(super) struct Edge {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct Public {
+    pub(super) multi: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(super) struct GenFactor {
     pub(super) multi: bool,
 }
 
@@ -118,6 +145,7 @@ pub struct FactorGraph {
     pub(super) edges: EdgeVec<Edge>,
     pub(super) publics: NamedList<Public>,
     pub(super) tables: NamedList<Table>,
+    pub(super) gen_factors: NamedList<GenFactor>,
     pub(super) petgraph: petgraph::Graph<Node, EdgeId, petgraph::Undirected>,
     pub(super) var_graph_ids: VarVec<petgraph::graph::NodeIndex>,
     pub(super) factor_graph_ids: FactorVec<petgraph::graph::NodeIndex>,
@@ -191,6 +219,9 @@ impl FactorGraph {
     pub fn public_multi(&self) -> impl Iterator<Item = (&str, bool)> {
         self.publics.iter().map(|(n, v)| (n.as_str(), v.multi))
     }
+    pub fn gf_multi(&self) -> impl Iterator<Item = (&str, bool)> {
+        self.gen_factors.iter().map(|(n, v)| (n.as_str(), v.multi))
+    }
     pub fn get_varid(&self, var: &str) -> FGResult<VarId> {
         self.vars
             .get_index_of(var)
@@ -254,39 +285,51 @@ impl FactorGraph {
         assert_eq!(var_assignments.len(), self.vars.len());
         let reduced_pub = self.reduce_pub(public_values.as_slice());
         for ((factor_name, factor), cst) in self.factors.iter().zip(reduced_pub) {
-            let expected_res = factor
-                .res_id()
-                .map(|v_id| &var_assignments[v_id])
-                .unwrap_or(&cst);
-            let skip_res = if factor.has_res { 1 } else { 0 };
-            let mut ops = factor
-                .edges
-                .keys()
-                .skip(skip_res)
-                .map(|v_id| &var_assignments[*v_id]);
-            let res = match &factor.kind {
-                FactorKind::AND { vars_neg } => self.merge_pubs(
-                    &factor.kind,
-                    ops.zip(vars_neg.iter().cloned())
-                        .chain(std::iter::once((&cst, false))),
-                ),
-                FactorKind::XOR | FactorKind::ADD | FactorKind::MUL => self.merge_pubs(
-                    &factor.kind,
-                    ops.zip(std::iter::repeat(false))
-                        .chain(std::iter::once((&cst, false))),
-                ),
-                FactorKind::NOT => ops.next().unwrap().map(|x| self.not(x)),
-                FactorKind::LOOKUP { table } => ops
-                    .next()
-                    .unwrap()
-                    .map(|x| self.tables[*table].values[x as usize]),
-            };
-            if &res != expected_res {
-                return Err(FGError::CheckFail(
-                    factor_name.clone(),
-                    expected_res.clone(),
-                    res,
-                ));
+            match &factor.kind {
+                FactorKind::Assign { expr, has_res } => {
+                    let expected_res = factor
+                        .res_id()
+                        .map(|v_id| &var_assignments[v_id])
+                        .unwrap_or(&cst);
+                    let skip_res = if *has_res { 1 } else { 0 };
+                    let mut ops = factor
+                        .edges
+                        .keys()
+                        .skip(skip_res)
+                        .map(|v_id| &var_assignments[*v_id]);
+                    let res = match expr {
+                        ExprFactor::AND { vars_neg } => self.merge_pubs(
+                            expr,
+                            ops.zip(vars_neg.iter().cloned())
+                                .chain(std::iter::once((&cst, false))),
+                        ),
+                        ExprFactor::XOR | ExprFactor::ADD | ExprFactor::MUL => self.merge_pubs(
+                            expr,
+                            ops.zip(std::iter::repeat(false))
+                                .chain(std::iter::once((&cst, false))),
+                        ),
+                        ExprFactor::NOT => ops.next().unwrap().map(|x| self.not(x)),
+                        ExprFactor::LOOKUP { table } => ops
+                            .next()
+                            .unwrap()
+                            .map(|x| self.tables[*table].values[x as usize]),
+                    };
+                    if &res != expected_res {
+                        return Err(FGError::CheckFail(
+                            factor_name.clone(),
+                            expected_res.clone(),
+                            res,
+                        ));
+                    }
+                }
+                FactorKind::GenFactor { .. } => {
+                    // We cannot verify anything, except if we were given the
+                    // value of the generalized factors as argument of this
+                    // function (then we could check that the associated
+                    // probability is non-zero).
+                    // Let us not do any verification for know (code block
+                    // intentionally left empty).
+                }
             }
         }
         Ok(())
@@ -297,9 +340,17 @@ impl FactorGraph {
             .map(|factor| {
                 match &factor.kind {
                     // Not used
-                    FactorKind::NOT | FactorKind::LOOKUP { .. } => PublicValue::Single(0),
-                    _ => self.merge_pubs(
-                        &factor.kind,
+                    FactorKind::Assign {
+                        expr: ExprFactor::NOT,
+                        ..
+                    }
+                    | FactorKind::Assign {
+                        expr: ExprFactor::LOOKUP { .. },
+                        ..
+                    }
+                    | FactorKind::GenFactor { .. } => PublicValue::Single(0),
+                    FactorKind::Assign { expr, .. } => self.merge_pubs(
+                        expr,
                         factor
                             .publics
                             .iter()
@@ -314,13 +365,13 @@ impl FactorGraph {
     }
     fn merge_pubs<'a>(
         &self,
-        factor_kind: &FactorKind,
+        expr: &ExprFactor,
         // bool is the "invserse" for every item
         pubs: impl Iterator<Item = (&'a PublicValue, bool)>,
     ) -> PublicValue {
         let merge_inner = |p1: PublicValue, (p2, nv2): (&PublicValue, bool)| {
             let f = |x: ClassVal, y: ClassVal| {
-                factor_kind.merge(x, if nv2 { self.not(y) } else { y }, self.nc)
+                expr.merge(x, if nv2 { self.not(y) } else { y }, self.nc)
             };
             match (p1, p2) {
                 (PublicValue::Single(c1), PublicValue::Single(c2)) => {
@@ -343,10 +394,7 @@ impl FactorGraph {
                 }
             }
         };
-        pubs.fold(
-            PublicValue::Single(factor_kind.neutral(self.nc)),
-            merge_inner,
-        )
+        pubs.fold(PublicValue::Single(expr.neutral(self.nc)), merge_inner)
     }
 
     pub(super) fn is_cyclic(&self, multi_exec: bool) -> bool {

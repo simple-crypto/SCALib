@@ -29,6 +29,14 @@ pub(super) enum Expr {
 }
 
 #[derive(Debug, Clone)]
+pub(super) enum Property {
+    // Assign a variable to an expression.
+    Assign { dest: Var, expr: Expr },
+    // General factor as a table.
+    GenFactor { factor: String, vars: Vec<NVar> },
+}
+
+#[derive(Debug, Clone)]
 pub(super) struct VarDecl {
     pub(super) name: Var,
     pub(super) multi: bool,
@@ -40,8 +48,7 @@ pub(super) enum Statement {
     Empty,
     Property {
         name: Option<String>,
-        dest: Var,
-        expr: Expr,
+        prop: Property,
     },
     NC(u64),
     VarDecl(VarDecl),
@@ -49,6 +56,10 @@ pub(super) enum Statement {
     TableDecl {
         name: String,
         val: Option<Vec<ClassVal>>,
+    },
+    GenericDecl {
+        name: String,
+        multi: bool,
     },
 }
 
@@ -75,12 +86,17 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
         .or(op_expr('+', Expr::Add as fn(_) -> _))
         .or(op_expr('*', Expr::Mul as fn(_) -> _))
         .or(not_var().map(|v| Expr::Not(v)));
-    let prop = kw("PROPERTY")
-        .ignore_then(ident.then_ignore(op(':')).or_not())
-        .then(var)
+    let prop_assign = var
         .then_ignore(op('='))
         .then(expr)
-        .map(|((name, dest), expr)| Statement::Property { name, dest, expr });
+        .map(|(dest, expr)| Property::Assign { dest, expr });
+    let prop_factor = ident
+        .then(nvar().separated_by(op(',')).delimited_by(op('('), op(')')))
+        .map(|(factor, vars)| Property::GenFactor { factor, vars });
+    let prop = kw("PROPERTY")
+        .ignore_then(ident.then_ignore(op(':')).or_not())
+        .then(prop_assign.or(prop_factor))
+        .map(|(name, prop)| Statement::Property { name, prop });
     let nc = kw("NC")
         .ignore_then(text::int(10))
         .map(|nc: String| Statement::NC(nc.parse().unwrap()));
@@ -102,11 +118,16 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
         .ignore_then(ident)
         .then(op('=').ignore_then(table_val).or_not())
         .map(|(name, val)| Statement::TableDecl { name, val });
+    let gen_factor = kw("GENERIC")
+        .ignore_then(kw("SINGLE").to(false).or(kw("MULTI").to(true)))
+        .then(ident)
+        .map(|(multi, name)| Statement::GenericDecl { name, multi });
     let graph = prop
         .or(nc)
         .or(var_decl)
         .or(pub_decl)
         .or(table)
+        .or(gen_factor)
         .or(pad.at_least(0).to(Statement::Empty))
         .then_ignore(comment.or_not())
         .recover_with(skip_until(['\n', '\r'], |_| Statement::Invalid))

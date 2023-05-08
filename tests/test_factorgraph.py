@@ -982,6 +982,107 @@ def test_manytraces():
     assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
 
 
+def test_generic_factor():
+    fg1 = FactorGraph(
+        """NC 2
+    VAR MULTI K0
+    VAR MULTI K1
+    VAR MULTI N1
+    VAR MULTI L1
+    PROPERTY P1: L1 = K0 & !K1
+    """
+    )
+    fg2 = FactorGraph(
+        """NC 2
+    VAR MULTI K0
+    VAR MULTI K1
+    VAR MULTI L1
+    GENERIC MULTI f
+    PROPERTY P1: f(K0, K1, L1)
+    """
+    )
+
+    bp1 = BPState(fg1, 1)
+    bp2 = BPState(fg2, 1, gen_factors={"f": [np.ones((2, 2, 2), dtype=np.float64)]})
+    for k in ["K0", "K1"]:
+        d = make_distri(2, 1)
+        bp1.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+        bp2.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+    bp1.bp_loopy(3, False)
+    bp2.bp_loopy(3, False)
+
+    print(bp1.debug())
+    print(bp2.debug())
+
+
+def test_generic_factor2():
+    fg1 = FactorGraph(
+        """NC 2
+    VAR MULTI K0
+    VAR MULTI K1
+    VAR MULTI L1
+    PROPERTY P1: L1 = K0 & !K1
+    """
+    )
+    fg2 = FactorGraph(
+        """NC 2
+    VAR MULTI K0
+    VAR MULTI K1
+    VAR MULTI L1
+    GENERIC SINGLE f
+    PROPERTY P1: f(K0, K1, L1)
+    """
+    )
+    factor = np.zeros((2, 2, 2))
+    factor[0, 0, 0] = 1.0
+    factor[0, 1, 0] = 1.0
+    factor[1, 0, 1] = 1.0
+    factor[1, 1, 0] = 1.0
+    bp1 = BPState(fg1, 1)
+    bp2 = BPState(fg2, 1, gen_factors={"f": factor})
+    for k in ["K0", "K1"]:
+        d = make_distri(2, 1)
+        bp1.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+        bp2.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+
+    bp1.bp_loopy(1, True)
+    bp2.bp_loopy(1, True)
+
+    assert np.allclose(bp1.get_distribution("L1"), bp2.get_distribution("L1"))
+
+
+def test_manytraces():
+    """No numerical underflow with many traces."""
+    nc = 8
+    n = 500
+    distri_x = np.ones((n, nc))
+    distri_x[:, 0] = 2.0
+    distri_x[:, 1] = 1.5
+    distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
+
+    graph = f"""
+            NC {nc}
+            VAR MULTI x
+            VAR SINGLE y
+            PUB SINGLE c
+            PROPERTY y = x ^ c
+            """
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n, {"c": 0})
+
+    bp_state.set_evidence("x", distri_x)
+
+    bp_state.bp_acyclic("y")
+    distri_y = bp_state.get_distribution("y")
+
+    distri_y_ref = np.log2(distri_x).sum(axis=0, keepdims=True)
+    distri_y_ref = distri_y_ref - np.max(distri_y_ref[0, :])
+    distri_y_ref = 2**distri_y_ref
+    distri_y_ref = distri_y_ref / distri_y_ref.sum(axis=1, keepdims=True)
+
+    assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
+
+
 def test_ADD3():
     nc = 13
     graph = f"""NC {nc}

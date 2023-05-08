@@ -10,6 +10,8 @@ __all__ = ["FactorGraph", "BPState"]
 
 CstValue = Union[int, Sequence[int]]
 ValsAssign = Mapping[str, CstValue]
+GenFactor = Union[npt.NDArray[np.float64], Sequence[npt.NDArray[np.float64]]]
+GenFactors = Mapping[str, GenFactor]
 
 
 class FactorGraph:
@@ -98,15 +100,17 @@ class FactorGraph:
     - `VAR SINGLE|MULTI variable_name`: declares a variables.
     - `PROPERTY w = x^y^z`: declares a bitwise XOR property. There can be any
       number of operands.
-    - `PROPERTY x = x&y`: declares a bitwise AND property.
+    - `PROPERTY z = x&y`: declares a bitwise AND property.
     - `PROPERTY x = t[y]`: declares a LOOKUP property (`y` is the lookup of the
       table `t` at index `y`). No public variable is allowed in this property.
     - `PROPERTY x = !y`: declares a bitwise NOT property.
       No public variable is allowed in this property.
+    - `PROPERTY f(x, y, z)`: declares a "Generic factor" property, f must be declared.
     - `TABLE` t = [0, 3, 2, 1]`: Declares a table that can be used in a LOOKUP.
       The values provided in the table must belong to the interval [0, nc).
       The initialization expression can be omitted from the graph description
       (e.g. `TABLE t`) and be given with `tables` parameter.
+    - `GENERIC SINGLE|MULTI f`: declares a "Generic factor" f.
 
 
     **Note**: if the `MULTI` feature doesn't match your use-case, using only
@@ -135,6 +139,11 @@ class FactorGraph:
         """Verify that the graph is compatible with example variable assignments.
 
         If the graph is not compatible, raise a ``ValueError``.
+
+        Remark
+        ------
+
+        We perform no check around generic factors.
 
         Parameters
         ----------
@@ -170,11 +179,14 @@ class BPState:
         factor_graph: FactorGraph,
         nexec: int,
         public_values: Optional[ValsAssign] = None,
+        gen_factors: Optional[GenFactors] = None,
     ):
         if public_values is None:
             public_values = dict()
+        if gen_factors is None:
+            gen_factors = dict()
         self._fg = factor_graph
-        self._inner = factor_graph._inner.new_bp(nexec, public_values)
+        self._inner = factor_graph._inner.new_bp(nexec, public_values, gen_factors)
 
     @property
     def fg(self) -> FactorGraph:
@@ -373,7 +385,7 @@ class BPState:
 
         Parameters
         ----------
-        var : string
+        factor:
             Identifier of the variable.
 
         """

@@ -2,14 +2,23 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
+use super::factor_graph as fg;
 use super::factor_graph::{
-    EdgeId, EdgeSlice, EdgeVec, Factor, FactorId, FactorKind, FactorVec, Node, Table, VarId, VarVec,
+    EdgeId, EdgeSlice, EdgeVec, ExprFactor, Factor, FactorGraph, FactorId, FactorKind, FactorVec,
+    Node, PublicValue, Table, VarId, VarVec,
 };
-use super::{Distribution, FactorGraph, PublicValue};
+use super::Distribution;
+use ndarray::s;
 
 // TODO improvements
 // - use a pool for Distribution allocations (can be a simple Vec storing them), to avoid frequent
 // allocations
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum GenFactor {
+    Single(ndarray::ArrayD<f64>),
+    Multi(Vec<ndarray::ArrayD<f64>>),
+}
 
 // Workaround since the plans are not Serialize of Debug
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -60,10 +69,12 @@ pub struct BPState {
     graph: std::sync::Arc<FactorGraph>,
     // number of parallel executions for PARA vars
     nmulti: u32,
-    // one public for every factor. Set to 0 if not relevant.
-    public_values: FactorVec<PublicValue>,
-    // public value for each factor
+    // list of public values
+    public_values: Vec<PublicValue>,
+    // one public value for every factor. Set to 0 if not relevant.
     pub_reduced: FactorVec<PublicValue>,
+    // generalized factors values
+    gen_factors: Vec<GenFactor>,
     // evidence for each var
     evidence: VarVec<Distribution>,
     // current proba for each var
@@ -96,6 +107,7 @@ impl BPState {
         graph: std::sync::Arc<FactorGraph>,
         nmulti: u32,
         public_values: Vec<PublicValue>,
+        gen_factors: Vec<GenFactor>,
     ) -> Self {
         let var_state: VarVec<_> = graph
             .vars
@@ -117,10 +129,11 @@ impl BPState {
             var_state,
             graph,
             nmulti,
-            public_values: FactorVec::from_vec(public_values),
+            public_values,
             pub_reduced,
             cyclic,
             plans,
+            gen_factors,
         }
     }
     pub fn is_cyclic(&self) -> bool {
@@ -239,15 +252,29 @@ impl BPState {
             };
         }
         match &factor.kind {
-            FactorKind::AND { .. } => {
-                prop_factor!(factor_gen_and, &self.pub_reduced[factor_id])
-            }
-            FactorKind::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id]),
-            FactorKind::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32),
-            FactorKind::ADD => prop_factor!(factor_add, &self.pub_reduced[factor_id], &self.plans),
-            FactorKind::MUL => prop_factor!(factor_mul, &self.pub_reduced[factor_id]),
-            FactorKind::LOOKUP { table } => {
-                prop_factor!(factor_lookup, &self.graph.tables[*table])
+            FactorKind::Assign { expr, .. } => match expr {
+                ExprFactor::AND { .. } => {
+                    prop_factor!(factor_gen_and, &self.pub_reduced[factor_id])
+                }
+                ExprFactor::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id]),
+                ExprFactor::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32),
+                ExprFactor::ADD => {
+                    prop_factor!(factor_add, &self.pub_reduced[factor_id], &self.plans)
+                }
+                ExprFactor::MUL => prop_factor!(factor_mul, &self.pub_reduced[factor_id]),
+                ExprFactor::LOOKUP { table } => {
+                    prop_factor!(factor_lookup, &self.graph.tables[*table])
+                }
+            },
+            FactorKind::GenFactor { id, .. } => {
+                let gen_factor = &self.gen_factors[*id];
+                prop_factor!(
+                    factor_gen_factor,
+                    gen_factor,
+                    self.public_values.as_slice(),
+                    self.nmulti as usize,
+                    self.graph.nc
+                );
             }
         }
     }
@@ -324,9 +351,9 @@ fn factor_gen_and<'a>(
     clear_incoming: bool,
     pub_red: &PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    let FactorKind::AND { vars_neg } = &factor.kind else { unreachable!() };
+    let FactorKind::Assign { expr: ExprFactor::AND { vars_neg }, has_res } = &factor.kind else { unreachable!() };
     // Special case for single-input AND
-    if factor.has_res & (factor.edges.len() == 2) {
+    if has_res & (factor.edges.len() == 2) {
         return dest
             .iter()
             .map(|var| {
@@ -358,7 +385,7 @@ fn factor_gen_and<'a>(
     // - if operand: opandt^-1 = opandt
     // - if result: cumt^-1 = cumti
     let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
-    if factor.has_res {
+    if *has_res {
         // constant is operand
         acc.cumt();
     } else {
@@ -378,7 +405,7 @@ fn factor_gen_and<'a>(
             d.not();
         }
         d.ensure_full();
-        if factor.has_res && (i == 0) {
+        if *has_res && (i == 0) {
             d.opandt();
         } else {
             d.cumt();
@@ -754,4 +781,82 @@ fn factor_lookup<'a>(
         }
         res
     })
+}
+
+fn factor_gen_factor<'a>(
+    factor: &'a Factor,
+    belief_from_var: &'a mut EdgeSlice<Distribution>,
+    dest: &'a [VarId],
+    clear_incoming: bool,
+    gen_factor: &'a GenFactor,
+    public_values: &'a [PublicValue],
+    nmulti: usize,
+    nc: usize,
+) -> impl Iterator<Item = Distribution> + 'a {
+    let fg::FactorKind::GenFactor { operands, .. } = &factor.kind else { unreachable!() };
+    let res: Vec<Distribution> = dest.iter().map(|dest| {
+        let dest_idx = factor.edges.get_index_of(dest).unwrap();
+        let mut distr = belief_from_var[factor.edges[dest_idx]].clone();
+        distr.ensure_full();
+        for i in 0..nmulti {
+            let gen_factor = match gen_factor {
+                GenFactor::Single(x) => x,
+                GenFactor::Multi(x) => &x[i],
+            };
+            assert_eq!(gen_factor.shape().len(), operands.len());
+            // First slice the array with the constants.
+            let gen_factor = gen_factor.slice_each_axis(|ax| match operands[ax.axis.index()] {
+                fg::GenFactorOperand::Var(_, _) => ndarray::Slice::new(0, None, 1),
+                fg::GenFactorOperand::Pub(pub_idx) => {
+                    let mut pub_val = public_values[factor.publics[pub_idx].0].get(i) as isize;
+                    if factor.publics[pub_idx].1 {
+                        if nc.is_power_of_two() {
+                            pub_val = !pub_val;
+                        } else {
+                            // TODO Check that we enforce this at graph creation time and return a proper error.
+                            panic!("Cannot negate operands with non-power-of-two number of classes.");
+                        }
+                    }
+                    ndarray::Slice::new(pub_val, Some(pub_val+1), 1)
+                }
+            });
+            let mut gen_factor = gen_factor.to_owned();
+            for (op_idx, op) in operands.iter().enumerate() {
+                if op_idx != dest_idx {
+                    if let fg::GenFactorOperand::Var(var_idx, neg) = op {
+                        if *neg {
+                            todo!("Negated operands on generalized factors not yet implemented.");
+                        }
+                        let distr = &belief_from_var[factor.edges[*var_idx]];
+                        let mut new_gen_factor: ndarray::ArrayD<f64> = ndarray::ArrayD::zeros(gen_factor.slice_axis(ndarray::Axis(op_idx), ndarray::Slice::new(0, Some(1), 1)).shape());
+                        if let Some(distr) = distr.value() {
+                            for (d, gf) in distr.slice(s![i,..]).iter().zip(gen_factor.axis_chunks_iter(ndarray::Axis(op_idx), 1)) {
+                                new_gen_factor.scaled_add(*d, &gf);
+                            }
+                        } else {
+                            for gf in gen_factor.axis_chunks_iter(ndarray::Axis(op_idx), 1) {
+                                new_gen_factor += &gf;
+                            }
+                        }
+                        gen_factor = new_gen_factor;
+                    }
+                }
+            }
+            // Drop useless axes.
+            for _ in 0..dest_idx {
+                gen_factor.index_axis_inplace(ndarray::Axis(0), 0);
+            }
+            for _ in (dest_idx+1)..operands.len() {
+                gen_factor.index_axis_inplace(ndarray::Axis(1), 0);
+            }
+            distr.value_mut().unwrap().slice_mut(s![i,..]).assign(&gen_factor);
+        }
+        distr
+    }).collect();
+    if clear_incoming {
+        for e in factor.edges.values() {
+            belief_from_var[*e].reset();
+        }
+    }
+    res.into_iter()
 }
