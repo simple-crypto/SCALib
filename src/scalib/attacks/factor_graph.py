@@ -6,12 +6,11 @@ import numpy.typing as npt
 from scalib import _scalib_ext
 from scalib.config import get_config
 
-__all__ = ["FactorGraph", "BPState"]
+__all__ = ["FactorGraph", "BPState", "GenFactor"]
 
 CstValue = Union[int, Sequence[int]]
 ValsAssign = Mapping[str, CstValue]
-GenFactor = Union[npt.NDArray[np.float64], Sequence[npt.NDArray[np.float64]]]
-GenFactors = Mapping[str, GenFactor]
+GenFactors = Mapping[str, Union[GenFactor, Sequence[GenFactor]]
 
 
 class FactorGraph:
@@ -409,3 +408,36 @@ class BPState:
                 s.append(f"\t{factor} -> {var}")
                 s.append(repr(self.get_belief_to_var(var, factor)))
         return "\n".join(s)
+
+
+class GenFactor:
+    """Generic factor for belief propagation.
+    """
+    class GenFactorKind:
+        DENSE = 0
+        SPARSE_FUNCTIONAL = 1
+
+    def __init__(self, kind: GenFactorKind, factor):
+        self.kind = kind
+        self.factor = factor
+
+    @classmethod
+    def dense(cls, factor: npt.NDArray[np.float64]):
+        """A dense factor.
+
+        ``factor`` is a n-dimensional array, each axis corresponds to one
+        variable, entries in the array are probabilities.
+        """
+        assert len(set(factor.shape)) == 1
+        assert factor.dtype == np.float64
+        return cls(cls.GenFactorKind.DENSE, factor)
+    @classmethod
+    def sparse_functional(cls, factor: npt.NDArray[np.uint32]):
+        """A sparse functional factor.
+
+        ``factor`` is a 2D array, each row corresponding to an entry in the
+        factor, and in each row, the values are the values of the variables.
+        """
+        assert factor.shape == 2
+        assert factor.dtype == np.uint32
+        return cls(cls.GenFactorKind.SPARSE_FUNCTIONAL, factor)
