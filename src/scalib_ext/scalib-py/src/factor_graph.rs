@@ -320,6 +320,34 @@ impl BPState {
         let edge_id = self.get_edge_named(var, factor)?;
         distr2py(py, self.get_inner().get_belief_from_var(edge_id))
     }
+    pub fn propagate_from_var(
+        &mut self,
+        py: Python,
+        var: &str,
+        factor: &str,
+        config: crate::ConfigWrapper,
+        alpha: f64,
+    ) -> PyResult<()> {
+        config.on_worker(py, |_| {
+            let edge_id = self.get_edge_named(var, factor)?;
+            self.get_inner_mut().propagate_from_var(edge_id, alpha);
+            Ok(())
+        })
+    }
+    pub fn propagate_to_var(
+        &mut self,
+        py: Python,
+        var: &str,
+        config: crate::ConfigWrapper,
+        clear_evidence: bool,
+    ) -> PyResult<()> {
+        config.on_worker(py, |_| {
+            let var_id = self.get_var(var)?;
+            self.get_inner_mut()
+                .propagate_to_var(var_id, clear_evidence);
+            Ok(())
+        })
+    }
     pub fn propagate_var(
         &mut self,
         py: Python,

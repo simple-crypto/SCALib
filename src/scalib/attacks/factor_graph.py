@@ -8,9 +8,44 @@ from scalib.config import get_config
 
 __all__ = ["FactorGraph", "BPState", "GenFactor"]
 
+
+class GenFactor:
+    """Generic factor for belief propagation."""
+
+    class GenFactorKind:
+        DENSE = 0
+        SPARSE_FUNCTIONAL = 1
+
+    def __init__(self, kind: GenFactorKind, factor):
+        self.kind = kind
+        self.factor = factor
+
+    @classmethod
+    def dense(cls, factor: npt.NDArray[np.float64]):
+        """A dense factor.
+
+        ``factor`` is a n-dimensional array, each axis corresponds to one
+        variable, entries in the array are probabilities.
+        """
+        assert len(set(factor.shape)) == 1
+        assert factor.dtype == np.float64
+        return cls(cls.GenFactorKind.DENSE, factor)
+
+    @classmethod
+    def sparse_functional(cls, factor: npt.NDArray[np.uint32]):
+        """A sparse functional factor.
+
+        ``factor`` is a 2D array, each row corresponding to an entry in the
+        factor, and in each row, the values are the values of the variables.
+        """
+        assert len(factor.shape) == 2
+        assert factor.dtype == np.uint32
+        return cls(cls.GenFactorKind.SPARSE_FUNCTIONAL, factor)
+
+
 CstValue = Union[int, Sequence[int]]
 ValsAssign = Mapping[str, CstValue]
-GenFactors = Mapping[str, Union[GenFactor, Sequence[GenFactor]]
+GenFactors = Mapping[str, Union[GenFactor, Sequence[GenFactor]]]
 
 
 class FactorGraph:
@@ -357,6 +392,14 @@ class BPState:
         """
         return self._inner.get_belief_from_var(var, factor)
 
+    def propagate_from_var(self, var: str, factor: str, alpha: float = 0.0):
+        """TODO"""
+        return self._inner.propagate_from_var(var, factor, get_config(), alpha)
+
+    def propagate_to_var(self, var: str, clear_evidence: bool = False):
+        """TODO"""
+        return self._inner.propagate_to_var(var, get_config(), clear_evidence)
+
     def propagate_var(self, var: str, alpha: float = 0.0, clear_beliefs: bool = True):
         """Run belief propagation on variable var.
 
@@ -408,36 +451,3 @@ class BPState:
                 s.append(f"\t{factor} -> {var}")
                 s.append(repr(self.get_belief_to_var(var, factor)))
         return "\n".join(s)
-
-
-class GenFactor:
-    """Generic factor for belief propagation.
-    """
-    class GenFactorKind:
-        DENSE = 0
-        SPARSE_FUNCTIONAL = 1
-
-    def __init__(self, kind: GenFactorKind, factor):
-        self.kind = kind
-        self.factor = factor
-
-    @classmethod
-    def dense(cls, factor: npt.NDArray[np.float64]):
-        """A dense factor.
-
-        ``factor`` is a n-dimensional array, each axis corresponds to one
-        variable, entries in the array are probabilities.
-        """
-        assert len(set(factor.shape)) == 1
-        assert factor.dtype == np.float64
-        return cls(cls.GenFactorKind.DENSE, factor)
-    @classmethod
-    def sparse_functional(cls, factor: npt.NDArray[np.uint32]):
-        """A sparse functional factor.
-
-        ``factor`` is a 2D array, each row corresponding to an entry in the
-        factor, and in each row, the values are the values of the variables.
-        """
-        assert factor.shape == 2
-        assert factor.dtype == np.uint32
-        return cls(cls.GenFactorKind.SPARSE_FUNCTIONAL, factor)

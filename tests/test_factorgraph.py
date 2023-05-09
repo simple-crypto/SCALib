@@ -1368,3 +1368,42 @@ def test_mix_single_multi():
         d2 = sasca2.get_distribution("s")
         if d is not None:
             assert np.allclose(d, d2, rtol=1e-5, atol=1e-19)
+
+
+def test_sparse_factor():
+    from scalib.attacks.factor_graph import GenFactor
+
+    graph = """NC 2
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    GENERIC SINGLE f
+    PROPERTY F0: f(a,b,c)"""
+    fg = FactorGraph(graph)
+    xor = np.zeros((4, 3), dtype=np.uint32)
+    xor[1, 1] = 1
+    xor[1, 2] = 1
+    xor[2, 0] = 1
+    xor[2, 2] = 1
+    xor[3, 0] = 1
+    xor[3, 1] = 1
+    print(xor)
+    xor_dense = np.zeros((2, 2, 2))
+    xor_dense[0, 1, 1] = 1
+    xor_dense[1, 0, 1] = 1
+    xor_dense[0, 0, 0] = 1
+    xor_dense[1, 1, 0] = 1
+    bp = BPState(
+        fg,
+        1,
+        gen_factors={"f": GenFactor.sparse_functional(xor)},
+    )
+    bp.set_evidence("a", np.array([[0.0, 1.0]]))
+    bp.set_evidence("b", np.array([[1.0, 0.0]]))
+
+    for i in range(5):
+        print(f"Iteration {i}")
+        bp.bp_loopy(1, False)
+
+    print(bp.get_distribution("c"))
+    assert False

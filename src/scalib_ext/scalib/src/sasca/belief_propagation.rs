@@ -7,7 +7,7 @@ use super::factor_graph::{
     EdgeId, EdgeSlice, EdgeVec, ExprFactor, Factor, FactorGraph, FactorId, FactorKind, FactorVec,
     Node, PublicValue, Table, VarId, VarVec,
 };
-use super::{ClassVal,Distribution};
+use super::{ClassVal, Distribution};
 use ndarray::s;
 
 // TODO improvements
