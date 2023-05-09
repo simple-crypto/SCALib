@@ -6,6 +6,7 @@ Not released
 ------------
 
 * Fix ``Distribution`` size bug in belief propagation computation (#102).
+* Do not include debug symbols in release builds (makes wheel much smaller).
 
 v0.5.4 (2023/04/26)
 -------------------
