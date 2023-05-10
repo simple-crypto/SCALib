@@ -1370,7 +1370,7 @@ def test_mix_single_multi():
             assert np.allclose(d, d2, rtol=1e-5, atol=1e-19)
 
 
-def test_sparse_factor():
+def test_sparse_factor_xor():
     from scalib.attacks.factor_graph import GenFactor
 
     graph = """NC 2
@@ -1387,12 +1387,6 @@ def test_sparse_factor():
     xor[2, 2] = 1
     xor[3, 0] = 1
     xor[3, 1] = 1
-    print(xor)
-    xor_dense = np.zeros((2, 2, 2))
-    xor_dense[0, 1, 1] = 1
-    xor_dense[1, 0, 1] = 1
-    xor_dense[0, 0, 0] = 1
-    xor_dense[1, 1, 0] = 1
     bp = BPState(
         fg,
         1,
@@ -1401,9 +1395,55 @@ def test_sparse_factor():
     bp.set_evidence("a", np.array([[0.0, 1.0]]))
     bp.set_evidence("b", np.array([[1.0, 0.0]]))
 
-    for i in range(5):
+    for i in range(50):
         print(f"Iteration {i}")
         bp.bp_loopy(1, False)
+        #  assert np.allclose(bp.get_distribution("c"), [0.0, 1.0])
+        assert not np.isnan(bp.get_distribution("c")).any()
 
-    print(bp.get_distribution("c"))
-    assert False
+
+def test_sparse_factor_bff():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 4
+    graph = f"""NC {nc}
+    VAR MULTI x0
+    VAR MULTI x1
+    VAR MULTI y0
+    VAR MULTI y1
+    GENERIC SINGLE f
+    PROPERTY F0: f(x0, x1, y0, y1)"""
+
+    fg = FactorGraph(graph)
+    bff = []
+    bff_dense = np.zeros((nc, nc, nc, nc))
+
+    for x0 in range(nc):
+        for x1 in range(nc):
+            for y0 in range(nc):
+                for y1 in range(nc):
+                    if ((x0 + 1 * x1) % nc) == (y0 % nc) and ((x0 - 1 * x1) % nc) == (
+                        y1 % nc
+                    ):
+                        bff_dense[x0, x1, y0, y1] = 1.0
+                        bff.append([x0, x1, y0, y1])
+    bp = BPState(
+        fg,
+        1,
+        gen_factors={"f": GenFactor.sparse_functional(np.array(bff, dtype=np.uint32))},
+    )
+    bp_dense = BPState(fg, 1, gen_factors={"f": GenFactor.dense(bff_dense)})
+
+    for v in ["x0", "x1", "y0", "y1"]:
+        d = make_distri(nc, 1)
+        bp.set_evidence(v, d)
+        bp_dense.set_evidence(v, d)
+    import sys
+    bp.bp_loopy(1, True)
+    bp_dense.bp_loopy(1, True)
+    for i in range(50):
+        bp.bp_loopy(1, False)
+        bp_dense.bp_loopy(1, False)
+        for v in ["x0", "x1", "y0", "y1"]:
+            assert not np.isnan(bp.get_distribution(v)).any()
+            assert np.allclose(bp.get_distribution(v), bp_dense.get_distribution(v))

@@ -834,7 +834,8 @@ fn factor_gen_factor<'a>(
                                 if *neg {
                                     todo!("Negated operands on generalized factors not yet implemented.");
                                 }
-                                let distr = &belief_from_var[factor.edges[*var_idx]];
+                                let distr = &mut belief_from_var[factor.edges[*var_idx]];
+                                distr.normalize();
                                 let mut new_gen_factor: ndarray::ArrayD<f64> = ndarray::ArrayD::zeros(gen_factor.slice_axis(ndarray::Axis(op_idx), ndarray::Slice::new(0, Some(1), 1)).shape());
                                 if let Some(distr) = distr.value() {
                                     for (d, gf) in distr.slice(s![i,..]).iter().zip(gen_factor.axis_chunks_iter(ndarray::Axis(op_idx), 1)) {
@@ -878,7 +879,8 @@ fn factor_gen_factor<'a>(
                                                 panic!("Cannot negate operands with non-power-of-two number of classes.");
                                             }
                                         }
-                                        let distr = &belief_from_var[factor.edges[*var_idx]];
+                                        let distr = &mut belief_from_var[factor.edges[*var_idx]];
+                                        distr.normalize();
                                         // For uniform, we implicitly multiply by 1.0
                                         if let Some(distr) = distr.value() {
                                             res *= distr[(i, val as usize)];
