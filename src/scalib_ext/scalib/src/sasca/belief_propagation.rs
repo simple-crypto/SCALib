@@ -1,5 +1,5 @@
 use std::sync::Arc;
-
+use std::slice;
 use thiserror::Error;
 
 use super::factor_graph as fg;
@@ -250,7 +250,8 @@ impl BPState {
             ($f:ident, $($arg:expr),*) => {
                 {
                     let it = $f(factor, &mut self.belief_from_var, dest, clear_incoming, $($arg,)*);
-                    for (distr, dest) in it.zip(dest.iter()) {
+                    for (mut distr, dest) in it.zip(dest.iter()) {
+                        distr.normalize();
                         self.belief_to_var[factor.edges[dest]] = distr;
                     }
                 }
@@ -803,111 +804,192 @@ fn factor_gen_factor<'a>(
         let dest_idx = factor.edges.get_index_of(dest).unwrap();
         let mut distr = belief_from_var[factor.edges[dest_idx]].clone();
         distr.ensure_full();
-        for i in 0..nmulti {
-            let gen_factor = match gen_factor {
-                GenFactor::Single(x) => x,
-                GenFactor::Multi(x) => &x[i],
-            };
-            match gen_factor {
-                GenFactorInner::Dense(gen_factor) => {
-                    assert_eq!(gen_factor.shape().len(), operands.len());
-                    // First slice the array with the constants.
-                    let gen_factor = gen_factor.slice_each_axis(|ax| match operands[ax.axis.index()] {
-                        fg::GenFactorOperand::Var(_, _) => ndarray::Slice::new(0, None, 1),
-                        fg::GenFactorOperand::Pub(pub_idx) => {
-                            let mut pub_val = public_values[factor.publics[pub_idx].0].get(i) as isize;
-                            if factor.publics[pub_idx].1 {
-                                if nc.is_power_of_two() {
-                                    pub_val = !pub_val;
-                                } else {
-                                    // TODO Check that we enforce this at graph creation time and return a proper error.
-                                    panic!("Cannot negate operands with non-power-of-two number of classes.");
-                                }
-                            }
-                            ndarray::Slice::new(pub_val, Some(pub_val+1), 1)
-                        }
-                    });
-                    let mut gen_factor = gen_factor.to_owned();
-                    for (op_idx, op) in operands.iter().enumerate() {
-                        if op_idx != dest_idx {
-                            if let fg::GenFactorOperand::Var(var_idx, neg) = op {
-                                if *neg {
-                                    todo!("Negated operands on generalized factors not yet implemented.");
-                                }
-                                let distr = &mut belief_from_var[factor.edges[*var_idx]];
-                                distr.normalize();
-                                let mut new_gen_factor: ndarray::ArrayD<f64> = ndarray::ArrayD::zeros(gen_factor.slice_axis(ndarray::Axis(op_idx), ndarray::Slice::new(0, Some(1), 1)).shape());
+        dbg!(&distr);
+        
+        match gen_factor {
+            GenFactor::Single(GenFactorInner::SparseFunctional(gen_factor_inner)) => {
+               // let gen_factor_inner = gen_factor_inner.to_owned();
+                for op_values in gen_factor_inner.outer_iter() {
+                    let mut res = ndarray::Array1::ones((nmulti,));
+                    for (op_idx, (op, val)) in operands.iter().zip(op_values.iter()).enumerate() {
+                        match op {
+                            fg::GenFactorOperand::Var(var_idx, neg) => {
+                                let distr = &belief_from_var[factor.edges[*var_idx]];
+                                // For uniform, we implicitly multiply by 1.0
                                 if let Some(distr) = distr.value() {
-                                    for (d, gf) in distr.slice(s![i,..]).iter().zip(gen_factor.axis_chunks_iter(ndarray::Axis(op_idx), 1)) {
-                                        new_gen_factor.scaled_add(*d, &gf);
-                                    }
+                                    res *= &distr.slice(s![..,*val as usize]);
+                                }
+                            }
+                            fg::GenFactorOperand::Pub(pub_idx) => {
+                                let mut pub_val = &public_values[factor.publics[*pub_idx].0];
+                                if factor.publics[*pub_idx].1 {
+                                    todo!();
                                 } else {
-                                    for gf in gen_factor.axis_chunks_iter(ndarray::Axis(op_idx), 1) {
-                                        new_gen_factor += &gf;
-                                    }
-                                }
-                                gen_factor = new_gen_factor;
-                            }
-                        }
-                    }
-                    // Drop useless axes.
-                    for _ in 0..dest_idx {
-                        gen_factor.index_axis_inplace(ndarray::Axis(0), 0);
-                    }
-                    for _ in (dest_idx+1)..operands.len() {
-                        gen_factor.index_axis_inplace(ndarray::Axis(1), 0);
-                    }
-                    distr.value_mut().unwrap().slice_mut(s![i,..]).assign(&gen_factor);
-                }
-                GenFactorInner::SparseFunctional(gen_factor) => {
-                    assert_eq!(gen_factor.shape()[1], operands.len());
-                    let mut dest_all = distr.value_mut().unwrap();
-                    let mut dest = dest_all.slice_mut(s![i,..]);
-                    dest.fill(0.0);
-                    for op_values in gen_factor.outer_iter() {
-                        let mut res = 1.0;
-                        for (op_idx, (op, val)) in operands.iter().zip(op_values.iter()).enumerate() {
-                            if op_idx != dest_idx {
-                                match op {
-                                    fg::GenFactorOperand::Var(var_idx, neg) => {
-                                        let mut val = *val;
-                                        if *neg {
-                                            if nc.is_power_of_two() {
-                                                val = !val & ((nc - 1) as ClassVal);
-                                            } else {
-                                                // TODO Check that we enforce this at graph creation time and return a proper error.
-                                                panic!("Cannot negate operands with non-power-of-two number of classes.");
+                                    match pub_val {
+                                        PublicValue::Single(class_val) => {
+                                            if *class_val != *val {
+                                                res.fill(0.0);
                                             }
                                         }
-                                        let distr = &mut belief_from_var[factor.edges[*var_idx]];
-                                        distr.normalize();
-                                        // For uniform, we implicitly multiply by 1.0
-                                        if let Some(distr) = distr.value() {
-                                            res *= distr[(i, val as usize)];
-                                        }
-                                    }
-                                    fg::GenFactorOperand::Pub(pub_idx) => {
-                                        let mut pub_val = public_values[factor.publics[*pub_idx].0].get(i);
-                                        if factor.publics[*pub_idx].1 {
-                                            if nc.is_power_of_two() {
-                                                pub_val = !pub_val & ((nc - 1) as ClassVal);
-                                            } else {
-                                                // TODO Check that we enforce this at graph creation time and return a proper error.
-                                                panic!("Cannot negate operands with non-power-of-two number of classes.");
+                                        PublicValue::Multi(class_val) => {
+                                            for i in 0..nmulti {
+                                                if class_val[i] != *val {
+                                                    res[i] = 0.0;
+                                                }
                                             }
-                                        }
-                                        if pub_val != *val {
-                                            res = 0.0;
                                         }
                                     }
                                 }
                             }
                         }
-                        dest[op_values[dest_idx] as usize] += res;
                     }
                 }
+            },
+            GenFactor::Single(GenFactorInner::Dense(gen_factor_inner)) => {
+                assert_eq!(gen_factor_inner.shape().len(), operands.len());
+                let gen_factor_inner = gen_factor_inner.slice_each_axis(|ax| match operands[ax.axis.index()] {
+                    fg::GenFactorOperand::Var(_, _) => ndarray::Slice::new(0, None, 1),
+                    fg::GenFactorOperand::Pub(pub_idx) => {
+                        let mut pub_val = &public_values[factor.publics[pub_idx].0];
+                        if factor.publics[pub_idx].1 {
+                            todo!();
+                        } else {
+                            match pub_val {
+                                PublicValue::Single(class_val) => {
+                                    let class_val = *class_val as isize;
+                                    ndarray::Slice::new(class_val, Some(class_val+1), 1)
+                                }
+                                PublicValue::Multi(class_val) => {
+                                    todo!();
+                                    // for i in 0..nmulti {
+                                    //     let cv = class_val[i] as isize;
+                                    //     ndarray::Slice::new(cv, Some(cv+1), 1)
+                                    // }
+                                }
+                            }
+                        }
+                    }
+                });
+            },
+            GenFactor::Multi(gen_factor_inner) => {
+                todo!();
             }
         }
+
+        // match gen_factor {
+        //     GenFactor::Single(gen_factor) => {
+        //         match GenFactorInner::SparseFunctional(gen_factor) => {
+        //             for op_values in gen_factor.outer_iter() {
+        //             }
+        //         }
+        //     }
+        // }
+
+        // for i in 0..nmulti {
+        //     let gen_factor = match gen_factor {
+        //         GenFactor::Single(x) => x,
+        //         GenFactor::Multi(x) => &x[i],
+        //     };
+        //     match gen_factor {
+        //         GenFactorInner::Dense(gen_factor) => {
+        //             assert_eq!(gen_factor.shape().len(), operands.len());
+        //             // First slice the array with the constants.
+        //             let gen_factor = gen_factor.slice_each_axis(|ax| match operands[ax.axis.index()] {
+        //                 fg::GenFactorOperand::Var(_, _) => ndarray::Slice::new(0, None, 1),
+        //                 fg::GenFactorOperand::Pub(pub_idx) => {
+        //                     let mut pub_val = public_values[factor.publics[pub_idx].0].get(i) as isize;
+        //                     if factor.publics[pub_idx].1 {
+        //                         if nc.is_power_of_two() {
+        //                             pub_val = !pub_val;
+        //                         } else {
+        //                             // TODO Check that we enforce this at graph creation time and return a proper error.
+        //                             panic!("Cannot negate operands with non-power-of-two number of classes.");
+        //                         }
+        //                     }
+        //                     ndarray::Slice::new(pub_val, Some(pub_val+1), 1)
+        //                 }
+        //             });
+        //             let mut gen_factor = gen_factor.to_owned();
+        //             for (op_idx, op) in operands.iter().enumerate() {
+        //                 if op_idx != dest_idx {
+        //                     if let fg::GenFactorOperand::Var(var_idx, neg) = op {
+        //                         if *neg {
+        //                             todo!("Negated operands on generalized factors not yet implemented.");
+        //                         }
+        //                         let distr = &mut belief_from_var[factor.edges[*var_idx]];
+        //                         let mut new_gen_factor: ndarray::ArrayD<f64> = ndarray::ArrayD::zeros(gen_factor.slice_axis(ndarray::Axis(op_idx), ndarray::Slice::new(0, Some(1), 1)).shape());
+        //                         if let Some(distr) = distr.value() {
+        //                             for (d, gf) in distr.slice(s![i,..]).iter().zip(gen_factor.axis_chunks_iter(ndarray::Axis(op_idx), 1)) {
+        //                                 new_gen_factor.scaled_add(*d, &gf);
+        //                             }
+        //                         } else {
+        //                             for gf in gen_factor.axis_chunks_iter(ndarray::Axis(op_idx), 1) {
+        //                                 new_gen_factor += &gf;
+        //                             }
+        //                         }
+        //                         gen_factor = new_gen_factor;
+        //                     }
+        //                 }
+        //             }
+        //             // Drop useless axes.
+        //             for _ in 0..dest_idx {
+        //                 gen_factor.index_axis_inplace(ndarray::Axis(0), 0);
+        //             }
+        //             for _ in (dest_idx+1)..operands.len() {
+        //                 gen_factor.index_axis_inplace(ndarray::Axis(1), 0);
+        //             }
+        //             distr.value_mut().unwrap().slice_mut(s![i,..]).assign(&gen_factor);
+        //         }
+        //         GenFactorInner::SparseFunctional(gen_factor) => {
+        //             assert_eq!(gen_factor.shape()[1], operands.len());
+        //             let mut dest_all = distr.value_mut().unwrap();
+        //             let mut dest = dest_all.slice_mut(s![i,..]);
+        //             dest.fill(0.0);
+        //             for op_values in gen_factor.outer_iter() {
+        //                 let mut res = 1.0;
+        //                 for (op_idx, (op, val)) in operands.iter().zip(op_values.iter()).enumerate() {
+        //                     if op_idx != dest_idx {
+        //                         match op {
+        //                             fg::GenFactorOperand::Var(var_idx, neg) => {
+        //                                 let mut val = *val;
+        //                                 if *neg {
+        //                                     if nc.is_power_of_two() {
+        //                                         val = !val & ((nc - 1) as ClassVal);
+        //                                     } else {
+        //                                         // TODO Check that we enforce this at graph creation time and return a proper error.
+        //                                         panic!("Cannot negate operands with non-power-of-two number of classes.");
+        //                                     }
+        //                                 }
+        //                                 let distr = &belief_from_var[factor.edges[*var_idx]];
+        //                               
+        //                                 // For uniform, we implicitly multiply by 1.0
+        //                                 if let Some(distr) = distr.value() {
+        //                                     res *= distr[(i, val as usize)];
+        //                                 }
+        //                             }
+        //                             fg::GenFactorOperand::Pub(pub_idx) => {
+        //                                 let mut pub_val = public_values[factor.publics[*pub_idx].0].get(i);
+        //                                 if factor.publics[*pub_idx].1 {
+        //                                     if nc.is_power_of_two() {
+        //                                         pub_val = !pub_val & ((nc - 1) as ClassVal);
+        //                                     } else {
+        //                                         // TODO Check that we enforce this at graph creation time and return a proper error.
+        //                                         panic!("Cannot negate operands with non-power-of-two number of classes.");
+        //                                     }
+        //                                 }
+        //                                 if pub_val != *val {
+        //                                     res = 0.0;
+        //                                 }
+        //                             }
+        //                         }
+        //                     }
+        //                 }
+        //                 dbg!(&res);
+        //                 dest[op_values[dest_idx] as usize] += res;
+        //             }
+        //         }
+        //     }
+        // }
         distr
     }).collect();
     if clear_incoming {
