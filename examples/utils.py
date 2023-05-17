@@ -23,13 +23,17 @@ sbox = np.array([
 # fmt: on
 
 
-def gen_traces(ntraces, std, random_key):
-    if not random_key:
-        k = np.random.randint(0, 256, (1, 16), dtype=np.uint8)
-    else:
+def gen_traces(ntraces, std, random_key, random_plaintext):
+    if random_key:
         k = np.random.randint(0, 256, (ntraces, 16), dtype=np.uint8)
+    else:
+        k = np.random.randint(0, 256, (1, 16), dtype=np.uint8)
 
-    p = np.random.randint(0, 256, (ntraces, 16), dtype=np.uint8)
+    if random_plaintext:
+        p = np.random.randint(0, 256, (ntraces, 16), dtype=np.uint8)
+    else:
+        p = np.random.randint(0, 256, (16,), dtype=np.uint8)
+        p = np.vstack(ntraces*[p])
 
     # generate sensible data.
     # Input and output of the Sbox
