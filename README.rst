@@ -1,5 +1,6 @@
-Welcome to SCALib
-=================
+======
+SCALib
+======
 
 .. image:: https://badge.fury.io/py/scalib.svg
     :target: https://pypi.org/project/scalib/
@@ -11,8 +12,17 @@ Welcome to SCALib
     :target: https://matrix.to/#/#scalib:matrix.org
     :alt: Matrix room
 
-The Side-Channel Analysis Library (SCALib) is a Python package that
-contains state-of-the-art tools for side-channel security evaluation. It focuses on
+The Side-Channel Analysis Library (SCALib) is a Python library that
+contains state-of-the-art tools for side-channel security evaluation.
+
+- **Documentation**: https://scalib.readthedocs.io/
+- **Chat**: `https://matrix.to/#/#scalib:matrix.org`
+- **Source code**: https://github.com/simple-crypto/SCALib
+- **Bug reports/feature requests**: https://github.com/simple-crypto/SCALib/issues/new/choose
+- **Contributing**: https://scalib.readthedocs.io/en/stable/source/contributing.html
+
+
+SCALib focuses on
 
 - simple interface,
 - state-of-the art algorithms,
@@ -21,11 +31,7 @@ contains state-of-the-art tools for side-channel security evaluation. It focuses
 SCALib should be useful for any side-channel practitioner who wants to
 evaluate, but not necessarily attack, protected or non-protected
 implementations.
-
 See the documentation_ for the list of implemented tools.
-
-We have a `matrix chat <https://matrix.to/#/#scalib:matrix.org>`_ for
-announcements, questions, community support and discussions.
 
 .. _documentation: https://scalib.readthedocs.io/en/stable
 
@@ -96,10 +102,13 @@ Contributions welcome !
 
 Please file a **bug report** for any issue you encounter (even bad documentation is
 a bug !), and let us know your **suggestions** (open a `github issue
-<https://github.com/simple-crypto/SCALib/issues/new/choose>`_, email works too).
+<https://github.com/simple-crypto/SCALib/issues/new/choose>`_, `chat
+<https://matrix.to/#/#scalib:matrix.org>`_ and `email
+<mailto:gaetan.cassiers@uclouvain.be>`_ work too).
 We also welcome code contributions, see `CONTRIBUTING.rst <CONTRIBUTING.rst>`_.
 
-You can also come discuss on `matrix <https://matrix.to/#/#scalib:matrix.org>`_.
+You can also come discuss on `matrix <https://matrix.to/#/#scalib:matrix.org>`_
+(announcements, questions, community support, open discussion, etc.).
 
 All code contributions are subject to the Contributor License Agreement (`CLA
 <https://www.simple-crypto.dev/organization>`_) of SIMPLE-Crypto, which ensures
