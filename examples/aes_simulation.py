@@ -108,7 +108,8 @@ def main():
         bp.set_evidence(f"x{i}", model["lda"].predict_proba(traces_a[:, model["poi"]]))
 
     print("    4.4 Run belief propagation")
-    bp.bp_loopy(it=3, initialize_states=True)
+    for i in range(16):
+        bp.bp_acyclic(f'k{i}')
 
     print("5. Attack evaluation")
     print("    5.1 Byte-wise attack")
