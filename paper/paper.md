@@ -14,14 +14,12 @@ authors:
     orcid: 0000-0001-5426-9345
     equal-contrib: true
     corresponding: true
-    affiliation: "1, 2, 3"
+    affiliation: "1, 2"
 affiliations:
  - name: UCLouvain, Belgium
    index: 1
  - name: Graz University of Technology, Austria
    index: 2
- - name: Lamarr Security Research, Austria
-   index: 3
 date: 16 February 2023
 bibliography: paper.bib
 
@@ -45,13 +43,13 @@ known behavior [@DBLP:conf/eurocrypt/StandaertMY09].
 
 For the statistical processing, we distinguish between two classes of attacks,
 based on the use of a profiling dataset.
-Such a dataset consists in leakage measurements on a device running the
+Such a dataset consists of leakage measurements on a device running the
 cryptographic algorithm with the known key.
 Profiled attacks use this data to fit a statistical model (or train a
 machine-learning model) of the device, while non-profiled attacks have to rely
 on *a priori* models and are therefore less powerful [@DBLP:conf/ches/ChariRR02].
 
-There are two main approaches to evaluating security of devices against side-channel attacks.
+There are two main approaches for evaluating the security of devices against side-channel attacks.
 First, attack-based evaluations try to attack the device and report their success or failure.
 In case of success, the main figure of merit is the number of traces (i.e.,
 number of executions of a cryptographic algorithm for which the leakage is
@@ -65,12 +63,12 @@ analyzing the effectiveness of a newly proposed countermeasure or analyzing a
 widely deployed device.
 In `SCALib`, we implement algorithms for commonly used metrics and methods in
 side-channel security evaluations, attack-based and evaluation-based.
-We however focus on the requirements of evaluations, and do not implement
+We focus on the requirements of evaluations and do not implement
 complete attacks when they are not needed to evaluate the security of a device.
 
 `SCALib` is distributed as a Python package and uses 16-bit integer `numpy` [@numpy] arrays
 for leakage traces.
-For the sake of efficiency, most algorithms are however implemented in Rust,
+For the sake of efficiency, most algorithms are implemented in Rust,
 allowing fine control of the memory accesses and enabling efficient
 parallelization.
 
@@ -81,36 +79,36 @@ Many of the algorithms used in side-channel security evaluations are well-known
 statistical techniques.
 For instance, the widely used TVLA methodology is based on the Welch t-test for
 the difference of means [@DBLP:conf/ches/SchneiderM15].
-Also when modeling the leakage, techniques such as Linear Discriminant Analysis
+Also, when modeling the leakage, techniques such as Linear Discriminant Analysis
 (LDA) [@DBLP:conf/ches/StandaertA08] can be used.
 While implementations of these algorithms are fairly easy to find, our use-case
 has a few particularities that motivate dedicated implementations.
-For example, the number of traces used in a evaluation can be very large,
+For example, the number of traces used in an evaluation can be very large,
 amounting to terabytes of data, hence incremental single-pass algorithms (that
 avoid the need to store and/or load multiple times the dataset) are highly
 desirable.
-Moreover, while the leakage samples are acquired at relatively low-resolution
+Moreover, while the leakage samples are acquired at a fairly low-resolution
 (8-bit to 16-bit integers), detection of very small effect sizes is
 needed, as they can potentially be exploited to mount an attack.
 Besides this requirement, leakage traces contain many points (typically
-thousands) and many metrics have to be computed for each of these points,
+thousands), and many metrics have to be computed for each of these points,
 providing parallelization opportunities.
 As a result of these characteristics, dedicated implementations can achieve
 much better accuracy and performance than generic or naive (e.g., pure `numpy`)
 ones.
 
 On the other hand, security-specific algorithms are also used, such as key rank
-estimation (which allows to know the computational cost of the last part of a
+estimation (which allows us to know the computational cost of the last part of a
 side-channel attack without actually running it) [@DBLP:conf/ches/PoussierSG16].
 
-While there exists multiple open-source side-channel attack and evaluation
-libraries, most of them offer a very limited feature set and are unmaintained.
+While multiple open-source side-channel attack and evaluation
+libraries exist, most of them offer a very limited feature set and are unmaintained.
 The most comprehensive libraries are `lascar` [@lascar] and `SCAred` [@scared], which offer
 implementations of some evaluation metrics and non-profiled attacks.
 
 `SCALib` complements and improves over these libraries by providing better
 implementations for the computation of two common evaluation metrics, by
-providing algorithms for profiled side-channel attacks and by including a key
+providing algorithms for profiled side-channel attacks and including a key
 rank enumeration algorithm as a final evaluation step.
 More precisely, for leakage metrics, we implement the Welch t-test and the
 computation of the signal-to-noise ratio, and our implementations are significantly
@@ -122,7 +120,8 @@ LDA with a dimensionality reduction step (this
 provides a regularization and improves classification performance) [@DBLP:conf/ches/StandaertA08].
 We also implement the soft analytical side-channel attack (SASCA), which is a
 variant of the belief propagation algorithm [@DBLP:conf/asiacrypt/Veyrat-CharvillonGS14].
-Finally, our key-rank estimation implementation relies an efficient histogram-based algorithm [@DBLP:conf/ches/PoussierSG16].
+Finally, our key-rank estimation implementation relies on an efficient
+histogram-based algorithm [@DBLP:conf/ches/PoussierSG16].
 
 `SCALib` has been used in many recent papers as a tool to validate new protected
 designs [@DBLP:journals/tches/NagpalGPM22], to publish new attacks on public
@@ -135,7 +134,7 @@ to develop new attack and evaluation methodologies [@DBLP:journals/tches/Broncha
 This work has been funded in part by the Belgian Fund for Scientific Research
 (F.R.S.-FNRS) through the Equipment Project SCALAB, by the European Union (EU)
 and the Walloon Region through the FEDER project USERMedia (convention number
-501907-379156), and by the European Union (EU) through the ERC project 724725
-(acronym SWORD).
+501907-379156), by the European Union (EU) through the ERC project 724725
+(acronym SWORD), and by SGS.
 
 # References
