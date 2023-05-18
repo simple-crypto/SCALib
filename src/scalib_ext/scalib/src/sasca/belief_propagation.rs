@@ -219,7 +219,7 @@ impl BPState {
         // Since inputs should not be too big, we should not have any overflow.
         // Underflow my happen, since probas are lower-bounded by MIN_PROBA**2.
         // This also normalizes the result.
-        self.var_state[var].multiply_reg(distr_iter);
+        self.var_state[var].multiply_norm(distr_iter);
     }
     pub fn propagate_from_var(&mut self, edge: EdgeId, alpha: f64) {
         // Dividing here is ok if we ensure that there is no zero element and no
@@ -251,7 +251,7 @@ impl BPState {
                 {
                     let it = $f(factor, &mut self.belief_from_var, dest, clear_incoming, $($arg,)*);
                     for (mut distr, dest) in it.zip(dest.iter()) {
-                        distr.normalize();
+                        distr.regularize();
                         self.belief_to_var[factor.edges[dest]] = distr;
                     }
                 }
