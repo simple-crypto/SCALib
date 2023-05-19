@@ -16,30 +16,35 @@ def main():
     ntraces_a = 40
     ntraces_p = 20000
 
-    print("1. Generate simulated traces (Hamming weight + Gaussian noise) with parameters:")
+    print(
+        "1. Generate simulated traces (Hamming weight + Gaussian noise) with parameters:"
+    )
     print(f"    ntraces for profiling: {ntraces_p}")
     print(f"    ntraces for attack:    {ntraces_a}")
     print(f"    noise std:             {std}")
-    traces_p, labels_p = gen_traces(ntraces_p, std, random_key=True, random_plaintext=True)
-    traces_a, labels_a = gen_traces(ntraces_a, std, random_key=False, random_plaintext=True)
+    traces_p, labels_p = gen_traces(
+        ntraces_p, std, random_key=True, random_plaintext=True
+    )
+    traces_a, labels_a = gen_traces(
+        ntraces_a, std, random_key=False, random_plaintext=True
+    )
 
     _, ns = traces_p.shape
 
-    print("2. TVLA (not further used -- first leakage expected, but no second order leakage)")
-    # Ttest needs the lenght of the traces, and the test order (here, two)
-    ttest = Ttest(traces_p.shape[1], 2)
-    # Fix-vs-random TVLA (fixed-key vs random-key).
-    # We generate new datasets, as the previous ones use random plaintext, and we needed fixed plaintext.
-    traces_rk, _ = gen_traces(ntraces_p, std, random_key=True, random_plaintext=False)
-    traces_fk, _ = gen_traces(ntraces_p, std, random_key=False, random_plaintext=False)
-    # Ttest can be updated multiple times, and the order of the updates does not matter.
-    ttest.fit_u(traces_rk, np.zeros((traces_rk.shape[0],), dtype=np.uint16))
-    ttest.fit_u(traces_fk, np.ones((traces_fk.shape[0],), dtype=np.uint16))
-    tt_result = ttest.get_ttest()
-    print("")
-    print("    First-order t-statistic: ", *(f"{t:.02f}" for t in tt_result[0,:]))
-    print("    Second-order t-statistic:", *(f"{t:.02f}" for t in tt_result[1,:]))
-    print("")
+    print("2. POI selection with SNR")
+    print("    2.1 Compute SNR for 16 Sbox outputs xi")
+    # y array with xi values
+    x = np.zeros((ntraces_p, 16), dtype=np.uint16)
+    for i in range(16):
+        x[:, i] = labels_p[f"x{i}"]
+
+    # estimate SNR
+    snr = SNR(nc=nc, ns=ns, np=16)
+    snr.fit_u(traces_p, x)
+    snr_val = snr.get_snr()
+
+    print("    2.2 Select POIs with highest SNR.")
+    pois = [np.argsort(snr_val[i])[-npoi:] for i in range(16)]
 
     print("3. Profiling")
     # For each of the 16 variables at the output of the Sbox (xi)
@@ -50,33 +55,16 @@ def main():
     # 2. Select the Point-of-Interest based on the SNR
     # 3. Fit an LDA model for each of the xi
 
-    models = {}
+    print("    3.1 Build LDAClassifier for each xi")
+    models = []
     for i in range(16):
-        models[f"x{i}"] = {}
-
-    print("    3.1 Compute SNR for 16 Sbox outputs xi")
-    # y array with xi values
-    x = np.zeros((ntraces_p, 16), dtype=np.uint16)
-    for i in range(16):
-        x[:, i] = labels_p[f"x{i}"]
-
-    # estimate SNR
-    snr = SNR(nc=256, ns=ns, np=16)
-    snr.fit_u(traces_p, x)
-    snr_val = snr.get_snr()
-
-    print("    3.2 Keep {npoi} POIs for each xi")
-    # POI are the npoi indexes with the largest SNR
-    for i in range(16):
-        models[f"x{i}"]["poi"] = np.argsort(snr_val[i])[-npoi:]
-
-    print("    3.3 Build LDAClassifier for each xi")
-    for i in range(16):
-        model = models[f"x{i}"]
         lda = LDAClassifier(nc=256, ns=npoi, p=1)
-        lda.fit_u(l=traces_p[:, model["poi"]], x=labels_p[f"x{i}"].astype(np.uint16))
+        lda.fit_u(l=traces_p[:, pois[i]], x=labels_p[f"x{i}"].astype(np.uint16))
         lda.solve()
-        model["lda"] = lda
+        models.append(lda)
+
+    print("    3.2 Get xi distributions from attack traces")
+    probas = [models[i].predict_proba(traces_a[:, pois[i]]) for i in range(16)]
 
     print("4. Attack")
     print("    4.1 Create the SASCA Graph")
@@ -96,20 +84,22 @@ def main():
                 """
 
     # Init FactorGraph with the graph description and the required tables
-    factor_graph = FactorGraph(graph_desc, {'sbox': sbox})
+    factor_graph = FactorGraph(graph_desc, {"sbox": sbox})
 
     print("    4.2 Create belief propagation state.")
     # We have to give the number of attack traces and the values for the public variables.
-    bp = BPState(factor_graph, ntraces_a, {f"p{i}": labels_a[f"p{i}"].astype(np.uint32) for i in range(16)})
+    bp = BPState(
+        factor_graph,
+        ntraces_a,
+        {f"p{i}": labels_a[f"p{i}"].astype(np.uint32) for i in range(16)},
+    )
 
-    print("    4.3 Add xi distributions in the graph")
     for i in range(16):
-        model = models[f"x{i}"]
-        bp.set_evidence(f"x{i}", model["lda"].predict_proba(traces_a[:, model["poi"]]))
+        bp.set_evidence(f"x{i}", probas[i])
 
-    print("    4.4 Run belief propagation")
+    print("    4.3 Run belief propagation")
     for i in range(16):
-        bp.bp_acyclic(f'k{i}')
+        bp.bp_acyclic(f"k{i}")
 
     print("5. Attack evaluation")
     print("    5.1 Byte-wise attack")
