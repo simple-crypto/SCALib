@@ -1,14 +1,14 @@
 SCALib examples
 ===============
 
-Simple usage examples of SCALib algorithms are also provided in the
-`API documentation<https://scalib.readthedocs.io/>`_.
+**For more detailed documentation and parameters, see the
+API documentation at https://scalib.readthedocs.io/.**
 
 The examples in this directory attack simlated leakage from an unprotected AES
 implementation leaking the Hamming weight of the state bytes, with additive Gaussian noise.
 
-Attack
-------
+Key recovery
+------------
 
 This example demonstrates a key-recovery attack on the simulated leakage.
 
