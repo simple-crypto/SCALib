@@ -144,13 +144,10 @@ class SASCAGraph:
     def __init__(self, graph, n):
         import warnings
 
-        warnings.simplefilter("once", DeprecationWarning)  # turn off filter
         warnings.warn(
             "SASCAGraph is deprecated and will be removed in a next release. Use FactorGraph instead.",
             category=DeprecationWarning,
-            stacklevel=2,
         )
-        warnings.simplefilter("default", DeprecationWarning)  # reset filter
 
         self.n_ = n
         self.solved_ = False
