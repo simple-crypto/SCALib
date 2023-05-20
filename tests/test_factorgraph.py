@@ -1422,7 +1422,7 @@ def test_sparse_factor_bff():
         for x1 in range(nc):
             for y0 in range(nc):
                 for y1 in range(nc):
-                    if ((x0 + 1 * x1) % nc) == (y0 % nc) and ((x0 - 1 * x1) % nc) == (
+                    if ((x0 + 2 * x1) % nc) == (y0 % nc) and ((x0 - 2 * x1) % nc) == (
                         y1 % nc
                     ):
                         bff_dense[x0, x1, y0, y1] = 1.0
@@ -1434,11 +1434,16 @@ def test_sparse_factor_bff():
     )
     bp_dense = BPState(fg, 1, gen_factors={"f": GenFactor.dense(bff_dense)})
 
-    for v in ["x0", "x1", "y0", "y1"]:
-        d = make_distri(nc, 1)
-        bp.set_evidence(v, d)
-        bp_dense.set_evidence(v, d)
+    # for v in ["x0", "x1", "y0", "y1"]:
+    #     d = make_distri(nc, 1)
+    #     bp.set_evidence(v, d)
+    #     bp_dense.set_evidence(v, d)
+    bp.set_evidence("x0", np.array([[0.0, 0.5, 0.5, 0.0]]))
+    bp.set_evidence("x1", np.array([[1.0, 0.0, 0.0, 0.0]]))
+    bp.set_evidence("y0", np.array([[0.0, 0.5, 0.5, 0.0]]))
+    bp.set_evidence("y1", np.array([[0.0, 0.0, 0.0, 1.0]]))
     import sys
+
     bp.bp_loopy(1, True)
     bp_dense.bp_loopy(1, True)
     for i in range(50):
@@ -1447,3 +1452,186 @@ def test_sparse_factor_bff():
         for v in ["x0", "x1", "y0", "y1"]:
             assert not np.isnan(bp.get_distribution(v)).any()
             assert np.allclose(bp.get_distribution(v), bp_dense.get_distribution(v))
+
+
+def test_sparse_factor_bff2():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC {nc}
+    VAR MULTI x0
+    VAR MULTI x1
+    VAR MULTI y0
+    VAR MULTI y1
+    GENERIC SINGLE f
+    PROPERTY F0: f(x0, x1, y0, y1)"""
+
+    fg = FactorGraph(graph)
+    bff = []
+
+    for x0 in range(nc):
+        for x1 in range(nc):
+            for y0 in range(nc):
+                for y1 in range(nc):
+                    if ((x0 + (1 * x1)) % nc) == (y0 % nc) and (
+                        (x0 - (1 * x1)) % nc
+                    ) == (y1 % nc):
+                        bff.append([x0, x1, y0, y1])
+    bp = BPState(
+        fg,
+        1,
+        gen_factors={"f": GenFactor.sparse_functional(np.array(bff, dtype=np.uint32))},
+    )
+
+    # for v in ["x0", "x1", "y0", "y1"]:
+    #     d = make_distri(nc, 1)
+    #     bp.set_evidence(v, d)
+    #     bp_dense.set_evidence(v, d)
+    bp.set_evidence(
+        "x0",
+        np.array(
+            [
+                [
+                    0.0,  # 0
+                    0.0,  # 1
+                    0.0,  # 2
+                    0.0,  # 3 #0.16666667,
+                    0.0,  # 4
+                    0.0,  # 5 #0.16666667,
+                    0.0,  # 6 #0.16666667,
+                    0.0,  # 7
+                    0.0,  # 8
+                    0.0,  # 9 #0.16666667,
+                    1.0,  # 10 #0.16666667,
+                    0.0,  # 11
+                    0.0,  # 12 #0.16666667,
+                ]
+            ]
+        ),
+    )
+    bp.set_evidence(
+        "x1",
+        np.array(
+            [
+                [
+                    0.0,  # 0
+                    0.0,  # 1
+                    0.0,  # 2
+                    1.0,  # 3
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                ]
+            ]
+        ),
+    )
+    bp.set_evidence(
+        "y0",
+        np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),
+    )
+    bp.set_evidence(
+        "y1",
+        np.array([[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]]),
+    )
+    import sys
+
+    bp.bp_loopy(1, True)
+    # for i in range(50):
+    print(bp.debug(), file=sys.stderr)
+    print("NEXT", file=sys.stderr)
+    bp.bp_loopy(1, False)
+    print(bp.debug(), file=sys.stderr)
+    for v in ["x0", "x1", "y0", "y1"]:
+        assert not np.isnan(bp.get_distribution(v)).any()
+
+
+def test_sparse_factor_bff3():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC 13
+            VAR MULTI a0
+            VAR MULTI a1
+            VAR MULTI a2
+            VAR MULTI a3
+            VAR MULTI x0
+            VAR MULTI x1
+            VAR MULTI x2
+            VAR MULTI x3
+            VAR MULTI y0
+            VAR MULTI y1
+            VAR MULTI y2
+            VAR MULTI y3
+            GENERIC SINGLE f
+            PROPERTY F0: f(x0, x1, a0, a1)
+            PROPERTY F1: f(x2, x3, a2, a3)
+            PROPERTY F2: f(a0, a2, y0, y2)
+            PROPERTY F3: f(a1, a3, y1, y3)
+            """
+
+    fg = FactorGraph(graph)
+    bff = []
+
+    for x0 in range(nc):
+        for x1 in range(nc):
+            for y0 in range(nc):
+                for y1 in range(nc):
+                    if ((x0 + (x1)) % nc) == (y0 % nc) and ((x0 - (x1)) % nc) == (
+                        y1 % nc
+                    ):
+                        bff.append([x0, x1, y0, y1])
+    bp = BPState(
+        fg,
+        1,
+        gen_factors={"f": GenFactor.sparse_functional(np.array(bff, dtype=np.uint32))},
+    )
+    print(bff)
+    import sys
+
+    priors = {
+        "x0": 10,
+        "x1": 1,
+        "x2": 0,
+        "x3": 1,
+        "a0": 11,
+        "a1": 9,
+        "a2": 1,
+        "a3": 12,
+        "y0": 12,
+        "y1": 8,
+        "y2": 10,
+        "y3": 10,
+    }
+    priors = np.load("./priors.npy", allow_pickle=True).item()
+
+    for k, v in priors.items():
+        print(k)
+        print(v[6])
+        # arr = np.zeros((1,13))
+        # arr[0,v] = 1.0
+        bp.set_evidence(k, np.array([v[6]]))
+    bp.bp_loopy(1, True, clear_beliefs=False)
+
+    for i in range(15):
+        str2 = ""
+        print(f"############### Iteration {i} ################", file=sys.stderr)
+        bp.bp_loopy(1, True, clear_beliefs=False)
+        for k in list(priors.keys()) + ["a2", "a3"]:
+            str2 += f"{k}: {np.argmax(bp.get_distribution(k))} "
+        print(str2)
+        print(bp.debug(), file=sys.stderr)
+    # for factor in bp._inner.graph().factor_names():
+    #     bp.propagate_factor(factor)
+    # print(bp.debug(), file=sys.stderr)
+    # # for var in bp._inner.graph().var_names():
+    # #     bp.propagate_var(var, clear_beliefs=False)
+    # bp.propagate_to_var("a2")
+    # # for i in range(50):
+    # print(bp.debug(), file=sys.stderr)
+    assert False
