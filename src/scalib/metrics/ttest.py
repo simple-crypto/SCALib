@@ -149,10 +149,15 @@ class Ttest:
         """
         nl, nsl = l.shape
         nx = x.shape[0]
-        if not (nx == nl):
+        if nx != nl:
             raise ValueError(f"Expected x with shape ({nl},)")
-        if not (nsl == self._ns):
-            raise Exception(f"Expected second dim of l to have size {self._ns}.")
+        if nsl != self._ns:
+            raise ValueError(f"Expected second dim of l to have size {self._ns}.")
+        if not l.flags["C_CONTIGUOUS"]:
+            raise ValueError(
+                "Expected l to be a contiguous (C memory order) array. "
+                "Use np.ascontiguous to change memory representation."
+            )
 
         with scalib.utils.interruptible():
             self._ttest.update(l, x, get_config())
@@ -189,17 +194,20 @@ class MTtest:
     Parameters
     ----------
     d : int
-        Maximal statistical order of the :math:`t`-test.
+        Number of variables of the :math:`t`-test.
     pois : array_like, uint32
-        Array of share `(d,n_pois)`. Each column in `pois` will result in a
-        :math:`t`-test of the product of the traces at these $d$ indexes.
+        Array of shape ``(d,n_pois)``. Each column in `pois` will result in a
+        :math:`t`-test of the product of the traces at these :math:`d` indexes.
+        If an index is repeated in a column, the corresponding test uses a
+        higher-order moment for the corresponding point in the trace.
 
     Examples
     --------
     >>> from scalib.metrics import MTtest
     >>> import numpy as np
     >>> traces = np.random.randint(0,256,(100,200),dtype=np.int16)
-    >>> pois = np.random.randint(0,200,(2,5000),dtype=np.uint32)
+    >>> # Take as POIs each point in the trace combined with any of the 10 following samples.
+    >>> pois = np.array([[x, x+d] for x in range(200) for d in range(10) if x + d < 200], dtype=np.uint32).T
     >>> X = np.random.randint(0,2,100,dtype=np.uint16)
     >>> mttest = MTtest(d=2,pois=pois)
     >>> mttest.fit_u(traces,X)
