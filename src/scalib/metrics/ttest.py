@@ -149,10 +149,15 @@ class Ttest:
         """
         nl, nsl = l.shape
         nx = x.shape[0]
-        if not (nx == nl):
+        if nx != nl:
             raise ValueError(f"Expected x with shape ({nl},)")
-        if not (nsl == self._ns):
-            raise Exception(f"Expected second dim of l to have size {self._ns}.")
+        if nsl != self._ns:
+            raise ValueError(f"Expected second dim of l to have size {self._ns}.")
+        if not l.flags["C_CONTIGUOUS"]:
+            raise ValueError(
+                "Expected l to be a contiguous (C memory order) array. "
+                "Use np.ascontiguous to change memory representation."
+            )
 
         with scalib.utils.interruptible():
             self._ttest.update(l, x, get_config())
