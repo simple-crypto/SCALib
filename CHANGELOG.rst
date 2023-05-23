@@ -5,6 +5,8 @@ Changelog
 Not released
 ------------
 
+* Fix build dependences and run build in an isolated environment.
+
 v0.5.5 (2023/05/30)
 -------------------
 
