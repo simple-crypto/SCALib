@@ -5,8 +5,13 @@ Changelog
 Not released
 ------------
 
+v0.5.5 (2023/05/30)
+-------------------
+
 * Fix ``Distribution`` size bug in belief propagation computation (#102).
 * Do not include debug symbols in release builds (makes wheel much smaller).
+* ``Ttest``: do not crash on non-contiguous/fortran-order arrays
+* Improve examples and README
 
 v0.5.4 (2023/04/26)
 -------------------
