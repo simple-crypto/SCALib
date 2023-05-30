@@ -4,7 +4,7 @@ SCALib examples
 **For more detailed documentation and parameters, see the
 API documentation at https://scalib.readthedocs.io/.**
 
-The examples in this directory attack simlated leakage from an unprotected AES
+The examples in this directory attack simulated leakage from an unprotected AES
 implementation leaking the Hamming weight of the state bytes, with additive Gaussian noise.
 
 Key recovery
@@ -40,14 +40,14 @@ The attack goes in multiple steps:
     *Our factor graph here is acyclic, so we can to exact inference. SCALib also supports approximate inference with loopy belief propagation for more complex cases.*
     
 5. Evaluate the attack results
-    1. Show the rank for each key bytes.
+    1. Show the rank for each key byte.
     2. Show the overall key rank with ``scalib.postprocessing.rank_accuracy``.
 
 
 TVLA
 ----
 
-This example runs a fixed-vs-random first- and second-order unvariate TVLA using ``scalib.metrics.Ttest``.
+This example runs a fixed-vs-random first- and second-order univariate TVLA using ``scalib.metrics.Ttest``.
 
 .. code-block::
 

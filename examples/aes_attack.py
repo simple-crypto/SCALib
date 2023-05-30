@@ -47,18 +47,13 @@ def main():
     pois = [np.argsort(snr_val[i])[-npoi:] for i in range(16)]
 
     print("3. Profiling")
-    # For each of the 16 variables at the output of the Sbox (xi)
-    # we build a model that store in the dictonnary models.
-    #
-    # The profiling is done in 3 phases
-    # 1. Compute SNR for all xi
-    # 2. Select the Point-of-Interest based on the SNR
-    # 3. Fit an LDA model for each of the xi
+    # We build a LDA model (pooled Gaussian templates) for each of the 16
+    # Sboxes (xi).
 
     print("    3.1 Build LDAClassifier for each xi")
     models = []
     for i in range(16):
-        lda = LDAClassifier(nc=256, ns=npoi, p=1)
+        lda = LDAClassifier(nc=nc, ns=npoi, p=1)
         lda.fit_u(l=traces_p[:, pois[i]], x=labels_p[f"x{i}"].astype(np.uint16))
         lda.solve()
         models.append(lda)
@@ -83,7 +78,7 @@ def main():
                 PROPERTY x{i} = sbox[y{i}]  # Sbox lookup
                 """
 
-    # Init FactorGraph with the graph description and the required tables
+    # Initialize FactorGraph with the graph description and the required tables
     factor_graph = FactorGraph(graph_desc, {"sbox": sbox})
 
     print("    4.2 Create belief propagation state.")

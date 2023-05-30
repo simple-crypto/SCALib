@@ -32,15 +32,8 @@ def main():
 
     _, ns = traces_p.shape
 
-    print("2. Profiling")
+    print("2. Profiling the value of the first Sbox.")
     print("")
-    # For each of the 16 variables at the output of the Sbox (xi)
-    # we build a model that store in the dictonnary models.
-    #
-    # The profiling is done in 3 phases
-    # 1. Compute SNR for all xi
-    # 2. Select the Point-of-Interest based on the SNR
-    # 3. Fit an LDA model for each of the xi
 
     lda = LDAClassifier(nc=256, ns=ns, p=1)
     lda.fit_u(l=traces_p, x=labels_p["x0"].astype(np.uint16))
