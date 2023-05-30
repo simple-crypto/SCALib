@@ -6,21 +6,21 @@ tags:
   - Python
   - Rust
 authors:
-  - name: Olivier Bronchain
-    orcid: 0000-0001-7595-718X
-    equal-contrib: true
-    affiliation: 1
   - name: Gaëtan Cassiers
     orcid: 0000-0001-5426-9345
     equal-contrib: true
     corresponding: true
-    affiliation: "1, 2"
+    affiliation: "2, 1"
+  - name: Olivier Bronchain
+    orcid: 0000-0001-7595-718X
+    equal-contrib: true
+    affiliation: 1
 affiliations:
  - name: UCLouvain, Belgium
    index: 1
- - name: Graz University of Technology, Austria
+ - name: TU Graz, Austria
    index: 2
-date: 16 February 2023
+date: 30 May 2023
 bibliography: paper.bib
 
 ---
@@ -131,10 +131,10 @@ to develop new attack and evaluation methodologies [@DBLP:journals/tches/Broncha
 
 # Acknowledgments
 
-This work has been funded in part by the Belgian Fund for Scientific Research
+This work has been funded in part by SGS, by the Belgian Fund for Scientific Research
 (F.R.S.-FNRS) through the Equipment Project SCALAB, by the European Union (EU)
 and the Walloon Region through the FEDER project USERMedia (convention number
-501907-379156), by the European Union (EU) through the ERC project 724725
-(acronym SWORD), and by SGS.
+501907-379156) and by the European Union (EU) through the ERC project 724725
+(acronym SWORD).
 
 # References
