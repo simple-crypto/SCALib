@@ -35,7 +35,7 @@ important threat to embedded devices.
 Countermeasures against these attacks have been extensively researched for more
 than two decades and are often deployed in security-critical devices.
 
-A side-channel attack is made of three steps: first, the leakage is measured.
+A side-channel attack is made of three steps. First, the leakage is measured.
 Then, a statistical processing is applied to this leakage in order to infer the
 internal behavior of the device (typically, an intermediate state of the
 cryptographic algorithm). Finally, the cryptographic key is recovered from the
@@ -66,7 +66,7 @@ side-channel security evaluations, attack-based and evaluation-based.
 We focus on the requirements of evaluations and do not implement
 complete attacks when they are not needed to evaluate the security of a device.
 
-`SCALib` is distributed as a Python package and uses 16-bit integer `numpy` [@numpy] arrays
+`SCALib` is distributed as a Python package and uses 16-bit integer NumPy [@numpy] arrays
 for leakage traces.
 For the sake of efficiency, most algorithms are implemented in Rust,
 allowing fine control of the memory accesses and enabling efficient
@@ -94,7 +94,7 @@ Besides this requirement, leakage traces contain many points (typically
 thousands), and many metrics have to be computed for each of these points,
 providing parallelization opportunities.
 As a result of these characteristics, dedicated implementations can achieve
-much better accuracy and performance than generic or naive (e.g., pure `numpy`)
+much better accuracy and performance than generic or naive (e.g., pure NumPy)
 ones.
 
 On the other hand, security-specific algorithms are also used, such as key rank
