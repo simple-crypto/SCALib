@@ -11,6 +11,9 @@ SCALib
 .. image:: https://img.shields.io/matrix/scalib:matrix.org
     :target: https://matrix.to/#/#scalib:matrix.org
     :alt: Matrix room
+.. image:: https://joss.theoj.org/papers/10.21105/joss.05196/status.svg
+   :target: https://doi.org/10.21105/joss.05196
+   :alt: JOSS paper
 
 The Side-Channel Analysis Library (SCALib) is a Python library that
 contains state-of-the-art tools for side-channel security evaluation.
@@ -114,6 +117,33 @@ You can also come discuss on `matrix <https://matrix.to/#/#scalib:matrix.org>`_
 All code contributions are subject to the Contributor License Agreement (`CLA
 <https://www.simple-crypto.dev/organization>`_) of SIMPLE-Crypto, which ensures
 a thriving future for open-source hardware security.
+
+
+Citation
+========
+
+If you use SCALib in your research, please cite our `software paper <https://doi.org/10.21105/joss.05196>`_:
+
+.. code-block::
+
+    Cassiers et al., (2023). SCALib: A Side-Channel Analysis Library. Journal of Open Source Software, 8(86), 5196, https://doi.org/10.21105/joss.05196
+
+Bibtex:
+
+.. code-block::
+
+   @article{scalib,
+       doi = {10.21105/joss.05196},
+       url = {https://doi.org/10.21105/joss.05196},
+       year = {2023},
+       publisher = {The Open Journal},
+       volume = {8},
+       number = {86},
+       pages = {5196},
+       author = {Gaëtan Cassiers and Olivier Bronchain},
+       title = {SCALib: A Side-Channel Analysis Library}, journal = {Journal of Open Source Software}
+   }
+
 
 License
 =======
