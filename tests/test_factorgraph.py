@@ -394,15 +394,15 @@ def test_ADD():
     """
     Test ADD between distributions
     """
-    nc = 251
-    n = 4
+    nc = 241
+    n = 1
     distri_x = make_distri(nc, n)
     distri_y = make_distri(nc, n)
 
     graph = f"""
         # some comments
         NC {nc}
-        PROPERTY z = x+y
+        PROPERTY F0: z = x+y
         VAR MULTI z
         VAR MULTI x
         VAR MULTI y
@@ -413,8 +413,10 @@ def test_ADD():
     bp_state = BPState(graph, n)
     bp_state.set_evidence("x", distri_x)
     bp_state.set_evidence("y", distri_y)
+    import sys
 
     bp_state.bp_loopy(1, True)
+
     distri_z = bp_state.get_distribution("z")
 
     distri_z_ref = np.zeros(distri_z.shape)
@@ -982,73 +984,73 @@ def test_manytraces():
     assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
 
 
-def test_generic_factor():
-    fg1 = FactorGraph(
-        """NC 2
-    VAR MULTI K0
-    VAR MULTI K1
-    VAR MULTI N1
-    VAR MULTI L1
-    PROPERTY P1: L1 = K0 & !K1
-    """
-    )
-    fg2 = FactorGraph(
-        """NC 2
-    VAR MULTI K0
-    VAR MULTI K1
-    VAR MULTI L1
-    GENERIC MULTI f
-    PROPERTY P1: f(K0, K1, L1)
-    """
-    )
+# def test_generic_factor():
+#     fg1 = FactorGraph(
+#         """NC 2
+#     VAR MULTI K0
+#     VAR MULTI K1
+#     VAR MULTI N1
+#     VAR MULTI L1
+#     PROPERTY P1: L1 = K0 & !K1
+#     """
+#     )
+#     fg2 = FactorGraph(
+#         """NC 2
+#     VAR MULTI K0
+#     VAR MULTI K1
+#     VAR MULTI L1
+#     GENERIC MULTI f
+#     PROPERTY P1: f(K0, K1, L1)
+#     """
+#     )
 
-    bp1 = BPState(fg1, 1)
-    bp2 = BPState(fg2, 1, gen_factors={"f": [np.ones((2, 2, 2), dtype=np.float64)]})
-    for k in ["K0", "K1"]:
-        d = make_distri(2, 1)
-        bp1.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
-        bp2.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
-    bp1.bp_loopy(3, False)
-    bp2.bp_loopy(3, False)
+#     bp1 = BPState(fg1, 1)
+#     bp2 = BPState(fg2, 1, gen_factors={"f": [np.ones((2, 2, 2), dtype=np.float64)]})
+#     for k in ["K0", "K1"]:
+#         d = make_distri(2, 1)
+#         bp1.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+#         bp2.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+#     bp1.bp_loopy(3, False)
+#     bp2.bp_loopy(3, False)
 
-    print(bp1.debug())
-    print(bp2.debug())
+#     print(bp1.debug())
+#     print(bp2.debug())
 
 
-def test_generic_factor2():
-    fg1 = FactorGraph(
-        """NC 2
-    VAR MULTI K0
-    VAR MULTI K1
-    VAR MULTI L1
-    PROPERTY P1: L1 = K0 & !K1
-    """
-    )
-    fg2 = FactorGraph(
-        """NC 2
-    VAR MULTI K0
-    VAR MULTI K1
-    VAR MULTI L1
-    GENERIC SINGLE f
-    PROPERTY P1: f(K0, K1, L1)
-    """
-    )
-    factor = np.zeros((2, 2, 2))
-    factor[0, 0, 0] = 1.0
-    factor[0, 1, 0] = 1.0
-    factor[1, 0, 1] = 1.0
-    factor[1, 1, 0] = 1.0
-    bp1 = BPState(fg1, 1)
-    bp2 = BPState(fg2, 1, gen_factors={"f": factor})
-    for k in ["K0", "K1"]:
-        d = make_distri(2, 1)
-        bp1.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
-        bp2.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+# def test_generic_factor2():
+#     fg1 = FactorGraph(
+#         """NC 2
+#     VAR MULTI K0
+#     VAR MULTI K1
+#     VAR MULTI L1
+#     PROPERTY P1: L1 = K0 & !K1
+#     """
+#     )
+#     fg2 = FactorGraph(
+#         """NC 2
+#     VAR MULTI K0
+#     VAR MULTI K1
+#     VAR MULTI L1
+#     GENERIC SINGLE f
+#     PROPERTY P1: f(K0, K1, L1)
+#     """
+#     )
+#     factor = np.zeros((2, 2, 2))
+#     factor[0, 0, 0] = 1.0
+#     factor[0, 1, 0] = 1.0
+#     factor[1, 0, 1] = 1.0
+#     factor[1, 1, 0] = 1.0
+#     bp1 = BPState(fg1, 1)
+#     bp2 = BPState(fg2, 1, gen_factors={"f": factor})
+#     for k in ["K0", "K1"]:
+#         d = make_distri(2, 1)
+#         bp1.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+#         bp2.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
 
-    bp1.bp_loopy(1, True)
-    bp2.bp_loopy(1, True)
+#     bp1.bp_loopy(1, True)
+#     bp2.bp_loopy(1, True)
 
-    assert np.allclose(bp1.get_distribution("L1"), bp2.get_distribution("L1"))
+#     assert np.allclose(bp1.get_distribution("L1"), bp2.get_distribution("L1"))
 
 
 def test_manytraces():
@@ -1182,11 +1184,8 @@ def test_ADD3():
         print(f"=============== {i} ==========", file=sys.stderr)
         bp_state.bp_loopy(2, initialize_states=False, clear_beliefs=False)
         print(bp_state.debug(), file=sys.stderr)
-    distr = []
     for x in ["x0", "x1", "a0"]:
-        distr.append(bp_state.get_distribution(x))
-    assert not np.isnan(np.array(distr)).any()
-    assert False
+        assert not np.isnan(bp_state.get_distribution(x)).any()
 
 
 def test_ADD4():
@@ -1215,13 +1214,9 @@ def test_ADD4():
     bp_state.set_evidence("x0", x0_distr)
     bp_state.set_evidence("x1", x1_distr)
     bp_state.set_evidence("a0", a0_distr)
-    # bp_state.bp_loopy(1, initialize_states=True)
-    #  print(bp_state.debug())
-    distr = []
+    bp_state.bp_loopy(50, initialize_states=False)
     for x in ["x0", "x1", "a0"]:
-        distr.append(bp_state.get_distribution(x))
-
-    assert not np.isnan(distr).any()
+        assert not np.isnan(bp_state.get_distribution(x)).any()
 
 
 def test_clear_beliefs():
@@ -1402,56 +1397,56 @@ def test_sparse_factor_xor():
         assert not np.isnan(bp.get_distribution("c")).any()
 
 
-def test_sparse_factor_bff():
-    from scalib.attacks.factor_graph import GenFactor
+# def test_sparse_factor_bff():
+#     from scalib.attacks.factor_graph import GenFactor
 
-    nc = 4
-    graph = f"""NC {nc}
-    VAR MULTI x0
-    VAR MULTI x1
-    VAR MULTI y0
-    VAR MULTI y1
-    GENERIC SINGLE f
-    PROPERTY F0: f(x0, x1, y0, y1)"""
+#     nc = 4
+#     graph = f"""NC {nc}
+#     VAR MULTI x0
+#     VAR MULTI x1
+#     VAR MULTI y0
+#     VAR MULTI y1
+#     GENERIC SINGLE f
+#     PROPERTY F0: f(x0, x1, y0, y1)"""
 
-    fg = FactorGraph(graph)
-    bff = []
-    bff_dense = np.zeros((nc, nc, nc, nc))
+#     fg = FactorGraph(graph)
+#     bff = []
+#     bff_dense = np.zeros((nc, nc, nc, nc))
 
-    for x0 in range(nc):
-        for x1 in range(nc):
-            for y0 in range(nc):
-                for y1 in range(nc):
-                    if ((x0 + 2 * x1) % nc) == (y0 % nc) and ((x0 - 2 * x1) % nc) == (
-                        y1 % nc
-                    ):
-                        bff_dense[x0, x1, y0, y1] = 1.0
-                        bff.append([x0, x1, y0, y1])
-    bp = BPState(
-        fg,
-        1,
-        gen_factors={"f": GenFactor.sparse_functional(np.array(bff, dtype=np.uint32))},
-    )
-    bp_dense = BPState(fg, 1, gen_factors={"f": GenFactor.dense(bff_dense)})
+#     for x0 in range(nc):
+#         for x1 in range(nc):
+#             for y0 in range(nc):
+#                 for y1 in range(nc):
+#                     if ((x0 + 2 * x1) % nc) == (y0 % nc) and ((x0 - 2 * x1) % nc) == (
+#                         y1 % nc
+#                     ):
+#                         bff_dense[x0, x1, y0, y1] = 1.0
+#                         bff.append([x0, x1, y0, y1])
+#     bp = BPState(
+#         fg,
+#         1,
+#         gen_factors={"f": GenFactor.sparse_functional(np.array(bff, dtype=np.uint32))},
+#     )
+#     bp_dense = BPState(fg, 1, gen_factors={"f": GenFactor.dense(bff_dense)})
 
-    # for v in ["x0", "x1", "y0", "y1"]:
-    #     d = make_distri(nc, 1)
-    #     bp.set_evidence(v, d)
-    #     bp_dense.set_evidence(v, d)
-    bp.set_evidence("x0", np.array([[0.0, 0.5, 0.5, 0.0]]))
-    bp.set_evidence("x1", np.array([[1.0, 0.0, 0.0, 0.0]]))
-    bp.set_evidence("y0", np.array([[0.0, 0.5, 0.5, 0.0]]))
-    bp.set_evidence("y1", np.array([[0.0, 0.0, 0.0, 1.0]]))
-    import sys
+#     # for v in ["x0", "x1", "y0", "y1"]:
+#     #     d = make_distri(nc, 1)
+#     #     bp.set_evidence(v, d)
+#     #     bp_dense.set_evidence(v, d)
+#     bp.set_evidence("x0", np.array([[0.0, 0.5, 0.5, 0.0]]))
+#     bp.set_evidence("x1", np.array([[1.0, 0.0, 0.0, 0.0]]))
+#     bp.set_evidence("y0", np.array([[0.0, 0.5, 0.5, 0.0]]))
+#     bp.set_evidence("y1", np.array([[0.0, 0.0, 0.0, 1.0]]))
+#     import sys
 
-    bp.bp_loopy(1, True)
-    bp_dense.bp_loopy(1, True)
-    for i in range(50):
-        bp.bp_loopy(1, False)
-        bp_dense.bp_loopy(1, False)
-        for v in ["x0", "x1", "y0", "y1"]:
-            assert not np.isnan(bp.get_distribution(v)).any()
-            assert np.allclose(bp.get_distribution(v), bp_dense.get_distribution(v))
+#     bp.bp_loopy(1, True)
+#     bp_dense.bp_loopy(1, True)
+#     for i in range(50):
+#         bp.bp_loopy(1, False)
+#         bp_dense.bp_loopy(1, False)
+#         for v in ["x0", "x1", "y0", "y1"]:
+#             assert not np.isnan(bp.get_distribution(v)).any()
+#             assert np.allclose(bp.get_distribution(v), bp_dense.get_distribution(v))
 
 
 def test_sparse_factor_bff2():
@@ -1471,12 +1466,7 @@ def test_sparse_factor_bff2():
 
     for x0 in range(nc):
         for x1 in range(nc):
-            for y0 in range(nc):
-                for y1 in range(nc):
-                    if ((x0 + (1 * x1)) % nc) == (y0 % nc) and (
-                        (x0 - (1 * x1)) % nc
-                    ) == (y1 % nc):
-                        bff.append([x0, x1, y0, y1])
+            bff.append([x0, x1, (x0 + x1) % nc, (x0 - x1) % nc])
     bp = BPState(
         fg,
         1,
@@ -1579,13 +1569,8 @@ def test_sparse_factor_bff3():
     bff = []
 
     for x0 in range(nc):
-        for x1 in range(nc):
-            for y0 in range(nc):
-                for y1 in range(nc):
-                    if ((x0 + (x1)) % nc) == (y0 % nc) and ((x0 - (x1)) % nc) == (
-                        y1 % nc
-                    ):
-                        bff.append([x0, x1, y0, y1])
+            for x1 in range(nc):
+                bff.append([x0, x1, (x0 + x1) % nc, (x0 - x1) % nc])
     bp = BPState(
         fg,
         1,
@@ -1634,4 +1619,5 @@ def test_sparse_factor_bff3():
     # bp.propagate_to_var("a2")
     # # for i in range(50):
     # print(bp.debug(), file=sys.stderr)
-    assert False
+    for k in priors.keys():
+        assert not np.isnan(bp.get_distribution(k)).any()

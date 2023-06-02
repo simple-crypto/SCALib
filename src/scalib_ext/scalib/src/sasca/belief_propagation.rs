@@ -631,13 +631,12 @@ fn factor_add<'a>(
                         plans,
                         negate,
                     );
-
                     if acc_fft_init {
                         acc_fft *= &fft_tmp;
+                    } else {
+                        acc_fft.assign(&fft_tmp);
+                        acc_fft_init = true;
                     }
-                } else {
-                    acc_fft.assign(&fft_tmp);
-                    acc_fft_init = true;
                 }
                 if clear_incoming {
                     belief_from_var[*e].reset();
@@ -647,7 +646,6 @@ fn factor_add<'a>(
         let mut acc = uniform_template.clone();
         let mut fft_scratch = plans.c2r.make_scratch_vec();
         acc.ifft(acc_fft.view_mut(), fft_scratch.as_mut_slice(), plans, false);
-
         acc.regularize();
         let mut res = vec![uniform_template; dest.len()];
         res[dest.iter().position(|v| v == v_dest).unwrap()] = acc;
