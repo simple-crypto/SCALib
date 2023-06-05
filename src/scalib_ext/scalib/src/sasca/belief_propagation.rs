@@ -786,7 +786,123 @@ fn factor_lookup<'a>(
         res
     })
 }
+fn gen_factor_single_sparse(
+    gen_factor_inner: &ndarray::Array2<ClassVal>,
+    factor: &Factor,
+    nmulti: usize,
+    belief_from_var: &mut EdgeSlice<Distribution>,
+    public_values: &[PublicValue],
+    mut tdest: ndarray::ArrayViewMut2<f64>,
+    dest_idx: usize,
+) {
+    let fg::FactorKind::GenFactor { operands, .. } = &factor.kind else { unreachable!() };
+    for trace_idx in 0..nmulti {
+        eprintln!("Trace idx: {}, dest_idx {}", trace_idx, dest_idx);
+        let mut pubs: Vec<(ClassVal, usize)> = Vec::new();
+        let mut vars: Vec<(&[f64], usize)> = Vec::new();
 
+        for (col_idx, (col_type, _)) in operands
+            .iter()
+            .zip(gen_factor_inner.axis_iter(ndarray::Axis(1)))
+            .enumerate()
+        {
+            dbg!(col_idx);
+            if col_idx != dest_idx {
+                match col_type {
+                    fg::GenFactorOperand::Var(_, _) => {
+                        let distr = &belief_from_var[factor.edges[col_idx]];
+                        if let Some(distr) = distr.value() {
+                            vars.push((
+                                distr
+                                    .slice_move(s![trace_idx, ..])
+                                    .to_slice()
+                                    .expect("Distr is not contiguous"),
+                                col_idx,
+                            ))
+                        }
+                    }
+                    fg::GenFactorOperand::Pub(class_val) => {
+                        let pub_val = public_values[factor.publics[*class_val].0].get(0);
+                        pubs.push((pub_val, col_idx));
+                    }
+                }
+            }
+        }
+        dbg!(&vars);
+        for row in gen_factor_inner.outer_iter() {
+            let mut res: f64 = 1.0;
+            for (belief, col_idx) in vars.iter() {
+                res *= belief[row[*col_idx] as usize];
+                dbg!(res);
+            }
+            for (class_val, col_idx) in pubs.iter() {
+                if *class_val != row[*col_idx] {
+                    res = 0.0;
+                }
+            }
+            tdest[[trace_idx, row[dest_idx] as usize]] += res;
+        }
+        dbg!(&tdest);
+        // for (op, val) in operands.iter() {
+        //     dbg!((op, val));
+        // }
+    }
+    // let Vec<
+    // for trace_idx in 0..nmulti {
+    //     let res = 1.0;
+
+    //     for op_values in gen_factor_inner.outer_iter() {
+    //         let mut res = ndarray::Array1::ones((nmulti,));
+    //         for (op_idx, (op, val)) in operands.iter().zip(op_values.iter()).enumerate()
+    //         {
+    //             match op {
+    //                 fg::GenFactorOperand::Var(var_idx, neg) => {
+    //                     let distr = &belief_from_var[factor.edges[*var_idx]];
+    //                     // For uniform, we implicitly multiply by 1.0
+    //                     if let Some(distr) = distr.value() {
+    //                         res *= &distr.slice(s![trace_idx *val as usize]);
+    //                     }
+    //                 }
+    //                 fg::GenFactorOperand::Pub(pub_idx) => {
+    //                     let mut pub_val = &public_values[factor.publics[*pub_idx].0];
+    //                     if factor.publics[*pub_idx].1 {
+    //                         todo!();
+    //                     } else {
+    //                         match pub_val {
+    //                             PublicValue::Single(class_val) => {
+    //                                 if *class_val != *val {
+    //                                     res.fill(0.0);
+    //                                 }
+    //                             }
+    //                             PublicValue::Multi(class_val) => {
+    //                                 for i in 0..nmulti {
+    //                                     if class_val[i] != *val {
+    //                                         res[i] = 0.0;
+    //                                     }
+    //                                 }
+    //                             }
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
+    // }
+    // for trace_idx in 0..nmulti {
+    //     let mut res = 1.0;
+    //     for op_values in gen_factor_inner.outer_iter() {
+    //         for (op, val) in operands.iter().zip(op_values.iter()) {
+    //             match op {
+    //                 fg::GenFactorOperand::Var(var_idx, neg) => {
+    //                     let distr = &belief_from_var[factor.edges[*var_idx]];
+    //                     if let Some(distr) = distr.value() {
+    //                         res *= &distr[[trace_idx, *val as usize]];
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
+}
 fn factor_gen_factor<'a>(
     factor: &'a Factor,
     belief_from_var: &'a mut EdgeSlice<Distribution>,
@@ -810,44 +926,15 @@ fn factor_gen_factor<'a>(
             match gen_factor {
                 GenFactor::Single(GenFactorInner::SparseFunctional(gen_factor_inner)) => {
                     // let gen_factor_inner = gen_factor_inner.to_owned();
-                    for op_values in gen_factor_inner.outer_iter() {
-                        let mut res = ndarray::Array1::ones((nmulti,));
-                        for (op_idx, (op, val)) in operands.iter().zip(op_values.iter()).enumerate()
-                        {
-                            match op {
-                                fg::GenFactorOperand::Var(var_idx, neg) => {
-                                    let distr = &belief_from_var[factor.edges[*var_idx]];
-                                    // For uniform, we implicitly multiply by 1.0
-                                    if let Some(distr) = distr.value() {
-                                        res *= &distr.slice(s![.., *val as usize]);
-                                    }
-                                }
-                                fg::GenFactorOperand::Pub(pub_idx) => {
-                                    let mut pub_val = &public_values[factor.publics[*pub_idx].0];
-                                    if factor.publics[*pub_idx].1 {
-                                        todo!();
-                                    } else {
-                                        match pub_val {
-                                            PublicValue::Single(class_val) => {
-                                                if *class_val != *val {
-                                                    res.fill(0.0);
-                                                }
-                                            }
-                                            PublicValue::Multi(class_val) => {
-                                                for i in 0..nmulti {
-                                                    if class_val[i] != *val {
-                                                        res[i] = 0.0;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        let mut tmp = tdest.slice_mut(s![.., op_values[dest_idx] as usize]);
-                        tmp += &res;
-                    }
+                    gen_factor_single_sparse(
+                        gen_factor_inner,
+                        factor,
+                        nmulti,
+                        belief_from_var,
+                        public_values,
+                        tdest,
+                        dest_idx,
+                    );
                 }
                 GenFactor::Single(GenFactorInner::Dense(gen_factor_inner)) => {
                     todo!();

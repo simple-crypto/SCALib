@@ -1374,8 +1374,16 @@ def test_sparse_factor_xor():
     VAR MULTI c
     GENERIC SINGLE f
     PROPERTY F0: f(a,b,c)"""
+
+    graph2 = """NC 2
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    PROPERTY F0: c = a ^ b"""
     fg = FactorGraph(graph)
+    fg2 = FactorGraph(graph2)
     xor = np.zeros((4, 3), dtype=np.uint32)
+    n = 4
     xor[1, 1] = 1
     xor[1, 2] = 1
     xor[2, 0] = 1
@@ -1384,17 +1392,21 @@ def test_sparse_factor_xor():
     xor[3, 1] = 1
     bp = BPState(
         fg,
-        1,
+        n,
         gen_factors={"f": GenFactor.sparse_functional(xor)},
     )
-    bp.set_evidence("a", np.array([[0.0, 1.0]]))
-    bp.set_evidence("b", np.array([[1.0, 0.0]]))
+    bp2 = BPState(fg2, n)
+    distr_a = make_distri(2, n)
+    distr_b = make_distri(2, n)
+    bp.set_evidence("a", distr_a)
+    bp.set_evidence("b", distr_b)
+    bp2.set_evidence("a", distr_a)
+    bp2.set_evidence("b", distr_b)
 
-    for i in range(50):
-        print(f"Iteration {i}")
-        bp.bp_loopy(1, False)
-        #  assert np.allclose(bp.get_distribution("c"), [0.0, 1.0])
-        assert not np.isnan(bp.get_distribution("c")).any()
+    bp.bp_loopy(10, False)
+    bp2.bp_loopy(10, False)
+    assert not np.isnan(bp.get_distribution("c")).any()
+    assert np.allclose(bp.get_distribution("c"), bp2.get_distribution("c"))
 
 
 # def test_sparse_factor_bff():
@@ -1569,8 +1581,8 @@ def test_sparse_factor_bff3():
     bff = []
 
     for x0 in range(nc):
-            for x1 in range(nc):
-                bff.append([x0, x1, (x0 + x1) % nc, (x0 - x1) % nc])
+        for x1 in range(nc):
+            bff.append([x0, x1, (x0 + x1) % nc, (x0 - x1) % nc])
     bp = BPState(
         fg,
         1,
