@@ -797,7 +797,6 @@ fn gen_factor_single_sparse(
 ) {
     let fg::FactorKind::GenFactor { operands, .. } = &factor.kind else { unreachable!() };
     for trace_idx in 0..nmulti {
-        eprintln!("Trace idx: {}, dest_idx {}", trace_idx, dest_idx);
         let mut pubs: Vec<(ClassVal, usize)> = Vec::new();
         let mut vars: Vec<(&[f64], usize)> = Vec::new();
 
@@ -806,7 +805,6 @@ fn gen_factor_single_sparse(
             .zip(gen_factor_inner.axis_iter(ndarray::Axis(1)))
             .enumerate()
         {
-            dbg!(col_idx);
             if col_idx != dest_idx {
                 match col_type {
                     fg::GenFactorOperand::Var(_, _) => {
@@ -828,12 +826,10 @@ fn gen_factor_single_sparse(
                 }
             }
         }
-        dbg!(&vars);
         for row in gen_factor_inner.outer_iter() {
             let mut res: f64 = 1.0;
             for (belief, col_idx) in vars.iter() {
                 res *= belief[row[*col_idx] as usize];
-                dbg!(res);
             }
             for (class_val, col_idx) in pubs.iter() {
                 if *class_val != row[*col_idx] {
@@ -842,7 +838,6 @@ fn gen_factor_single_sparse(
             }
             tdest[[trace_idx, row[dest_idx] as usize]] += res;
         }
-        dbg!(&tdest);
         // for (op, val) in operands.iter() {
         //     dbg!((op, val));
         // }
