@@ -786,30 +786,32 @@ fn factor_lookup<'a>(
     })
 }
 
-// fn compute_dest(
-//     gen_factor_inner: &ndarray::Array2<ClassVal>,
-//     vars: &[(&[f64], usize)],
-//     pubs: &[(ClassVal, usize)],
-//     dest_idx: usize,
-//     trace_idx: usize,
-//     tdest: &mut ndarray::ArrayViewMut2<f64>,
-// ) {
-//     for row in gen_factor_inner.outer_iter() {
-//         let row = row.to_slice().unwrap();
-//         let mut res: f64 = 1.0;
-//         for (belief, col_idx) in vars.iter() {
-//             unsafe {
-//                 res *= belief.get_unchecked(*row.get_unchecked(*col_idx) as usize);
-//             }
-//         }
-//         for (class_val, col_idx) in pubs.iter() {
-//             if *class_val != row[*col_idx] {
-//                 res = 0.0;
-//             }
-//         }
-//         tdest[[trace_idx, row[dest_idx] as usize]] += res;
-//     }
-// }
+fn compute_dest(
+    gen_factor_inner: &ndarray::Array2<ClassVal>,
+    vars: &[(&[f64], usize)],
+    pubs: &[(ClassVal, usize)],
+    dest_idx: usize,
+    tdest: &mut [f64],
+) {
+    for row in gen_factor_inner.outer_iter() {
+        let row = row.to_slice().unwrap();
+        let mut res: f64 = 1.0;
+        for (belief, col_idx) in vars.iter() {
+            unsafe {
+                res *= belief.get_unchecked(*row.get_unchecked(*col_idx) as usize);
+            }
+        }
+        for (class_val, col_idx) in pubs.iter() {
+            if *class_val != row[*col_idx] {
+                res = 0.0;
+            }
+        }
+        unsafe {
+            let loc = tdest.get_unchecked_mut(*row.get_unchecked(dest_idx) as usize);
+            *loc += res;
+        }
+    }
+}
 fn gen_factor_single_sparse(
     gen_factor_inner: &ndarray::Array2<ClassVal>,
     factor: &Factor,
@@ -823,7 +825,8 @@ fn gen_factor_single_sparse(
     for trace_idx in 0..nmulti {
         let mut pubs: Vec<(ClassVal, usize)> = Vec::new();
         let mut vars: Vec<(&[f64], usize)> = Vec::new();
-
+        let mut tmp_slice = tdest.slice_mut(s![trace_idx, ..]);
+        let tdest_slice = tmp_slice.as_slice_mut().unwrap();
         for (col_idx, (col_type, _)) in operands
             .iter()
             .zip(gen_factor_inner.axis_iter(ndarray::Axis(1)))
@@ -850,22 +853,30 @@ fn gen_factor_single_sparse(
                 }
             }
         }
-        for row in gen_factor_inner.outer_iter() {
-            let row = row.to_slice().unwrap();
-            let mut res: f64 = 1.0;
-            for (belief, col_idx) in vars.iter() {
-                unsafe {
-                    res *= belief.get_unchecked(*row.get_unchecked(*col_idx) as usize);
-                }
-            }
-            for (class_val, col_idx) in pubs.iter() {
-                if *class_val != row[*col_idx] {
-                    res = 0.0;
-                }
-            }
-            tdest[[trace_idx, row[dest_idx] as usize]] += res;
-        }
+
+        compute_dest(
+            gen_factor_inner,
+            vars.as_slice(),
+            pubs.as_slice(),
+            dest_idx,
+            tdest_slice,
+        );
+        // for row in gen_factor_inner.outer_iter() {
+        //     let row = row.to_slice().unwrap();
+        //     let mut res: f64 = 1.0;
+        //     for (belief, col_idx) in vars.iter() {
+        //         unsafe {
+        //             res *= belief.get_unchecked(*row.get_unchecked(*col_idx) as usize);
+        //         }
+        //     }
+        //     for (class_val, col_idx) in pubs.iter() {
+        //         if *class_val != row[*col_idx] {
+        //             res = 0.0;
+        //         }
+        //     }
+        //     tdest[[trace_idx, row[dest_idx] as usize]] += res;
     }
+    //}
 }
 // for row in gen_factor_inner.outer_iter() {
 //     let mut res: f64 = 1.0;
