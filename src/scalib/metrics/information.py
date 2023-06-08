@@ -9,8 +9,11 @@ from scalib.modeling import RLDAClassifier
 
 
 class RLDAInformationEstimator:
-    r"""Computes perceived information (PI) or training information [2]_ (TI)  bounds
-    of a RLDA model for a variable.
+    r"""Amount of information that can be extracted from leakage with a RLDA model.
+
+    This class can be used to compute Perceived Information (PI) or Training
+    Information (TI) :footcite:p:`InfoBounds` bounds of a RLDA model
+    :footcite:p:`RLDA` for a variable.
 
     It estimates the information using
 
@@ -34,7 +37,8 @@ class RLDAInformationEstimator:
     The estimator is further subject some variance due to the sampling of the
     validation set. The estimated standard deviation can be obtained with :meth:`get_deviation`.
 
-    Example usage:
+    Examples
+    --------
 
     >>> from scalib.modeling import RLDAClassifier
     >>> from scalib.metrics import RLDAInformationEstimator
@@ -51,15 +55,15 @@ class RLDAInformationEstimator:
     >>> it.fit_u(traces_test, labels_test)
     >>> pi_l,pi_u = it.get_information()
 
-    See :meth:`scalib.modeling.RLDAClassifier.get_clustered_model()` on how to set its parameters.
+    See Also
+    --------
 
+    scalib.modeling.RLDAClassifier.get_clustered_model: Clustered model to use with ``RLDAInformationEstimator``.
 
-    Notes
-    -----
-    .. [1] "Efficient Regression-Based Linear Discriminant Analysis for Side-Channel Security Evaluations",
-        G. Cassiers, H. Devillez, F. Standaert, B. Udvarhelyi, TCHES 2023 - Issue 3.
-    .. [2] "Information Bounds and Convergence Rates for Side-Channel Security Evaluators",
-        L. Masure, G. Cassiers, J. Hendrickx, F. Standaert, TCHES 2023 - Issue 3.
+    References
+    ----------
+
+    .. footbibliography::
     """
 
     def __init__(self, model: RLDAClassifier.ClusteredModel, max_popped_classes: int):
@@ -69,7 +73,7 @@ class RLDAInformationEstimator:
         model
             The clustered model, it is obtained by calling `get_clustered_model()` on an RLDA object.
         max_popped_classes
-            Number of classes that are calculated without using the associated cluster. Corresponds to parameter :math:`\zeta` in [1]_.
+            Number of classes that are calculated without using the associated cluster. Corresponds to parameter :math:`\zeta` in :footcite:p:`RLDA`.
         """
         self._inner = _scalib_ext.ItEstimator(model._inner, max_popped_classes)
 

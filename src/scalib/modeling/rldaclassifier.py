@@ -6,8 +6,11 @@ from scalib.config import get_config
 
 
 class RLDAClassifier:
-    r"""Models the leakage :math:`\mathbf{l}` with :math:`n_s` dimensions using
-    the regression based linear discriminant analysis classifier (RLDA). [1]_
+    r"""Regression-based Linear Discriminant Analysis.
+
+    Models the leakage using a regression-based linear discriminant analysis
+    (RLDA) classifier :footcite:p:`RLDA`, which can efficiently handle long
+    traces and large number of classes.
 
     In a nutshell, this model performs LDA with the class means modelled as
     linear regression based on the :math:`n_b` bits of the class value.
@@ -37,6 +40,9 @@ class RLDAClassifier:
     :class:`RLDAClassifier` provides the probability for each of the :math:`2^{n_b}`
     classes with :meth:`predict_proba`.
 
+    Examples
+    --------
+
     >>> from scalib.modeling import RLDAClassifier
     >>> import numpy as np
     >>> traces_model = np.random.randint(0,256,(5000,10),dtype=np.int16)
@@ -47,10 +53,10 @@ class RLDAClassifier:
     >>> traces_test = np.random.randint(0,256,(5000,10),dtype=np.int16)
     >>> prs = rlda.predict_proba(traces_test, 0)
 
-    Notes
-    -----
-    .. [1] "Efficient Regression-Based Linear Discriminant Analysis for Side-Channel Security Evaluations",
-        G. Cassiers, H. Devillez, F. Standaert, B. Udvarhelyi, TCHES 2023 - Issue 3.
+    References
+    ----------
+
+    .. footbibliography::
     """
 
     def __init__(self, nb: int, ns: int, nv: int, p: int):
