@@ -5,12 +5,15 @@ Changelog
 Not released
 ------------
 
+v0.5.6 (2023/06/08)
+-------------------
+
+* Add ``scalib.modeling.RLDAClassifier`` and ``scalib.metrics.RLDAInformationEstimator``.
 * Fix build dependences and run build in an isolated environment.
 
 v0.5.5 (2023/05/30)
 -------------------
 
-* Add ``scalib.modeling.RLDAClassifier`` and ``scalib.metrics.RLDAInformationEstimator``.
 * Fix ``Distribution`` size bug in belief propagation computation (#102).
 * Do not include debug symbols in release builds (makes wheel much smaller).
 * ``Ttest``: do not crash on non-contiguous/fortran-order arrays
