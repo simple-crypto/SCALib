@@ -58,8 +58,13 @@ Local build
 To get **best performance**, you want to build locally (this will optimize
 SCALib for your CPU).
 
-**Depdendencies:** You need a C/C++ compiler and the latest stable
-release of the `rust toolchain <https://rustup.rs/>`_.
+**Depdendencies:**
+
+- ``python >= 3.8``,
+- the python ``build`` module (`available on PyPI <https://pypi.org/project/build>`__),
+- a C/C++ compiler for your platform,
+- ``clang`` (version 5.0 or later),
+- the latest stable release of the `rust toolchain <https://rustup.rs/>`_.
 
 To install from source:
 
@@ -69,6 +74,7 @@ To install from source:
     cd SCALib
     pip install .
 
+See `CONTRIBUTING.rst <CONTRIBUTING.rst>`__ for advanced build configuration.
 
 Usage
 =====
