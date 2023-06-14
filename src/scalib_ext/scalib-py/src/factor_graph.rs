@@ -388,6 +388,22 @@ impl BPState {
             Ok(())
         })
     }
+    pub fn propagate_factor_to_var(
+        &mut self,
+        py: Python,
+        factor: &str,
+        var: &str,
+        clear_beliefs: bool,
+        config: crate::ConfigWrapper,
+    ) -> PyResult<()> {
+        config.on_worker(py, |_| {
+            let factor_id = self.get_factor(factor)?;
+            let dest = [self.get_var(var)?];
+            self.get_inner_mut()
+                .propagate_factor(factor_id, &dest, clear_beliefs);
+            Ok(())
+        })
+    }
     pub fn set_belief_from_var(
         &mut self,
         py: Python,

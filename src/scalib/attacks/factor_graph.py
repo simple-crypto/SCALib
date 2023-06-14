@@ -419,6 +419,14 @@ class BPState:
         """
         return self._inner.propagate_var(var, get_config(), alpha, clear_beliefs)
 
+    def propagate_factor_to_var(
+        self, factor: str, var: str, clear_beliefs: bool = True
+    ):
+        """TODO"""
+        return self._inner.propagate_factor_to_var(
+            factor, var, clear_beliefs, get_config()
+        )
+
     def propagate_factor(self, factor: str):
         """Run belief propagation on the given factor.
 

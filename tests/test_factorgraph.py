@@ -1633,3 +1633,40 @@ def test_sparse_factor_bff3():
     # print(bp.debug(), file=sys.stderr)
     for k in priors.keys():
         assert not np.isnan(bp.get_distribution(k)).any()
+
+
+def test_propagate_factor_to_var():
+    nc = 16
+    graph = f"""NC 16
+    TABLE SUB = [0, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+    VAR MULTI x0
+    VAR MULTI x1
+    VAR MULTI ix1
+    VAR MULTI a0
+    VAR MULTI a1
+    PROPERTY F0: a0 = x0 + x1
+    PROPERTY F1: ix1 = SUB[x1]
+    PROPERTY F2: a1 = x0 + ix1 """
+
+    fg = FactorGraph(graph)
+
+    bp = BPState(
+        fg,
+        1,
+    )
+    vars = ["x0", "x1", "ix1", "a0", "a1"]
+    bp.set_evidence("x0", make_distri(nc, 1))
+    bp.set_evidence("x1", make_distri(nc, 1))
+    for v in vars:
+        bp.propagate_var(v, clear_beliefs=False)
+
+    for f in fg.factors():
+        for v in fg._inner.factor_scope(f):
+            bp.propagate_from_var(v, f)
+
+    assert bp.get_belief_to_var("a0", "F0") is None
+    assert bp.get_distribution("a0") is None
+    bp.propagate_factor_to_var("F0", "a0", clear_beliefs=False)
+    assert bp.get_belief_to_var("a0", "F0") is not None
+    bp.propagate_to_var("a0", clear_evidence=False)
+    assert bp.get_distribution("a0") is not None
