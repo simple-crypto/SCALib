@@ -1,5 +1,5 @@
 r"""
-The Student's :math:`t`-test can be used to highlight a difference in the means
+The Welch's :math:`t`-test can be used to highlight a difference in the means
 of two distributions. To do so, a `t` statistic is derived following the
 expression:
 
