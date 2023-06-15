@@ -10,7 +10,8 @@ Dependencies
 
 The minimum dependencies for building SCALib are
 
-- A C/C++ compiler.
+- A C/C++ compiler for your platform.
+- ``clang`` (version 5.0 or later).
 - The latest stable release of the `rust toolchain <https://rustup.rs/>`_.
 - Python (see ``setup.cfg`` for supported versions).
 - The PyPI :code:`build` package.

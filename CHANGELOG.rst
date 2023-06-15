@@ -5,6 +5,10 @@ Changelog
 Not released
 ------------
 
+v0.5.6 (2023/06/08)
+-------------------
+
+* Add ``scalib.modeling.RLDAClassifier`` and ``scalib.metrics.RLDAInformationEstimator``.
 * Fix build dependences and run build in an isolated environment.
 
 v0.5.5 (2023/05/30)
@@ -154,7 +158,7 @@ v0.1.0 (2021/04/16)
 -------------------
 
 * Initial release, with the following features:
-  * LDA and Gaussian templates modelling
+  * LDA and Gaussian templates modeling
   * SNR
   * T-test any order (for TLVA)
   * Soft Analytical Side-Channel Attack (SASCA)
