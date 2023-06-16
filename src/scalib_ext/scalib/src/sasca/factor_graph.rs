@@ -75,6 +75,30 @@ pub(super) enum GenFactorOperand {
     Pub(usize),
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(super) enum HardCodedFactorKind {
+    /// _BUTTERFLY(a, b, c, d): c = a+b, d = a-b
+    Butterfly,
+}
+
+impl TryFrom<&str> for HardCodedFactorKind {
+    type Error = ();
+    fn try_from(x: &str) -> Result<Self, Self::Error> {
+        match x {
+            "_BUTTERFLY" => Ok(Self::Butterfly),
+            _ => Err(()),
+        }
+    }
+}
+
+impl HardCodedFactorKind {
+    fn n_ops(self) -> usize {
+        match self {
+            Self::Butterfly => 4,
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) enum FactorKind {
     Assign {
@@ -84,6 +108,10 @@ pub(super) enum FactorKind {
     },
     GenFactor {
         id: GenFactorId,
+        operands: Vec<GenFactorOperand>,
+    },
+    HardCodedFactor {
+        kind: HardCodedFactorKind,
         operands: Vec<GenFactorOperand>,
     },
 }
@@ -179,6 +207,28 @@ impl PublicValue {
         match self {
             PublicValue::Single(x) => PublicValue::Single(f(*x)),
             PublicValue::Multi(x) => PublicValue::Multi(x.iter().cloned().map(f).collect()),
+        }
+    }
+    fn merge(self, other: &PublicValue, f: impl Fn(ClassVal, ClassVal) -> ClassVal) -> Self {
+        match (self, other) {
+            (PublicValue::Single(c1), PublicValue::Single(c2)) => {
+                PublicValue::Single(f(c1, *c2))
+            }
+            (PublicValue::Single(c1), PublicValue::Multi(c2)) => {
+                PublicValue::Multi(c2.iter().map(|c2| f(c1, *c2)).collect())
+            }
+            (PublicValue::Multi(mut c1), PublicValue::Single(c2)) => {
+                for c1 in c1.iter_mut() {
+                    *c1 = f(*c1, *c2);
+                }
+                PublicValue::Multi(c1)
+            }
+            (PublicValue::Multi(mut c1), PublicValue::Multi(c2)) => {
+                for (c1, c2) in c1.iter_mut().zip(c2.iter()) {
+                    *c1 = f(*c1, *c2);
+                }
+                PublicValue::Multi(c1)
+            }
         }
     }
 }
@@ -330,6 +380,29 @@ impl FactorGraph {
                     // Let us not do any verification for know (code block
                     // intentionally left empty).
                 }
+                FactorKind::HardCodedFactor { kind: HardCodedFactorKind::Butterfly, operands } => {
+                    let op = |id: usize| -> &PublicValue {
+                        match operands[id] {
+                            GenFactorOperand::Var(edge_index, false) => &var_assignments[*factor.edges.get_index(edge_index).unwrap().0],
+                            GenFactorOperand::Var(_, true) => panic!("non-supported negated operands on generic factors"),
+                            GenFactorOperand::Pub(pub_index) => &public_values[pub_index],
+                        }
+                    };
+                    let a = op(0);
+                    let b = op(1);
+                    let c = op(2);
+                    let d = op(3);
+                    let nc = self.nc as u32;
+                    let exp_c = a.clone().merge(b, |x, y| (x+y) % nc);
+                    let exp_d = a.clone().merge(b, |x, y| (x+(nc-y)) % nc);
+                    for (res, expected_res) in [(c, exp_c), (d, exp_d)] {
+                        return Err(FGError::CheckFail(
+                            factor_name.clone(),
+                            expected_res,
+                            res.clone(),
+                        ));
+                    }
+                }
             }
         }
         Ok(())
@@ -348,7 +421,9 @@ impl FactorGraph {
                         expr: ExprFactor::LOOKUP { .. },
                         ..
                     }
-                    | FactorKind::GenFactor { .. } => PublicValue::Single(0),
+                    | FactorKind::GenFactor { .. }
+                    | FactorKind::HardCodedFactor { .. }
+                    => PublicValue::Single(0),
                     FactorKind::Assign { expr, .. } => self.merge_pubs(
                         expr,
                         factor
@@ -373,26 +448,7 @@ impl FactorGraph {
             let f = |x: ClassVal, y: ClassVal| {
                 expr.merge(x, if nv2 { self.not(y) } else { y }, self.nc)
             };
-            match (p1, p2) {
-                (PublicValue::Single(c1), PublicValue::Single(c2)) => {
-                    PublicValue::Single(f(c1, *c2))
-                }
-                (PublicValue::Single(c1), PublicValue::Multi(c2)) => {
-                    PublicValue::Multi(c2.iter().map(|c2| f(c1, *c2)).collect())
-                }
-                (PublicValue::Multi(mut c1), PublicValue::Single(c2)) => {
-                    for c1 in c1.iter_mut() {
-                        *c1 = f(*c1, *c2);
-                    }
-                    PublicValue::Multi(c1)
-                }
-                (PublicValue::Multi(mut c1), PublicValue::Multi(c2)) => {
-                    for (c1, c2) in c1.iter_mut().zip(c2.iter()) {
-                        *c1 = f(*c1, *c2);
-                    }
-                    PublicValue::Multi(c1)
-                }
-            }
+            p1.merge(p2, f)
         };
         pubs.fold(PublicValue::Single(expr.neutral(self.nc)), merge_inner)
     }

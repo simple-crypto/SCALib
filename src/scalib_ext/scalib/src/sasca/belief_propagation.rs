@@ -5,6 +5,7 @@ use super::factor_graph as fg;
 use super::factor_graph::{
     EdgeId, EdgeSlice, EdgeVec, ExprFactor, Factor, FactorGraph, FactorId, FactorKind, FactorVec,
     Node, PublicValue, Table, VarId, VarVec,
+    HardCodedFactorKind
 };
 use super::{ClassVal, Distribution};
 use ndarray::s;
@@ -276,6 +277,14 @@ impl BPState {
                 prop_factor!(
                     factor_gen_factor,
                     gen_factor,
+                    self.public_values.as_slice(),
+                    self.nmulti as usize,
+                    self.graph.nc
+                );
+            }
+            FactorKind::HardCodedFactor { kind: HardCodedFactorKind::Butterfly, .. } => {
+                prop_factor!(
+                    factor_butterfly,
                     self.public_values.as_slice(),
                     self.nmulti as usize,
                     self.graph.nc
@@ -1128,6 +1137,83 @@ fn factor_gen_factor<'a>(
             //         }
             //     }
             // }
+            distr
+        })
+        .collect();
+    if clear_incoming {
+        for e in factor.edges.values() {
+            belief_from_var[*e].reset();
+        }
+    }
+    res.into_iter()
+}
+
+fn factor_butterfly<'a>(
+    factor: &'a Factor,
+    belief_from_var: &'a mut EdgeSlice<Distribution>,
+    dest: &'a [VarId],
+    clear_incoming: bool,
+    public_values: &'a [PublicValue],
+    nmulti: usize,
+    nc: usize,
+) -> impl Iterator<Item = Distribution> + 'a {
+    let fg::FactorKind::HardCodedFactor{ operands, .. } = &factor.kind else { unreachable!() };
+    // We only handle the case where All factors are var, no public
+    assert!(operands.iter().enumerate().all(|(i, op)| matches!(op, fg::GenFactorOperand::Var(i, false))));
+    let res: Vec<Distribution> = dest
+        .iter()
+        .map(|dest| {
+            let dest_idx = factor.edges.get_index_of(dest).unwrap();
+            let mut distr = belief_from_var[factor.edges[dest_idx]].clone();
+            distr.ensure_full();
+            let mut tdest = distr.value_mut().unwrap();
+            tdest.fill(0.0);
+
+
+            for trace_idx in 0..nmulti {
+                let mut tmp_slice = tdest.slice_mut(s![trace_idx, ..]);
+                let tdest_slice = tmp_slice.as_slice_mut().unwrap();
+                for i in 0..4 {
+                    belief_from_var[factor.edges[i]].ensure_full()
+                }
+                let beliefs = [
+                    belief_from_var[factor.edges[0]].value().unwrap().slice_move(s![trace_idx,..]).to_slice().unwrap(),
+                    belief_from_var[factor.edges[1]].value().unwrap().slice_move(s![trace_idx,..]).to_slice().unwrap(),
+                    belief_from_var[factor.edges[2]].value().unwrap().slice_move(s![trace_idx,..]).to_slice().unwrap(),
+                    belief_from_var[factor.edges[3]].value().unwrap().slice_move(s![trace_idx,..]).to_slice().unwrap(),
+                ];
+                macro_rules! process {
+                    ($dest:expr, $op0: expr, $op1:expr, $op2:expr) => {
+                        {
+                            let nc = nc as u32;
+                            for a in 0..nc {
+                                for b in 0..nc {
+                                    let c = (a+b) % nc;
+                                    let d = (a+(nc-b)) % nc;
+                                    let v = [a, b, c, d];
+                                    unsafe {
+                                        let res = 
+                                            beliefs[$op0].get_unchecked(v[$op0] as usize)
+                                            * beliefs[$op1].get_unchecked(v[$op1] as usize)
+                                            * beliefs[$op2].get_unchecked(v[$op2] as usize);
+                                        let loc = tdest_slice.get_unchecked_mut(v[$dest] as usize);
+                                        *loc += res;
+                                    }
+                                }
+                            }
+                        }
+                    };
+                }
+                match dest_idx {
+                    0 => process!(0, 1, 2, 3),
+                    1 => process!(1, 0, 2, 3),
+                    2 => process!(2, 1, 0, 3),
+                    3 => process!(3, 1, 2, 0),
+                    _ => unreachable!(),
+                }
+            }
+
+
             distr
         })
         .collect();

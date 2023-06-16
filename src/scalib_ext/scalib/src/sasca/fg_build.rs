@@ -11,6 +11,8 @@ pub enum GraphBuildError {
     MultipleTableDecl(String),
     #[error("Generic {0} declared multiple times.")]
     MultipleGenericDecl(String),
+    #[error("Generic name {0} invalid: names starting with '_' are reserved for hard-coded factors.")]
+    GenericNameHardCoded(String),
     #[error("Variable or public {0} declared multiple times.")]
     MultipleVarDecl(String),
     #[error("Multiple properties with name {0}, property name must be unique.")]
@@ -94,6 +96,9 @@ impl fg::FactorGraph {
         Ok(())
     }
     fn add_generic(&mut self, name: String, multi: bool) -> Result<(), GraphBuildError> {
+        if name.starts_with(&"_") {
+            return Err(GraphBuildError::GenericNameHardCoded(name));
+        }
         if self.gen_factors.contains_key(&name) {
             return Err(GraphBuildError::MultipleGenericDecl(name));
         }
@@ -195,13 +200,21 @@ impl fg::FactorGraph {
                     n_vars += 1;
                 }
             }
-            Ok(fg::FactorKind::GenFactor {
-                id: s
-                    .gen_factors
-                    .get_index_of(gen_factor)
-                    .ok_or_else(|| GraphBuildError::UnknownGenFactor(gen_factor.to_owned()))?,
-                operands,
-            })
+            let factor_kind = if let Ok(hardcoded_kind) = gen_factor.try_into() {
+                fg::FactorKind::HardCodedFactor {
+                    kind: hardcoded_kind,
+                    operands,
+                }
+            } else {
+                fg::FactorKind::GenFactor {
+                    id: s
+                        .gen_factors
+                        .get_index_of(gen_factor)
+                        .ok_or_else(|| GraphBuildError::UnknownGenFactor(gen_factor.to_owned()))?,
+                    operands,
+                }
+            };
+            Ok(factor_kind)
         })
     }
     fn add_graph_edges(&mut self) {
