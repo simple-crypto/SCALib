@@ -32,7 +32,7 @@ fn annotate_cause(err: Option<&(dyn Error + 'static)>, pyerr: &mut PyErr, py: Py
     }
 }
 
-#[pyclass]
+#[pyclass(module = "scalib._scalib_ext")]
 #[derive(Clone)]
 pub struct Config {
     inner: scalib::Config,

@@ -4,7 +4,7 @@ use crate::ScalibError;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
-#[pyclass]
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct LdaAcc {
     inner: scalib::lda::LdaAcc,
 }
@@ -111,7 +111,7 @@ impl LdaAcc {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct LDA {
     inner: scalib::lda::LDA,
 }

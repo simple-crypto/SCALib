@@ -11,7 +11,9 @@ pub enum GraphBuildError {
     MultipleTableDecl(String),
     #[error("Generic {0} declared multiple times.")]
     MultipleGenericDecl(String),
-    #[error("Generic name {0} invalid: names starting with '_' are reserved for hard-coded factors.")]
+    #[error(
+        "Generic name {0} invalid: names starting with '_' are reserved for hard-coded factors."
+    )]
     GenericNameHardCoded(String),
     #[error("Variable or public {0} declared multiple times.")]
     MultipleVarDecl(String),

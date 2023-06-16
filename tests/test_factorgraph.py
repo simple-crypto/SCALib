@@ -1670,3 +1670,73 @@ def test_propagate_factor_to_var():
     assert bp.get_belief_to_var("a0", "F0") is not None
     bp.propagate_to_var("a0", clear_evidence=False)
     assert bp.get_distribution("a0") is not None
+
+
+def test_butterfly_factor():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 241
+    graph = f"""NC {nc}
+            VAR MULTI a0
+            VAR MULTI a1
+            VAR MULTI a2
+            VAR MULTI a3
+            VAR MULTI x0
+            VAR MULTI x1
+            VAR MULTI x2
+            VAR MULTI x3
+            VAR MULTI y0
+            VAR MULTI y1
+            VAR MULTI y2
+            VAR MULTI y3
+            GENERIC SINGLE f
+            PROPERTY F0: f(x0, x1, a0, a1)
+            PROPERTY F1: f(x2, x3, a2, a3)
+            PROPERTY F2: f(a0, a2, y0, y2)
+            PROPERTY F3: f(a1, a3, y1, y3)
+            """
+
+    graph2 = f"""NC {nc}
+            VAR MULTI a0
+            VAR MULTI a1
+            VAR MULTI a2
+            VAR MULTI a3
+            VAR MULTI x0
+            VAR MULTI x1
+            VAR MULTI x2
+            VAR MULTI x3
+            VAR MULTI y0
+            VAR MULTI y1
+            VAR MULTI y2
+            VAR MULTI y3
+            PROPERTY F0: _BUTTERFLY(x0, x1, a0, a1)
+            PROPERTY F1: _BUTTERFLY(x2, x3, a2, a3)
+            PROPERTY F2: _BUTTERFLY(a0, a2, y0, y2)
+            PROPERTY F3: _BUTTERFLY(a1, a3, y1, y3)
+            """
+    fg = FactorGraph(graph)
+    fg2 = FactorGraph(graph2)
+    bff = []
+
+    for x0 in range(nc):
+        for x1 in range(nc):
+            bff.append([x0, x1, (x0 + x1) % nc, (x0 - x1) % nc])
+    bp = BPState(
+        fg,
+        1,
+        gen_factors={"f": GenFactor.sparse_functional(np.array(bff, dtype=np.uint32))},
+    )
+    bp2 = BPState(fg2, 1)
+
+    for v in fg.vars():
+        d = make_distri(nc, 1)
+        bp.set_evidence(v, d)
+        bp2.set_evidence(v, d)
+
+    for i in range(50):
+        bp.bp_loopy(1, False)
+        bp2.bp_loopy(1, False)
+        for v in fg.vars():
+            assert not np.isnan(bp.get_distribution(v)).any()
+            assert not np.isnan(bp2.get_distribution(v)).any()
+            assert np.allclose(bp.get_distribution(v), bp2.get_distribution(v))

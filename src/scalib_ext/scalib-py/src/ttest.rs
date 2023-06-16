@@ -3,7 +3,7 @@
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
-#[pyclass]
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct Ttest {
     inner: scalib::ttest::Ttest,
 }
@@ -46,7 +46,7 @@ impl Ttest {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct MTtest {
     inner: scalib::mttest::MTtest,
 }

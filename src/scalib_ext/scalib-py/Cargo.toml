@@ -33,3 +33,6 @@ path = "../ranklib"
 
 [dependencies.scalib]
 path = "../scalib"
+
+[profile.release]
+debug = true

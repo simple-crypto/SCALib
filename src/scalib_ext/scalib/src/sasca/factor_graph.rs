@@ -211,9 +211,7 @@ impl PublicValue {
     }
     fn merge(self, other: &PublicValue, f: impl Fn(ClassVal, ClassVal) -> ClassVal) -> Self {
         match (self, other) {
-            (PublicValue::Single(c1), PublicValue::Single(c2)) => {
-                PublicValue::Single(f(c1, *c2))
-            }
+            (PublicValue::Single(c1), PublicValue::Single(c2)) => PublicValue::Single(f(c1, *c2)),
             (PublicValue::Single(c1), PublicValue::Multi(c2)) => {
                 PublicValue::Multi(c2.iter().map(|c2| f(c1, *c2)).collect())
             }
@@ -380,11 +378,18 @@ impl FactorGraph {
                     // Let us not do any verification for know (code block
                     // intentionally left empty).
                 }
-                FactorKind::HardCodedFactor { kind: HardCodedFactorKind::Butterfly, operands } => {
+                FactorKind::HardCodedFactor {
+                    kind: HardCodedFactorKind::Butterfly,
+                    operands,
+                } => {
                     let op = |id: usize| -> &PublicValue {
                         match operands[id] {
-                            GenFactorOperand::Var(edge_index, false) => &var_assignments[*factor.edges.get_index(edge_index).unwrap().0],
-                            GenFactorOperand::Var(_, true) => panic!("non-supported negated operands on generic factors"),
+                            GenFactorOperand::Var(edge_index, false) => {
+                                &var_assignments[*factor.edges.get_index(edge_index).unwrap().0]
+                            }
+                            GenFactorOperand::Var(_, true) => {
+                                panic!("non-supported negated operands on generic factors")
+                            }
                             GenFactorOperand::Pub(pub_index) => &public_values[pub_index],
                         }
                     };
@@ -393,8 +398,8 @@ impl FactorGraph {
                     let c = op(2);
                     let d = op(3);
                     let nc = self.nc as u32;
-                    let exp_c = a.clone().merge(b, |x, y| (x+y) % nc);
-                    let exp_d = a.clone().merge(b, |x, y| (x+(nc-y)) % nc);
+                    let exp_c = a.clone().merge(b, |x, y| (x + y) % nc);
+                    let exp_d = a.clone().merge(b, |x, y| (x + (nc - y)) % nc);
                     for (res, expected_res) in [(c, exp_c), (d, exp_d)] {
                         return Err(FGError::CheckFail(
                             factor_name.clone(),
@@ -422,8 +427,7 @@ impl FactorGraph {
                         ..
                     }
                     | FactorKind::GenFactor { .. }
-                    | FactorKind::HardCodedFactor { .. }
-                    => PublicValue::Single(0),
+                    | FactorKind::HardCodedFactor { .. } => PublicValue::Single(0),
                     FactorKind::Assign { expr, .. } => self.merge_pubs(
                         expr,
                         factor
