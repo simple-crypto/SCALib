@@ -1,4 +1,7 @@
-use pyo3::prelude::{pyfunction, PyResult, Python};
+use pyo3::{
+    exceptions::PyRuntimeError,
+    prelude::{pyfunction, PyResult, Python},
+};
 
 #[pyfunction]
 #[pyo3(signature = (costs, key, acc, merge, method, max_nb_bin, config))]
@@ -17,9 +20,7 @@ pub fn rank_accuracy(
         let res = res.rank_accuracy(&costs, &key, acc, merge, max_nb_bin);
         match res {
             Ok(res) => Ok((res.min, res.est, res.max)),
-            Err(s) => {
-                panic!("{}", s);
-            }
+            Err(s) => Err(PyRuntimeError::new_err(s.to_string())),
         }
     })
 }
@@ -40,9 +41,7 @@ pub fn rank_nbin(
         let res = res.rank_nbin(&costs, &key, nb_bin, merge);
         match res {
             Ok(res) => Ok((res.min, res.est, res.max)),
-            Err(s) => {
-                panic!("{}", s);
-            }
+            Err(s) => Err(PyRuntimeError::new_err(s.to_string())),
         }
     })
 }
