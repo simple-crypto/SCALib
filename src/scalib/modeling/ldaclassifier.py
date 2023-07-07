@@ -18,7 +18,7 @@ class LDAClassifier:
     separation.
     Then, a multivariate gaussian template is fitted for each class (using the
     same covariance matrix for all the classes) in the reduced dimensionality
-    space to predict leakage likelihood [1]_.
+    space to predict leakage likelihood :footcite:p:`LDA`.
 
     Let :math:`\mathbf{W}` be the dimensionality reduction matrix of size
     (:math:`p`, :math:`n_s`). The likelihood is
@@ -63,9 +63,10 @@ class LDAClassifier:
     has better performance and numerical properties (at the cost of
     flexibility).
 
-    .. [1] François-Xavier Standaert and Cédric Archambeau, "Using
-       Subspace-Based Template Attacks to Compare and Combine Power and
-       Electromagnetic Information Leakages", CHES 2008: 411-425
+    References
+    ----------
+
+    .. footbibliography::
 
     Parameters
     ----------

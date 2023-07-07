@@ -18,11 +18,12 @@ blis = ["scalib/blis"]
 
 [dependencies]
 rayon = "1.7"
-ndarray = { version = "0.15", features = ["rayon"] }
+ndarray = { version = "0.15", features = ["rayon", "serde"] }
 numpy = "0.18"
 indicatif = "0.17"
 num_cpus = "1.15"
-bincode = "1.3" # Serialization for pickle support
+serde = { version = "1.0" }
+bincode = "1.3.3" # Serialization for pickle support
 
 [dependencies.pyo3]
 version = "0.18"

@@ -5,8 +5,19 @@ Changelog
 Not released
 ------------
 
+v0.5.6 (2023/06/08)
+-------------------
+
+* Add ``scalib.modeling.RLDAClassifier`` and ``scalib.metrics.RLDAInformationEstimator``.
+* Fix build dependences and run build in an isolated environment.
+
+v0.5.5 (2023/05/30)
+-------------------
+
 * Fix ``Distribution`` size bug in belief propagation computation (#102).
 * Do not include debug symbols in release builds (makes wheel much smaller).
+* ``Ttest``: do not crash on non-contiguous/fortran-order arrays
+* Improve examples and README
 
 v0.5.4 (2023/04/26)
 -------------------
@@ -147,7 +158,7 @@ v0.1.0 (2021/04/16)
 -------------------
 
 * Initial release, with the following features:
-  * LDA and Gaussian templates modelling
+  * LDA and Gaussian templates modeling
   * SNR
   * T-test any order (for TLVA)
   * Soft Analytical Side-Channel Attack (SASCA)

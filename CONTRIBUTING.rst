@@ -10,10 +10,11 @@ Dependencies
 
 The minimum dependencies for building SCALib are
 
-- A C/C++ compiler.
+- A C/C++ compiler for your platform.
+- ``clang`` (version 5.0 or later).
 - The latest stable release of the `rust toolchain <https://rustup.rs/>`_.
 - Python (see ``setup.cfg`` for supported versions).
-- :code:`pip`
+- The PyPI :code:`build` package.
 
 Moreover, for development, we use
 
@@ -36,6 +37,8 @@ Build wheels
 
 If you need to get wheels (e.g. to install elsewhere), you can simply
 use ``make wheel_local``, ``make wheel_avx2`` or ``make wheel_portable``.
+(See the content of ``Makefile`` if you cannot use ``make``.)
+The wheels are stored in ``dist/``.
 
 
 Development flow

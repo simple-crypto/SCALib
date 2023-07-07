@@ -3,6 +3,10 @@ from scalib.attacks import SASCAGraph
 import numpy as np
 import os
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*:DeprecationWarning:scalib.attacks.sacagraph"
+)
+
 
 def test_table():
     """
