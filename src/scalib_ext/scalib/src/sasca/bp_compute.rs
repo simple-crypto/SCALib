@@ -264,31 +264,6 @@ impl Distribution {
         return res;
     }
 
-    // Update belief with weight average of new and previous value
-    pub fn update_dampen(
-        &mut self,
-        numerator: &Distribution,
-        denominator: &Distribution,
-        alpha: f64,
-    ) {
-        let mut self_arr = self
-            .value_mut()
-            .expect("update_dampen needs full dist self");
-        let num_arr = numerator
-            .value()
-            .expect("update_dampen needs full dist num");
-        let sigma_s = &self_arr.sum_axis(ndarray::Axis(1));
-
-        if let Some(denom_arr) = denominator.value() {
-            let sigma_nd = (&num_arr / (&denom_arr + MIN_PROBA)).sum_axis(ndarray::Axis(1));
-
-            azip!((index (i, _j), x in &mut self_arr, n in &num_arr, d in &denom_arr) *x = (alpha/sigma_nd[i]) * (n/(d+MIN_PROBA)) + (((1.0 - alpha)/sigma_s[i]) * *x));
-        } else {
-            let sigma_n = (&num_arr).sum_axis(ndarray::Axis(1));
-            azip!((index (i, _j), x in &mut self_arr, n in &num_arr) *x = ((alpha / sigma_n[i]) * (n)) + (((1.0 - alpha) / sigma_s[i]) * (*x)))
-        }
-    }
-
     pub fn dividing_full(&mut self, other: &Distribution) {
         match (&mut self.value, &other.value) {
             (DistrRepr::Full(div), DistrRepr::Full(st)) => {

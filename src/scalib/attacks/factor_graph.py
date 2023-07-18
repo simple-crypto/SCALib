@@ -248,7 +248,6 @@ class BPState:
         self,
         it: int,
         initialize_states: bool,
-        alpha: float = 0.0,
         clear_beliefs: bool = True,
     ):
         """Runs belief propagation algorithm on the current state of the graph.
@@ -273,15 +272,12 @@ class BPState:
         initialize_states:
             Whether to update variable distributions before running the BP iterations.
             Recommended after using :func:`BPState.set_evidence`.
-        alpha:
-            Dampening factor. When set to 0, dampening is disabled, otherwise a new message from a var -> factor is the weighted average of the current and previous message e.g. alpha*m_{v->f} + (1-alpha)*mprev_{v->f}
-            alpha must be in the interval [0.0, 1.0]. Default value is 0.
         clear_beliefs:
             Whether to clear beliefs between vars -> factors. Setting to False can help debugging. Default value is True.
         """
         if initialize_states:
-            self._inner.propagate_all_vars(get_config(), alpha, clear_beliefs)
-        self._inner.propagate_loopy_step(it, get_config(), alpha, clear_beliefs)
+            self._inner.propagate_all_vars(get_config(), clear_beliefs)
+        self._inner.propagate_loopy_step(it, get_config(), clear_beliefs)
 
     def bp_acyclic(
         self,
@@ -392,15 +388,15 @@ class BPState:
         """
         return self._inner.get_belief_from_var(var, factor)
 
-    def propagate_from_var(self, var: str, factor: str, alpha: float = 0.0):
+    def propagate_from_var(self, var: str, factor: str):
         """TODO"""
-        return self._inner.propagate_from_var(var, factor, get_config(), alpha)
+        return self._inner.propagate_from_var(var, factor, get_config())
 
     def propagate_to_var(self, var: str, clear_evidence: bool = False):
         """TODO"""
         return self._inner.propagate_to_var(var, get_config(), clear_evidence)
 
-    def propagate_var(self, var: str, alpha: float = 0.0, clear_beliefs: bool = True):
+    def propagate_var(self, var: str, clear_beliefs: bool = True):
         """Run belief propagation on variable var.
 
         This fetches beliefs from adjacent factors, computes the var
@@ -410,14 +406,11 @@ class BPState:
         ----------
         var : string
             Identifier of the variable.
-        alpha:
-            Dampening factor. When set to 0, dampening is disabled, otherwise a new message from a var -> factor is the weighted average of the current and previous message e.g. alpha*m_{v->f} + (1-alpha)*mprev_{v->f}
-            alpha must be in the interval [0.0, 1.0]. Default value is 0.
         clear_beliefs:
             Whether to clear beliefs between vars -> factors. Setting to False can help debugging. Default value is True.
 
         """
-        return self._inner.propagate_var(var, get_config(), alpha, clear_beliefs)
+        return self._inner.propagate_var(var, get_config(), clear_beliefs)
 
     def propagate_factor_to_var(
         self, factor: str, var: str, clear_beliefs: bool = True
