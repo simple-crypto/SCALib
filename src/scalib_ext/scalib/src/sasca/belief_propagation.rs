@@ -201,7 +201,7 @@ impl BPState {
         // Since inputs should not be too big, we should not have any overflow.
         // Underflow my happen, since probas are lower-bounded by MIN_PROBA**2.
         // This also normalizes the result.
-        self.var_state[var].multiply_reg(distr_iter);
+        self.var_state[var].multiply_norm(distr_iter);
     }
     pub fn propagate_from_var(&mut self, edge: EdgeId) {
         // Dividing here is ok if we ensure that there is no zero element and no
@@ -224,7 +224,8 @@ impl BPState {
             ($f:ident, $($arg:expr),*) => {
                 {
                     let it = $f(factor, &mut self.belief_from_var, dest, clear_incoming, $($arg,)*);
-                    for (distr, dest) in it.zip(dest.iter()) {
+                    for (mut distr, dest) in it.zip(dest.iter()) {
+                        distr.regularize();
                         self.belief_to_var[factor.edges[dest]] = distr;
                     }
                 }
@@ -550,15 +551,17 @@ fn factor_add<'a>(
             .into_iter();
     }
     let mut taken_dest = vec![false; factor.edges.len()];
+    let mut negated_vars = vec![false; factor.edges.len()];
+    negated_vars[0] = true;
     for dest in dest {
         taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
     }
     let mut uniform_iter = factor
         .edges
-        .values()
+        .iter()
         .zip(taken_dest.iter())
-        .enumerate()
-        .filter(|(_, (e, _))| !belief_from_var[**e].is_full());
+        .zip(negated_vars.iter())
+        .filter(|(((_, e), _), _)| !belief_from_var[**e].is_full());
     let uniform_op = uniform_iter.next();
     let uniform_template = belief_from_var[factor.edges[0]].as_uniform();
     let (nmulti, nc) = uniform_template.shape();
@@ -567,7 +570,7 @@ fn factor_add<'a>(
     let mut acc_fft_init = false;
     let mut fft_scratch = plans.r2c.make_scratch_vec();
     let mut fft_input_scratch = plans.r2c.make_input_vec();
-    if let Some((i, (e_dest, t))) = uniform_op {
+    if let Some((((v_dest, e_dest), t), dest_negated)) = uniform_op {
         if !*t || uniform_iter.next().is_some() {
             // At least 2 uniform operands, or single uniform is not in dest,
             // all dest messages are uniform.
@@ -575,13 +578,15 @@ fn factor_add<'a>(
             return vec![uniform_template; dest.len()].into_iter();
         } else {
             // Single uniform op, only compute for that one.
-            for e in factor.edges.values() {
+            for (e_idx, e) in factor.edges.values().enumerate() {
                 if e != e_dest {
+                    let negate = !(dest_negated ^ negated_vars[e_idx]);
                     belief_from_var[*e].fft_to(
                         fft_input_scratch.as_mut_slice(),
                         fft_tmp.view_mut(),
                         fft_scratch.as_mut_slice(),
                         plans,
+                        negate,
                     );
                     if acc_fft_init {
                         acc_fft *= &fft_tmp;
@@ -589,67 +594,99 @@ fn factor_add<'a>(
                         acc_fft.assign(&fft_tmp);
                         acc_fft_init = true;
                     }
-                    if clear_incoming {
-                        belief_from_var[*e].reset();
-                    }
+                }
+                if clear_incoming {
+                    belief_from_var[*e].reset();
                 }
             }
-            let mut acc = uniform_template.clone();
-            let mut fft_scratch = plans.c2r.make_scratch_vec();
-            acc.ifft(acc_fft.view_mut(), fft_scratch.as_mut_slice(), plans);
-            acc.regularize();
-            let mut res = vec![uniform_template; dest.len()];
-            res[i] = acc;
-            return res.into_iter();
         }
+        let mut acc = uniform_template.clone();
+        let mut fft_scratch = plans.c2r.make_scratch_vec();
+        acc.ifft(acc_fft.view_mut(), fft_scratch.as_mut_slice(), plans, false);
+        acc.regularize();
+        let mut res = vec![uniform_template; dest.len()];
+        res[dest.iter().position(|v| v == v_dest).unwrap()] = acc;
+        return res.into_iter();
     } else {
         // Here we have to actually compute.
         // Simply make the product if FFT domain
         // We do take the product of all factors then divide because some factors could be zero.
         let mut dest_fft = Vec::with_capacity(dest.len());
-        for (e, taken) in factor.edges.values().zip(taken_dest.iter()) {
-            let v = if *taken {
+        for (i, (e, taken)) in factor.edges.values().zip(taken_dest.iter()).enumerate() {
+            if *taken {
                 let mut fft_e = ndarray::Array2::zeros((nmulti, nc / 2 + 1));
                 belief_from_var[*e].fft_to(
                     fft_input_scratch.as_mut_slice(),
                     fft_e.view_mut(),
                     fft_scratch.as_mut_slice(),
                     plans,
+                    negated_vars[i],
                 );
+                if negated_vars[i] {
+                    for x in fft_e.iter_mut() {
+                        *x = 1.0 / *x;
+                    }
+                }
                 dest_fft.push(fft_e);
-                dest_fft.last().unwrap()
             } else {
                 belief_from_var[*e].fft_to(
                     fft_input_scratch.as_mut_slice(),
                     fft_tmp.view_mut(),
                     fft_scratch.as_mut_slice(),
                     plans,
+                    negated_vars[i],
                 );
-                &fft_tmp
-            };
-            if acc_fft_init {
-                acc_fft *= v;
-            } else {
-                acc_fft.assign(&v);
-                acc_fft_init = true;
+
+                if acc_fft_init {
+                    if negated_vars[i] {
+                        acc_fft /= &fft_tmp;
+                    } else {
+                        acc_fft *= &fft_tmp;
+                    }
+                } else {
+                    if negated_vars[i] {
+                        for x in fft_tmp.iter_mut() {
+                            *x = 1.0 / *x;
+                        }
+                    }
+                    acc_fft.assign(&fft_tmp);
+                    acc_fft_init = true;
+                }
             }
             if clear_incoming {
                 belief_from_var[*e].reset();
             }
         }
+
         // This could be done in O(l) instead of O(l^2) where l=dest.len() by
         // better caching product computations.
         let mut fft_scratch = plans.c2r.make_scratch_vec();
         return (0..dest.len())
             .map(move |i| {
-                let mut res = acc_fft.clone();
+                let mut res = if acc_fft_init {
+                    acc_fft.clone()
+                } else {
+                    ndarray::Array2::ones(acc_fft.raw_dim())
+                };
+
                 for (j, fft_op) in dest_fft.iter().enumerate() {
                     if j != i {
                         res *= fft_op;
                     }
                 }
+                let idx = factor.edges.get_index_of(&dest[i]).unwrap();
+                if !negated_vars[idx] {
+                    for x in res.iter_mut() {
+                        *x = 1.0 / *x;
+                    }
+                }
                 let mut acc = uniform_template.clone();
-                acc.ifft(res.view_mut(), fft_scratch.as_mut_slice(), plans);
+                acc.ifft(
+                    res.view_mut(),
+                    fft_scratch.as_mut_slice(),
+                    plans,
+                    !negated_vars[idx],
+                );
                 acc.regularize();
                 acc
             })

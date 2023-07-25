@@ -139,11 +139,15 @@ impl Distribution {
         self.multiply_inner(factors, false);
     }
 
-    pub fn multiply_reg<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>) {
+    pub fn multiply_norm<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>) {
         self.multiply_inner(factors, true);
     }
 
-    fn multiply_inner<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>, reg: bool) {
+    fn multiply_inner<'a>(
+        &mut self,
+        factors: impl Iterator<Item = &'a Distribution>,
+        normalize: bool,
+    ) {
         for factor in factors {
             assert_eq!(self.shape.1, factor.shape.1);
             if self.multi & factor.multi {
@@ -166,7 +170,7 @@ impl Distribution {
                         // We therefore compute the maximum at every iteration,
                         // and correct to keep the maximum at 1. at the next
                         // iteration.
-                        if reg {
+                        if normalize {
                             let mut max_proba = 1.0f64;
                             for d in d.axis_iter(ndarray::Axis(0)) {
                                 let norm_factor = 1.0 / max_proba;
@@ -204,7 +208,7 @@ impl Distribution {
             }
             // Now we'll make to sum equal one to avoid underflows or overflows in the long run, and keep the exposed probas nice.
             // Just multiply, don't add anything, underflows are taken care of above.
-            if reg {
+            if normalize {
                 self.normalize();
             }
         }
@@ -233,6 +237,33 @@ impl Distribution {
         );
         return res;
     }
+
+    pub fn divide_norm(state: &Distribution, div: &Distribution) -> Self {
+        let mut res = Self {
+            multi: state.multi | div.multi,
+            shape: (std::cmp::max(state.shape.0, div.shape.0), state.shape.1),
+            value: DistrRepr::Uniform,
+        };
+        assert!(res.shape == state.shape || state.shape == (1, res.shape.1));
+        assert!(res.shape == div.shape || div.shape == (1, res.shape.1));
+        let one = ndarray::Array2::ones((1, 1));
+        let (vst, vdiv) = match (&state.value, &div.value) {
+            (DistrRepr::Uniform, DistrRepr::Uniform) => {
+                return res;
+            }
+            (DistrRepr::Uniform, DistrRepr::Full(v)) => (&one, v),
+            (DistrRepr::Full(v), DistrRepr::Uniform) => (v, &one),
+            (DistrRepr::Full(vst), DistrRepr::Full(vdiv)) => (vst, vdiv),
+        };
+        res.value = DistrRepr::Full(
+            Zip::from(vst.broadcast((res.shape.0, vst.dim().1)).unwrap())
+                .and_broadcast(vdiv)
+                .map_collect(|vst, vdiv| *vst / (*vdiv)),
+        );
+        res.normalize(); //todo optimize
+        return res;
+    }
+
     pub fn dividing_full(&mut self, other: &Distribution) {
         match (&mut self.value, &other.value) {
             (DistrRepr::Full(div), DistrRepr::Full(st)) => {
@@ -275,10 +306,14 @@ impl Distribution {
         mut dest: ArrayViewMut2<Complex<f64>>,
         fft_scratch: &mut [Complex<f64>],
         plans: &FftPlans,
+        negated: bool,
     ) {
         if let DistrRepr::Full(v) = &self.value {
             for (distr, mut dest) in v.outer_iter().zip(dest.outer_iter_mut()) {
                 input_scratch.copy_from_slice(distr.as_slice().unwrap());
+                if negated {
+                    negate_slice_distr(input_scratch);
+                }
                 plans
                     .r2c
                     .process_with_scratch(input_scratch, dest.as_slice_mut().unwrap(), fft_scratch)
@@ -291,6 +326,7 @@ impl Distribution {
         mut input: ArrayViewMut2<Complex<f64>>,
         fft_scratch: &mut [Complex<f64>],
         plans: &FftPlans,
+        negated: bool,
     ) {
         self.ensure_full();
         let mut v = self.value_mut().unwrap();
@@ -303,6 +339,9 @@ impl Distribution {
                     fft_scratch,
                 )
                 .unwrap();
+            if negated {
+                negate_slice_distr(dest.as_slice_mut().unwrap());
+            }
         }
     }
     pub fn is_full(&self) -> bool {
@@ -383,8 +422,10 @@ impl Distribution {
             let (sum, min) = d
                 .iter()
                 .fold((0.0f64, 0.0f64), |(sum, min), x| (sum + x, min.min(*x)));
-            let offset = -min + MIN_PROBA;
-            let norm_f = 1.0 / (sum + offset * d.len() as f64);
+
+            let norm_f = (1.0 - MIN_PROBA * (d.len() as f64)) / (sum - (min * (d.len() as f64)));
+            let offset = -min + (MIN_PROBA / norm_f);
+
             d.mapv_inplace(|x| (x + offset) * norm_f);
         })
     }
@@ -528,6 +569,16 @@ impl Distribution {
     }
 }
 
+fn negate_slice_distr(a: &mut [f64]) {
+    let n = if a.len() % 2 == 0 {
+        (a.len() / 2) - 1
+    } else {
+        a.len() / 2
+    };
+    for i in 1..=n {
+        a.swap(i, a.len() - i);
+    }
+}
 /// Walsh-Hadamard transform (non-normalized).
 fn slice_wht(a: &mut [f64]) {
     // The speed of this can be much improved, with the following techiques

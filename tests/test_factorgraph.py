@@ -394,15 +394,15 @@ def test_ADD():
     """
     Test ADD between distributions
     """
-    nc = 251
-    n = 4
+    nc = 241
+    n = 1
     distri_x = make_distri(nc, n)
     distri_y = make_distri(nc, n)
 
     graph = f"""
         # some comments
         NC {nc}
-        PROPERTY z = x+y
+        PROPERTY F0: z = x+y
         VAR MULTI z
         VAR MULTI x
         VAR MULTI y
@@ -415,6 +415,50 @@ def test_ADD():
     bp_state.set_evidence("y", distri_y)
 
     bp_state.bp_loopy(1, True)
+    distri_z = bp_state.get_distribution("z")
+
+    distri_z_ref = np.zeros(distri_z.shape)
+    msg = np.zeros(distri_z.shape)
+
+    for x in range(nc):
+        for y in range(nc):
+            distri_z_ref[:, (x + y) % nc] += distri_x[:, x] * distri_y[:, y]
+
+    distri_z_ref = (distri_z_ref.T / np.sum(distri_z_ref, axis=1)).T
+    assert np.allclose(distri_z_ref, distri_z)
+
+
+def test_ADD2():
+    """
+    Test ADD between distributions
+    """
+    nc = 16
+    n = 1
+    distri_x = np.zeros((n, nc))  # make_distri(nc, n)
+    distri_y = np.zeros((n, nc))  # make_distri(nc, n)
+
+    distri_x[:, 0] = 1.0
+    distri_y[:, 0] = 1.0
+
+    graph = f"""
+        # some comments
+        NC {nc}
+        PROPERTY F: z = x+y
+        VAR MULTI z
+        VAR MULTI x
+        VAR MULTI y
+
+        """
+
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n)
+    bp_state.set_evidence("x", distri_x)
+    bp_state.set_evidence("y", distri_y)
+    print(bp_state.debug())
+    bp_state.bp_loopy(1, True)
+    print(bp_state.debug())
+    bp_state.bp_loopy(10, False)
+    print(bp_state.debug())
     distri_z = bp_state.get_distribution("z")
 
     distri_z_ref = np.zeros(distri_z.shape)
@@ -936,6 +980,38 @@ def test_manytraces():
     distri_y_ref = distri_y_ref / distri_y_ref.sum(axis=1, keepdims=True)
 
     assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
+
+
+def test_ADD3():
+    nc = 13
+    graph = f"""NC {nc}
+    TABLE SUB = [0, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+    VAR MULTI a0
+    VAR MULTI x0
+    VAR MULTI x1
+
+
+
+    PROPERTY F0: a0 = x0 + x1
+    """
+    a0_distr = np.array(
+        [[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+    )
+    x0_distr = np.array(
+        [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]]
+    )
+    x1_distr = np.array(
+        [[0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+    )
+    fg = FactorGraph(graph)
+    bp_state = BPState(fg, 1)
+    bp_state.set_evidence("x0", x0_distr)
+    bp_state.set_evidence("x1", x1_distr)
+    bp_state.set_evidence("a0", a0_distr)
+    bp_state.bp_loopy(50, initialize_states=False)
+    for x in ["x0", "x1", "a0"]:
+        print(bp_state.get_distribution(x))
+        assert not np.isnan(bp_state.get_distribution(x)).any()
 
 
 def test_mix_single_multi():
