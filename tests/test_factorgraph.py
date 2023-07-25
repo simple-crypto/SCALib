@@ -993,6 +993,7 @@ def test_mix_single_multi():
         if d is not None:
             assert np.allclose(d, d2, rtol=1e-5, atol=1e-19)
 
+
 def test_clear_beliefs():
     graph = """
     NC 2
