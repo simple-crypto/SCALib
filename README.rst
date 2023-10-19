@@ -162,8 +162,8 @@ Acknowledgements
 ================
 
 This work has been funded in part by the Belgian Fund for Scientific Research
-(F.R.S.-FNRS) through the Equipment Project SCALAB, by the European Union (EU)
-and the Walloon Region through the FEDER project USERMedia (convention number
-501907-379156), and by the European Union (EU) through the ERC project 724725
-(acronym SWORD).
-
+(F.R.S.-FNRS) through the Equipment Project SCALAB and individual researchers'
+grants, by the European Union (EU) and the Walloon Region through the FEDER
+project USERMedia (convention number 501907-379156), and by the European Union
+(EU) through the ERC project 724725 (acronym SWORD) and the ERC project
+101096871 (acronym BRIDGE).
