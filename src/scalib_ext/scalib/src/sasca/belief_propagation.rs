@@ -314,7 +314,9 @@ fn factor_gen_and<'a>(
     clear_incoming: bool,
     pub_red: &PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    let FactorKind::AND { vars_neg } = &factor.kind else { unreachable!() };
+    let FactorKind::AND { vars_neg } = &factor.kind else {
+        unreachable!()
+    };
     // Special case for single-input AND
     if factor.has_res & (factor.edges.len() == 2) {
         return dest
