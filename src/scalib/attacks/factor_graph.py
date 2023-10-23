@@ -179,7 +179,7 @@ class BPState:
     @property
     def fg(self) -> FactorGraph:
         """The associated factor graph."""
-        self._fg
+        return self._fg
 
     def set_evidence(self, var: str, distribution: Optional[npt.NDArray[np.float64]]):
         r"""Sets prior distribution of a variable.
