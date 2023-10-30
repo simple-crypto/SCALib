@@ -578,9 +578,11 @@ fn factor_add<'a>(
             return vec![uniform_template; dest.len()].into_iter();
         } else {
             // Single uniform op, only compute for that one.
-            for (e_idx, e) in factor.edges.values().enumerate() {
+            for ((e_idx, e), negated_var) in
+                factor.edges.values().enumerate().zip(negated_vars.iter())
+            {
                 if e != e_dest {
-                    let negate = !(dest_negated ^ negated_vars[e_idx]);
+                    let negate = !(dest_negated ^ negated_var);
                     belief_from_var[*e].fft_to(
                         fft_input_scratch.as_mut_slice(),
                         fft_tmp.view_mut(),
@@ -612,7 +614,12 @@ fn factor_add<'a>(
         // Simply make the product if FFT domain
         // We do take the product of all factors then divide because some factors could be zero.
         let mut dest_fft = Vec::with_capacity(dest.len());
-        for (i, (e, taken)) in factor.edges.values().zip(taken_dest.iter()).enumerate() {
+        for ((e, taken), negated_var) in factor
+            .edges
+            .values()
+            .zip(taken_dest.iter())
+            .zip(negated_vars.iter())
+        {
             if *taken {
                 let mut fft_e = ndarray::Array2::zeros((nmulti, nc / 2 + 1));
                 belief_from_var[*e].fft_to(
@@ -620,9 +627,9 @@ fn factor_add<'a>(
                     fft_e.view_mut(),
                     fft_scratch.as_mut_slice(),
                     plans,
-                    negated_vars[i],
+                    *negated_var,
                 );
-                if negated_vars[i] {
+                if *negated_var {
                     for x in fft_e.iter_mut() {
                         *x = 1.0 / *x;
                     }
@@ -634,17 +641,17 @@ fn factor_add<'a>(
                     fft_tmp.view_mut(),
                     fft_scratch.as_mut_slice(),
                     plans,
-                    negated_vars[i],
+                    *negated_var,
                 );
 
                 if acc_fft_init {
-                    if negated_vars[i] {
+                    if *negated_var {
                         acc_fft /= &fft_tmp;
                     } else {
                         acc_fft *= &fft_tmp;
                     }
                 } else {
-                    if negated_vars[i] {
+                    if *negated_var {
                         for x in fft_tmp.iter_mut() {
                             *x = 1.0 / *x;
                         }
