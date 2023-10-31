@@ -238,32 +238,6 @@ impl Distribution {
         return res;
     }
 
-    pub fn divide_norm(state: &Distribution, div: &Distribution) -> Self {
-        let mut res = Self {
-            multi: state.multi | div.multi,
-            shape: (std::cmp::max(state.shape.0, div.shape.0), state.shape.1),
-            value: DistrRepr::Uniform,
-        };
-        assert!(res.shape == state.shape || state.shape == (1, res.shape.1));
-        assert!(res.shape == div.shape || div.shape == (1, res.shape.1));
-        let one = ndarray::Array2::ones((1, 1));
-        let (vst, vdiv) = match (&state.value, &div.value) {
-            (DistrRepr::Uniform, DistrRepr::Uniform) => {
-                return res;
-            }
-            (DistrRepr::Uniform, DistrRepr::Full(v)) => (&one, v),
-            (DistrRepr::Full(v), DistrRepr::Uniform) => (v, &one),
-            (DistrRepr::Full(vst), DistrRepr::Full(vdiv)) => (vst, vdiv),
-        };
-        res.value = DistrRepr::Full(
-            Zip::from(vst.broadcast((res.shape.0, vst.dim().1)).unwrap())
-                .and_broadcast(vdiv)
-                .map_collect(|vst, vdiv| *vst / (*vdiv)),
-        );
-        res.normalize(); //todo optimize
-        return res;
-    }
-
     pub fn dividing_full(&mut self, other: &Distribution) {
         match (&mut self.value, &other.value) {
             (DistrRepr::Full(div), DistrRepr::Full(st)) => {
@@ -423,6 +397,7 @@ impl Distribution {
                 .iter()
                 .fold((0.0f64, 0.0f64), |(sum, min), x| (sum + x, min.min(*x)));
 
+            // normalize to MIN_PROBA to prevent underflow errors
             let norm_f = (1.0 - MIN_PROBA * (d.len() as f64)) / (sum - (min * (d.len() as f64)));
             let offset = -min + (MIN_PROBA / norm_f);
 
@@ -569,6 +544,7 @@ impl Distribution {
     }
 }
 
+/// Let `a` represent the distribution of a variable `x`, update a to make it represent the distribution of  `(a.len()+1)-x`
 fn negate_slice_distr(a: &mut [f64]) {
     let n = if a.len() % 2 == 0 {
         (a.len() / 2) - 1

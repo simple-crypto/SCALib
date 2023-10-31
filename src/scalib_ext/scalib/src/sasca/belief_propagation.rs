@@ -578,9 +578,7 @@ fn factor_add<'a>(
             return vec![uniform_template; dest.len()].into_iter();
         } else {
             // Single uniform op, only compute for that one.
-            for ((e_idx, e), negated_var) in
-                factor.edges.values().enumerate().zip(negated_vars.iter())
-            {
+            for (e, negated_var) in factor.edges.values().zip(negated_vars.iter()) {
                 if e != e_dest {
                     let negate = !(dest_negated ^ negated_var);
                     belief_from_var[*e].fft_to(
@@ -629,11 +627,7 @@ fn factor_add<'a>(
                     plans,
                     *negated_var,
                 );
-                if *negated_var {
-                    for x in fft_e.iter_mut() {
-                        *x = 1.0 / *x;
-                    }
-                }
+
                 dest_fft.push(fft_e);
             } else {
                 belief_from_var[*e].fft_to(
@@ -645,11 +639,7 @@ fn factor_add<'a>(
                 );
 
                 if acc_fft_init {
-                    if *negated_var {
-                        acc_fft /= &fft_tmp;
-                    } else {
-                        acc_fft *= &fft_tmp;
-                    }
+                    acc_fft *= &fft_tmp;
                 } else {
                     if *negated_var {
                         for x in fft_tmp.iter_mut() {
@@ -682,11 +672,7 @@ fn factor_add<'a>(
                     }
                 }
                 let idx = factor.edges.get_index_of(&dest[i]).unwrap();
-                if !negated_vars[idx] {
-                    for x in res.iter_mut() {
-                        *x = 1.0 / *x;
-                    }
-                }
+
                 let mut acc = uniform_template.clone();
                 acc.ifft(
                     res.view_mut(),

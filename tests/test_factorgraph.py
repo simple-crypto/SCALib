@@ -395,7 +395,7 @@ def test_ADD():
     Test ADD between distributions
     """
     nc = 241
-    n = 1
+    n = 4
     distri_x = make_distri(nc, n)
     distri_y = make_distri(nc, n)
 
@@ -1012,6 +1012,31 @@ def test_ADD3():
     for x in ["x0", "x1", "a0"]:
         print(bp_state.get_distribution(x))
         assert not np.isnan(bp_state.get_distribution(x)).any()
+
+
+def test_ADD4():
+    nc = 256
+    n = 10
+    graph = f"""NC {nc}
+    VAR MULTI a0
+    VAR MULTI x0
+    VAR MULTI x1
+
+
+
+    PROPERTY F0: a0 = x0 + x1
+    """
+    fg = FactorGraph(graph)
+    for _ in range(50):
+        bp = BPState(fg, n)
+
+        bp.set_evidence("x0", make_distri(nc, n))
+        bp.set_evidence("x1", make_distri(nc, n))
+        bp.set_evidence("a0", make_distri(nc, n))
+        bp.bp_loopy(50, initialize_states=False)
+        for x in ["x0", "x1", "a0"]:
+            print(bp.get_distribution(x))
+            assert not np.isnan(bp.get_distribution(x)).any()
 
 
 def test_mix_single_multi():
