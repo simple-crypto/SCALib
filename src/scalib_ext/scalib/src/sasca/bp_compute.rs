@@ -544,7 +544,7 @@ impl Distribution {
     }
 }
 
-/// Let `a` represent the distribution of a variable `x`, update a to make it represent the distribution of  `(a.len()+1)-x`
+/// Let `a` represent the distribution of a variable `x`, update a to make it represent the distribution of  `(a.len()-1)-x`
 fn negate_slice_distr(a: &mut [f64]) {
     let n = if a.len() % 2 == 0 {
         (a.len() / 2) - 1
