@@ -645,11 +645,6 @@ fn factor_add<'a>(
                 if acc_fft_init {
                     acc_fft *= &fft_tmp;
                 } else {
-                    if *negated_var {
-                        for x in fft_tmp.iter_mut() {
-                            *x = 1.0 / *x;
-                        }
-                    }
                     acc_fft.assign(&fft_tmp);
                     acc_fft_init = true;
                 }

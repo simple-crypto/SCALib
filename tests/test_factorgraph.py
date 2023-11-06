@@ -1095,7 +1095,6 @@ def test_mix_single_multi():
             assert np.allclose(d, d2, rtol=1e-5, atol=1e-19)
 
 
-
 def test_ADD5():
     nc = 256
     n = 10
@@ -1119,6 +1118,7 @@ def test_ADD5():
             print(bp.get_distribution(x))
             assert not np.isnan(bp.get_distribution(x)).any()
 
+
 def test_clear_beliefs():
     graph = """
     NC 2
@@ -1136,4 +1136,3 @@ def test_clear_beliefs():
     assert bp.get_belief_from_var("x", "s1") is not None
     assert bp.get_belief_from_var("a", "s1") is not None
     assert bp.get_belief_from_var("b", "s1") is not None
-
