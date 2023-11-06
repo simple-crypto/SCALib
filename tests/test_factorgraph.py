@@ -1099,22 +1099,34 @@ def test_ADD5():
     nc = 256
     n = 10
     graph = f"""NC {nc}
-    VAR MULTI a0
-    VAR MULTI x0
-    VAR MULTI x1
+    VAR MULTI x
+    VAR MULTI y
+    VAR MULTI z
 
 
 
-    PROPERTY F0: a0 = x0 + x1
+    PROPERTY F0: z = x + y
     """
     fg = FactorGraph(graph)
     for _ in range(50):
         bp = BPState(fg, n)
 
-        bp.set_evidence("x0", make_distri(nc, n))
-        bp.set_evidence("a0", make_distri(nc, n))
+        x_distri = make_distri(nc, n)
+        z_distri = make_distri(nc, n)
+        bp.set_evidence("x", x_distri)
+        bp.set_evidence("z", z_distri)
+
+        y_distri_ref = np.zeros(x_distri.shape)
+
+        for x in range(nc):
+            for z in range(nc):
+                y_distri_ref[:, (z - x) % nc] += x_distri[:, x] * z_distri[:, z]
+
+        y_distri_ref = (y_distri_ref.T / np.sum(y_distri_ref, axis=1)).T
+
         bp.bp_loopy(50, initialize_states=False)
-        for x in ["x0", "x1", "a0"]:
+        assert np.allclose(y_distri_ref, bp.get_distribution("y"))
+        for x in ["x", "y", "z"]:
             print(bp.get_distribution(x))
             assert not np.isnan(bp.get_distribution(x)).any()
 
