@@ -250,29 +250,31 @@ impl BPState {
         let dest: Vec<_> = self.graph.factor(factor).edges.keys().cloned().collect();
         self.propagate_factor(factor, dest.as_slice(), false);
     }
-    pub fn propagate_from_var_all(&mut self, var: VarId) {
+    pub fn propagate_from_var_all(&mut self, var: VarId, clear_beliefs: bool) {
         for i in 0..self.graph.var(var).edges.len() {
             self.propagate_from_var(self.graph.var(var).edges[i]);
         }
-        for i in 0..self.graph.var(var).edges.len() {
-            self.belief_to_var[self.graph.var(var).edges[i]].reset();
+        if clear_beliefs {
+            for i in 0..self.graph.var(var).edges.len() {
+                self.belief_to_var[self.graph.var(var).edges[i]].reset();
+            }
         }
     }
-    pub fn propagate_var(&mut self, var: VarId) {
+    pub fn propagate_var(&mut self, var: VarId, clear_beliefs: bool) {
         self.propagate_to_var(var, false);
-        self.propagate_from_var_all(var);
+        self.propagate_from_var_all(var, clear_beliefs);
     }
-    pub fn propagate_all_vars(&mut self) {
+    pub fn propagate_all_vars(&mut self, clear_beliefs: bool) {
         for var_id in self.graph.range_vars() {
-            self.propagate_var(var_id);
+            self.propagate_var(var_id, clear_beliefs);
         }
     }
-    pub fn propagate_loopy_step(&mut self, n_steps: u32) {
+    pub fn propagate_loopy_step(&mut self, n_steps: u32, clear_beliefs: bool) {
         for _ in 0..n_steps {
             for factor_id in self.graph.range_factors() {
                 self.propagate_factor_all(factor_id);
             }
-            self.propagate_all_vars();
+            self.propagate_all_vars(clear_beliefs);
         }
     }
     pub fn propagate_acyclic(
@@ -315,7 +317,9 @@ fn factor_gen_and<'a>(
     clear_incoming: bool,
     pub_red: &PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    let FactorKind::AND { vars_neg } = &factor.kind else { unreachable!() };
+    let FactorKind::AND { vars_neg } = &factor.kind else {
+        unreachable!()
+    };
     // Special case for single-input AND
     if factor.has_res & (factor.edges.len() == 2) {
         return dest

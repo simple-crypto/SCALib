@@ -1095,6 +1095,7 @@ def test_mix_single_multi():
             assert np.allclose(d, d2, rtol=1e-5, atol=1e-19)
 
 
+
 def test_ADD5():
     nc = 256
     n = 10
@@ -1117,3 +1118,22 @@ def test_ADD5():
         for x in ["x0", "x1", "a0"]:
             print(bp.get_distribution(x))
             assert not np.isnan(bp.get_distribution(x)).any()
+
+def test_clear_beliefs():
+    graph = """
+    NC 2
+    PROPERTY s1: x = a^b
+    VAR MULTI x
+    VAR MULTI a
+    VAR MULTI b
+    """
+    fg = FactorGraph(graph)
+    bp = BPState(fg, 1)
+    for k in fg.vars():
+        bp.set_evidence(k, make_distri(2, 1))
+    bp.bp_loopy(1, False, clear_beliefs=False)
+
+    assert bp.get_belief_from_var("x", "s1") is not None
+    assert bp.get_belief_from_var("a", "s1") is not None
+    assert bp.get_belief_from_var("b", "s1") is not None
+
