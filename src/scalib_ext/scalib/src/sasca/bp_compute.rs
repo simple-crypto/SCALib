@@ -419,11 +419,8 @@ impl Distribution {
             let (sum, min) = d
                 .iter()
                 .fold((0.0f64, 0.0f64), |(sum, min), x| (sum + x, min.min(*x)));
-
-            // normalize to MIN_PROBA to prevent underflow errors
-            let norm_f = (1.0 - MIN_PROBA * (d.len() as f64)) / (sum - (min * (d.len() as f64)));
-            let offset = -min + (MIN_PROBA / norm_f);
-
+            let norm_f = 1.0 / (sum - (min * (d.len() as f64)));
+            let offset = -min;
             d.mapv_inplace(|x| (x + offset) * norm_f);
         })
     }
