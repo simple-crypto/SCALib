@@ -379,7 +379,6 @@ def test_and_not_or():
         d = bp_state.get_distribution(v)
         d2 = bp_state2.get_distribution(v)
         assert np.allclose(d, d2)
-
     bp_state3 = BPState(graph, n, {"p": p, "t": t})
     bp_state3.set_evidence("x", distri_x)
     bp_state3.set_evidence("y", distri_y)
@@ -667,9 +666,9 @@ def test_xor():
 
     print("distri_x_ref", distri_x)
     print("distri_y_ref", distri_y)
-    print("distri_z_ref", distri_z_ref)
 
     distri_z_ref = distri_z_ref / np.sum(distri_z_ref)
+    print("distri_z_ref", distri_z_ref)
     assert np.allclose(distri_z_ref, distri_z)
     assert np.allclose(distri_z_ref, distri_z2)
 
@@ -827,7 +826,7 @@ def test_and_rounding_error_simple():
     assert (bp.get_belief_to_var("B", "P") >= 0.0).all()
 
 
-def test_and_rounding_error_simple():
+def test_and_rounding_error_simple2():
     # test case of issue #86
     factor_graph = """NC 16
     VAR MULTI K0
@@ -1035,7 +1034,6 @@ def test_ADD4():
         bp.set_evidence("a0", make_distri(nc, n))
         bp.bp_loopy(50, initialize_states=False)
         for x in ["x0", "x1", "a0"]:
-            print(bp.get_distribution(x))
             assert not np.isnan(bp.get_distribution(x)).any()
 
 
@@ -1096,39 +1094,41 @@ def test_mix_single_multi():
 
 
 def test_ADD5():
-    nc = 256
-    n = 10
-    graph = f"""NC {nc}
-    VAR MULTI x
-    VAR MULTI y
-    VAR MULTI z
+    for nc in [13, 256]:
+        n = 10
+        graph = f"""NC {nc}
+        VAR MULTI x
+        VAR MULTI y
+        VAR MULTI z
 
 
 
-    PROPERTY F0: z = x + y
-    """
-    fg = FactorGraph(graph)
-    for _ in range(50):
-        bp = BPState(fg, n)
+        PROPERTY F0: z = x + y
+        """
 
-        x_distri = make_distri(nc, n)
-        z_distri = make_distri(nc, n)
-        bp.set_evidence("x", x_distri)
-        bp.set_evidence("z", z_distri)
+        fg = FactorGraph(graph)
+        for _ in range(50):
+            bp = BPState(fg, n)
 
-        y_distri_ref = np.zeros(x_distri.shape)
+            x_distri = make_distri(nc, n)
+            z_distri = make_distri(nc, n)
+            bp.set_evidence("x", x_distri)
+            bp.set_evidence("z", z_distri)
 
-        for x in range(nc):
-            for z in range(nc):
-                y_distri_ref[:, (z - x) % nc] += x_distri[:, x] * z_distri[:, z]
+            y_distri_ref = np.zeros(x_distri.shape)
 
-        y_distri_ref = (y_distri_ref.T / np.sum(y_distri_ref, axis=1)).T
+            for x in range(nc):
+                for z in range(nc):
+                    y_distri_ref[:, (z - x) % nc] += x_distri[:, x] * z_distri[:, z]
 
-        bp.bp_loopy(50, initialize_states=False)
-        assert np.allclose(y_distri_ref, bp.get_distribution("y"))
-        for x in ["x", "y", "z"]:
-            print(bp.get_distribution(x))
-            assert not np.isnan(bp.get_distribution(x)).any()
+            y_distri_ref = (y_distri_ref.T / np.sum(y_distri_ref, axis=1)).T
+
+            bp.bp_loopy(3, initialize_states=False)
+
+            assert np.allclose(y_distri_ref, bp.get_distribution("y"))
+            for x in ["x", "y", "z"]:
+                print(bp.get_distribution(x))
+                assert not np.isnan(bp.get_distribution(x)).any()
 
 
 def test_clear_beliefs():
