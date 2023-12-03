@@ -163,6 +163,50 @@ Dependencies upgrade policy
 .. _NEP29: https://numpy.org/neps/nep-0029-deprecation_policy.html
 .. _manylinux: https://github.com/pypa/manylinux
 
+Maintainers
+-----------
+
+Tests policy:
+
+- For changes to existing code: please ensure that all modified code is
+  exercised by a test (we don't want to break stuff without knowing).
+- For new code: we'd like to have tests for all the main codepaths.
+
+It is not required to have tests that cover every codepath (such as error
+paths), although that is always nice to have ;)
+
+Reviewing and merging pull requests:
+
+- Pull request reviewing: you should check if (i) the code is useful and fits
+  within the scope of SCALib, (ii) it is somewhat maintainable (i.e.,
+  understandable and covered by tests).
+- Do no wait for a code to be perfect to merge it: a useful, correct and tested
+  code is good enough, it can be later improved (e.g. by you or the author of
+  the PR in a follow-up PR, based on review comments).
+- You may merge your own pull requests, if they are trivial or if no other
+  maintainer is available to review.
+- Always wait for green CI before merging (this includes CLA stuff!).
+- Choose between "create a merge commit" (for PRs with a few meaningful
+  commits) and "squash and merge" (for PRs that would be better as a single
+  commit, in this case, please write a sufficiently detailed commit message).
+- Do not directly push to the main branch of the repo!
+
+Making releases:
+
+- We do release whenever! (i.e., when somebody asks for it, or if there is a
+  useful fix).
+- Version number: in ``X.Y.Z``, increment ``Z`` if the releases containes only
+  bug-fixes without any API change, go to ``X.(Y+1).0`` if the release contains
+  new features, but is compatible (it should not break any code using SCALib),
+  otherwise jump to ``(X+1).0.0``. See `semver <https://semver.org>`_.
+- Plan some time to make the release (carfully checking the changes takes time,
+  as well as fixing possible CI issues).
+- Follow the instructions below carefully, and everything should work well.
+
+Final remarks:
+- As a maintainer, feel free to take initiaves!
+- In the worst case, there is little that can be broken and cannot be undone ;)
+
 
 Make a release
 --------------
@@ -172,5 +216,5 @@ Make a release
 2. Add the new release with the release date in ``CHANGELOG.rst``.
 3. Commit, create pull request and merge it (after CI succeeds).
 4. Create and push release tag: ``git tag vX.Y.Z && git push origin vX.Y.Z``.
-5. Check that CI build, PyPI upload and ReadTheDocs all worked. Otherwise fix and make a patch release.
+5. Check that CI build, PyPI upload and ReadTheDocs all worked automatically. Otherwise fix and make a patch release.
 
