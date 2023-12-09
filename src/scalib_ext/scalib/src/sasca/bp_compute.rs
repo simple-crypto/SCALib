@@ -1,7 +1,9 @@
+use std::ops::MulAssign;
+
 use super::belief_propagation::{BPError, FftPlans};
 use super::factor_graph::PublicValue;
 use super::ClassVal;
-use ndarray::{azip, s, ArrayViewMut2, Zip};
+use ndarray::{azip, s, ArrayViewMut2};
 use realfft::num_complex::Complex;
 
 type Proba = f64;
@@ -102,6 +104,7 @@ impl Distribution {
             value: DistrRepr::Uniform,
         }
     }
+
     pub fn new_constant(&self, cst: &PublicValue) -> Self {
         if let PublicValue::Multi(cst) = cst {
             assert!(self.multi);
@@ -135,6 +138,7 @@ impl Distribution {
         }
     }
 
+    //  pub fn multiply_distr<'a>(&self, other: &'a Distribution) -> Self {}
     pub fn multiply<'a>(&mut self, factors: impl Iterator<Item = &'a Distribution>) {
         self.multiply_inner(factors, false);
     }
@@ -213,41 +217,60 @@ impl Distribution {
             }
         }
     }
-    pub fn divide_reg(state: &Distribution, div: &Distribution) -> Self {
-        let mut res = Self {
-            multi: state.multi | div.multi,
-            shape: (std::cmp::max(state.shape.0, div.shape.0), state.shape.1),
-            value: DistrRepr::Uniform,
-        };
-        assert!(res.shape == state.shape || state.shape == (1, res.shape.1));
-        assert!(res.shape == div.shape || div.shape == (1, res.shape.1));
-        let one = ndarray::Array2::ones((1, 1));
-        let (vst, vdiv) = match (&state.value, &div.value) {
-            (DistrRepr::Uniform, DistrRepr::Uniform) => {
-                return res;
+    pub fn reciprocal_product(&self, base: Distribution) -> (Distribution, Distribution) {
+        assert!(!base.multi);
+        let mut res = self.as_uniform();
+        match &self.value {
+            DistrRepr::Uniform => {
+                if base.is_full() {
+                    res.multiply_norm(std::iter::once(&base));
+                    return (base, res);
+                } else {
+                    // Everything is uniform
+                    return (base, res);
+                }
             }
-            (DistrRepr::Uniform, DistrRepr::Full(v)) => (&one, v),
-            (DistrRepr::Full(v), DistrRepr::Uniform) => (v, &one),
-            (DistrRepr::Full(vst), DistrRepr::Full(vdiv)) => (vst, vdiv),
-        };
-        res.value = DistrRepr::Full(
-            Zip::from(vst.broadcast((res.shape.0, vst.dim().1)).unwrap())
-                .and_broadcast(vdiv)
-                .map_collect(|vst, vdiv| *vst / (*vdiv + MIN_PROBA)),
-        );
-        return res;
-    }
-
-    pub fn dividing_full(&mut self, other: &Distribution) {
-        match (&mut self.value, &other.value) {
-            (DistrRepr::Full(div), DistrRepr::Full(st)) => {
-                ndarray::azip!(div, st).for_each(|div, st| *div = *st / *div);
-            }
-            _ => {
-                unimplemented!();
+            DistrRepr::Full(self_v) => {
+                let mut res_v = ndarray::Array2::ones(self.shape);
+                for i in 1..self.shape.0 {
+                    let (res_v_prev, res_v_new) = res_v.multi_slice_mut((s![i - 1, ..], s![i, ..]));
+                    azip!((&p in &res_v_prev, n in res_v_new, &x in &self_v.slice(s![i-1,..])) *n = p * x);
+                }
+                let mut running_product = base;
+                running_product.ensure_full();
+                let DistrRepr::Full(ref mut rp) = &mut running_product.value else {
+                    unreachable!()
+                };
+                for i in (0..self.shape.0).rev() {
+                    let mut rv = res_v.slice_mut(s![i, ..]);
+                    rv.mul_assign(&rp.slice(s![0, ..]));
+                    let norm_rv = 1.0 / rv.sum();
+                    rv.mapv_inplace(|x| x * norm_rv);
+                    rp.view_mut().mul_assign(&self_v.slice(s![i, ..]));
+                    let norm_rp = 1.0 / rp.sum();
+                    rp.mapv_inplace(|x| x * norm_rp)
+                }
+                res.value = DistrRepr::Full(res_v);
+                return (running_product, res);
             }
         }
     }
+
+    pub fn multiply_to_single(&mut self, other: &Distribution) {
+        assert!(!self.multi);
+        if let DistrRepr::Full(sv) = &other.value {
+            self.ensure_full();
+            let DistrRepr::Full(ref mut rv) = &mut self.value else {
+                unreachable!()
+            };
+            let mut rv = rv.slice_mut(s![0, ..]);
+            for d in sv.axis_iter(ndarray::Axis(0)) {
+                rv *= &d;
+                rv *= 1.0 / rv.sum();
+            }
+        }
+    }
+
     pub fn not(&mut self) {
         let inv_cst = (self.shape.1 - 1) as u32;
         self.for_each_ignore(|mut d, _| {
@@ -396,11 +419,8 @@ impl Distribution {
             let (sum, min) = d
                 .iter()
                 .fold((0.0f64, 0.0f64), |(sum, min), x| (sum + x, min.min(*x)));
-
-            // normalize to MIN_PROBA to prevent underflow errors
-            let norm_f = (1.0 - MIN_PROBA * (d.len() as f64)) / (sum - (min * (d.len() as f64)));
-            let offset = -min + (MIN_PROBA / norm_f);
-
+            let norm_f = 1.0 / (sum - (min * (d.len() as f64)));
+            let offset = -min;
             d.mapv_inplace(|x| (x + offset) * norm_f);
         })
     }
@@ -671,4 +691,29 @@ fn inv_and_cst_slice(a: &mut [f64], cst: ClassVal) {
         let j = i & (cst as usize);
         a[i] = a[j];
     }
+}
+
+/// Compute the product of all distributions in belief, and, at position i
+/// in the vector, the product of all distributions in belief except the
+/// one at position i.
+/// All are multiplied by base.
+pub fn belief_reciprocal_product<'a>(
+    base: Distribution,
+    beliefs: impl std::iter::DoubleEndedIterator<Item = &'a Distribution>
+        + std::iter::ExactSizeIterator
+        + Clone,
+) -> (Distribution, Vec<Distribution>) {
+    let n = beliefs.len();
+    let mut res = vec![base.as_uniform(); n];
+    let mut running_product = base;
+    for (i, x) in beliefs.clone().enumerate().take(n - 1) {
+        let (lower, upper) = res.split_at_mut(i + 1);
+        upper[0] = x.clone();
+        upper[0].multiply_norm(std::iter::once(&lower[i]));
+    }
+    for (i, x) in beliefs.enumerate().rev() {
+        res[i].multiply_norm(std::iter::once(&running_product));
+        running_product.multiply_norm(std::iter::once(x));
+    }
+    return (running_product, res);
 }

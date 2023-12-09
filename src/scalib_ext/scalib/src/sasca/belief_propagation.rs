@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use itertools::Itertools;
 use thiserror::Error;
 
 use super::factor_graph::{
@@ -185,33 +186,75 @@ impl BPState {
         self.belief_to_var[edge] = belief;
         Ok(())
     }
-    // Propagation type:
-    // belief to var -> var
-    // var -> belief to func
-    // trhough func: towards all vars, towards a subset of vars
-    pub fn propagate_to_var(&mut self, var: VarId, clear_evidence: bool) {
-        let distr_iter = self
-            .graph
-            .var(var)
-            .edges
-            .values()
-            .map(|e| &self.belief_to_var[*e]);
-        self.var_state[var] = self.evidence[var].take_or_clone(clear_evidence);
-        // We multiply_reg to avoid having very low values in the product.
-        // Since inputs should not be too big, we should not have any overflow.
-        // Underflow my happen, since probas are lower-bounded by MIN_PROBA**2.
-        // This also normalizes the result.
-        self.var_state[var].multiply_norm(distr_iter);
+
+    /// propgate only go given edges
+    fn propagate_var_t_multi(
+        &mut self,
+        var_id: VarId,
+        to_edges: Vec<EdgeId>,
+        other_edges: Vec<EdgeId>,
+        clear_evidence: bool,
+        clear_beliefs: bool,
+    ) {
+        let var = self.graph.var(var_id);
+        assert!(var.multi);
+        let mut base = self.evidence[var_id].take_or_clone(clear_evidence);
+        base.multiply_norm(other_edges.iter().map(|e| &self.belief_to_var[*e]));
+        if clear_beliefs {
+            for e in other_edges {
+                self.belief_to_var[e].reset();
+            }
+        }
+        let (var_state, new_beliefs) = super::bp_compute::belief_reciprocal_product(
+            base,
+            to_edges.iter().map(|e| &self.belief_to_var[*e]),
+        );
+        for (e, d) in to_edges.iter().zip(new_beliefs.into_iter()) {
+            self.belief_from_var[*e] = d;
+            if clear_beliefs {
+                self.belief_to_var[*e].reset();
+            }
+        }
+        self.var_state[var_id] = var_state;
     }
-    pub fn propagate_from_var(&mut self, edge: EdgeId) {
-        // Dividing here is ok if we ensure that there is no zero element and no
-        // underflow (or denormalization).
-        // This is guaranteed as long as min_proba > var_degree * MIN_POSITIVE
-        let var = self.graph.edges[edge].var;
-        self.belief_from_var[edge].reset();
-        self.belief_from_var[edge] =
-            Distribution::divide_reg(&self.var_state[var], &self.belief_to_var[edge]);
+
+    fn propagate_var_t_single(
+        &mut self,
+        var_id: VarId,
+        to_edges: Vec<EdgeId>,
+        other_edges: Vec<EdgeId>,
+        clear_evidence: bool,
+        clear_beliefs: bool,
+    ) {
+        let var = self.graph.var(var_id);
+        assert!(!var.multi);
+        let mut base = self.evidence[var_id].take_or_clone(clear_evidence);
+        for e in other_edges {
+            base.multiply_to_single(&self.belief_to_var[e]);
+            if clear_beliefs {
+                self.belief_to_var[e].reset();
+            }
+        }
+        let (global_products, local_products): (Vec<_>, Vec<_>) = to_edges
+            .iter()
+            .map(|e| self.belief_to_var[*e].reciprocal_product(self.evidence[var_id].as_uniform()))
+            .unzip();
+        let (var_state, new_beliefs_global) =
+            super::bp_compute::belief_reciprocal_product(base, global_products.iter());
+        for ((e, mut local), global) in to_edges
+            .iter()
+            .zip(local_products.into_iter())
+            .zip(new_beliefs_global.into_iter())
+        {
+            local.multiply_norm(std::iter::once(&global));
+            self.belief_from_var[*e] = local;
+            if clear_beliefs {
+                self.belief_to_var[*e].reset();
+            }
+        }
+        self.var_state[var_id] = var_state;
     }
+
     pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId], clear_incoming: bool) {
         let factor = self.graph.factor(factor_id);
         // Pre-erase to have buffers available in cache allocator.
@@ -250,19 +293,60 @@ impl BPState {
         let dest: Vec<_> = self.graph.factor(factor).edges.keys().cloned().collect();
         self.propagate_factor(factor, dest.as_slice(), false);
     }
-    pub fn propagate_from_var_all(&mut self, var: VarId, clear_beliefs: bool) {
-        for i in 0..self.graph.var(var).edges.len() {
-            self.propagate_from_var(self.graph.var(var).edges[i]);
-        }
-        if clear_beliefs {
-            for i in 0..self.graph.var(var).edges.len() {
-                self.belief_to_var[self.graph.var(var).edges[i]].reset();
-            }
-        }
+    pub fn propagate_var(&mut self, var_id: VarId, clear_beliefs: bool) {
+        let clear_evidence = false;
+        self.propagate_var_to(
+            var_id,
+            self.graph
+                .var(var_id)
+                .edges
+                .values()
+                .cloned()
+                .collect::<Vec<_>>(),
+            clear_beliefs,
+            clear_evidence,
+        );
     }
-    pub fn propagate_var(&mut self, var: VarId, clear_beliefs: bool) {
-        self.propagate_to_var(var, false);
-        self.propagate_from_var_all(var, clear_beliefs);
+    pub fn propagate_var_to(
+        &mut self,
+        var_id: VarId,
+        mut to_edges: Vec<EdgeId>,
+        clear_beliefs: bool,
+        clear_evidence: bool,
+    ) {
+        let var = self.graph.var(var_id);
+        let mut all_edges = var.edges.values().collect::<Vec<_>>();
+        all_edges.sort_unstable();
+        to_edges.sort_unstable();
+        let other_edges = all_edges
+            .iter()
+            .merge_join_by(to_edges.iter(), |x, y| x.cmp(&y))
+            .filter_map(|x| {
+                if let itertools::EitherOrBoth::Left(e) = x {
+                    Some(*e)
+                } else {
+                    None
+                }
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if var.multi {
+            self.propagate_var_t_multi(
+                var_id,
+                to_edges,
+                other_edges,
+                clear_evidence,
+                clear_beliefs,
+            );
+        } else {
+            self.propagate_var_t_single(
+                var_id,
+                to_edges,
+                other_edges,
+                clear_evidence,
+                clear_beliefs,
+            );
+        }
     }
     pub fn propagate_all_vars(&mut self, clear_beliefs: bool) {
         for var_id in self.graph.range_vars() {
@@ -289,16 +373,12 @@ impl BPState {
         for (node, parent) in self.graph.propagation_order(var) {
             match node {
                 Node::Var(var_id) => {
-                    self.propagate_to_var(var_id, clear_evidence);
-                    if let Some(dest_factor) = parent {
-                        let edge_id = self.graph.var(var_id).edges[&dest_factor.factor().unwrap()];
-                        self.propagate_from_var(edge_id);
-                    }
-                    if clear_intermediates {
-                        for e in self.graph.var(var_id).edges.values() {
-                            self.belief_to_var[*e].reset();
-                        }
-                    }
+                    let to_edges = if let Some(dest_factor) = parent {
+                        vec![self.graph.var(var_id).edges[&dest_factor.factor().unwrap()]]
+                    } else {
+                        vec![]
+                    };
+                    self.propagate_var_to(var_id, to_edges, clear_intermediates, clear_evidence);
                 }
                 Node::Factor(factor_id) => {
                     let parent_var = parent.unwrap().var().unwrap();

@@ -552,8 +552,8 @@ fn inner_prod_generic(
     for j in 0..ts[0].len() {
         for i in 0..prods.len() {
             let (t, c) = posi[i];
-            let (prod_old, mut prod_up) = prods.split_at_mut(i);
-            let (_, mut accs_up) = accs.split_at_mut(i);
+            let (prod_old, prod_up) = prods.split_at_mut(i);
+            let (_, accs_up) = accs.split_at_mut(i);
 
             let t = &ts[t as usize][j];
             if c == -1 {
