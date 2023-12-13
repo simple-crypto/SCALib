@@ -706,14 +706,16 @@ pub fn belief_reciprocal_product<'a>(
     let n = beliefs.len();
     let mut res = vec![base.as_uniform(); n];
     let mut running_product = base;
-    for (i, x) in beliefs.clone().enumerate().take(n - 1) {
-        let (lower, upper) = res.split_at_mut(i + 1);
-        upper[0] = x.clone();
-        upper[0].multiply_norm(std::iter::once(&lower[i]));
-    }
-    for (i, x) in beliefs.enumerate().rev() {
-        res[i].multiply_norm(std::iter::once(&running_product));
-        running_product.multiply_norm(std::iter::once(x));
+    if n > 0 {
+        for (i, x) in beliefs.clone().enumerate().take(n - 1) {
+            let (lower, upper) = res.split_at_mut(i + 1);
+            upper[0] = x.clone();
+            upper[0].multiply_norm(std::iter::once(&lower[i]));
+        }
+        for (i, x) in beliefs.enumerate().rev() {
+            res[i].multiply_norm(std::iter::once(&running_product));
+            running_product.multiply_norm(std::iter::once(x));
+        }
     }
     return (running_product, res);
 }
