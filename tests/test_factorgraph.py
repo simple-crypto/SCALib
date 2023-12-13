@@ -673,6 +673,24 @@ def test_xor():
     assert np.allclose(distri_z_ref, distri_z2)
 
 
+def test_xor_acyclic():
+    nc = 4
+    fg = FactorGraph(
+        f"""NC {nc}
+    VAR MULTI x0
+    VAR MULTI x4
+    VAR MULTI y0
+    PROPERTY F1: y0 = x0 ^ x4
+    """
+    )
+    bp = BPState(fg, 1)
+    for v in fg.vars():
+        bp.set_evidence(v, make_distri(nc, 1))
+    for v in ["x0", "x4"]:
+        bp.bp_acyclic(v)
+        bp.get_distribution(v)
+
+
 def test_bad_var_norm():
     """
     When normalization of distributions can be bad...

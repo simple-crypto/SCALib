@@ -531,18 +531,19 @@ fn factor_xor<'a>(
     let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
     acc.wht();
     let mut taken_dest = vec![false; factor.edges.len()];
-    for dest in dest {
+    let mut taken_dest_idx = vec![None; factor.edges.len()];
+    for (i, dest) in dest.iter().enumerate() {
         taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
+        taken_dest_idx[factor.edges.get_index_of(dest).unwrap()] = Some(i);
     }
     let mut uniform_iter = factor
         .edges
         .values()
-        .zip(taken_dest.iter())
-        .enumerate()
-        .filter(|(_, (e, _))| !belief_from_var[**e].is_full());
+        .zip(taken_dest_idx.iter())
+        .filter(|(e, _)| !belief_from_var[**e].is_full());
     let uniform_op = uniform_iter.next();
-    if let Some((i, (e_dest, t))) = uniform_op {
-        if !*t || uniform_iter.next().is_some() {
+    if let Some((e_dest, t)) = uniform_op {
+        if t.is_none() || uniform_iter.next().is_some() {
             // At least 2 uniform operands, or single uniform is not in dest,
             // all dest messages are uniform.
             reset_incoming(factor, belief_from_var, &taken_dest, clear_incoming);
@@ -560,7 +561,7 @@ fn factor_xor<'a>(
             acc.wht();
             acc.regularize();
             let mut res = vec![acc.as_uniform(); dest.len()];
-            res[i] = acc;
+            res[t.unwrap()] = acc;
             return res.into_iter();
         }
     } else {
