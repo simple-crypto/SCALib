@@ -7,6 +7,3 @@ members = [
     "scalib-py"
 ]
 resolver = "2"
-
-[profile.release]
-debug = true

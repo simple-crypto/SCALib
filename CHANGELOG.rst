@@ -5,12 +5,30 @@ Changelog
 Not released
 ------------
 
+v0.5.6 (2023/06/08)
+-------------------
+
+* Add ``scalib.modeling.RLDAClassifier`` and ``scalib.metrics.RLDAInformationEstimator``.
+* Fix build dependences and run build in an isolated environment.
+
+v0.5.5 (2023/05/30)
+-------------------
+
+* Fix ``Distribution`` size bug in belief propagation computation (#102).
+* Do not include debug symbols in release builds (makes wheel much smaller).
+* ``Ttest``: do not crash on non-contiguous/fortran-order arrays
+* Improve examples and README
+
+v0.5.4 (2023/04/26)
+-------------------
+
 * Run CI on Mac Os and build wheels (x86_64 and arm64, but we test only x86_64). No AVX2 due to old runner in github CI.
 * Add ``scalib.tools.ContextExecutor``, as a solution to ``LookupError`` in
   ``get_config()``.
 * Fix numerical underflow in ``BPState`` when multiple traces are used.
 * Fix missing import in ``MultiLDA``.
 * Run ``BPState`` methods on the threadpool.
+* Make threadpool initalization lazy -- makes SCALib play more nicely with ``ProcessPoolExecutor``.
 
 v0.5.3 (2023/02/21)
 -------------------
@@ -140,7 +158,7 @@ v0.1.0 (2021/04/16)
 -------------------
 
 * Initial release, with the following features:
-  * LDA and Gaussian templates modelling
+  * LDA and Gaussian templates modeling
   * SNR
   * T-test any order (for TLVA)
   * Soft Analytical Side-Channel Attack (SASCA)

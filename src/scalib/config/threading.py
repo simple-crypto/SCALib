@@ -15,7 +15,20 @@ class ThreadPool:
 
     def __init__(self, n_threads):
         self.n_threads = n_threads
-        self.pool = _scalib_ext.ThreadPool(n_threads)
+        self._pool = None
+
+    @property
+    def pool(self):
+        # We initialize the true threadpool lazily for 2 reasons:
+        # - It avoids creating threads when importing SCALib, which reduces
+        # import time and, more importantly, prevents bugs with the usage of
+        # subprocesses (such as with concurrent.futures.ProcessPoolExecutor),
+        # since the POSIX API does not allow fork'ing after threadds have been
+        # created.
+        # - It generally improves performance when the threadpool is not actually used.
+        if self._pool is None:
+            self._pool = _scalib_ext.ThreadPool(self.n_threads)
+        return self._pool
 
 
 def _default_num_threads():

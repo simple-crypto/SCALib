@@ -31,3 +31,12 @@
    {% endif %}
    {% endblock %}
 
+   {% block classes %}
+
+   .. autosummary::
+   {% for item in elements %}
+       {% if item[0].isupper() %}
+          ~{{ name }}.{{ item }}
+       {%- endif %}
+   {%- endfor %}
+   {% endblock %}

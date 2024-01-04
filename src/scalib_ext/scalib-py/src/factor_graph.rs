@@ -296,16 +296,22 @@ impl BPState {
         py: Python,
         var: &str,
         config: crate::ConfigWrapper,
+        clear_beliefs: bool,
     ) -> PyResult<()> {
         config.on_worker(py, |_| {
             let var_id = self.get_var(var)?;
-            self.get_inner_mut().propagate_var(var_id);
+            self.get_inner_mut().propagate_var(var_id, clear_beliefs);
             Ok(())
         })
     }
-    pub fn propagate_all_vars(&mut self, py: Python, config: crate::ConfigWrapper) -> PyResult<()> {
+    pub fn propagate_all_vars(
+        &mut self,
+        py: Python,
+        config: crate::ConfigWrapper,
+        clear_beliefs: bool,
+    ) -> PyResult<()> {
         config.on_worker(py, |_| {
-            self.get_inner_mut().propagate_all_vars();
+            self.get_inner_mut().propagate_all_vars(clear_beliefs);
             Ok(())
         })
     }
@@ -368,9 +374,16 @@ impl BPState {
             Ok(())
         })
     }
-    pub fn propagate_loopy_step(&mut self, py: Python, n_steps: u32, config: crate::ConfigWrapper) {
+    pub fn propagate_loopy_step(
+        &mut self,
+        py: Python,
+        n_steps: u32,
+        config: crate::ConfigWrapper,
+        clear_beliefs: bool,
+    ) {
         config.on_worker(py, |_| {
-            self.get_inner_mut().propagate_loopy_step(n_steps);
+            self.get_inner_mut()
+                .propagate_loopy_step(n_steps, clear_beliefs);
         });
     }
     pub fn graph(&self) -> FactorGraph {

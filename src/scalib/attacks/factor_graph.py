@@ -191,7 +191,7 @@ class BPState:
     @property
     def fg(self) -> FactorGraph:
         """The associated factor graph."""
-        self._fg
+        return self._fg
 
     def set_evidence(self, var: str, distribution: Optional[npt.NDArray[np.float64]]):
         r"""Sets prior distribution of a variable.
@@ -210,7 +210,12 @@ class BPState:
         else:
             self._inner.set_evidence(var, distribution)
 
-    def bp_loopy(self, it: int, initialize_states: bool):
+    def bp_loopy(
+        self,
+        it: int,
+        initialize_states: bool,
+        clear_beliefs: bool = True,
+    ):
         """Runs belief propagation algorithm on the current state of the graph.
 
         This is a shortcut for calls to :meth:`propagate_var` and :meth:`propagate_factor`. It is equivalent to:
@@ -233,10 +238,12 @@ class BPState:
         initialize_states:
             Whether to update variable distributions before running the BP iterations.
             Recommended after using :func:`BPState.set_evidence`.
+        clear_beliefs:
+            Whether to clear beliefs between vars -> factors. Setting to False can help debugging. Default value is True.
         """
         if initialize_states:
-            self._inner.propagate_all_vars(get_config())
-        self._inner.propagate_loopy_step(it, get_config())
+            self._inner.propagate_all_vars(get_config(), clear_beliefs)
+        self._inner.propagate_loopy_step(it, get_config(), clear_beliefs)
 
     def bp_acyclic(
         self,
@@ -347,7 +354,7 @@ class BPState:
         """
         return self._inner.get_belief_from_var(var, factor)
 
-    def propagate_var(self, var: str):
+    def propagate_var(self, var: str, clear_beliefs: bool = True):
         """Run belief propagation on variable var.
 
         This fetches beliefs from adjacent factors, computes the var
@@ -357,9 +364,11 @@ class BPState:
         ----------
         var : string
             Identifier of the variable.
+        clear_beliefs:
+            Whether to clear beliefs between vars -> factors. Setting to False can help debugging. Default value is True.
 
         """
-        return self._inner.propagate_var(var, get_config())
+        return self._inner.propagate_var(var, get_config(), clear_beliefs)
 
     def propagate_factor(self, factor: str):
         """Run belief propagation on the given factor.
@@ -382,7 +391,7 @@ class BPState:
         for var in self._inner.graph().var_names():
             s.append(f"\tVar {var}")
             s.append(repr(self.get_distribution(var)))
-        s.append("FACTORS FROM VARS")
+        s.append("VARS TO FACTORS")
         for factor in self._inner.graph().factor_names():
             for var in self._inner.graph().factor_scope(factor):
                 s.append(f"\t{var} -> {factor}")

@@ -11,4 +11,5 @@ def example_path(example_file):
 
 
 def test_examples():
-    runpy.run_path(example_path("aes_simulation.py"))
+    for p in ["aes_attack.py", "aes_tvla.py", "aes_info.py"]:
+        runpy.run_path(example_path(p))

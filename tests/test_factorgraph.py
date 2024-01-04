@@ -379,7 +379,6 @@ def test_and_not_or():
         d = bp_state.get_distribution(v)
         d2 = bp_state2.get_distribution(v)
         assert np.allclose(d, d2)
-
     bp_state3 = BPState(graph, n, {"p": p, "t": t})
     bp_state3.set_evidence("x", distri_x)
     bp_state3.set_evidence("y", distri_y)
@@ -394,7 +393,7 @@ def test_ADD():
     """
     Test ADD between distributions
     """
-    nc = 251
+    nc = 241
     n = 4
     distri_x = make_distri(nc, n)
     distri_y = make_distri(nc, n)
@@ -402,7 +401,7 @@ def test_ADD():
     graph = f"""
         # some comments
         NC {nc}
-        PROPERTY z = x+y
+        PROPERTY F0: z = x+y
         VAR MULTI z
         VAR MULTI x
         VAR MULTI y
@@ -415,6 +414,50 @@ def test_ADD():
     bp_state.set_evidence("y", distri_y)
 
     bp_state.bp_loopy(1, True)
+    distri_z = bp_state.get_distribution("z")
+
+    distri_z_ref = np.zeros(distri_z.shape)
+    msg = np.zeros(distri_z.shape)
+
+    for x in range(nc):
+        for y in range(nc):
+            distri_z_ref[:, (x + y) % nc] += distri_x[:, x] * distri_y[:, y]
+
+    distri_z_ref = (distri_z_ref.T / np.sum(distri_z_ref, axis=1)).T
+    assert np.allclose(distri_z_ref, distri_z)
+
+
+def test_ADD2():
+    """
+    Test ADD between distributions
+    """
+    nc = 16
+    n = 1
+    distri_x = np.zeros((n, nc))  # make_distri(nc, n)
+    distri_y = np.zeros((n, nc))  # make_distri(nc, n)
+
+    distri_x[:, 0] = 1.0
+    distri_y[:, 0] = 1.0
+
+    graph = f"""
+        # some comments
+        NC {nc}
+        PROPERTY F: z = x+y
+        VAR MULTI z
+        VAR MULTI x
+        VAR MULTI y
+
+        """
+
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n)
+    bp_state.set_evidence("x", distri_x)
+    bp_state.set_evidence("y", distri_y)
+    print(bp_state.debug())
+    bp_state.bp_loopy(1, True)
+    print(bp_state.debug())
+    bp_state.bp_loopy(10, False)
+    print(bp_state.debug())
     distri_z = bp_state.get_distribution("z")
 
     distri_z_ref = np.zeros(distri_z.shape)
@@ -623,11 +666,29 @@ def test_xor():
 
     print("distri_x_ref", distri_x)
     print("distri_y_ref", distri_y)
-    print("distri_z_ref", distri_z_ref)
 
     distri_z_ref = distri_z_ref / np.sum(distri_z_ref)
+    print("distri_z_ref", distri_z_ref)
     assert np.allclose(distri_z_ref, distri_z)
     assert np.allclose(distri_z_ref, distri_z2)
+
+
+def test_xor_acyclic():
+    nc = 4
+    fg = FactorGraph(
+        f"""NC {nc}
+    VAR MULTI x0
+    VAR MULTI x4
+    VAR MULTI y0
+    PROPERTY F1: y0 = x0 ^ x4
+    """
+    )
+    bp = BPState(fg, 1)
+    for v in fg.vars():
+        bp.set_evidence(v, make_distri(nc, 1))
+    for v in ["x0", "x4"]:
+        bp.bp_acyclic(v)
+        bp.get_distribution(v)
 
 
 def test_bad_var_norm():
@@ -783,7 +844,7 @@ def test_and_rounding_error_simple():
     assert (bp.get_belief_to_var("B", "P") >= 0.0).all()
 
 
-def test_and_rounding_error_simple():
+def test_and_rounding_error_simple2():
     # test case of issue #86
     factor_graph = """NC 16
     VAR MULTI K0
@@ -936,6 +997,175 @@ def test_manytraces():
     distri_y_ref = distri_y_ref / distri_y_ref.sum(axis=1, keepdims=True)
 
     assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
+
+
+def test_ADD3():
+    nc = 13
+    graph = f"""NC {nc}
+    TABLE SUB = [0, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+    VAR MULTI a0
+    VAR MULTI x0
+    VAR MULTI x1
+
+
+
+    PROPERTY F0: a0 = x0 + x1
+    """
+    a0_distr = np.array(
+        [[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+    )
+    x0_distr = np.array(
+        [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]]
+    )
+    x1_distr = np.array(
+        [[0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+    )
+    fg = FactorGraph(graph)
+    bp_state = BPState(fg, 1)
+    bp_state.set_evidence("x0", x0_distr)
+    bp_state.set_evidence("x1", x1_distr)
+    bp_state.set_evidence("a0", a0_distr)
+    bp_state.bp_loopy(50, initialize_states=False)
+    for x in ["x0", "x1", "a0"]:
+        print(bp_state.get_distribution(x))
+        assert not np.isnan(bp_state.get_distribution(x)).any()
+
+
+def test_ADD4():
+    nc = 256
+    n = 10
+    graph = f"""NC {nc}
+    VAR MULTI a0
+    VAR MULTI x0
+    VAR MULTI x1
+
+
+
+    PROPERTY F0: a0 = x0 + x1
+    """
+    fg = FactorGraph(graph)
+    for _ in range(50):
+        bp = BPState(fg, n)
+
+        bp.set_evidence("x0", make_distri(nc, n))
+        bp.set_evidence("x1", make_distri(nc, n))
+        bp.set_evidence("a0", make_distri(nc, n))
+        bp.bp_loopy(50, initialize_states=False)
+        for x in ["x0", "x1", "a0"]:
+            assert not np.isnan(bp.get_distribution(x)).any()
+
+
+def test_mix_single_multi():
+    graph_desc = """
+    NC 2
+    TABLE t
+    VAR SINGLE s
+
+    VAR MULTI a
+    VAR MULTI b
+
+    PROPERTY TABLE: a = t[s]
+    PROPERTY XOR: b = a ^ s
+    """
+
+    graph_desc2 = """
+    NC 2
+    TABLE t
+    VAR SINGLE s
+
+    VAR SINGLE a0
+    VAR SINGLE b0
+
+    PROPERTY a0 = t[s]
+    PROPERTY b0 = a0 ^ s
+
+    VAR SINGLE a1
+    VAR SINGLE b1
+
+    PROPERTY a1 = t[s]
+    PROPERTY b1 = a1 ^ s
+    """
+
+    graph = FactorGraph(graph_desc, {"t": np.arange(2, dtype=np.uint32)})
+    graph2 = FactorGraph(graph_desc2, {"t": np.arange(2, dtype=np.uint32)})
+
+    sasca = BPState(graph, 2)
+    sasca.bp_loopy(4, initialize_states=True)  # check no crash
+
+    sasca = BPState(graph, 2)
+    sasca2 = BPState(graph2, 1)
+
+    for _ in range(10):
+        sasca.bp_loopy(1, initialize_states=False)
+        sasca2.bp_loopy(1, initialize_states=False)
+        for v in ("a", "b"):
+            d = sasca.get_distribution(v)
+            d0 = sasca2.get_distribution(f"{v}0")
+            d1 = sasca2.get_distribution(f"{v}0")
+            if d is not None:
+                assert np.allclose(d[0, :], d0, rtol=1e-5, atol=1e-19)
+                assert np.allclose(d[1, :], d1, rtol=1e-5, atol=1e-19)
+        d = sasca.get_distribution("s")
+        d2 = sasca2.get_distribution("s")
+        if d is not None:
+            assert np.allclose(d, d2, rtol=1e-5, atol=1e-19)
+
+
+def test_ADD5():
+    for nc in [13, 256]:
+        n = 10
+        graph = f"""NC {nc}
+        VAR MULTI x
+        VAR MULTI y
+        VAR MULTI z
+
+
+
+        PROPERTY F0: z = x + y
+        """
+
+        fg = FactorGraph(graph)
+        for _ in range(50):
+            bp = BPState(fg, n)
+
+            x_distri = make_distri(nc, n)
+            z_distri = make_distri(nc, n)
+            bp.set_evidence("x", x_distri)
+            bp.set_evidence("z", z_distri)
+
+            y_distri_ref = np.zeros(x_distri.shape)
+
+            for x in range(nc):
+                for z in range(nc):
+                    y_distri_ref[:, (z - x) % nc] += x_distri[:, x] * z_distri[:, z]
+
+            y_distri_ref = (y_distri_ref.T / np.sum(y_distri_ref, axis=1)).T
+
+            bp.bp_loopy(3, initialize_states=False)
+
+            assert np.allclose(y_distri_ref, bp.get_distribution("y"))
+            for x in ["x", "y", "z"]:
+                print(bp.get_distribution(x))
+                assert not np.isnan(bp.get_distribution(x)).any()
+
+
+def test_clear_beliefs():
+    graph = """
+    NC 2
+    PROPERTY s1: x = a^b
+    VAR MULTI x
+    VAR MULTI a
+    VAR MULTI b
+    """
+    fg = FactorGraph(graph)
+    bp = BPState(fg, 1)
+    for k in fg.vars():
+        bp.set_evidence(k, make_distri(2, 1))
+    bp.bp_loopy(1, False, clear_beliefs=False)
+
+    assert bp.get_belief_from_var("x", "s1") is not None
+    assert bp.get_belief_from_var("a", "s1") is not None
+    assert bp.get_belief_from_var("b", "s1") is not None
 
 
 def test_generic_factor():

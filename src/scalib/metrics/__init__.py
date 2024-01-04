@@ -10,9 +10,11 @@ This module contains several well-know side-channel metrics.
 
    SNR
    ttest
+   RLDAInformationEstimator
 """
-__all__ = ["SNR", "ttest"]
+__all__ = ["SNR", "ttest", "RLDAInformationEstimator"]
 
 from .snr import SNR
 from .ttest import Ttest
 from .ttest import MTtest
+from .information import RLDAInformationEstimator

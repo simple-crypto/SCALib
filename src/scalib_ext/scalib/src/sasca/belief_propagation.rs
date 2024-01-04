@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use itertools::Itertools;
 use thiserror::Error;
 
 use super::factor_graph as fg;
@@ -198,33 +199,75 @@ impl BPState {
         self.belief_to_var[edge] = belief;
         Ok(())
     }
-    // Propagation type:
-    // belief to var -> var
-    // var -> belief to func
-    // trhough func: towards all vars, towards a subset of vars
-    pub fn propagate_to_var(&mut self, var: VarId, clear_evidence: bool) {
-        let distr_iter = self
-            .graph
-            .var(var)
-            .edges
-            .values()
-            .map(|e| &self.belief_to_var[*e]);
-        self.var_state[var] = self.evidence[var].take_or_clone(clear_evidence);
-        // We multiply_reg to avoid having very low values in the product.
-        // Since inputs should not be too big, we should not have any overflow.
-        // Underflow my happen, since probas are lower-bounded by MIN_PROBA**2.
-        // This also normalizes the result.
-        self.var_state[var].multiply_reg(distr_iter);
+
+    /// propgate only go given edges
+    fn propagate_var_t_multi(
+        &mut self,
+        var_id: VarId,
+        to_edges: Vec<EdgeId>,
+        other_edges: Vec<EdgeId>,
+        clear_evidence: bool,
+        clear_beliefs: bool,
+    ) {
+        let var = self.graph.var(var_id);
+        assert!(var.multi);
+        let mut base = self.evidence[var_id].take_or_clone(clear_evidence);
+        base.multiply_norm(other_edges.iter().map(|e| &self.belief_to_var[*e]));
+        if clear_beliefs {
+            for e in other_edges {
+                self.belief_to_var[e].reset();
+            }
+        }
+        let (var_state, new_beliefs) = super::bp_compute::belief_reciprocal_product(
+            base,
+            to_edges.iter().map(|e| &self.belief_to_var[*e]),
+        );
+        for (e, d) in to_edges.iter().zip(new_beliefs.into_iter()) {
+            self.belief_from_var[*e] = d;
+            if clear_beliefs {
+                self.belief_to_var[*e].reset();
+            }
+        }
+        self.var_state[var_id] = var_state;
     }
-    pub fn propagate_from_var(&mut self, edge: EdgeId) {
-        // Dividing here is ok if we ensure that there is no zero element and no
-        // underflow (or denormalization).
-        // This is guaranteed as long as min_proba > var_degree * MIN_POSITIVE
-        let var = self.graph.edges[edge].var;
-        self.belief_from_var[edge].reset();
-        self.belief_from_var[edge] =
-            Distribution::divide_reg(&self.var_state[var], &self.belief_to_var[edge]);
+
+    fn propagate_var_t_single(
+        &mut self,
+        var_id: VarId,
+        to_edges: Vec<EdgeId>,
+        other_edges: Vec<EdgeId>,
+        clear_evidence: bool,
+        clear_beliefs: bool,
+    ) {
+        let var = self.graph.var(var_id);
+        assert!(!var.multi);
+        let mut base = self.evidence[var_id].take_or_clone(clear_evidence);
+        for e in other_edges {
+            base.multiply_to_single(&self.belief_to_var[e]);
+            if clear_beliefs {
+                self.belief_to_var[e].reset();
+            }
+        }
+        let (global_products, local_products): (Vec<_>, Vec<_>) = to_edges
+            .iter()
+            .map(|e| self.belief_to_var[*e].reciprocal_product(self.evidence[var_id].as_uniform()))
+            .unzip();
+        let (var_state, new_beliefs_global) =
+            super::bp_compute::belief_reciprocal_product(base, global_products.iter());
+        for ((e, mut local), global) in to_edges
+            .iter()
+            .zip(local_products.into_iter())
+            .zip(new_beliefs_global.into_iter())
+        {
+            local.multiply_norm(std::iter::once(&global));
+            self.belief_from_var[*e] = local;
+            if clear_beliefs {
+                self.belief_to_var[*e].reset();
+            }
+        }
+        self.var_state[var_id] = var_state;
     }
+
     pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId], clear_incoming: bool) {
         let factor = self.graph.factor(factor_id);
         // Pre-erase to have buffers available in cache allocator.
@@ -237,7 +280,8 @@ impl BPState {
             ($f:ident, $($arg:expr),*) => {
                 {
                     let it = $f(factor, &mut self.belief_from_var, dest, clear_incoming, $($arg,)*);
-                    for (distr, dest) in it.zip(dest.iter()) {
+                    for (mut distr, dest) in it.zip(dest.iter()) {
+                        distr.regularize();
                         self.belief_to_var[factor.edges[dest]] = distr;
                     }
                 }
@@ -276,29 +320,72 @@ impl BPState {
         let dest: Vec<_> = self.graph.factor(factor).edges.keys().cloned().collect();
         self.propagate_factor(factor, dest.as_slice(), false);
     }
-    pub fn propagate_from_var_all(&mut self, var: VarId) {
-        for i in 0..self.graph.var(var).edges.len() {
-            self.propagate_from_var(self.graph.var(var).edges[i]);
-        }
-        for i in 0..self.graph.var(var).edges.len() {
-            self.belief_to_var[self.graph.var(var).edges[i]].reset();
+    pub fn propagate_var(&mut self, var_id: VarId, clear_beliefs: bool) {
+        let clear_evidence = false;
+        self.propagate_var_to(
+            var_id,
+            self.graph
+                .var(var_id)
+                .edges
+                .values()
+                .cloned()
+                .collect::<Vec<_>>(),
+            clear_beliefs,
+            clear_evidence,
+        );
+    }
+    pub fn propagate_var_to(
+        &mut self,
+        var_id: VarId,
+        mut to_edges: Vec<EdgeId>,
+        clear_beliefs: bool,
+        clear_evidence: bool,
+    ) {
+        let var = self.graph.var(var_id);
+        let mut all_edges = var.edges.values().collect::<Vec<_>>();
+        all_edges.sort_unstable();
+        to_edges.sort_unstable();
+        let other_edges = all_edges
+            .iter()
+            .merge_join_by(to_edges.iter(), |x, y| x.cmp(&y))
+            .filter_map(|x| {
+                if let itertools::EitherOrBoth::Left(e) = x {
+                    Some(*e)
+                } else {
+                    None
+                }
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if var.multi {
+            self.propagate_var_t_multi(
+                var_id,
+                to_edges,
+                other_edges,
+                clear_evidence,
+                clear_beliefs,
+            );
+        } else {
+            self.propagate_var_t_single(
+                var_id,
+                to_edges,
+                other_edges,
+                clear_evidence,
+                clear_beliefs,
+            );
         }
     }
-    pub fn propagate_var(&mut self, var: VarId) {
-        self.propagate_to_var(var, false);
-        self.propagate_from_var_all(var);
-    }
-    pub fn propagate_all_vars(&mut self) {
+    pub fn propagate_all_vars(&mut self, clear_beliefs: bool) {
         for var_id in self.graph.range_vars() {
-            self.propagate_var(var_id);
+            self.propagate_var(var_id, clear_beliefs);
         }
     }
-    pub fn propagate_loopy_step(&mut self, n_steps: u32) {
+    pub fn propagate_loopy_step(&mut self, n_steps: u32, clear_beliefs: bool) {
         for _ in 0..n_steps {
             for factor_id in self.graph.range_factors() {
                 self.propagate_factor_all(factor_id);
             }
-            self.propagate_all_vars();
+            self.propagate_all_vars(clear_beliefs);
         }
     }
     pub fn propagate_acyclic(
@@ -313,16 +400,12 @@ impl BPState {
         for (node, parent) in self.graph.propagation_order(var) {
             match node {
                 Node::Var(var_id) => {
-                    self.propagate_to_var(var_id, clear_evidence);
-                    if let Some(dest_factor) = parent {
-                        let edge_id = self.graph.var(var_id).edges[&dest_factor.factor().unwrap()];
-                        self.propagate_from_var(edge_id);
-                    }
-                    if clear_intermediates {
-                        for e in self.graph.var(var_id).edges.values() {
-                            self.belief_to_var[*e].reset();
-                        }
-                    }
+                    let to_edges = if let Some(dest_factor) = parent {
+                        vec![self.graph.var(var_id).edges[&dest_factor.factor().unwrap()]]
+                    } else {
+                        vec![]
+                    };
+                    self.propagate_var_to(var_id, to_edges, clear_intermediates, clear_evidence);
                 }
                 Node::Factor(factor_id) => {
                     let parent_var = parent.unwrap().var().unwrap();
@@ -473,18 +556,19 @@ fn factor_xor<'a>(
     let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
     acc.wht();
     let mut taken_dest = vec![false; factor.edges.len()];
-    for dest in dest {
+    let mut taken_dest_idx = vec![None; factor.edges.len()];
+    for (i, dest) in dest.iter().enumerate() {
         taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
+        taken_dest_idx[factor.edges.get_index_of(dest).unwrap()] = Some(i);
     }
     let mut uniform_iter = factor
         .edges
         .values()
-        .zip(taken_dest.iter())
-        .enumerate()
-        .filter(|(_, (e, _))| !belief_from_var[**e].is_full());
+        .zip(taken_dest_idx.iter())
+        .filter(|(e, _)| !belief_from_var[**e].is_full());
     let uniform_op = uniform_iter.next();
-    if let Some((i, (e_dest, t))) = uniform_op {
-        if !*t || uniform_iter.next().is_some() {
+    if let Some((e_dest, t)) = uniform_op {
+        if t.is_none() || uniform_iter.next().is_some() {
             // At least 2 uniform operands, or single uniform is not in dest,
             // all dest messages are uniform.
             reset_incoming(factor, belief_from_var, &taken_dest, clear_incoming);
@@ -502,7 +586,7 @@ fn factor_xor<'a>(
             acc.wht();
             acc.regularize();
             let mut res = vec![acc.as_uniform(); dest.len()];
-            res[i] = acc;
+            res[t.unwrap()] = acc;
             return res.into_iter();
         }
     } else {
@@ -577,15 +661,17 @@ fn factor_add<'a>(
             .into_iter();
     }
     let mut taken_dest = vec![false; factor.edges.len()];
+    let mut negated_vars = vec![false; factor.edges.len()];
+    negated_vars[0] = true;
     for dest in dest {
         taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
     }
     let mut uniform_iter = factor
         .edges
-        .values()
+        .iter()
         .zip(taken_dest.iter())
-        .enumerate()
-        .filter(|(_, (e, _))| !belief_from_var[**e].is_full());
+        .zip(negated_vars.iter())
+        .filter(|(((_, e), _), _)| !belief_from_var[**e].is_full());
     let uniform_op = uniform_iter.next();
     let uniform_template = belief_from_var[factor.edges[0]].as_uniform();
     let (nmulti, nc) = uniform_template.shape();
@@ -594,7 +680,7 @@ fn factor_add<'a>(
     let mut acc_fft_init = false;
     let mut fft_scratch = plans.r2c.make_scratch_vec();
     let mut fft_input_scratch = plans.r2c.make_input_vec();
-    if let Some((i, (e_dest, t))) = uniform_op {
+    if let Some((((v_dest, e_dest), t), dest_negated)) = uniform_op {
         if !*t || uniform_iter.next().is_some() {
             // At least 2 uniform operands, or single uniform is not in dest,
             // all dest messages are uniform.
@@ -602,13 +688,15 @@ fn factor_add<'a>(
             return vec![uniform_template; dest.len()].into_iter();
         } else {
             // Single uniform op, only compute for that one.
-            for e in factor.edges.values() {
+            for (e, negated_var) in factor.edges.values().zip(negated_vars.iter()) {
                 if e != e_dest {
+                    let negate = !(dest_negated ^ negated_var);
                     belief_from_var[*e].fft_to(
                         fft_input_scratch.as_mut_slice(),
                         fft_tmp.view_mut(),
                         fft_scratch.as_mut_slice(),
                         plans,
+                        negate,
                     );
                     if acc_fft_init {
                         acc_fft *= &fft_tmp;
@@ -616,67 +704,87 @@ fn factor_add<'a>(
                         acc_fft.assign(&fft_tmp);
                         acc_fft_init = true;
                     }
-                    if clear_incoming {
-                        belief_from_var[*e].reset();
-                    }
+                }
+                if clear_incoming {
+                    belief_from_var[*e].reset();
                 }
             }
-            let mut acc = uniform_template.clone();
-            let mut fft_scratch = plans.c2r.make_scratch_vec();
-            acc.ifft(acc_fft.view_mut(), fft_scratch.as_mut_slice(), plans);
-            acc.regularize();
-            let mut res = vec![uniform_template; dest.len()];
-            res[i] = acc;
-            return res.into_iter();
         }
+        let mut acc = uniform_template.clone();
+        let mut fft_scratch = plans.c2r.make_scratch_vec();
+        acc.ifft(acc_fft.view_mut(), fft_scratch.as_mut_slice(), plans, false);
+        acc.regularize();
+        let mut res = vec![uniform_template; dest.len()];
+        res[dest.iter().position(|v| v == v_dest).unwrap()] = acc;
+        return res.into_iter();
     } else {
         // Here we have to actually compute.
         // Simply make the product if FFT domain
         // We do take the product of all factors then divide because some factors could be zero.
         let mut dest_fft = Vec::with_capacity(dest.len());
-        for (e, taken) in factor.edges.values().zip(taken_dest.iter()) {
-            let v = if *taken {
+        for ((e, taken), negated_var) in factor
+            .edges
+            .values()
+            .zip(taken_dest.iter())
+            .zip(negated_vars.iter())
+        {
+            if *taken {
                 let mut fft_e = ndarray::Array2::zeros((nmulti, nc / 2 + 1));
                 belief_from_var[*e].fft_to(
                     fft_input_scratch.as_mut_slice(),
                     fft_e.view_mut(),
                     fft_scratch.as_mut_slice(),
                     plans,
+                    *negated_var,
                 );
+
                 dest_fft.push(fft_e);
-                dest_fft.last().unwrap()
             } else {
                 belief_from_var[*e].fft_to(
                     fft_input_scratch.as_mut_slice(),
                     fft_tmp.view_mut(),
                     fft_scratch.as_mut_slice(),
                     plans,
+                    *negated_var,
                 );
-                &fft_tmp
-            };
-            if acc_fft_init {
-                acc_fft *= v;
-            } else {
-                acc_fft.assign(&v);
-                acc_fft_init = true;
+
+                if acc_fft_init {
+                    acc_fft *= &fft_tmp;
+                } else {
+                    acc_fft.assign(&fft_tmp);
+                    acc_fft_init = true;
+                }
             }
             if clear_incoming {
                 belief_from_var[*e].reset();
             }
         }
+
         // This could be done in O(l) instead of O(l^2) where l=dest.len() by
         // better caching product computations.
         let mut fft_scratch = plans.c2r.make_scratch_vec();
         return (0..dest.len())
             .map(move |i| {
-                let mut res = acc_fft.clone();
+                let mut res = if acc_fft_init {
+                    acc_fft.clone()
+                } else {
+                    ndarray::Array2::ones(acc_fft.raw_dim())
+                };
+
                 for (j, fft_op) in dest_fft.iter().enumerate() {
                     if j != i {
                         res *= fft_op;
                     }
                 }
+                let idx = factor.edges.get_index_of(&dest[i]).unwrap();
+
                 let mut acc = uniform_template.clone();
-                acc.ifft(res.view_mut(), fft_scratch.as_mut_slice(), plans);
+                acc.ifft(
+                    res.view_mut(),
+                    fft_scratch.as_mut_slice(),
+                    plans,
+                    !negated_vars[idx],
+                );
                 acc.regularize();
                 acc
             })
