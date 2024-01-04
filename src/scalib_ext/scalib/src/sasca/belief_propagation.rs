@@ -424,7 +424,13 @@ fn factor_gen_and<'a>(
     clear_incoming: bool,
     pub_red: &PublicValue,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    let FactorKind::Assign { expr: ExprFactor::AND { vars_neg }, has_res } = &factor.kind else { unreachable!() };
+    let FactorKind::Assign {
+        expr: ExprFactor::AND { vars_neg },
+        has_res,
+    } = &factor.kind
+    else {
+        unreachable!()
+    };
     // Special case for single-input AND
     if has_res & (factor.edges.len() == 2) {
         return dest
@@ -871,7 +877,9 @@ fn factor_gen_factor<'a>(
     nmulti: usize,
     nc: usize,
 ) -> impl Iterator<Item = Distribution> + 'a {
-    let fg::FactorKind::GenFactor { operands, .. } = &factor.kind else { unreachable!() };
+    let fg::FactorKind::GenFactor { operands, .. } = &factor.kind else {
+        unreachable!()
+    };
     let res: Vec<Distribution> = dest.iter().map(|dest| {
         let dest_idx = factor.edges.get_index_of(dest).unwrap();
         let mut distr = belief_from_var[factor.edges[dest_idx]].clone();
