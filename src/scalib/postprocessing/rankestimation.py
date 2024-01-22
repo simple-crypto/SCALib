@@ -41,15 +41,15 @@ Reference
 
 Notes
 -----
-The rank estimation algorithm is based on [1]_, with the following
+The rank estimation algorithm is based on :footcite:p:`rankest_histograms`,
+with the following
 optimization: computation of histogram bins with higher score than the expected
 key is skipped, since it has no impact on the final rank.
 
 References
 ----------
 
-.. [1] "Simple Key Enumeration (and Rank Estimation) Using Histograms: An
-   Integrated Approach", R. Poussier, F.-X. Standaert, V. Grosso in CHES2016.
+.. footbibliography::
 """
 
 import math

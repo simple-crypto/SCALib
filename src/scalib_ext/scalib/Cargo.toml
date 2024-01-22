@@ -41,7 +41,8 @@ ndarray = { version = "0.15", features = ["rayon", "approx", "serde"] }
 blis-src = { version = "0.2.1", default-features=false, features=["static", "pthreads"], optional = true }
 blis-sys2 = { version = "0.2.1", optional = true }
 matrixmultiply = "0.3"
-nalgebra = "0.32"
+kdtree = { version = "0.5.1", features = ["serialize"] }
+nalgebra = "0.30.1"
 nshare = { version="0.9", features=["nalgebra", "ndarray"] }
 
 realfft = "2.0"

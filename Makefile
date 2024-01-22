@@ -38,11 +38,10 @@ fmt:
 	tox run -e fmt
 
 wheel_avx2:
-	SCALIB_AVX2=1 CARGO_TARGET_DIR=.cargo_build_avx2 pip wheel . --no-deps
+	SCALIB_AVX2=1 CARGO_TARGET_DIR=.cargo_build_avx2 python3 -m build -w -o dist/avx2
 
 wheel_local:
-	CARGO_TARGET_DIR=.cargo_build pip wheel . --no-deps
+	CARGO_TARGET_DIR=.cargo_build python3 -m build -w -o dist/local
 
 wheel_portable:
-	SCALIB_PORTABLE=1 CARGO_TARGET_DIR=.cargo_build_portable pip wheel . --no-deps
-
+	SCALIB_PORTABLE=1 CARGO_TARGET_DIR=.cargo_build_portable  python3 -m build -w -o dist/portable

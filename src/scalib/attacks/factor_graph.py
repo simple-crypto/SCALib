@@ -8,9 +8,44 @@ from scalib.config import get_config
 
 __all__ = ["FactorGraph", "BPState", "GenFactor"]
 
+
+class GenFactor:
+    """Generic factor for belief propagation."""
+
+    class GenFactorKind:
+        DENSE = 0
+        SPARSE_FUNCTIONAL = 1
+
+    def __init__(self, kind: GenFactorKind, factor):
+        self.kind = kind
+        self.factor = factor
+
+    @classmethod
+    def dense(cls, factor: npt.NDArray[np.float64]):
+        """A dense factor.
+
+        ``factor`` is a n-dimensional array, each axis corresponds to one
+        variable, entries in the array are probabilities.
+        """
+        assert len(set(factor.shape)) == 1
+        assert factor.dtype == np.float64
+        return cls(cls.GenFactorKind.DENSE, factor)
+
+    @classmethod
+    def sparse_functional(cls, factor: npt.NDArray[np.uint32]):
+        """A sparse functional factor.
+
+        ``factor`` is a 2D array, each row corresponding to an entry in the
+        factor, and in each row, the values are the values of the variables.
+        """
+        assert len(factor.shape) == 2
+        assert factor.dtype == np.uint32
+        return cls(cls.GenFactorKind.SPARSE_FUNCTIONAL, factor)
+
+
 CstValue = Union[int, Sequence[int]]
 ValsAssign = Mapping[str, CstValue]
-GenFactors = Mapping[str, Union[GenFactor, Sequence[GenFactor]]
+GenFactors = Mapping[str, Union[GenFactor, Sequence[GenFactor]]]
 
 
 class FactorGraph:
@@ -190,7 +225,7 @@ class BPState:
     @property
     def fg(self) -> FactorGraph:
         """The associated factor graph."""
-        self._fg
+        return self._fg
 
     def set_evidence(self, var: str, distribution: Optional[npt.NDArray[np.float64]]):
         r"""Sets prior distribution of a variable.
@@ -213,7 +248,6 @@ class BPState:
         self,
         it: int,
         initialize_states: bool,
-        alpha: float = 0.0,
         clear_beliefs: bool = True,
     ):
         """Runs belief propagation algorithm on the current state of the graph.
@@ -238,15 +272,12 @@ class BPState:
         initialize_states:
             Whether to update variable distributions before running the BP iterations.
             Recommended after using :func:`BPState.set_evidence`.
-        alpha:
-            Dampening factor. When set to 0, dampening is disabled, otherwise a new message from a var -> factor is the weighted average of the current and previous message e.g. alpha*m_{v->f} + (1-alpha)*mprev_{v->f}
-            alpha must be in the interval [0.0, 1.0]. Default value is 0.
         clear_beliefs:
             Whether to clear beliefs between vars -> factors. Setting to False can help debugging. Default value is True.
         """
         if initialize_states:
-            self._inner.propagate_all_vars(get_config(), alpha, clear_beliefs)
-        self._inner.propagate_loopy_step(it, get_config(), alpha, clear_beliefs)
+            self._inner.propagate_all_vars(get_config(), clear_beliefs)
+        self._inner.propagate_loopy_step(it, get_config(), clear_beliefs)
 
     def bp_acyclic(
         self,
@@ -357,7 +388,7 @@ class BPState:
         """
         return self._inner.get_belief_from_var(var, factor)
 
-    def propagate_var(self, var: str, alpha: float = 0.0, clear_beliefs: bool = True):
+    def propagate_var(self, var: str, clear_beliefs: bool = True):
         """Run belief propagation on variable var.
 
         This fetches beliefs from adjacent factors, computes the var
@@ -367,14 +398,11 @@ class BPState:
         ----------
         var : string
             Identifier of the variable.
-        alpha:
-            Dampening factor. When set to 0, dampening is disabled, otherwise a new message from a var -> factor is the weighted average of the current and previous message e.g. alpha*m_{v->f} + (1-alpha)*mprev_{v->f}
-            alpha must be in the interval [0.0, 1.0]. Default value is 0.
         clear_beliefs:
             Whether to clear beliefs between vars -> factors. Setting to False can help debugging. Default value is True.
 
         """
-        return self._inner.propagate_var(var, get_config(), alpha, clear_beliefs)
+        return self._inner.propagate_var(var, get_config(), clear_beliefs)
 
     def propagate_factor(self, factor: str):
         """Run belief propagation on the given factor.
@@ -411,8 +439,8 @@ class BPState:
 
 
 class GenFactor:
-    """Generic factor for belief propagation.
-    """
+    """Generic factor for belief propagation."""
+
     class GenFactorKind:
         DENSE = 0
         SPARSE_FUNCTIONAL = 1
@@ -431,6 +459,7 @@ class GenFactor:
         assert len(set(factor.shape)) == 1
         assert factor.dtype == np.float64
         return cls(cls.GenFactorKind.DENSE, factor)
+
     @classmethod
     def sparse_functional(cls, factor: npt.NDArray[np.uint32]):
         """A sparse functional factor.
