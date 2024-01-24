@@ -467,6 +467,6 @@ class GenFactor:
         ``factor`` is a 2D array, each row corresponding to an entry in the
         factor, and in each row, the values are the values of the variables.
         """
-        assert factor.shape == 2
+        assert len(factor.shape) == 2
         assert factor.dtype == np.uint32
         return cls(cls.GenFactorKind.SPARSE_FUNCTIONAL, factor)

@@ -999,73 +999,187 @@ def test_manytraces():
     assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
 
 
-def test_generic_factor():
-    fg1 = FactorGraph(
-        """NC 2
-    VAR MULTI K0
-    VAR MULTI K1
-    VAR MULTI N1
-    VAR MULTI L1
-    PROPERTY P1: L1 = K0 & !K1
-    """
-    )
-    fg2 = FactorGraph(
-        """NC 2
-    VAR MULTI K0
-    VAR MULTI K1
-    VAR MULTI L1
-    GENERIC MULTI f
-    PROPERTY P1: f(K0, K1, L1)
-    """
-    )
+def test_sparse_factor_xor():
+    from scalib.attacks.factor_graph import GenFactor
 
-    bp1 = BPState(fg1, 1)
-    bp2 = BPState(fg2, 1, gen_factors={"f": [np.ones((2, 2, 2), dtype=np.float64)]})
-    for k in ["K0", "K1"]:
-        d = make_distri(2, 1)
-        bp1.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
-        bp2.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
-    bp1.bp_loopy(3, False)
-    bp2.bp_loopy(3, False)
-
-    print(bp1.debug())
-    print(bp2.debug())
-
-
-def test_generic_factor2():
-    fg1 = FactorGraph(
-        """NC 2
-    VAR MULTI K0
-    VAR MULTI K1
-    VAR MULTI L1
-    PROPERTY P1: L1 = K0 & !K1
-    """
-    )
-    fg2 = FactorGraph(
-        """NC 2
-    VAR MULTI K0
-    VAR MULTI K1
-    VAR MULTI L1
+    nc = 256
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
     GENERIC SINGLE f
-    PROPERTY P1: f(K0, K1, L1)
-    """
+    PROPERTY F0: f(a,b,c)"""
+
+    graph2 = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    PROPERTY F0: c = a ^ b"""
+    fg = FactorGraph(graph)
+    fg2 = FactorGraph(graph2)
+    xor = []
+    n = 4
+    for a in range(nc):
+        for b in range(nc):
+            xor.append([a, b, (a ^ b) & 0xFF])
+    bp = BPState(
+        fg,
+        n,
+        gen_factors={"f": GenFactor.sparse_functional(np.array(xor, dtype=np.uint32))},
     )
-    factor = np.zeros((2, 2, 2))
-    factor[0, 0, 0] = 1.0
-    factor[0, 1, 0] = 1.0
-    factor[1, 0, 1] = 1.0
-    factor[1, 1, 0] = 1.0
-    bp1 = BPState(fg1, 1)
-    bp2 = BPState(fg2, 1, gen_factors={"f": factor})
-    for k in ["K0", "K1"]:
-        d = make_distri(2, 1)
-        bp1.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
-        bp2.set_evidence(k, distribution=np.array([[0.0, 1.0]]))
+    bp2 = BPState(fg2, n)
+    distr_a = make_distri(nc, n)
+    distr_b = make_distri(nc, n)
+    bp.set_evidence("a", distr_a)
+    bp.set_evidence("b", distr_b)
+    bp2.set_evidence("a", distr_a)
+    bp2.set_evidence("b", distr_b)
 
-    bp1.bp_loopy(1, True)
-    bp2.bp_loopy(1, True)
+    bp.bp_loopy(10, False)
+    bp2.bp_loopy(10, False)
+    assert np.allclose(bp.get_distribution("c"), bp2.get_distribution("c"))
 
-    assert np.allclose(bp1.get_distribution("L1"), bp2.get_distribution("L1"))
+
+def test_sparse_factor_xor_multi():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 256
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    GENERIC MULTI f
+    PROPERTY F0: f(a,b,c)"""
+
+    graph2 = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    PROPERTY F0: c = a ^ b"""
+    fg = FactorGraph(graph)
+    fg2 = FactorGraph(graph2)
+    xor = []
+    n = 4
+    for a in range(nc):
+        for b in range(nc):
+            xor.append([a, b, (a ^ b) & 0xFF])
+    bp = BPState(
+        fg,
+        n,
+        gen_factors={
+            "f": [
+                GenFactor.sparse_functional(np.array(xor, dtype=np.uint32))
+                for _ in range(n)
+            ]
+        },
+    )
+    bp2 = BPState(fg2, n)
+    distr_a = make_distri(nc, n)
+    distr_b = make_distri(nc, n)
+    bp.set_evidence("a", distr_a)
+    bp.set_evidence("b", distr_b)
+    bp2.set_evidence("a", distr_a)
+    bp2.set_evidence("b", distr_b)
+
+    bp.bp_loopy(10, False)
+    bp2.bp_loopy(10, False)
+    assert np.allclose(bp.get_distribution("c"), bp2.get_distribution("c"))
+
+
+def test_dense_factor_bff():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC SINGLE f
+    PROPERTY F0: f(a,b,c,d)"""
+
+    graph2 = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI bi
+    VAR MULTI c
+    VAR MULTI d
+    TABLE sub
+    PROPERTY F0: c = a + b
+    PROPERTY F1: bi = sub[b]
+    PROPERTY F2: d = a + bi"""
+
+    fg = FactorGraph(graph)
+    fg2 = FactorGraph(
+        graph2, {"sub": np.array([-n % nc for n in range(nc)], dtype=np.uint32)}
+    )
+    bff = np.zeros((nc, nc, nc, nc))
+    n = 4
+    for a in range(nc):
+        for b in range(nc):
+            bff[a, b, (a + b) % nc, (a - b) % nc] = 1.0
+
+    bp = BPState(fg, n, gen_factors={"f": GenFactor.dense(bff)})
+    bp2 = BPState(fg2, n)
+
+    distr_a = make_distri(nc, n)
+    distr_b = make_distri(nc, n)
+    bp.set_evidence("a", distr_a)
+    bp.set_evidence("b", distr_b)
+    bp2.set_evidence("a", distr_a)
+    bp2.set_evidence("b", distr_b)
+
+    bp.bp_loopy(10, False)
+    bp2.bp_loopy(10, False)
+    assert np.allclose(bp.get_distribution("c"), bp2.get_distribution("c"))
+
+
+def test_dense_factor_bff():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC MULTI f
+    PROPERTY F0: f(a,b,c,d)"""
+
+    graph2 = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI bi
+    VAR MULTI c
+    VAR MULTI d
+    TABLE sub
+    PROPERTY F0: c = a + b
+    PROPERTY F1: bi = sub[b]
+    PROPERTY F2: d = a + bi"""
+
+    fg = FactorGraph(graph)
+    fg2 = FactorGraph(
+        graph2, {"sub": np.array([-n % nc for n in range(nc)], dtype=np.uint32)}
+    )
+    bff = np.zeros((nc, nc, nc, nc))
+    n = 4
+    for a in range(nc):
+        for b in range(nc):
+            bff[a, b, (a + b) % nc, (a - b) % nc] = 1.0
+
+    bp = BPState(fg, n, gen_factors={"f": [GenFactor.dense(bff) for _ in range(n)]})
+    bp2 = BPState(fg2, n)
+
+    distr_a = make_distri(nc, n)
+    distr_b = make_distri(nc, n)
+    bp.set_evidence("a", distr_a)
+    bp.set_evidence("b", distr_b)
+    bp2.set_evidence("a", distr_a)
+    bp2.set_evidence("b", distr_b)
+
+    bp.bp_loopy(10, False)
+    bp2.bp_loopy(10, False)
+    assert np.allclose(bp.get_distribution("c"), bp2.get_distribution("c"))
 
 
 def test_manytraces():

@@ -151,13 +151,10 @@ fn pyobj2pubs<'a>(
 
 fn pyobj2genfactor_inner(py: Python, obj: &PyAny) -> PyResult<sasca::GenFactorInner> {
     let kind: u32 = obj.getattr("kind")?.extract()?;
-    let dense: u32 = obj
-        .getattr("GenericFactorKind")?
-        .getattr("DENSE")?
-        .extract()?;
+    let dense: u32 = obj.getattr("GenFactorKind")?.getattr("DENSE")?.extract()?;
     let sparse_functional: u32 = obj
-        .getattr("GenericFactorKind")?
-        .getattr("SPARSE_FUNCTIONNAL")?
+        .getattr("GenFactorKind")?
+        .getattr("SPARSE_FUNCTIONAL")?
         .extract()?;
     if kind == dense {
         let factor: &numpy::PyArrayDyn<f64> = obj.getattr("factor")?.extract()?;
