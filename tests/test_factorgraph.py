@@ -999,6 +999,221 @@ def test_manytraces():
     assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
 
 
+def test_sparse_factor_xor():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 256
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    GENERIC SINGLE f
+    PROPERTY F0: f(a,b,c)"""
+
+    graph2 = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    PROPERTY F0: c = a ^ b"""
+    fg = FactorGraph(graph)
+    fg2 = FactorGraph(graph2)
+    xor = []
+    n = 4
+    for a in range(nc):
+        for b in range(nc):
+            xor.append([a, b, (a ^ b) & 0xFF])
+    bp = BPState(
+        fg,
+        n,
+        gen_factors={"f": GenFactor.sparse_functional(np.array(xor, dtype=np.uint32))},
+    )
+    bp2 = BPState(fg2, n)
+    distr_a = make_distri(nc, n)
+    distr_b = make_distri(nc, n)
+    bp.set_evidence("a", distr_a)
+    bp.set_evidence("b", distr_b)
+    bp2.set_evidence("a", distr_a)
+    bp2.set_evidence("b", distr_b)
+
+    bp.bp_loopy(10, False)
+    bp2.bp_loopy(10, False)
+    assert np.allclose(bp.get_distribution("c"), bp2.get_distribution("c"))
+
+
+def test_sparse_factor_xor_multi():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 256
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    GENERIC MULTI f
+    PROPERTY F0: f(a,b,c)"""
+
+    graph2 = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    PROPERTY F0: c = a ^ b"""
+    fg = FactorGraph(graph)
+    fg2 = FactorGraph(graph2)
+    xor = []
+    n = 4
+    for a in range(nc):
+        for b in range(nc):
+            xor.append([a, b, (a ^ b) & 0xFF])
+    bp = BPState(
+        fg,
+        n,
+        gen_factors={
+            "f": [
+                GenFactor.sparse_functional(np.array(xor, dtype=np.uint32))
+                for _ in range(n)
+            ]
+        },
+    )
+    bp2 = BPState(fg2, n)
+    distr_a = make_distri(nc, n)
+    distr_b = make_distri(nc, n)
+    bp.set_evidence("a", distr_a)
+    bp.set_evidence("b", distr_b)
+    bp2.set_evidence("a", distr_a)
+    bp2.set_evidence("b", distr_b)
+
+    bp.bp_loopy(10, False)
+    bp2.bp_loopy(10, False)
+    assert np.allclose(bp.get_distribution("c"), bp2.get_distribution("c"))
+
+
+def test_dense_factor_bff():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC SINGLE f
+    PROPERTY F0: f(a,b,c,d)"""
+
+    graph2 = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI bi
+    VAR MULTI c
+    VAR MULTI d
+    TABLE sub
+    PROPERTY F0: c = a + b
+    PROPERTY F1: bi = sub[b]
+    PROPERTY F2: d = a + bi"""
+
+    fg = FactorGraph(graph)
+    fg2 = FactorGraph(
+        graph2, {"sub": np.array([-n % nc for n in range(nc)], dtype=np.uint32)}
+    )
+    bff = np.zeros((nc, nc, nc, nc))
+    n = 4
+    for a in range(nc):
+        for b in range(nc):
+            bff[a, b, (a + b) % nc, (a - b) % nc] = 1.0
+
+    bp = BPState(fg, n, gen_factors={"f": GenFactor.dense(bff)})
+    bp2 = BPState(fg2, n)
+
+    distr_a = make_distri(nc, n)
+    distr_b = make_distri(nc, n)
+    bp.set_evidence("a", distr_a)
+    bp.set_evidence("b", distr_b)
+    bp2.set_evidence("a", distr_a)
+    bp2.set_evidence("b", distr_b)
+
+    bp.bp_loopy(10, False)
+    bp2.bp_loopy(10, False)
+    assert np.allclose(bp.get_distribution("c"), bp2.get_distribution("c"))
+
+
+def test_dense_factor_bff():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC MULTI f
+    PROPERTY F0: f(a,b,c,d)"""
+
+    graph2 = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI bi
+    VAR MULTI c
+    VAR MULTI d
+    TABLE sub
+    PROPERTY F0: c = a + b
+    PROPERTY F1: bi = sub[b]
+    PROPERTY F2: d = a + bi"""
+
+    fg = FactorGraph(graph)
+    fg2 = FactorGraph(
+        graph2, {"sub": np.array([-n % nc for n in range(nc)], dtype=np.uint32)}
+    )
+    bff = np.zeros((nc, nc, nc, nc))
+    n = 4
+    for a in range(nc):
+        for b in range(nc):
+            bff[a, b, (a + b) % nc, (a - b) % nc] = 1.0
+
+    bp = BPState(fg, n, gen_factors={"f": [GenFactor.dense(bff) for _ in range(n)]})
+    bp2 = BPState(fg2, n)
+
+    distr_a = make_distri(nc, n)
+    distr_b = make_distri(nc, n)
+    bp.set_evidence("a", distr_a)
+    bp.set_evidence("b", distr_b)
+    bp2.set_evidence("a", distr_a)
+    bp2.set_evidence("b", distr_b)
+
+    bp.bp_loopy(10, False)
+    bp2.bp_loopy(10, False)
+    assert np.allclose(bp.get_distribution("c"), bp2.get_distribution("c"))
+
+
+def test_manytraces():
+    """No numerical underflow with many traces."""
+    nc = 8
+    n = 500
+    distri_x = np.ones((n, nc))
+    distri_x[:, 0] = 2.0
+    distri_x[:, 1] = 1.5
+    distri_x = (distri_x.T / np.sum(distri_x, axis=1)).T
+
+    graph = f"""
+            NC {nc}
+            VAR MULTI x
+            VAR SINGLE y
+            PUB SINGLE c
+            PROPERTY y = x ^ c
+            """
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n, {"c": 0})
+
+    bp_state.set_evidence("x", distri_x)
+
+    bp_state.bp_acyclic("y")
+    distri_y = bp_state.get_distribution("y")
+
+    distri_y_ref = np.log2(distri_x).sum(axis=0, keepdims=True)
+    distri_y_ref = distri_y_ref - np.max(distri_y_ref[0, :])
+    distri_y_ref = 2**distri_y_ref
+    distri_y_ref = distri_y_ref / distri_y_ref.sum(axis=1, keepdims=True)
+
+    assert np.allclose(distri_y_ref, distri_y, rtol=1e-5, atol=1e-19)
+
+
 def test_ADD3():
     nc = 13
     graph = f"""NC {nc}

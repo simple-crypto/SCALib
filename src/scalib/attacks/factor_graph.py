@@ -6,10 +6,46 @@ import numpy.typing as npt
 from scalib import _scalib_ext
 from scalib.config import get_config
 
-__all__ = ["FactorGraph", "BPState"]
+__all__ = ["FactorGraph", "BPState", "GenFactor"]
+
+
+class GenFactor:
+    """Generic factor for belief propagation."""
+
+    class GenFactorKind:
+        DENSE = 0
+        SPARSE_FUNCTIONAL = 1
+
+    def __init__(self, kind: GenFactorKind, factor):
+        self.kind = kind
+        self.factor = factor
+
+    @classmethod
+    def dense(cls, factor: npt.NDArray[np.float64]):
+        """A dense factor.
+
+        ``factor`` is a n-dimensional array, each axis corresponds to one
+        variable, entries in the array are probabilities.
+        """
+        assert len(set(factor.shape)) == 1
+        assert factor.dtype == np.float64
+        return cls(cls.GenFactorKind.DENSE, factor)
+
+    @classmethod
+    def sparse_functional(cls, factor: npt.NDArray[np.uint32]):
+        """A sparse functional factor.
+
+        ``factor`` is a 2D array, each row corresponding to an entry in the
+        factor, and in each row, the values are the values of the variables.
+        """
+        assert len(factor.shape) == 2
+        assert factor.dtype == np.uint32
+        return cls(cls.GenFactorKind.SPARSE_FUNCTIONAL, factor)
+
 
 CstValue = Union[int, Sequence[int]]
 ValsAssign = Mapping[str, CstValue]
+GenFactors = Mapping[str, Union[GenFactor, Sequence[GenFactor]]]
 
 
 class FactorGraph:
@@ -98,15 +134,17 @@ class FactorGraph:
     - `VAR SINGLE|MULTI variable_name`: declares a variables.
     - `PROPERTY w = x^y^z`: declares a bitwise XOR property. There can be any
       number of operands.
-    - `PROPERTY x = x&y`: declares a bitwise AND property.
+    - `PROPERTY z = x&y`: declares a bitwise AND property.
     - `PROPERTY x = t[y]`: declares a LOOKUP property (`y` is the lookup of the
       table `t` at index `y`). No public variable is allowed in this property.
     - `PROPERTY x = !y`: declares a bitwise NOT property.
       No public variable is allowed in this property.
+    - `PROPERTY f(x, y, z)`: declares a "Generic factor" property, f must be declared.
     - `TABLE` t = [0, 3, 2, 1]`: Declares a table that can be used in a LOOKUP.
       The values provided in the table must belong to the interval [0, nc).
       The initialization expression can be omitted from the graph description
       (e.g. `TABLE t`) and be given with `tables` parameter.
+    - `GENERIC SINGLE|MULTI f`: declares a "Generic factor" f.
 
 
     **Note**: if the `MULTI` feature doesn't match your use-case, using only
@@ -135,6 +173,11 @@ class FactorGraph:
         """Verify that the graph is compatible with example variable assignments.
 
         If the graph is not compatible, raise a ``ValueError``.
+
+        Remark
+        ------
+
+        We perform no check around generic factors.
 
         Parameters
         ----------
@@ -170,11 +213,14 @@ class BPState:
         factor_graph: FactorGraph,
         nexec: int,
         public_values: Optional[ValsAssign] = None,
+        gen_factors: Optional[GenFactors] = None,
     ):
         if public_values is None:
             public_values = dict()
+        if gen_factors is None:
+            gen_factors = dict()
         self._fg = factor_graph
-        self._inner = factor_graph._inner.new_bp(nexec, public_values)
+        self._inner = factor_graph._inner.new_bp(nexec, public_values, gen_factors)
 
     @property
     def fg(self) -> FactorGraph:
@@ -390,3 +436,37 @@ class BPState:
                 s.append(f"\t{factor} -> {var}")
                 s.append(repr(self.get_belief_to_var(var, factor)))
         return "\n".join(s)
+
+
+class GenFactor:
+    """Generic factor for belief propagation."""
+
+    class GenFactorKind:
+        DENSE = 0
+        SPARSE_FUNCTIONAL = 1
+
+    def __init__(self, kind: GenFactorKind, factor):
+        self.kind = kind
+        self.factor = factor
+
+    @classmethod
+    def dense(cls, factor: npt.NDArray[np.float64]):
+        """A dense factor.
+
+        ``factor`` is a n-dimensional array, each axis corresponds to one
+        variable, entries in the array are probabilities.
+        """
+        assert len(set(factor.shape)) == 1
+        assert factor.dtype == np.float64
+        return cls(cls.GenFactorKind.DENSE, factor)
+
+    @classmethod
+    def sparse_functional(cls, factor: npt.NDArray[np.uint32]):
+        """A sparse functional factor.
+
+        ``factor`` is a 2D array, each row corresponding to an entry in the
+        factor, and in each row, the values are the values of the variables.
+        """
+        assert len(factor.shape) == 2
+        assert factor.dtype == np.uint32
+        return cls(cls.GenFactorKind.SPARSE_FUNCTIONAL, factor)
