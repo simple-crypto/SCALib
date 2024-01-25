@@ -1,5 +1,6 @@
 from typing import Sequence, Mapping, Union, Optional
-
+from dataclasses import dataclass
+from enum import Enum
 import numpy as np
 import numpy.typing as npt
 
@@ -8,17 +9,49 @@ from scalib.config import get_config
 
 __all__ = ["FactorGraph", "BPState", "GenFactor"]
 
-
+@dataclass
 class GenFactor:
-    """Generic factor for belief propagation."""
+    r"""Generic factor which can implement arbitrary functions between
+    variables. A factor can be declared as `MULTI` if the factor changes between
+    executions. For most use cases, where the implementation of the factor is
+    static, `SINGLE` is sufficient. An example of a "butterfly" factor which
+    computes the sum and difference of the inputs is shown below.
 
-    class GenFactorKind:
+    >>> # Describe and generate the SASCAGraph
+    >>> graph_desc = '''
+    ... NC 13 # arbitrary prime number
+    ... VAR MULTI a # inputs
+    ... VAR MULTI b
+    ... VAR MULTI c # outputs
+    ... VAR MULTI d
+    ... GENERIC SINGLE f # declare the factor
+    ... PROPERTY F0: f(a,b,c,d) # declare the relationship c = a + b and d = a - b'''
+    >>> factor = []
+    >>> nc = 13
+    >>> # Construct the factor table
+    >>> for a in range(nc):
+    ...     for b in range(nc):
+    ...         factor.append([a, b, (a + b) % nc, (a - b) % nc])
+    >>> factor = GenFactor.sparse_functional(np.array(factor, dtype=np.uint32))
+    >>> graph = FactorGraph(graph_desc)
+    >>> bpstate = BPState(graph, gen_factors={"f": factor})
+
+    Notes
+    -----
+    In general, the computational cost of sparse_functional factors is quadratic
+    in the number of rows. For dense factors, the cost is exponential in the
+    number of axes. Therefore, one should prefer to use built-in functions (^, &, !, etc)
+    whenever possible to minimize the performance penalty of generic factors,
+    and to keep the number entries in the factor small when they must be used.
+    """
+
+    class GenFactorKind(Enum):
+        """Choices of generic factor types"""
         DENSE = 0
         SPARSE_FUNCTIONAL = 1
 
-    def __init__(self, kind: GenFactorKind, factor):
-        self.kind = kind
-        self.factor = factor
+    kind: GenFactorKind
+    factor: npt.NDArray
 
     @classmethod
     def dense(cls, factor: npt.NDArray[np.float64]):
@@ -37,6 +70,10 @@ class GenFactor:
 
         ``factor`` is a 2D array, each row corresponding to an entry in the
         factor, and in each row, the values are the values of the variables.
+        Each row corresponds to setting the factor entry to 1. Omitting a factor
+        entry implicitly assigns that entry to 0. Sparse factors leads to better
+        performance and lower memory usage if the number of rows is much smaller
+        than the total number of entries in the factor.
         """
         assert len(factor.shape) == 2
         assert factor.dtype == np.uint32
@@ -139,12 +176,15 @@ class FactorGraph:
       table `t` at index `y`). No public variable is allowed in this property.
     - `PROPERTY x = !y`: declares a bitwise NOT property.
       No public variable is allowed in this property.
-    - `PROPERTY f(x, y, z)`: declares a "Generic factor" property, f must be declared.
+    - `PROPERTY f(x, y, z)`: declares a "Generic factor" property, f must be
+       declared as a GENERIC.
     - `TABLE` t = [0, 3, 2, 1]`: Declares a table that can be used in a LOOKUP.
       The values provided in the table must belong to the interval [0, nc).
       The initialization expression can be omitted from the graph description
       (e.g. `TABLE t`) and be given with `tables` parameter.
-    - `GENERIC SINGLE|MULTI f`: declares a "Generic factor" f.
+    - `GENERIC SINGLE|MULTI f`: declares a "Generic factor" f. A generic factor
+        can be used to define an arbitrary functional relationships between
+        variables. See the docs for ``GenFactor`` for more information and examples.
 
 
     **Note**: if the `MULTI` feature doesn't match your use-case, using only
@@ -436,37 +476,3 @@ class BPState:
                 s.append(f"\t{factor} -> {var}")
                 s.append(repr(self.get_belief_to_var(var, factor)))
         return "\n".join(s)
-
-
-class GenFactor:
-    """Generic factor for belief propagation."""
-
-    class GenFactorKind:
-        DENSE = 0
-        SPARSE_FUNCTIONAL = 1
-
-    def __init__(self, kind: GenFactorKind, factor):
-        self.kind = kind
-        self.factor = factor
-
-    @classmethod
-    def dense(cls, factor: npt.NDArray[np.float64]):
-        """A dense factor.
-
-        ``factor`` is a n-dimensional array, each axis corresponds to one
-        variable, entries in the array are probabilities.
-        """
-        assert len(set(factor.shape)) == 1
-        assert factor.dtype == np.float64
-        return cls(cls.GenFactorKind.DENSE, factor)
-
-    @classmethod
-    def sparse_functional(cls, factor: npt.NDArray[np.uint32]):
-        """A sparse functional factor.
-
-        ``factor`` is a 2D array, each row corresponding to an entry in the
-        factor, and in each row, the values are the values of the variables.
-        """
-        assert len(factor.shape) == 2
-        assert factor.dtype == np.uint32
-        return cls(cls.GenFactorKind.SPARSE_FUNCTIONAL, factor)
