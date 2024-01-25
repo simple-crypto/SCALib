@@ -1,6 +1,6 @@
 from typing import Sequence, Mapping, Union, Optional
 from dataclasses import dataclass
-from enum import Enum
+from enum import IntEnum
 import numpy as np
 import numpy.typing as npt
 
@@ -8,6 +8,7 @@ from scalib import _scalib_ext
 from scalib.config import get_config
 
 __all__ = ["FactorGraph", "BPState", "GenFactor"]
+
 
 @dataclass
 class GenFactor:
@@ -34,7 +35,7 @@ class GenFactor:
     ...         factor.append([a, b, (a + b) % nc, (a - b) % nc])
     >>> factor = GenFactor.sparse_functional(np.array(factor, dtype=np.uint32))
     >>> graph = FactorGraph(graph_desc)
-    >>> bpstate = BPState(graph, gen_factors={"f": factor})
+    >>> bpstate = BPState(graph, nexec=1, gen_factors={"f": factor})
 
     Notes
     -----
@@ -45,8 +46,9 @@ class GenFactor:
     and to keep the number entries in the factor small when they must be used.
     """
 
-    class GenFactorKind(Enum):
+    class GenFactorKind(IntEnum):
         """Choices of generic factor types"""
+
         DENSE = 0
         SPARSE_FUNCTIONAL = 1
 

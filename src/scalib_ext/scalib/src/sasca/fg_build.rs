@@ -214,43 +214,7 @@ impl fg::FactorGraph {
         }
     }
 }
-/*
-impl fg::FactorKind {
-    fn map_vars_neg<F>(self, f: F) -> Self
-    where
-        F: FnOnce(Vec<bool>) -> Vec<bool>,
-    {
-        match self {
-            fg::FactorKind::AND { vars_neg } => fg::FactorKind::AND {
-                vars_neg: f(vars_neg),
-            },
-            x => x,
-        }
-    }
-    fn get_neg(&self, i: usize) -> bool {
-        match self {
-            fg::FactorKind::AND { vars_neg } => vars_neg[i],
-            _ => false,
-        }
-    }
-}
-*/
 impl fg_parser::Expr {
-    /*
-    /// Returns wether an operand in the expression is negated.
-    /// Maps Or to And using De Morgan law.
-    fn get_neg(&self, i: usize) -> bool {
-        match self {
-            fg_parser::Expr::And(vars) => vars[i].neg,
-            fg_parser::Expr::Or(vars) => !vars[i].neg,
-            fg_parser::Expr::Not(_)
-            | fg_parser::Expr::Lookup { .. }
-            | fg_parser::Expr::Add(_)
-            | fg_parser::Expr::Mul(_)
-            | fg_parser::Expr::Xor(_) => false,
-        }
-    }
-    */
     fn as_factor_expr<F>(
         &self,
         ft: F,
@@ -282,16 +246,6 @@ impl fg_parser::Expr {
             Self::And(_) | Self::Or(_) => fg::ExprFactor::AND { vars_neg },
         })
     }
-    /*
-    fn vars(&self) -> impl Iterator<Item = &str> {
-        match self {
-            Self::Not(var) | Self::Lookup { var, .. } => vec![var.0.as_str()],
-            Self::Xor(v) | Self::Add(v) | Self::Mul(v) => v.iter().map(|v| v.0.as_str()).collect(),
-            Self::And(v) | Self::Or(v) => v.iter().map(|v| v.var.0.as_str()).collect(),
-        }
-        .into_iter()
-    }
-    */
     /// Returns operands with their negation.
     /// Maps Or to And using De Morgan law.
     fn vars_neg(&self) -> Vec<(&fg_parser::Var, bool)> {
