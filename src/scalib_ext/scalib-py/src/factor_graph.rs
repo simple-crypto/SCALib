@@ -7,7 +7,7 @@ use bincode::{deserialize, serialize};
 use numpy::{PyArray, PyArray1, PyArray2};
 use pyo3::exceptions::{PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyTuple};
+use pyo3::types::{PyBytes, PyList, PyTuple};
 
 use scalib::sasca;
 
@@ -68,13 +68,21 @@ impl FactorGraph {
         }
     }
 
-    pub fn new_bp(&self, py: Python, nmulti: u32, public_values: PyObject) -> PyResult<BPState> {
+    pub fn new_bp(
+        &self,
+        py: Python,
+        nmulti: u32,
+        public_values: PyObject,
+        gen_factors: PyObject,
+    ) -> PyResult<BPState> {
         let pub_values = pyobj2pubs(py, public_values, self.get_inner().public_multi())?;
+        let gen_factors = pyobj2factors(py, gen_factors, self.get_inner().gf_multi())?;
         Ok(BPState {
             inner: Some(sasca::BPState::new(
                 self.get_inner().clone(),
                 nmulti,
                 pub_values,
+                gen_factors,
             )),
         })
     }
@@ -137,6 +145,80 @@ fn pyobj2pubs<'a>(
             format!("{} is not a public.", unknown_pubs[0])
         } else {
             format!("{:?} are not publics.", unknown_pubs)
+        }))
+    }
+}
+
+fn pyobj2genfactor_inner(py: Python, obj: &PyAny) -> PyResult<sasca::GenFactorInner> {
+    let kind: u32 = obj.getattr("kind")?.extract()?;
+    let dense: u32 = obj.getattr("GenFactorKind")?.getattr("DENSE")?.extract()?;
+    let sparse_functional: u32 = obj
+        .getattr("GenFactorKind")?
+        .getattr("SPARSE_FUNCTIONAL")?
+        .extract()?;
+    if kind == dense {
+        let factor: &numpy::PyArrayDyn<f64> = obj.getattr("factor")?.extract()?;
+        let factor = factor
+            .readonly()
+            .as_array()
+            .as_standard_layout()
+            .into_owned();
+        Ok(sasca::GenFactorInner::Dense(factor))
+    } else if kind == sparse_functional {
+        let factor: &numpy::PyArray2<sasca::ClassVal> = obj.getattr("factor")?.extract()?;
+        let factor = factor
+            .readonly()
+            .as_array()
+            .as_standard_layout()
+            .into_owned();
+        Ok(sasca::GenFactorInner::SparseFunctional(factor))
+    } else {
+        Err(PyValueError::new_err((
+            "Unknown kind",
+            obj.getattr("kind")?.to_object(py),
+        )))
+    }
+}
+
+fn pyobj2factors<'a>(
+    py: Python,
+    gen_factors: PyObject,
+    expected: impl Iterator<Item = (&'a str, bool)>,
+) -> PyResult<Vec<sasca::GenFactor>> {
+    // TODO validate single/para, dimensionality and dimensions.
+    let mut gen_factors: HashMap<&str, PyObject> = gen_factors.extract(py)?;
+    let res = expected
+        .map(|(name, multi)| {
+            let gf = gen_factors
+                .remove(name)
+                .ok_or_else(|| PyKeyError::new_err(format!("Missing gen factor {}.", name)))?;
+            if multi {
+                if gf.downcast::<'_, PyList>(py).is_err() {
+                    return Err(PyTypeError::new_err(format!(
+                        "Generalized factor {} must be a list, as it is MULTI.",
+                        name
+                    )));
+                }
+                let obj: Vec<&PyAny> = gf.extract(py)?;
+                Ok(sasca::GenFactor::Multi(
+                    obj.into_iter()
+                        .map(|obj| pyobj2genfactor_inner(py, obj))
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
+            } else {
+                let obj: &PyAny = gf.extract(py)?;
+                Ok(sasca::GenFactor::Single(pyobj2genfactor_inner(py, obj)?))
+            }
+        })
+        .collect::<Result<Vec<sasca::GenFactor>, PyErr>>()?;
+    if gen_factors.is_empty() {
+        Ok(res)
+    } else {
+        let unknown = gen_factors.keys().collect::<Vec<_>>();
+        Err(PyKeyError::new_err(if unknown.len() == 1 {
+            format!("{} is not a generalized factor.", unknown[0])
+        } else {
+            format!("{:?} are not generalized factors.", unknown)
         }))
     }
 }

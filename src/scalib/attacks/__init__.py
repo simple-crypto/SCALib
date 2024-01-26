@@ -10,8 +10,8 @@ Soft Analytical Side-Channel Attack (SASCA)
    :nosignatures:
 
    FactorGraph
+   GenFactor
    BPState
-
 
 Deprecated
 ~~~~~~~~~~
@@ -26,7 +26,7 @@ Deprecated
    SASCAGraph
 """
 
-__all__ = ["FactorGraph", "BPState"]
+__all__ = ["FactorGraph", "BPState", "GenFactor"]
 
 from .sascagraph import SASCAGraph
-from .factor_graph import FactorGraph, BPState
+from .factor_graph import FactorGraph, BPState, GenFactor
