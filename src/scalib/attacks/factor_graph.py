@@ -39,7 +39,7 @@ class GenFactor:
 
     Notes
     -----
-    In general, the computational cost of sparse_functional factors is quadratic
+    In general, the computational cost of sparse_functional factors is linear
     in the number of rows. For dense factors, the cost is exponential in the
     number of axes. Therefore, one should prefer to use built-in functions (^, &, !, etc)
     whenever possible to minimize the performance penalty of generic factors,
