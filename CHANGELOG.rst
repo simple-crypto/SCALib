@@ -5,6 +5,8 @@ Changelog
 Not released
 ------------
 
+* Add ``GENERIC`` factors to ``scalib.attacks.FactorGraph``.
+
 v0.5.6 (2023/06/08)
 -------------------
 
