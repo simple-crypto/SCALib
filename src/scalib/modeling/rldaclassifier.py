@@ -18,10 +18,10 @@ class RLDAClassifier:
     perform better when the number of classes is large and/or there are few
     profiling traces.
 
-    Internally, it first estimates the coefficients of the regression then estimates
-    the projection matrix to reduce the dimensionality of the gaussian template to
-    :math:`p` dimensions. A second projection is applied such that the covariance
-    matrix is identity.
+    Internally, it first estimates the coefficients of the linear regression,
+    then computes a projection matrix that reduces the dimensionality of the
+    gaussian template to :math:`p` dimensions and makes the covariance matrix
+    the identity.
 
     It is then able to predict the leakage likelihood
 
@@ -111,7 +111,7 @@ class RLDAClassifier:
         Returns
         -------
         array_like, float64
-            The projection coefficients. Shape (nv,p,ns)."""
+            Shape (nv,p,ns)."""
         return self._inner.get_norm_proj()
 
     def get_proj_coefs(
@@ -122,7 +122,7 @@ class RLDAClassifier:
         Returns
         -------
         array_like, float64
-            The projection coefficients. Shape (nv,p,nb+1).
+            Shape (nv,p,nb+1).
         """
         return self._inner.get_proj_coefs()
 
