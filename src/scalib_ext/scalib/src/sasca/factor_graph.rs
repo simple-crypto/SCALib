@@ -1,9 +1,9 @@
 use std::fmt;
 
-use indexmap::IndexMap;
-use thiserror::Error;
-
 use super::{ClassVal, NamedList};
+use indexmap::IndexMap;
+use ndarray::{s, Array, Array2};
+use thiserror::Error;
 
 macro_rules! new_id {
     ($it:ident, $vt:ident) => {
@@ -201,6 +201,8 @@ pub enum FGError {
     NoEdge { var: String, factor: FactorId },
     #[error("Failure at factor {0}. Expected result {1}, got {2}.")]
     CheckFail(String, PublicValue, PublicValue),
+    #[error("Factor {0} got an invalid assignment")]
+    InvalidGenericFactorAssignment(String),
 }
 
 type FGResult<T> = Result<T, FGError>;
@@ -280,6 +282,7 @@ impl FactorGraph {
         &self,
         public_values: Vec<PublicValue>,
         var_assignments: VarVec<PublicValue>,
+        gen_factors: Vec<super::GenFactor>,
     ) -> FGResult<()> {
         assert_eq!(public_values.len(), self.publics.len());
         assert_eq!(var_assignments.len(), self.vars.len());
@@ -322,13 +325,51 @@ impl FactorGraph {
                         ));
                     }
                 }
-                FactorKind::GenFactor { .. } => {
-                    // We cannot verify anything, except if we were given the
-                    // value of the generalized factors as argument of this
-                    // function (then we could check that the associated
-                    // probability is non-zero).
-                    // Let us not do any verification for know (code block
-                    // intentionally left empty).
+                FactorKind::GenFactor { id, operands } => {
+                    let ops: Vec<&PublicValue> = operands
+                        .iter()
+                        .map(|op| match op {
+                            GenFactorOperand::Var(idx, ..) => &var_assignments[*idx],
+                            GenFactorOperand::Pub(idx) => &public_values[*idx],
+                        })
+                        .collect();
+                    let mut ops_iter = ops.iter();
+                    let nmulti = loop {
+                        if let Some(PublicValue::Multi(x)) = ops_iter.next() {
+                            break x.len();
+                        }
+                    };
+                    let mut indices: Vec<Vec<usize>> = vec![vec![0; ops.iter().len()]; nmulti];
+                    for i in 0..nmulti {
+                        for (j, pv) in ops.iter().enumerate() {
+                            indices[i][j] = match *pv {
+                                PublicValue::Single(x) => *x as usize,
+                                PublicValue::Multi(xvec) => xvec[i] as usize,
+                            };
+                        }
+                    }
+                    match &gen_factors[*id] {
+                        super::GenFactor::Single(gf) => match gf {
+                            super::GenFactorInner::Dense(dense_factor) => {
+                                for index_vector in indices.iter() {
+                                    let indx = index_vector.as_slice();
+                                    if !(dense_factor[indx] > 0.0) {
+                                        return Err(FGError::InvalidGenericFactorAssignment(
+                                            factor_name.clone(),
+                                        ));
+                                    }
+                                }
+                            }
+                            super::GenFactorInner::SparseFunctional(sf_factor) => {
+                                let x = indices
+                                    .iter()
+                                    .all(|index_vector| sf_factor.outer_iter().find(|&x| x   == 1));
+                            }
+                        },
+                        super::GenFactor::Multi(gfv) => {
+                            todo!();
+                        }
+                    };
                 }
             }
         }

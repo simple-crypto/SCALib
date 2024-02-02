@@ -1381,3 +1381,36 @@ def test_clear_beliefs():
     assert bp.get_belief_from_var("x", "s1") is not None
     assert bp.get_belief_from_var("a", "s1") is not None
     assert bp.get_belief_from_var("b", "s1") is not None
+
+
+def test_generic_factor():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC SINGLE f
+    PROPERTY F0: f(a,b,c,d)"""
+
+    fg = FactorGraph(graph)
+
+    bff = np.zeros((nc, nc, nc, nc))
+    n = 1
+    for a in range(nc):
+        for b in range(nc):
+            bff[a, b, (a + b) % nc, (a - b) % nc] = 1.0
+
+    fg.sanity_check(
+        {},
+        {
+            "a": np.array([0, 0]),
+            "b": np.array([1, 1]),
+            "c": np.array([1, 1]),
+            "d": np.array([12, 12]),
+        },
+        {"f": GenFactor.dense(bff)},
+    )
+    assert False

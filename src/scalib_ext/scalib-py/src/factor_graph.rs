@@ -106,6 +106,7 @@ impl FactorGraph {
         py: Python,
         public_values: PyObject,
         var_assignments: PyObject,
+        factor_assignments: PyObject,
     ) -> PyResult<()> {
         let inner = self.get_inner();
         let pub_values = pyobj2pubs(py, public_values, inner.public_multi())?;
@@ -114,8 +115,9 @@ impl FactorGraph {
             var_assignments,
             inner.vars().map(|(v, vn)| (vn, inner.var_multi(v))),
         )?;
+        let gen_factors = pyobj2factors(py, factor_assignments, self.get_inner().gf_multi())?;
         inner
-            .sanity_check(pub_values, var_values.into())
+            .sanity_check(pub_values, var_values.into(), gen_factors)
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 }
