@@ -1428,7 +1428,6 @@ def test_single_gf_sanity_check():
         },
         {"f": GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32))},
     )
-    assert False
 
 
 def test_multi_gf_sanity_check():

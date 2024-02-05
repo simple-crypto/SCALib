@@ -215,7 +215,7 @@ class FactorGraph:
         self,
         pub_assignment: ValsAssign,
         var_assignment: ValsAssign,
-        factor_assignment: Optional[GenFactors],
+        factor_assignment: Optional[GenFactors] = None,
     ):
         """Verify that the graph is compatible with example variable assignments.
 
