@@ -376,7 +376,32 @@ impl FactorGraph {
                             }
                         },
                         super::GenFactor::Multi(gfv) => {
-                            todo!();
+                            assert_eq!(nmulti, gfv.len());
+                            for (i, gf) in gfv.iter().enumerate() {
+                                match gf {
+                                    super::GenFactorInner::Dense(dense_factor) => {
+                                        let i_vec = indices[i]
+                                            .iter()
+                                            .map(|x| *x as usize)
+                                            .collect::<Vec<usize>>();
+                                        if !(dense_factor[i_vec.as_slice()] > 0.0) {
+                                            return Err(FGError::InvalidGenericFactorAssignment(
+                                                factor_name.clone(),
+                                            ));
+                                        }
+                                    }
+                                    super::GenFactorInner::SparseFunctional(sf_factor) => {
+                                        if !sf_factor
+                                            .outer_iter()
+                                            .any(|x| x.as_slice().unwrap() == indices[i].as_slice())
+                                        {
+                                            return Err(FGError::InvalidGenericFactorAssignment(
+                                                factor_name.clone(),
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
                         }
                     };
                 }
@@ -384,6 +409,7 @@ impl FactorGraph {
         }
         Ok(())
     }
+
     pub(super) fn reduce_pub(&self, public_values: &[PublicValue]) -> FactorVec<PublicValue> {
         self.factors
             .values()

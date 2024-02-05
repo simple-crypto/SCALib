@@ -221,17 +221,14 @@ class FactorGraph:
 
         If the graph is not compatible, raise a ``ValueError``.
 
-        Remark
-        ------
-
-        We perform no check around generic factors.
-
         Parameters
         ----------
         pub_assignment:
             For each public variable its value for all test executions.
         var_assignment:
             For each non-public variable its value for all test executions.
+        factor_assignment:
+            The probability tables (i.e., ``GenFactor`` assignments) for each generic factor.
 
         Returns
         -------

@@ -1383,7 +1383,7 @@ def test_clear_beliefs():
     assert bp.get_belief_from_var("b", "s1") is not None
 
 
-def test_generic_factor():
+def test_single_gf_sanity_check():
     from scalib.attacks.factor_graph import GenFactor
 
     nc = 13
@@ -1429,3 +1429,58 @@ def test_generic_factor():
         {"f": GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32))},
     )
     assert False
+
+
+def test_multi_gf_sanity_check():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC MULTI f
+    PROPERTY F0: f(a,b,c,d)"""
+
+    fg = FactorGraph(graph)
+
+    bff = np.zeros((nc, nc, nc, nc))
+    bff2 = np.zeros((nc, nc, nc, nc))
+    n = 1
+    for a in range(nc):
+        for b in range(nc):
+            bff[a, b, (a + b) % nc, (a - b) % nc] = 1.0
+            bff2[a, b, (a + 2 * b) % nc, (a - 2 * b) % nc] = 1.0
+
+    bff_sparse = []
+    bff2_sparse = []
+    for a in range(nc):
+        for b in range(nc):
+            bff_sparse.append([a, b, (a + b) % nc, (a - b) % nc])
+            bff2_sparse.append([a, b, (a + 2 * b) % nc, (a - 2 * b) % nc])
+    fg.sanity_check(
+        {},
+        {
+            "a": np.array([0, 0]),
+            "b": np.array([1, 1]),
+            "c": np.array([1, 2]),
+            "d": np.array([12, 11]),
+        },
+        {"f": [GenFactor.dense(bff), GenFactor.dense(bff2)]},
+    )
+    fg.sanity_check(
+        {},
+        {
+            "a": np.array([0, 0]),
+            "b": np.array([1, 1]),
+            "c": np.array([1, 2]),
+            "d": np.array([12, 11]),
+        },
+        {
+            "f": [
+                GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32)),
+                GenFactor.sparse_functional(np.array(bff2_sparse, dtype=np.uint32)),
+            ]
+        },
+    )
