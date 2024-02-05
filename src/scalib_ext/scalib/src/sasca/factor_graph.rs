@@ -339,12 +339,12 @@ impl FactorGraph {
                             break x.len();
                         }
                     };
-                    let mut indices: Vec<Vec<usize>> = vec![vec![0; ops.iter().len()]; nmulti];
+                    let mut indices: Vec<Vec<ClassVal>> = vec![vec![0; ops.iter().len()]; nmulti];
                     for i in 0..nmulti {
                         for (j, pv) in ops.iter().enumerate() {
                             indices[i][j] = match *pv {
-                                PublicValue::Single(x) => *x as usize,
-                                PublicValue::Multi(xvec) => xvec[i] as usize,
+                                PublicValue::Single(x) => *x,
+                                PublicValue::Multi(xvec) => xvec[i],
                             };
                         }
                     }
@@ -352,8 +352,11 @@ impl FactorGraph {
                         super::GenFactor::Single(gf) => match gf {
                             super::GenFactorInner::Dense(dense_factor) => {
                                 for index_vector in indices.iter() {
-                                    let indx = index_vector.as_slice();
-                                    if !(dense_factor[indx] > 0.0) {
+                                    let indx = index_vector
+                                        .iter()
+                                        .map(|x| *x as usize)
+                                        .collect::<Vec<usize>>();
+                                    if !(dense_factor[indx.as_slice()] > 0.0) {
                                         return Err(FGError::InvalidGenericFactorAssignment(
                                             factor_name.clone(),
                                         ));
@@ -361,9 +364,15 @@ impl FactorGraph {
                                 }
                             }
                             super::GenFactorInner::SparseFunctional(sf_factor) => {
-                                let x = indices
-                                    .iter()
-                                    .all(|index_vector| sf_factor.outer_iter().find(|&x| x   == 1));
+                                if !indices.iter().all(|i_vec| {
+                                    sf_factor
+                                        .outer_iter()
+                                        .any(|x| x.as_slice().unwrap() == i_vec.as_slice())
+                                }) {
+                                    return Err(FGError::InvalidGenericFactorAssignment(
+                                        factor_name.clone(),
+                                    ));
+                                }
                             }
                         },
                         super::GenFactor::Multi(gfv) => {

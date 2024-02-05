@@ -1403,6 +1403,11 @@ def test_generic_factor():
         for b in range(nc):
             bff[a, b, (a + b) % nc, (a - b) % nc] = 1.0
 
+    bff_sparse = []
+    for a in range(nc):
+        for b in range(nc):
+            bff_sparse.append([a, b, (a + b) % nc, (a - b) % nc])
+
     fg.sanity_check(
         {},
         {
@@ -1412,5 +1417,15 @@ def test_generic_factor():
             "d": np.array([12, 12]),
         },
         {"f": GenFactor.dense(bff)},
+    )
+    fg.sanity_check(
+        {},
+        {
+            "a": np.array([0, 0]),
+            "b": np.array([1, 1]),
+            "c": np.array([1, 1]),
+            "d": np.array([12, 12]),
+        },
+        {"f": GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32))},
     )
     assert False
