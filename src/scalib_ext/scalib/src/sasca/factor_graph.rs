@@ -2,7 +2,6 @@ use std::fmt;
 
 use super::{ClassVal, NamedList};
 use indexmap::IndexMap;
-use ndarray::{s, Array, Array2};
 use thiserror::Error;
 
 macro_rules! new_id {
