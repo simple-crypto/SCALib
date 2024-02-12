@@ -32,9 +32,9 @@ jobs:
                   key: linux-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
             - uses: actions/setup-python@v3
               with:
-                  python-version: "3.10"
+                  python-version: "3.8"
             - name: wheels Linux ${{ matrix.arch }}
-              uses: pypa/cibuildwheel@v2.12.0
+              uses: pypa/cibuildwheel@v2.16.5
               env:
                 CARGO_TARGET_DIR: "/host${{ runner.temp }}/cargo_build"
                 CARGO_HOME: "/host${{ runner.temp }}/cargo_home"
@@ -50,7 +50,7 @@ jobs:
             - name: Setup Python
               uses: actions/setup-python@v3
               with:
-                  python-version: "3.11"
+                  python-version: "3.12"
             - name: Install Tox
               run: pip install tox
             - name: Formatting
@@ -66,7 +66,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                python: ["3.8", "3.11"]
+                python: ["3.8", "3.12"]
         steps:
             - uses: actions/checkout@v3
             - uses: actions/download-artifact@v3
@@ -101,7 +101,7 @@ jobs:
             # sure that PyO3 can build properly (if needed).
             - uses: actions/setup-python@v3
               with:
-                  python-version: "3.10"
+                  python-version: "3.12"
             - name: Run tests
               run: cargo test --workspace --manifest-path src/scalib_ext/Cargo.toml
               env:
@@ -129,7 +129,7 @@ jobs:
               with:
                   python-version: "3.8"
             - name: wheels Windows ${{ matrix.arch}}
-              uses: pypa/cibuildwheel@v2.12.0
+              uses: pypa/cibuildwheel@v2.16.5
               env:
                 CARGO_TARGET_DIR: "${{ runner.temp }}\\cargo_build"
                 CARGO_HOME: "${{ runner.temp }}\\cargo_home"
@@ -165,7 +165,7 @@ jobs:
               if: ${{ matrix.vers }} == 'arm64'
               run: "rustup target add aarch64-apple-darwin"
             - name: wheels Mac Os ${{ matrix.vers }}
-              uses: joerick/cibuildwheel@v2.12.0
+              uses: pypa/cibuildwheel@v2.16.5
               env:
                 CARGO_TARGET_DIR: "${{ runner.temp }}\\cargo_build"
                 CARGO_HOME: "${{ runner.temp }}\\cargo_home"
