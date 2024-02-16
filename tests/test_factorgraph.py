@@ -1381,3 +1381,18 @@ def test_clear_beliefs():
     assert bp.get_belief_from_var("x", "s1") is not None
     assert bp.get_belief_from_var("a", "s1") is not None
     assert bp.get_belief_from_var("b", "s1") is not None
+
+
+def test_sub():
+    graph = """
+    NC 2
+    PROPERTY s1: x = a + -b
+    VAR MULTI x
+    VAR MULTI a
+    VAR MULTI b
+    """
+
+    fg = FactorGraph(graph)
+    bp = BPState(fg, 1)
+    bp.bp_loopy(1, False)
+    assert False

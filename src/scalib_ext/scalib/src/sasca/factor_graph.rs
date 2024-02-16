@@ -64,7 +64,7 @@ pub(super) enum ExprFactor {
     AND { vars_neg: Vec<bool> },
     XOR,
     NOT,
-    ADD,
+    ADD { vars_neg: Vec<bool> },
     MUL,
     LOOKUP { table: TableId },
 }
@@ -93,7 +93,7 @@ impl ExprFactor {
         match self {
             Self::AND { vars_neg: _ } => a & b,
             Self::XOR => a ^ b,
-            Self::ADD => (((a as u64) + (b as u64)) % (nc as u64)) as ClassVal,
+            Self::ADD { vars_neg: _ } => (((a as u64) + (b as u64)) % (nc as u64)) as ClassVal,
             Self::MUL => (((a as u64) * (b as u64)) % (nc as u64)) as ClassVal,
             Self::NOT | Self::LOOKUP { .. } => unreachable!(),
         }
@@ -101,7 +101,7 @@ impl ExprFactor {
     fn neutral(&self, nc: usize) -> ClassVal {
         match self {
             Self::AND { vars_neg: _ } => (nc - 1) as ClassVal,
-            Self::XOR | Self::ADD => 0,
+            Self::XOR | Self::ADD { vars_neg: _ } => 0,
             Self::MUL => 1,
             Self::NOT | Self::LOOKUP { .. } => unreachable!(),
         }
@@ -298,12 +298,13 @@ impl FactorGraph {
                         .skip(skip_res)
                         .map(|v_id| &var_assignments[*v_id]);
                     let res = match expr {
-                        ExprFactor::AND { vars_neg } => self.merge_pubs(
-                            expr,
-                            ops.zip(vars_neg.iter().cloned())
-                                .chain(std::iter::once((&cst, false))),
-                        ),
-                        ExprFactor::XOR | ExprFactor::ADD | ExprFactor::MUL => self.merge_pubs(
+                        ExprFactor::AND { vars_neg } | ExprFactor::ADD { vars_neg } => self
+                            .merge_pubs(
+                                expr,
+                                ops.zip(vars_neg.iter().cloned())
+                                    .chain(std::iter::once((&cst, false))),
+                            ),
+                        ExprFactor::XOR | ExprFactor::MUL => self.merge_pubs(
                             expr,
                             ops.zip(std::iter::repeat(false))
                                 .chain(std::iter::once((&cst, false))),
