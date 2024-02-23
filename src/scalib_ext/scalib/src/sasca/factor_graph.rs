@@ -287,10 +287,11 @@ impl FactorGraph {
         for ((factor_name, factor), cst) in self.factors.iter().zip(reduced_pub) {
             match &factor.kind {
                 FactorKind::Assign { expr, has_res } => {
-                    let expected_res = factor
+                    let mut expected_res = factor
                         .res_id()
                         .map(|v_id| &var_assignments[v_id])
-                        .unwrap_or(&cst);
+                        .unwrap_or(&cst)
+                        .clone();
                     let skip_res = if *has_res { 1 } else { 0 };
                     let mut ops = factor
                         .edges
@@ -298,11 +299,23 @@ impl FactorGraph {
                         .skip(skip_res)
                         .map(|v_id| &var_assignments[*v_id]);
                     let res = match expr {
-                        ExprFactor::AND { vars_neg } => self.merge_pubs(
-                            expr,
-                            ops.zip(vars_neg.iter().cloned())
-                                .chain(std::iter::once((&cst, false))),
-                        ),
+                        ExprFactor::AND { vars_neg } => {
+                            if *has_res && vars_neg[0] {
+                                expected_res = match expected_res {
+                                    PublicValue::Single(x) => {
+                                        PublicValue::Single(!x % self.nc as u32)
+                                    }
+                                    PublicValue::Multi(v) => PublicValue::Multi(
+                                        v.iter().map(|x| !x % self.nc as u32).collect(),
+                                    ),
+                                };
+                            }
+                            self.merge_pubs(
+                                expr,
+                                ops.zip(vars_neg.iter().cloned())
+                                    .chain(std::iter::once((&cst, false))),
+                            )
+                        }
                         ExprFactor::XOR | ExprFactor::ADD | ExprFactor::MUL => self.merge_pubs(
                             expr,
                             ops.zip(std::iter::repeat(false))
@@ -314,7 +327,7 @@ impl FactorGraph {
                             .unwrap()
                             .map(|x| self.tables[*table].values[x as usize]),
                     };
-                    if &res != expected_res {
+                    if res != expected_res {
                         return Err(FGError::CheckFail(
                             factor_name.clone(),
                             expected_res.clone(),
