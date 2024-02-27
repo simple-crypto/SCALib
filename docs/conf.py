@@ -60,11 +60,7 @@ autodoc_mock_imports = [
     "cpuinfo",
 ]
 
-linkcheck_request_headers = {
-    r'https://mathoverflow.net/': {'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux i686; '
-                                                'rv:24.0) Gecko/20100101 Firefox/24.0'}
-}
-
+linkcheck_ignore = [r'https://mathoverflow.net/a/273060']
 
 import sys
 
