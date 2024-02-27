@@ -298,11 +298,20 @@ impl FactorGraph {
                         .skip(skip_res)
                         .map(|v_id| &var_assignments[*v_id]);
                     let res = match expr {
-                        ExprFactor::AND { vars_neg } => self.merge_pubs(
-                            expr,
-                            ops.zip(vars_neg.iter().cloned())
-                                .chain(std::iter::once((&cst, false))),
-                        ),
+                        ExprFactor::AND { vars_neg } => {
+                            let x = self.merge_pubs(
+                                expr,
+                                ops.zip(vars_neg.iter().cloned())
+                                    .chain(std::iter::once((&cst, false))),
+                            );
+                            // invert if we are doing an OR
+                            match x {
+                                PublicValue::Single(cv) if vars_neg[0] => {
+                                    PublicValue::Single(self.not(cv))
+                                }
+                                _ => x,
+                            }
+                        }
                         ExprFactor::XOR | ExprFactor::ADD | ExprFactor::MUL => self.merge_pubs(
                             expr,
                             ops.zip(std::iter::repeat(false))
