@@ -1381,3 +1381,30 @@ def test_clear_beliefs():
     assert bp.get_belief_from_var("x", "s1") is not None
     assert bp.get_belief_from_var("a", "s1") is not None
     assert bp.get_belief_from_var("b", "s1") is not None
+
+
+def test_sanity_or():
+    graph = """
+    NC 2
+    PROPERTY s1: x = a | b
+    VAR SINGLE x
+    VAR SINGLE a
+    VAR SINGLE b
+    """
+    fg = FactorGraph(graph)
+    fg.sanity_check({}, {"x": 0, "a": 0, "b": 0})
+    fg.sanity_check({}, {"x": 1, "a": 1, "b": 0})
+    fg.sanity_check({}, {"x": 1, "a": 0, "b": 1})
+    fg.sanity_check({}, {"x": 1, "a": 1, "b": 1})
+    graph = """
+    NC 2
+    PROPERTY s1: x = a & b
+    VAR SINGLE x
+    VAR SINGLE a
+    VAR SINGLE b
+    """
+    fg = FactorGraph(graph)
+    fg.sanity_check({}, {"x": 0, "a": 0, "b": 0})
+    fg.sanity_check({}, {"x": 0, "a": 1, "b": 0})
+    fg.sanity_check({}, {"x": 0, "a": 0, "b": 1})
+    fg.sanity_check({}, {"x": 1, "a": 1, "b": 1})
