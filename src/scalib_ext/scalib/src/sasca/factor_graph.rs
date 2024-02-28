@@ -327,14 +327,13 @@ impl FactorGraph {
                             .map(|x| self.tables[*table].values[x as usize]),
                     };
                     let check = match (&res, expected_res) {
-                        (PublicValue::Single(v1), PublicValue::Single(v2)) => v1 == v2,
                         (PublicValue::Single(v1), PublicValue::Multi(v2)) => {
                             v2.iter().any(|x| x != v1)
                         }
                         (PublicValue::Multi(v1), PublicValue::Single(v2)) => {
                             v1.iter().any(|x| x != v2)
                         }
-                        (PublicValue::Multi(_), PublicValue::Multi(_)) => &res != expected_res,
+                        (_, _) => &res != expected_res,
                     };
                     if check {
                         return Err(FGError::CheckFail(
