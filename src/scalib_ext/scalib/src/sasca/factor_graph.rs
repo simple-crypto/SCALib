@@ -309,6 +309,9 @@ impl FactorGraph {
                                 PublicValue::Single(cv) if vars_neg[0] => {
                                     PublicValue::Single(self.not(cv))
                                 }
+                                PublicValue::Multi(cv) if vars_neg[0] => {
+                                    PublicValue::Multi(cv.iter().map(|v| self.not(*v)).collect())
+                                }
                                 _ => x,
                             }
                         }
@@ -323,7 +326,17 @@ impl FactorGraph {
                             .unwrap()
                             .map(|x| self.tables[*table].values[x as usize]),
                     };
-                    if &res != expected_res {
+                    let check = match (&res, expected_res) {
+                        (PublicValue::Single(v1), PublicValue::Single(v2)) => v1 == v2,
+                        (PublicValue::Single(v1), PublicValue::Multi(v2)) => {
+                            v2.iter().any(|x| x != v1)
+                        }
+                        (PublicValue::Multi(v1), PublicValue::Single(v2)) => {
+                            v1.iter().any(|x| x != v2)
+                        }
+                        (PublicValue::Multi(_), PublicValue::Multi(_)) => &res != expected_res,
+                    };
+                    if check {
                         return Err(FGError::CheckFail(
                             factor_name.clone(),
                             expected_res.clone(),

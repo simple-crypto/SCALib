@@ -1389,22 +1389,22 @@ def test_sanity_or():
     PROPERTY s1: x = a | b
     VAR SINGLE x
     VAR SINGLE a
-    VAR SINGLE b
+    VAR MULTI b
     """
     fg = FactorGraph(graph)
-    fg.sanity_check({}, {"x": 0, "a": 0, "b": 0})
-    fg.sanity_check({}, {"x": 1, "a": 1, "b": 0})
-    fg.sanity_check({}, {"x": 1, "a": 0, "b": 1})
-    fg.sanity_check({}, {"x": 1, "a": 1, "b": 1})
+    fg.sanity_check({}, {"x": 0, "a": 0, "b": [0, 0]})
+    fg.sanity_check({}, {"x": 1, "a": 1, "b": [0, 0]})
+    fg.sanity_check({}, {"x": 1, "a": 0, "b": [1, 1]})
+    fg.sanity_check({}, {"x": 1, "a": 1, "b": [1, 0]})
     graph = """
     NC 2
     PROPERTY s1: x = a & b
-    VAR SINGLE x
+    VAR MULTI x
     VAR SINGLE a
-    VAR SINGLE b
+    VAR MULTI b
     """
     fg = FactorGraph(graph)
-    fg.sanity_check({}, {"x": 0, "a": 0, "b": 0})
-    fg.sanity_check({}, {"x": 0, "a": 1, "b": 0})
-    fg.sanity_check({}, {"x": 0, "a": 0, "b": 1})
-    fg.sanity_check({}, {"x": 1, "a": 1, "b": 1})
+    fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [0, 0]})
+    fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [0, 1]})
+    fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [1, 0]})
+    fg.sanity_check({}, {"x": [1, 1], "a": 1, "b": [1, 1]})
