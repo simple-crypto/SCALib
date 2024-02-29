@@ -332,13 +332,25 @@ impl FactorGraph {
                             GenFactorOperand::Pub(idx) => &public_values[*idx],
                         })
                         .collect();
-                    let nmulti_ops = ops.iter().filter_map(|op| if let PublicValue::Multi(x) { Some(x.len()) } else { None }).next();
-                    let nmulti_factor = if let super::GenFactor::Multi(gfv) = &gen_factors[*id] { Some(gfv.len) } else { None };
-                    let nmulti = match (numlti_ops, nmulti_factor) {
-                        (Some(nm_ops), Some(nm_factors) if nm_ops == nm_factors => nm_factors,
-                        (Some(nm_ops), Some(nm_factors) => todo!("Return an error because of mismatch"),
+                    let nmulti_ops = ops.iter().find_map(|op| {
+                        if let PublicValue::Multi(x) = op {
+                            Some(x.len())
+                        } else {
+                            None
+                        }
+                    });
+                    let nmulti_factor = if let super::GenFactor::Multi(gfv) = &gen_factors[*id] {
+                        Some(gfv.len())
+                    } else {
+                        None
+                    };
+                    let nmulti = match (nmulti_ops, nmulti_factor) {
+                        (Some(nm_ops), Some(nm_factors)) if nm_ops == nm_factors => nm_factors,
+                        (Some(nm_ops), Some(nm_factors)) => {
+                            return Err(FGError::InvalidGenericFactorAssignment(format!("Mismatch between multi declaration of GenFactor operands {} and GenFactor {}", nm_ops, nm_factors)))
+                        }
                         (Some(nmulti), None) | (None, Some(nmulti)) => nmulti,
-                        (None, None) => 1
+                        (None, None) => 1,
                     };
                     let mut indices: Vec<Vec<ClassVal>> = vec![vec![0; ops.len()]; nmulti];
                     for i in 0..nmulti {
