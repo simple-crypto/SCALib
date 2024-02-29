@@ -338,7 +338,7 @@ impl FactorGraph {
                             break x.len();
                         }
                     };
-                    let mut indices: Vec<Vec<ClassVal>> = vec![vec![0; ops.iter().len()]; nmulti];
+                    let mut indices: Vec<Vec<ClassVal>> = vec![vec![0; ops.len()]; nmulti];
                     for i in 0..nmulti {
                         for (j, pv) in ops.iter().enumerate() {
                             indices[i][j] = match *pv {
