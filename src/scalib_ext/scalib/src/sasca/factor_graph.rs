@@ -332,11 +332,13 @@ impl FactorGraph {
                             GenFactorOperand::Pub(idx) => &public_values[*idx],
                         })
                         .collect();
-                    let mut ops_iter = ops.iter();
-                    let nmulti = loop {
-                        if let Some(PublicValue::Multi(x)) = ops_iter.next() {
-                            break x.len();
-                        }
+                    let nmulti_ops = ops.iter().filter_map(|op| if let PublicValue::Multi(x) { Some(x.len()) } else { None }).next();
+                    let nmulti_factor = if let super::GenFactor::Multi(gfv) = &gen_factors[*id] { Some(gfv.len) } else { None };
+                    let nmulti = match (numlti_ops, nmulti_factor) {
+                        (Some(nm_ops), Some(nm_factors) if nm_ops == nm_factors => nm_factors,
+                        (Some(nm_ops), Some(nm_factors) => todo!("Return an error because of mismatch"),
+                        (Some(nmulti), None) | (None, Some(nmulti)) => nmulti,
+                        (None, None) => 1
                     };
                     let mut indices: Vec<Vec<ClassVal>> = vec![vec![0; ops.len()]; nmulti];
                     for i in 0..nmulti {
