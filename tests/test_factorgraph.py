@@ -1559,3 +1559,30 @@ def test_mixed_gf_sanity_check():
         {"a": np.array([0, 1]), "b": 1, "c": np.array([1, 2]), "d": np.array([12, 0])},
         {"f": GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32))},
     )
+
+def test_sanity_or():
+    graph = """
+    NC 2
+    PROPERTY s1: x = a | b
+    VAR SINGLE x
+    VAR SINGLE a
+    VAR MULTI b
+    """
+    fg = FactorGraph(graph)
+    fg.sanity_check({}, {"x": 0, "a": 0, "b": [0, 0]})
+    fg.sanity_check({}, {"x": 1, "a": 1, "b": [0, 0]})
+    fg.sanity_check({}, {"x": 1, "a": 0, "b": [1, 1]})
+    fg.sanity_check({}, {"x": 1, "a": 1, "b": [1, 0]})
+    graph = """
+    NC 2
+    PROPERTY s1: x = a & b
+    VAR MULTI x
+    VAR SINGLE a
+    VAR MULTI b
+    """
+    fg = FactorGraph(graph)
+    fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [0, 0]})
+    fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [0, 1]})
+    fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [1, 0]})
+    fg.sanity_check({}, {"x": [1, 1], "a": 1, "b": [1, 1]})
+
