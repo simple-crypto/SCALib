@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, usize};
 
 use super::{ClassVal, NamedList};
 use indexmap::IndexMap;
@@ -352,71 +352,45 @@ impl FactorGraph {
                         (Some(nmulti), None) | (None, Some(nmulti)) => nmulti,
                         (None, None) => 1,
                     };
-                    let mut indices: Vec<Vec<ClassVal>> = vec![vec![0; ops.len()]; nmulti];
                     for i in 0..nmulti {
-                        for (j, pv) in ops.iter().enumerate() {
-                            indices[i][j] = match *pv {
+                        let gf = match &gen_factors[*id] {
+                            super::GenFactor::Single(gfs) => gfs,
+                            super::GenFactor::Multi(gfv) => &gfv[i],
+                        };
+                        let indices: Vec<ClassVal> = ops
+                            .iter()
+                            .map(|pv| match *pv {
                                 PublicValue::Single(x) => *x,
                                 PublicValue::Multi(xvec) => xvec[i],
-                            };
-                        }
-                    }
-                    match &gen_factors[*id] {
-                        super::GenFactor::Single(gf) => match gf {
+                            })
+                            .collect();
+                        match gf {
                             super::GenFactorInner::Dense(dense_factor) => {
-                                for index_vector in indices.iter() {
-                                    let indx = index_vector
-                                        .iter()
-                                        .map(|x| *x as usize)
-                                        .collect::<Vec<usize>>();
-                                    if !(dense_factor[indx.as_slice()] > 0.0) {
-                                        return Err(FGError::InvalidGenericFactorAssignment(
-                                            factor_name.clone(),
-                                        ));
-                                    }
-                                }
-                            }
-                            super::GenFactorInner::SparseFunctional(sf_factor) => {
-                                if !indices.iter().all(|i_vec| {
-                                    sf_factor
-                                        .outer_iter()
-                                        .any(|x| x.as_slice().unwrap() == i_vec.as_slice())
-                                }) {
+                                if !(dense_factor[indices
+                                    .iter()
+                                    .map(|x| *x as usize)
+                                    .collect::<Vec<usize>>()
+                                    .as_slice()]
+                                    > 0.0)
+                                {
                                     return Err(FGError::InvalidGenericFactorAssignment(
                                         factor_name.clone(),
                                     ));
                                 }
                             }
-                        },
-                        super::GenFactor::Multi(gfv) => {
-                            assert_eq!(nmulti, gfv.len());
-                            for (i, gf) in gfv.iter().enumerate() {
-                                match gf {
-                                    super::GenFactorInner::Dense(dense_factor) => {
-                                        let i_vec = indices[i]
-                                            .iter()
-                                            .map(|x| *x as usize)
-                                            .collect::<Vec<usize>>();
-                                        if !(dense_factor[i_vec.as_slice()] > 0.0) {
-                                            return Err(FGError::InvalidGenericFactorAssignment(
-                                                factor_name.clone(),
-                                            ));
-                                        }
-                                    }
-                                    super::GenFactorInner::SparseFunctional(sf_factor) => {
-                                        if !sf_factor
-                                            .outer_iter()
-                                            .any(|x| x.as_slice().unwrap() == indices[i].as_slice())
-                                        {
-                                            return Err(FGError::InvalidGenericFactorAssignment(
-                                                factor_name.clone(),
-                                            ));
-                                        }
-                                    }
+
+                            super::GenFactorInner::SparseFunctional(sf_factor) => {
+                                if !(sf_factor
+                                    .outer_iter()
+                                    .any(|x| x.as_slice().unwrap() == indices.as_slice()))
+                                {
+                                    return Err(FGError::InvalidGenericFactorAssignment(
+                                        factor_name.clone(),
+                                    ));
                                 }
                             }
                         }
-                    };
+                    }
                 }
             }
         }
