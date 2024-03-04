@@ -200,7 +200,7 @@ pub enum FGError {
     NoEdge { var: String, factor: FactorId },
     #[error("Failure at factor {0}. Expected result {1}, got {2}.")]
     CheckFail(String, PublicValue, PublicValue),
-    #[error("Factor {0} got an invalid assignment")]
+    #[error("")]
     InvalidGenericFactorAssignment(String),
 }
 
@@ -373,9 +373,11 @@ impl FactorGraph {
                                     .as_slice()]
                                     > 0.0)
                                 {
-                                    return Err(FGError::InvalidGenericFactorAssignment(
+                                    return Err(FGError::InvalidGenericFactorAssignment(format!(
+                                        "Invalid assignment to {}: {:?}",
                                         factor_name.clone(),
-                                    ));
+                                        indices.clone()
+                                    )));
                                 }
                             }
 
@@ -384,9 +386,11 @@ impl FactorGraph {
                                     .outer_iter()
                                     .any(|x| x.as_slice().unwrap() == indices.as_slice()))
                                 {
-                                    return Err(FGError::InvalidGenericFactorAssignment(
+                                    return Err(FGError::InvalidGenericFactorAssignment(format!(
+                                        "Invalid assignment to {}: {:?}",
                                         factor_name.clone(),
-                                    ));
+                                        indices.clone()
+                                    )));
                                 }
                             }
                         }

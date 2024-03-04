@@ -1497,7 +1497,15 @@ def test_mixed_gf_sanity_check():
     GENERIC MULTI f
     PROPERTY F0: f(a,b,c,d)"""
 
+    graph2 = f"""NC {nc}
+    VAR MULTI a
+    VAR SINGLE b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC SINGLE f
+    PROPERTY F0: f(a,b,c,d)"""
     fg = FactorGraph(graph)
+    fg2 = FactorGraph(graph2)
 
     bff = np.zeros((nc, nc, nc, nc))
     bff2 = np.zeros((nc, nc, nc, nc))
@@ -1521,7 +1529,9 @@ def test_mixed_gf_sanity_check():
             "c": np.array([1, 2]),
             "d": np.array([12, 11]),
         },
-        {"f": [GenFactor.dense(bff), GenFactor.dense(bff2)]},
+        {
+            "f": [GenFactor.dense(bff), GenFactor.dense(bff2)],
+        },
     )
     fg.sanity_check(
         {},
@@ -1537,4 +1547,15 @@ def test_mixed_gf_sanity_check():
                 GenFactor.sparse_functional(np.array(bff2_sparse, dtype=np.uint32)),
             ]
         },
+    )
+
+    fg2.sanity_check(
+        {},
+        {"a": np.array([0, 1]), "b": 1, "c": np.array([1, 2]), "d": np.array([12, 0])},
+        {"f": GenFactor.dense(bff)},
+    )
+    fg2.sanity_check(
+        {},
+        {"a": np.array([0, 1]), "b": 1, "c": np.array([1, 2]), "d": np.array([12, 0])},
+        {"f": GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32))},
     )
