@@ -197,6 +197,7 @@ impl Distribution {
                         self.value = DistrRepr::Full(d.map(|d| *d));
                     }
                     (true, _, DistrRepr::Full(ref mut v)) => {
+                        let d = d.broadcast(v.dim()).unwrap();
                         azip!(v, d).for_each(|v, d| {
                             *v = *v * *d;
                         });
