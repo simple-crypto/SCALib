@@ -1386,13 +1386,36 @@ def test_clear_beliefs():
 def test_sub():
     graph = """
     NC 2
-    PROPERTY s1: x = a + -b
+    PROPERTY s1: z = x + -y
     VAR MULTI x
-    VAR MULTI a
-    VAR MULTI b
+    VAR MULTI y
+    VAR MULTI z
+    """
+    graph2 = """
+    NC 2
+    PROPERTY s1: z = x - y
+    VAR MULTI x
+    VAR MULTI y
+    VAR MULTI z
     """
 
-    fg = FactorGraph(graph)
-    bp = BPState(fg, 1)
-    bp.bp_loopy(1, False)
-    assert False
+    nc = 2
+    n = 10
+    for g in [graph, graph2]:
+        fg = FactorGraph(g)
+        bp = BPState(fg, n)
+        distri_x = make_distri(nc, n)
+        distri_y = make_distri(nc, n)
+        bp.set_evidence("x", distri_x)
+        bp.set_evidence("y", distri_y)
+        z_distri_ref = np.zeros(distri_x.shape)
+
+        for x in range(nc):
+            for y in range(nc):
+                z_distri_ref[:, (x - y) % nc] += distri_x[:, x] * distri_y[:, y]
+
+        z_distri_ref = (z_distri_ref.T / np.sum(z_distri_ref, axis=1)).T
+        bp.bp_loopy(1, True)
+        distri_z = bp.get_distribution("z")
+
+        assert np.allclose(z_distri_ref, distri_z)

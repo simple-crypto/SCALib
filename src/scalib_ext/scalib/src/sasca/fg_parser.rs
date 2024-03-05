@@ -26,6 +26,7 @@ pub(super) enum Expr {
     Xor(Vec<Var>),
     And(Vec<NVar>),
     Or(Vec<NVar>),
+    Sub(Vec<NVar>),
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +88,7 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
         .or(op_nexpr('|', Expr::Or as fn(_) -> _))
         .or(op_nexpr('+', Expr::Add as fn(_) -> _))
         .or(op_expr('*', Expr::Mul as fn(_) -> _))
+        .or(op_nexpr('-', Expr::Sub as fn(_) -> _))
         .or(not_var().map(|v| Expr::Not(v)))
         .or(negate_var().map(|v| Expr::Not(v)));
     let prop_assign = var
