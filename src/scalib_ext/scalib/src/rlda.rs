@@ -229,11 +229,16 @@ impl RLDA {
         //     = s_t - xty^T*coef - coef.T*xty + s_m
         //     (s_t is self.scatter)
         let s_w = &scatter + s_m - &xty.t().dot(reg_coefs) - &reg_coefs.t().dot(&xty);
+        let ns = norm_proj.shape()[1];
 
-        let solver =
-            geigen::GEigenSolverP::new(&s_b.view(), &s_w.view(), p).expect("failed to solve");
-        let projection = solver.vecs().t().into_owned();
-
+        let projection = if p == ns {
+            Array2::eye(ns)
+        } else {
+            let solver =
+                geigen::GEigenSolverP::new(&s_b.view(), &s_w.view(), p).expect("failed to solve");
+            let projection = solver.vecs().t().into_owned();
+            projection
+        };
         // Now we can project traces, and projecting the coefs gives us a
         // reduced-dimensionality model.
         // The projection does not guarantee that the scatter of the new residual is unitary

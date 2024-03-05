@@ -298,13 +298,24 @@ impl FactorGraph {
                         .skip(skip_res)
                         .map(|v_id| &var_assignments[*v_id]);
                     let res = match expr {
-                        ExprFactor::AND { vars_neg } | ExprFactor::ADD { vars_neg } => self
-                            .merge_pubs(
+                        ExprFactor::AND { vars_neg } => {
+                            let x = self.merge_pubs(
                                 expr,
                                 ops.zip(vars_neg.iter().cloned())
                                     .chain(std::iter::once((&cst, false))),
-                            ),
-                        ExprFactor::XOR | ExprFactor::MUL => self.merge_pubs(
+                            );
+                            // invert if we are doing an OR
+                            match x {
+                                PublicValue::Single(cv) if vars_neg[0] => {
+                                    PublicValue::Single(self.not(cv))
+                                }
+                                PublicValue::Multi(cv) if vars_neg[0] => {
+                                    PublicValue::Multi(cv.iter().map(|v| self.not(*v)).collect())
+                                }
+                                _ => x,
+                            }
+                        }
+                        ExprFactor::XOR | ExprFactor::ADD | ExprFactor::MUL => self.merge_pubs(
                             expr,
                             ops.zip(std::iter::repeat(false))
                                 .chain(std::iter::once((&cst, false))),
@@ -315,7 +326,16 @@ impl FactorGraph {
                             .unwrap()
                             .map(|x| self.tables[*table].values[x as usize]),
                     };
-                    if &res != expected_res {
+                    let check = match (&res, expected_res) {
+                        (PublicValue::Single(v1), PublicValue::Multi(v2)) => {
+                            v2.iter().any(|x| x != v1)
+                        }
+                        (PublicValue::Multi(v1), PublicValue::Single(v2)) => {
+                            v1.iter().any(|x| x != v2)
+                        }
+                        (_, _) => &res != expected_res,
+                    };
+                    if check {
                         return Err(FGError::CheckFail(
                             factor_name.clone(),
                             expected_res.clone(),

@@ -1326,6 +1326,23 @@ def test_mix_single_multi():
             assert np.allclose(d, d2, rtol=1e-5, atol=1e-19)
 
 
+def test_mix_single_multi2():
+    graph = f"""
+        NC 16
+        VAR SINGLE A
+        VAR MULTI B
+        VAR MULTI AnB
+        VAR MULTI C
+        VAR MULTI AnC
+
+        PROPERTY A_and_B: AnB = A & B
+        PROPERTY A_and_C: AnC = A & C
+    """
+    fg = FactorGraph(graph)
+    bp = BPState(fg, 2)
+    bp.bp_loopy(3, initialize_states=True)
+
+
 def test_ADD5():
     for nc in [13, 256]:
         n = 10
@@ -1419,3 +1436,28 @@ def test_sub():
         distri_z = bp.get_distribution("z")
 
         assert np.allclose(z_distri_ref, distri_z)
+def test_sanity_or():
+    graph = """
+    NC 2
+    PROPERTY s1: x = a | b
+    VAR SINGLE x
+    VAR SINGLE a
+    VAR MULTI b
+    """
+    fg = FactorGraph(graph)
+    fg.sanity_check({}, {"x": 0, "a": 0, "b": [0, 0]})
+    fg.sanity_check({}, {"x": 1, "a": 1, "b": [0, 0]})
+    fg.sanity_check({}, {"x": 1, "a": 0, "b": [1, 1]})
+    fg.sanity_check({}, {"x": 1, "a": 1, "b": [1, 0]})
+    graph = """
+    NC 2
+    PROPERTY s1: x = a & b
+    VAR MULTI x
+    VAR SINGLE a
+    VAR MULTI b
+    """
+    fg = FactorGraph(graph)
+    fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [0, 0]})
+    fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [0, 1]})
+    fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [1, 0]})
+    fg.sanity_check({}, {"x": [1, 1], "a": 1, "b": [1, 1]})
