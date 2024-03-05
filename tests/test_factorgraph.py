@@ -1560,6 +1560,7 @@ def test_mixed_gf_sanity_check():
         {"f": GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32))},
     )
 
+
 def test_sanity_or():
     graph = """
     NC 2
@@ -1585,4 +1586,3 @@ def test_sanity_or():
     fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [0, 1]})
     fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [1, 0]})
     fg.sanity_check({}, {"x": [1, 1], "a": 1, "b": [1, 1]})
-
