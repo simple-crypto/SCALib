@@ -315,11 +315,12 @@ impl FactorGraph {
                                 _ => x,
                             }
                         }
-                        ExprFactor::XOR | ExprFactor::ADD | ExprFactor::MUL => self.merge_pubs(
-                            expr,
-                            ops.zip(std::iter::repeat(false))
-                                .chain(std::iter::once((&cst, false))),
-                        ),
+                        ExprFactor::XOR | ExprFactor::ADD { .. } | ExprFactor::MUL => self
+                            .merge_pubs(
+                                expr,
+                                ops.zip(std::iter::repeat(false))
+                                    .chain(std::iter::once((&cst, false))),
+                            ),
                         ExprFactor::NOT => ops.next().unwrap().map(|x| self.not(x)),
                         ExprFactor::LOOKUP { table } => ops
                             .next()

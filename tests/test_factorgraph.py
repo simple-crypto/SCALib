@@ -1436,6 +1436,8 @@ def test_sub():
         distri_z = bp.get_distribution("z")
 
         assert np.allclose(z_distri_ref, distri_z)
+
+
 def test_sanity_or():
     graph = """
     NC 2
