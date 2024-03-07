@@ -1425,3 +1425,46 @@ def test_sanity_or():
     fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [0, 1]})
     fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [1, 0]})
     fg.sanity_check({}, {"x": [1, 1], "a": 1, "b": [1, 1]})
+
+
+def test_cycle_detection_single_factor():
+    graph_desc = """
+                NC 2
+                VAR SINGLE x
+                VAR SINGLE y
+                PROPERTY x = !y
+                """
+
+    fg = FactorGraph(graph_desc)
+    bp = BPState(fg, 2)
+    assert not bp.is_cyclic()
+
+
+def test_cycle_detection_single_factor2():
+    graph_desc = """
+                NC 2
+                VAR SINGLE x
+                VAR SINGLE y
+                VAR SINGLE z
+                PROPERTY x = !y
+                PROPERTY x = y ^ z
+                """
+
+    fg = FactorGraph(graph_desc)
+    bp = BPState(fg, 2)
+    assert bp.is_cyclic()
+
+
+def test_cycle_detection_single_factor_with_multi():
+    graph_desc = """
+                NC 2
+                VAR SINGLE x
+                VAR SINGLE y
+                VAR MULTI z
+                PROPERTY x = !y
+                PROPERTY x = y ^ z
+                """
+
+    fg = FactorGraph(graph_desc)
+    bp = BPState(fg, 2)
+    assert bp.is_cyclic()

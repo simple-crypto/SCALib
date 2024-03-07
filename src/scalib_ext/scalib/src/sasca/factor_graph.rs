@@ -149,6 +149,8 @@ pub struct FactorGraph {
     pub(super) petgraph: petgraph::Graph<Node, EdgeId, petgraph::Undirected>,
     pub(super) var_graph_ids: VarVec<petgraph::graph::NodeIndex>,
     pub(super) factor_graph_ids: FactorVec<petgraph::graph::NodeIndex>,
+    pub(super) cyclic_single: bool,
+    pub(super) cyclic_multi: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -419,25 +421,10 @@ impl FactorGraph {
     }
 
     pub(super) fn is_cyclic(&self, multi_exec: bool) -> bool {
-        if petgraph::algo::is_cyclic_undirected(&self.petgraph) {
-            return true;
-        }
         if multi_exec {
-            return petgraph::algo::kosaraju_scc(&self.petgraph)
-                .into_iter()
-                .any(|scc| {
-                    scc.into_iter()
-                        .filter(|n| match self.petgraph[*n] {
-                            Node::Var(var_id) => {
-                                !self.vars.get_index(var_id.index()).unwrap().1.multi
-                            }
-                            Node::Factor(_) => false,
-                        })
-                        .count()
-                        > 1
-                });
+            self.cyclic_multi
         } else {
-            return false;
+            self.cyclic_single
         }
     }
 
