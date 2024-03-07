@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use itertools::Itertools;
+use rayon::iter::{ParallelBridge, ParallelIterator};
 use thiserror::Error;
 
 use super::factor_graph as fg;
@@ -86,8 +87,8 @@ pub struct BPState {
     // current proba for each var
     var_state: VarVec<Distribution>,
     // beliefs on each edge
-    belief_from_var: EdgeVec<Distribution>,
-    belief_to_var: EdgeVec<Distribution>,
+    belief_from_var: EdgeVec<Arc<RwLock<Distribution>>>,
+    belief_to_var: EdgeVec<Arc<RwLock<Distribution>>>,
     // save if cyclic
     cyclic: bool,
     // fft plans
@@ -120,18 +121,35 @@ impl BPState {
             .values()
             .map(|v| Distribution::new(v.multi, graph.nc, nmulti))
             .collect();
-        let beliefs: EdgeVec<_> = graph
+        let beliefs_from: EdgeVec<_> = graph
             .edges
             .iter()
-            .map(|e| Distribution::new(graph.factor(e.factor).multi, graph.nc, nmulti))
+            .map(|e| {
+                Arc::new(RwLock::new(Distribution::new(
+                    graph.factor(e.factor).multi,
+                    graph.nc,
+                    nmulti,
+                )))
+            })
+            .collect();
+        let beliefs_to: EdgeVec<_> = graph
+            .edges
+            .iter()
+            .map(|e| {
+                Arc::new(RwLock::new(Distribution::new(
+                    graph.var(e.var).multi,
+                    graph.nc,
+                    nmulti,
+                )))
+            })
             .collect();
         let pub_reduced = graph.reduce_pub(&public_values);
         let cyclic = graph.is_cyclic(nmulti > 1);
         let plans = FftPlans::new(graph.nc);
         Self {
             evidence: var_state.clone(),
-            belief_from_var: beliefs.clone(),
-            belief_to_var: beliefs,
+            belief_from_var: beliefs_from,
+            belief_to_var: beliefs_to,
             var_state,
             graph,
             nmulti,
@@ -184,11 +202,11 @@ impl BPState {
     pub fn drop_state(&mut self, var: VarId) {
         self.var_state[var] = self.var_state[var].as_uniform();
     }
-    pub fn get_belief_to_var(&self, edge: EdgeId) -> &Distribution {
-        &self.belief_to_var[edge]
+    pub fn get_belief_to_var(&self, edge: EdgeId) -> Arc<RwLock<Distribution>> {
+        self.belief_to_var[edge].clone()
     }
-    pub fn get_belief_from_var(&self, edge: EdgeId) -> &Distribution {
-        &self.belief_from_var[edge]
+    pub fn get_belief_from_var(&self, edge: EdgeId) -> Arc<RwLock<Distribution>> {
+        self.belief_from_var[edge].clone()
     }
     pub fn set_belief_from_var(
         &mut self,
@@ -196,12 +214,12 @@ impl BPState {
         belief: Distribution,
     ) -> Result<(), BPError> {
         self.check_distribution(&belief, self.graph.edge_multi(edge))?;
-        self.belief_from_var[edge] = belief;
+        *self.belief_from_var[edge].write().unwrap() = belief;
         Ok(())
     }
     pub fn set_belief_to_var(&mut self, edge: EdgeId, belief: Distribution) -> Result<(), BPError> {
         self.check_distribution(&belief, self.graph.edge_multi(edge))?;
-        self.belief_to_var[edge] = belief;
+        *self.belief_to_var[edge].write().unwrap() = belief;
         Ok(())
     }
 
@@ -217,20 +235,26 @@ impl BPState {
         let var = self.graph.var(var_id);
         assert!(var.multi);
         let mut base = self.evidence[var_id].take_or_clone(clear_evidence);
-        base.multiply_norm(other_edges.iter().map(|e| &self.belief_to_var[*e]));
+        let beliefs: Vec<Distribution> = other_edges
+            .iter()
+            .map(|e| self.belief_to_var[*e].read().unwrap().clone())
+            .collect();
+        base.multiply_norm(beliefs.iter());
         if clear_beliefs {
             for e in other_edges {
-                self.belief_to_var[e].reset();
+                self.belief_to_var[e].write().unwrap().reset();
             }
         }
-        let (var_state, new_beliefs) = super::bp_compute::belief_reciprocal_product(
-            base,
-            to_edges.iter().map(|e| &self.belief_to_var[*e]),
-        );
+        let beliefs: Vec<Distribution> = to_edges
+            .iter()
+            .map(|e| self.belief_to_var[*e].read().unwrap().clone())
+            .collect();
+        let (var_state, new_beliefs) =
+            super::bp_compute::belief_reciprocal_product(base, beliefs.iter());
         for (e, d) in to_edges.iter().zip(new_beliefs.into_iter()) {
-            self.belief_from_var[*e] = d;
+            *self.belief_from_var[*e].write().unwrap() = d;
             if clear_beliefs {
-                self.belief_to_var[*e].reset();
+                self.belief_to_var[*e].write().unwrap().reset();
             }
         }
         self.var_state[var_id] = var_state;
@@ -248,14 +272,19 @@ impl BPState {
         assert!(!var.multi);
         let mut base = self.evidence[var_id].take_or_clone(clear_evidence);
         for e in other_edges {
-            base.multiply_to_single(&self.belief_to_var[e]);
+            base.multiply_to_single(&self.belief_to_var[e].read().unwrap());
             if clear_beliefs {
-                self.belief_to_var[e].reset();
+                self.belief_to_var[e].write().unwrap().reset();
             }
         }
         let (global_products, local_products): (Vec<_>, Vec<_>) = to_edges
             .iter()
-            .map(|e| self.belief_to_var[*e].reciprocal_product(self.evidence[var_id].as_uniform()))
+            .map(|e| {
+                self.belief_to_var[*e]
+                    .read()
+                    .unwrap()
+                    .reciprocal_product(self.evidence[var_id].as_uniform())
+            })
             .unzip();
         let (var_state, new_beliefs_global) =
             super::bp_compute::belief_reciprocal_product(base, global_products.iter());
@@ -265,29 +294,29 @@ impl BPState {
             .zip(new_beliefs_global.into_iter())
         {
             local.multiply_norm(std::iter::once(&global));
-            self.belief_from_var[*e] = local;
+            *self.belief_from_var[*e].write().unwrap() = local;
             if clear_beliefs {
-                self.belief_to_var[*e].reset();
+                self.belief_to_var[*e].write().unwrap().reset();
             }
         }
         self.var_state[var_id] = var_state;
     }
 
-    pub fn propagate_factor(&mut self, factor_id: FactorId, dest: &[VarId], clear_incoming: bool) {
+    pub fn propagate_factor(&self, factor_id: FactorId, dest: &[VarId], clear_incoming: bool) {
         let factor = self.graph.factor(factor_id);
         // Pre-erase to have buffers available in cache allocator.
         for d in dest {
-            self.belief_to_var[factor.edges[d]].reset();
+            self.belief_to_var[factor.edges[d]].write().unwrap().reset();
         }
         // Use a macro to call very similar functions in match arms.
         // Needed because of anonymous return types of these functions.
         macro_rules! prop_factor {
             ($f:ident, $($arg:expr),*) => {
                 {
-                    let it = $f(factor, &mut self.belief_from_var, dest, clear_incoming, $($arg,)*);
+                    let it = $f(factor, &self.belief_from_var, dest, clear_incoming, $($arg,)*);
                     for (mut distr, dest) in it.zip(dest.iter()) {
                         distr.regularize();
-                        self.belief_to_var[factor.edges[dest]] = distr;
+                        *self.belief_to_var[factor.edges[dest]].write().unwrap() = distr;
                     }
                 }
             };
@@ -321,7 +350,7 @@ impl BPState {
     }
 
     // Higher-level
-    pub fn propagate_factor_all(&mut self, factor: FactorId) {
+    pub fn propagate_factor_all(&self, factor: FactorId) {
         let dest: Vec<_> = self.graph.factor(factor).edges.keys().cloned().collect();
         self.propagate_factor(factor, dest.as_slice(), false);
     }
@@ -387,9 +416,10 @@ impl BPState {
     }
     pub fn propagate_loopy_step(&mut self, n_steps: u32, clear_beliefs: bool) {
         for _ in 0..n_steps {
-            for factor_id in self.graph.range_factors() {
-                self.propagate_factor_all(factor_id);
-            }
+            self.graph
+                .range_factors()
+                .par_bridge()
+                .for_each(|factor_id| self.propagate_factor_all(factor_id));
             self.propagate_all_vars(clear_beliefs);
         }
     }
@@ -424,7 +454,7 @@ impl BPState {
 
 fn factor_gen_and<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a mut EdgeSlice<Distribution>,
+    belief_from_var: &'a EdgeSlice<Arc<RwLock<Distribution>>>,
     dest: &'a [VarId],
     clear_incoming: bool,
     pub_red: &PublicValue,
@@ -442,7 +472,10 @@ fn factor_gen_and<'a>(
             .iter()
             .map(|var| {
                 let i = factor.edges.get_index_of(var).unwrap();
-                let mut distr = belief_from_var[factor.edges[1 - i]].take_or_clone(clear_incoming);
+                let mut distr = belief_from_var[factor.edges[1 - i]]
+                    .write()
+                    .unwrap()
+                    .take_or_clone(clear_incoming);
                 if vars_neg[1 - i] {
                     distr.not();
                 }
@@ -468,7 +501,10 @@ fn factor_gen_and<'a>(
     // inverse transform:
     // - if operand: opandt^-1 = opandt
     // - if result: cumt^-1 = cumti
-    let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
+    let mut acc = belief_from_var[factor.edges[0]]
+        .read()
+        .unwrap()
+        .new_constant(pub_red);
     if *has_res {
         // constant is operand
         acc.cumt();
@@ -484,7 +520,10 @@ fn factor_gen_and<'a>(
     // We do not take the product of all factors then divide because some factors could be zero.
     let mut dest_transformed = Vec::with_capacity(dest.len());
     for ((i, e), taken) in factor.edges.values().enumerate().zip(taken_dest.iter()) {
-        let mut d = belief_from_var[*e].take_or_clone(clear_incoming);
+        let mut d = belief_from_var[*e]
+            .write()
+            .unwrap()
+            .take_or_clone(clear_incoming);
         if vars_neg[i] {
             d.not();
         }
@@ -529,7 +568,7 @@ fn factor_gen_and<'a>(
 
 fn reset_incoming(
     factor: &Factor,
-    belief_from_var: &mut EdgeSlice<Distribution>,
+    belief_from_var: &EdgeSlice<Arc<RwLock<Distribution>>>,
     dest_taken: &[bool],
     clear_incoming: bool,
 ) {
@@ -538,7 +577,7 @@ fn reset_incoming(
     if clear_incoming {
         for (taken, e) in dest_taken.iter().zip(factor.edges.values()) {
             if *taken {
-                belief_from_var[*e].reset();
+                belief_from_var[*e].write().unwrap().reset();
             }
         }
     }
@@ -546,7 +585,7 @@ fn reset_incoming(
 
 fn factor_xor<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a mut EdgeSlice<Distribution>,
+    belief_from_var: &'a EdgeSlice<Arc<RwLock<Distribution>>>,
     dest: &'a [VarId],
     clear_incoming: bool,
     pub_red: &PublicValue,
@@ -557,14 +596,20 @@ fn factor_xor<'a>(
             .iter()
             .map(|var| {
                 let i = factor.edges.get_index_of(var).unwrap();
-                let mut distr = belief_from_var[factor.edges[1 - i]].take_or_clone(clear_incoming);
+                let mut distr = belief_from_var[factor.edges[1 - i]]
+                    .write()
+                    .unwrap()
+                    .take_or_clone(clear_incoming);
                 distr.xor_cst(pub_red);
                 distr
             })
             .collect::<Vec<_>>()
             .into_iter();
     }
-    let mut acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
+    let mut acc = belief_from_var[factor.edges[0]]
+        .read()
+        .unwrap()
+        .new_constant(pub_red);
     acc.wht();
     let mut taken_dest = vec![false; factor.edges.len()];
     let mut taken_dest_idx = vec![None; factor.edges.len()];
@@ -576,7 +621,7 @@ fn factor_xor<'a>(
         .edges
         .values()
         .zip(taken_dest_idx.iter())
-        .filter(|(e, _)| !belief_from_var[**e].is_full());
+        .filter(|(e, _)| !belief_from_var[**e].read().unwrap().is_full());
     let uniform_op = uniform_iter.next();
     if let Some((e_dest, t)) = uniform_op {
         if t.is_none() || uniform_iter.next().is_some() {
@@ -588,7 +633,10 @@ fn factor_xor<'a>(
             // Single uniform op, only compute for that one.
             for e in factor.edges.values() {
                 if e != e_dest {
-                    let mut d = belief_from_var[*e].take_or_clone(clear_incoming);
+                    let mut d = belief_from_var[*e]
+                        .write()
+                        .unwrap()
+                        .take_or_clone(clear_incoming);
                     d.wht();
                     d.make_non_zero_signed();
                     acc.multiply(Some(&d).into_iter());
@@ -606,7 +654,10 @@ fn factor_xor<'a>(
         // We do take the product of all factors then divide because some factors could be zero.
         let mut dest_wht = Vec::with_capacity(dest.len());
         for (e, taken) in factor.edges.values().zip(taken_dest.iter()) {
-            let mut d = belief_from_var[*e].take_or_clone(clear_incoming);
+            let mut d = belief_from_var[*e]
+                .write()
+                .unwrap()
+                .take_or_clone(clear_incoming);
             assert!(d.is_full());
             d.wht();
             // TODO remove this ?
@@ -635,7 +686,7 @@ fn factor_xor<'a>(
 
 fn factor_not<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a mut EdgeSlice<Distribution>,
+    belief_from_var: &'a EdgeSlice<Arc<RwLock<Distribution>>>,
     dest: &'a [VarId],
     clear_incoming: bool,
     inv_cst: u32,
@@ -652,7 +703,7 @@ fn factor_not<'a>(
 // TODO handle subtraction too (actually, we can re-write it as an addition by moving terms around).
 fn factor_add<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a mut EdgeSlice<Distribution>,
+    belief_from_var: &'a EdgeSlice<Arc<RwLock<Distribution>>>,
     dest: &'a [VarId],
     clear_incoming: bool,
     pub_red: &PublicValue,
@@ -665,7 +716,10 @@ fn factor_add<'a>(
             .iter()
             .map(|var| {
                 let i = factor.edges.get_index_of(var).unwrap();
-                let mut distr = belief_from_var[factor.edges[1 - i]].take_or_clone(clear_incoming);
+                let mut distr = belief_from_var[factor.edges[1 - i]]
+                    .write()
+                    .unwrap()
+                    .take_or_clone(clear_incoming);
                 distr.add_cst(pub_red, i != 0);
                 distr
             })
@@ -683,9 +737,12 @@ fn factor_add<'a>(
         .iter()
         .zip(taken_dest.iter())
         .zip(negated_vars.iter())
-        .filter(|(((_, e), _), _)| !belief_from_var[**e].is_full());
+        .filter(|(((_, e), _), _)| !belief_from_var[**e].read().unwrap().is_full());
     let uniform_op = uniform_iter.next();
-    let uniform_template = belief_from_var[factor.edges[0]].as_uniform();
+    let uniform_template = belief_from_var[factor.edges[0]]
+        .read()
+        .unwrap()
+        .as_uniform();
     let (nmulti, nc) = uniform_template.shape();
     let mut fft_tmp = ndarray::Array2::zeros((nmulti, nc / 2 + 1));
     let mut acc_fft = ndarray::Array2::zeros((nmulti, nc / 2 + 1));
@@ -703,7 +760,7 @@ fn factor_add<'a>(
             for (e, negated_var) in factor.edges.values().zip(negated_vars.iter()) {
                 if e != e_dest {
                     let negate = !(dest_negated ^ negated_var);
-                    belief_from_var[*e].fft_to(
+                    belief_from_var[*e].read().unwrap().fft_to(
                         fft_input_scratch.as_mut_slice(),
                         fft_tmp.view_mut(),
                         fft_scratch.as_mut_slice(),
@@ -719,7 +776,7 @@ fn factor_add<'a>(
                     }
                 }
                 if clear_incoming {
-                    belief_from_var[*e].reset();
+                    belief_from_var[*e].write().unwrap().reset();
                 }
             }
         }
@@ -743,7 +800,7 @@ fn factor_add<'a>(
         {
             if *taken {
                 let mut fft_e = ndarray::Array2::zeros((nmulti, nc / 2 + 1));
-                belief_from_var[*e].fft_to(
+                belief_from_var[*e].read().unwrap().fft_to(
                     fft_input_scratch.as_mut_slice(),
                     fft_e.view_mut(),
                     fft_scratch.as_mut_slice(),
@@ -753,7 +810,7 @@ fn factor_add<'a>(
 
                 dest_fft.push(fft_e);
             } else {
-                belief_from_var[*e].fft_to(
+                belief_from_var[*e].read().unwrap().fft_to(
                     fft_input_scratch.as_mut_slice(),
                     fft_tmp.view_mut(),
                     fft_scratch.as_mut_slice(),
@@ -769,7 +826,7 @@ fn factor_add<'a>(
                 }
             }
             if clear_incoming {
-                belief_from_var[*e].reset();
+                belief_from_var[*e].write().unwrap().reset();
             }
         }
 
@@ -807,7 +864,7 @@ fn factor_add<'a>(
 
 fn factor_mul<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a mut EdgeSlice<Distribution>,
+    belief_from_var: &'a EdgeSlice<Arc<RwLock<Distribution>>>,
     dest: &'a [VarId],
     clear_incoming: bool,
     pub_red: &'a PublicValue,
@@ -823,12 +880,15 @@ fn factor_mul<'a>(
                 if v != var {
                     res = Some(if let Some(res) = res {
                         if is_product {
-                            res.op_multiply(&belief_from_var[*e])
+                            res.op_multiply(&belief_from_var[*e].read().unwrap())
                         } else {
-                            res.op_multiply_factor(&belief_from_var[*e])
+                            res.op_multiply_factor(&belief_from_var[*e].read().unwrap())
                         }
                     } else {
-                        belief_from_var[*e].take_or_clone(clear_incoming)
+                        belief_from_var[*e]
+                            .write()
+                            .unwrap()
+                            .take_or_clone(clear_incoming)
                     });
                 }
             }
@@ -840,7 +900,7 @@ fn factor_mul<'a>(
         } else {
             if clear_incoming {
                 for e in factor.edges.values() {
-                    belief_from_var[*e].reset();
+                    belief_from_var[*e].write().unwrap().reset();
                 }
             }
             None
@@ -850,7 +910,7 @@ fn factor_mul<'a>(
 
 fn factor_lookup<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a mut EdgeSlice<Distribution>,
+    belief_from_var: &'a EdgeSlice<Arc<RwLock<Distribution>>>,
     dest: &'a [VarId],
     clear_incoming: bool,
     table: &'a Table,
@@ -862,12 +922,15 @@ fn factor_lookup<'a>(
         let distr = belief_from_var[factor.edges[1 - i]].clone();
         let res = if i == 0 {
             // dest is res
-            distr.map_table(table.values.as_slice())
+            distr.read().unwrap().map_table(table.values.as_slice())
         } else {
-            distr.map_table_inv(table.values.as_slice())
+            distr.read().unwrap().map_table_inv(table.values.as_slice())
         };
         if clear_incoming {
-            belief_from_var[factor.edges[1 - i]].reset();
+            belief_from_var[factor.edges[1 - i]]
+                .write()
+                .unwrap()
+                .reset();
         }
         res
     })
@@ -875,7 +938,7 @@ fn factor_lookup<'a>(
 
 fn factor_gen_factor<'a>(
     factor: &'a Factor,
-    belief_from_var: &'a mut EdgeSlice<Distribution>,
+    belief_from_var: &'a EdgeSlice<Arc<RwLock<Distribution>>>,
     dest: &'a [VarId],
     clear_incoming: bool,
     gen_factor: &'a GenFactor,
@@ -888,7 +951,7 @@ fn factor_gen_factor<'a>(
     };
     let res: Vec<Distribution> = dest.iter().map(|dest| {
         let dest_idx = factor.edges.get_index_of(dest).unwrap();
-        let mut distr = belief_from_var[factor.edges[dest_idx]].clone();
+        let mut distr = belief_from_var[factor.edges[dest_idx]].read().unwrap().clone();
         distr.ensure_full();
         for i in 0..nmulti {
             let gen_factor = match gen_factor {
@@ -923,7 +986,7 @@ fn factor_gen_factor<'a>(
                                 }
                                 let distr = &belief_from_var[factor.edges[*var_idx]];
                                 let mut new_gen_factor: ndarray::ArrayD<f64> = ndarray::ArrayD::zeros(gen_factor.slice_axis(ndarray::Axis(op_idx), ndarray::Slice::new(0, Some(1), 1)).shape());
-                                if let Some(distr) = distr.value() {
+                                if let Some(distr) = distr.read().unwrap().value() {
                                     for (d, gf) in distr.slice(s![i,..]).iter().zip(gen_factor.axis_chunks_iter(ndarray::Axis(op_idx), 1)) {
                                         new_gen_factor.scaled_add(*d, &gf);
                                     }
@@ -967,7 +1030,7 @@ fn factor_gen_factor<'a>(
                                         }
                                         let distr = &belief_from_var[factor.edges[*var_idx]];
                                         // For uniform, we implicitly multiply by 1.0
-                                        if let Some(distr) = distr.value() {
+                                        if let Some(distr) = distr.read().unwrap().value() {
                                             res *= distr[(i, val as usize)];
                                         }
                                     }
@@ -997,7 +1060,7 @@ fn factor_gen_factor<'a>(
     }).collect();
     if clear_incoming {
         for e in factor.edges.values() {
-            belief_from_var[*e].reset();
+            belief_from_var[*e].write().unwrap().reset();
         }
     }
     res.into_iter()
