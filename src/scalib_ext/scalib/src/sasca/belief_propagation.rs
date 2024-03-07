@@ -83,9 +83,9 @@ pub struct BPState {
     // generalized factors values
     gen_factors: Vec<GenFactor>,
     // evidence for each var
-    evidence: VarVec<Distribution>,
+    evidence: VarVec<Arc<RwLock<Distribution>>>,
     // current proba for each var
-    var_state: VarVec<Distribution>,
+    var_state: VarVec<Arc<RwLock<Distribution>>>,
     // beliefs on each edge
     belief_from_var: EdgeVec<Arc<RwLock<Distribution>>>,
     belief_to_var: EdgeVec<Arc<RwLock<Distribution>>>,
@@ -116,10 +116,15 @@ impl BPState {
         public_values: Vec<PublicValue>,
         gen_factors: Vec<GenFactor>,
     ) -> Self {
+        let ev_state: VarVec<_> = graph
+            .vars
+            .values()
+            .map(|v| Arc::new(RwLock::new(Distribution::new(v.multi, graph.nc, nmulti))))
+            .collect();
         let var_state: VarVec<_> = graph
             .vars
             .values()
-            .map(|v| Distribution::new(v.multi, graph.nc, nmulti))
+            .map(|v| Arc::new(RwLock::new(Distribution::new(v.multi, graph.nc, nmulti))))
             .collect();
         let beliefs_from: EdgeVec<_> = graph
             .edges
@@ -147,7 +152,7 @@ impl BPState {
         let cyclic = graph.is_cyclic(nmulti > 1);
         let plans = FftPlans::new(graph.nc);
         Self {
-            evidence: var_state.clone(),
+            evidence: ev_state,
             belief_from_var: beliefs_from,
             belief_to_var: beliefs_to,
             var_state,
@@ -185,22 +190,22 @@ impl BPState {
     }
     pub fn set_evidence(&mut self, var: VarId, evidence: Distribution) -> Result<(), BPError> {
         self.check_distribution(&evidence, self.graph.var_multi(var))?;
-        self.evidence[var] = evidence;
+        *self.evidence[var].write().unwrap() = evidence;
         Ok(())
     }
     pub fn drop_evidence(&mut self, var: VarId) {
-        self.evidence[var] = self.evidence[var].as_uniform();
+        *self.evidence[var].write().unwrap() = self.evidence[var].read().unwrap().as_uniform();
     }
-    pub fn get_state(&self, var: VarId) -> &Distribution {
-        &self.var_state[var]
+    pub fn get_state(&self, var: VarId) -> Arc<RwLock<Distribution>> {
+        self.var_state[var].clone()
     }
     pub fn set_state(&mut self, var: VarId, state: Distribution) -> Result<(), BPError> {
         self.check_distribution(&state, self.graph.var_multi(var))?;
-        self.var_state[var] = state;
+        *self.var_state[var].write().unwrap() = state;
         Ok(())
     }
     pub fn drop_state(&mut self, var: VarId) {
-        self.var_state[var] = self.var_state[var].as_uniform();
+        *self.var_state[var].write().unwrap() = self.var_state[var].read().unwrap().as_uniform();
     }
     pub fn get_belief_to_var(&self, edge: EdgeId) -> Arc<RwLock<Distribution>> {
         self.belief_to_var[edge].clone()
@@ -225,7 +230,7 @@ impl BPState {
 
     /// propgate only go given edges
     fn propagate_var_t_multi(
-        &mut self,
+        &self,
         var_id: VarId,
         to_edges: Vec<EdgeId>,
         other_edges: Vec<EdgeId>,
@@ -234,7 +239,10 @@ impl BPState {
     ) {
         let var = self.graph.var(var_id);
         assert!(var.multi);
-        let mut base = self.evidence[var_id].take_or_clone(clear_evidence);
+        let mut base = self.evidence[var_id]
+            .write()
+            .unwrap()
+            .take_or_clone(clear_evidence);
         let beliefs: Vec<Distribution> = other_edges
             .iter()
             .map(|e| self.belief_to_var[*e].read().unwrap().clone())
@@ -257,11 +265,11 @@ impl BPState {
                 self.belief_to_var[*e].write().unwrap().reset();
             }
         }
-        self.var_state[var_id] = var_state;
+        *self.var_state[var_id].write().unwrap() = var_state;
     }
 
     fn propagate_var_t_single(
-        &mut self,
+        &self,
         var_id: VarId,
         to_edges: Vec<EdgeId>,
         other_edges: Vec<EdgeId>,
@@ -270,7 +278,10 @@ impl BPState {
     ) {
         let var = self.graph.var(var_id);
         assert!(!var.multi);
-        let mut base = self.evidence[var_id].take_or_clone(clear_evidence);
+        let mut base = self.evidence[var_id]
+            .write()
+            .unwrap()
+            .take_or_clone(clear_evidence);
         for e in other_edges {
             base.multiply_to_single(&self.belief_to_var[e].read().unwrap());
             if clear_beliefs {
@@ -283,7 +294,7 @@ impl BPState {
                 self.belief_to_var[*e]
                     .read()
                     .unwrap()
-                    .reciprocal_product(self.evidence[var_id].as_uniform())
+                    .reciprocal_product(self.evidence[var_id].read().unwrap().as_uniform())
             })
             .unzip();
         let (var_state, new_beliefs_global) =
@@ -299,7 +310,7 @@ impl BPState {
                 self.belief_to_var[*e].write().unwrap().reset();
             }
         }
-        self.var_state[var_id] = var_state;
+        *self.var_state[var_id].write().unwrap() = var_state;
     }
 
     pub fn propagate_factor(&self, factor_id: FactorId, dest: &[VarId], clear_incoming: bool) {
@@ -354,7 +365,7 @@ impl BPState {
         let dest: Vec<_> = self.graph.factor(factor).edges.keys().cloned().collect();
         self.propagate_factor(factor, dest.as_slice(), false);
     }
-    pub fn propagate_var(&mut self, var_id: VarId, clear_beliefs: bool) {
+    pub fn propagate_var(&self, var_id: VarId, clear_beliefs: bool) {
         let clear_evidence = false;
         self.propagate_var_to(
             var_id,
@@ -369,7 +380,7 @@ impl BPState {
         );
     }
     pub fn propagate_var_to(
-        &mut self,
+        &self,
         var_id: VarId,
         mut to_edges: Vec<EdgeId>,
         clear_beliefs: bool,
@@ -410,9 +421,10 @@ impl BPState {
         }
     }
     pub fn propagate_all_vars(&mut self, clear_beliefs: bool) {
-        for var_id in self.graph.range_vars() {
-            self.propagate_var(var_id, clear_beliefs);
-        }
+        self.graph
+            .range_vars()
+            .par_bridge()
+            .for_each(|var_id| self.propagate_var(var_id, clear_beliefs));
     }
     pub fn propagate_loopy_step(&mut self, n_steps: u32, clear_beliefs: bool) {
         for _ in 0..n_steps {
