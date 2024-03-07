@@ -52,6 +52,8 @@ impl fg::FactorGraph {
             petgraph: petgraph::Graph::new_undirected(),
             var_graph_ids: VarVec::new(),
             factor_graph_ids: FactorVec::new(),
+            cyclic_single: false,
+            cyclic_multi: false,
         }
     }
     fn check_new_var(&self, name: &String) -> Result<(), GraphBuildError> {
@@ -213,6 +215,69 @@ impl fg::FactorGraph {
             );
         }
     }
+    /// Return the "flattended" factor graph for 2 executions, which can then be used to check
+    /// cyclicity for any nexec > 1.
+    /// Needs correct .vars, .factors and .edges
+    fn petgraph_2exec(
+        &self,
+    ) -> petgraph::Graph<(Node, u32), super::factor_graph::EdgeId, petgraph::Undirected> {
+        enum Either<T> {
+            Single(T),
+            Multi([T; 2]),
+        }
+        let mut graph = petgraph::Graph::new_undirected();
+        let var_graph_ids = self
+            .vars
+            .values()
+            .enumerate()
+            .map(|(var_id, var)| {
+                if var.multi {
+                    Either::Multi([
+                        graph.add_node((Node::Var(VarId::from_usize(var_id)), 0)),
+                        graph.add_node((Node::Var(VarId::from_usize(var_id)), 1)),
+                    ])
+                } else {
+                    Either::Single(graph.add_node((Node::Var(VarId::from_usize(var_id)), 0)))
+                }
+            })
+            .collect::<VarVec<_>>();
+        let factor_graph_ids = self
+            .factors
+            .values()
+            .enumerate()
+            .map(|(factor_id, factor)| {
+                if factor.multi {
+                    Either::Multi([
+                        graph.add_node((Node::Factor(FactorId::from_usize(factor_id)), 0)),
+                        graph.add_node((Node::Factor(FactorId::from_usize(factor_id)), 1)),
+                    ])
+                } else {
+                    Either::Single(
+                        graph.add_node((Node::Factor(FactorId::from_usize(factor_id)), 0)),
+                    )
+                }
+            })
+            .collect::<FactorVec<_>>();
+        for (i, e) in self.edges.iter_enumerated() {
+            match (&var_graph_ids[e.var], &factor_graph_ids[e.factor]) {
+                (Either::Single(var_node), Either::Single(factor_node)) => {
+                    graph.add_edge(*var_node, *factor_node, i);
+                }
+                (Either::Multi(var_nodes), Either::Multi(factor_nodes)) => {
+                    for (var_node, factor_node) in var_nodes.iter().zip(factor_nodes.iter()) {
+                        graph.add_edge(*var_node, *factor_node, i);
+                    }
+                }
+                (Either::Multi(nodes_multi), Either::Single(node_single))
+                | (Either::Single(node_single), Either::Multi(nodes_multi)) => {
+                    for node_multi in nodes_multi.iter() {
+                        graph.add_edge(*node_single, *node_multi, i);
+                    }
+                }
+            }
+        }
+        graph
+    }
 }
 impl fg_parser::Expr {
     fn as_factor_expr<F>(
@@ -312,6 +377,8 @@ pub(super) fn build_graph(
         }
     }
     graph.add_graph_edges();
+    graph.cyclic_single = petgraph::algo::is_cyclic_undirected(&graph.petgraph);
+    graph.cyclic_multi = petgraph::algo::is_cyclic_undirected(&graph.petgraph_2exec());
     Ok(graph)
 }
 
