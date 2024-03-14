@@ -240,7 +240,7 @@ impl fg_parser::Expr {
             Self::Lookup { table, .. } => fg::ExprFactor::LOOKUP {
                 table: ft(table.as_str())?,
             },
-            Self::Add(_) | Self::Sub(_) => fg::ExprFactor::ADD { vars_neg },
+            Self::Sum(_) => fg::ExprFactor::ADD { vars_neg },
             Self::Mul(_) => fg::ExprFactor::MUL,
             Self::Xor(_) => fg::ExprFactor::XOR,
             Self::And(_) | Self::Or(_) => fg::ExprFactor::AND { vars_neg },
@@ -252,8 +252,13 @@ impl fg_parser::Expr {
         match self {
             Self::Not(var) | Self::Lookup { var, .. } => vec![(var, false)],
             Self::Xor(v) | Self::Mul(v) => v.iter().map(|v| (v, false)).collect(),
-            Self::Add(v) => v.iter().map(|v| (&v.var, v.neg)).collect(),
-            Self::Sub(v) => v.iter().map(|v| (&v.var, !v.neg)).collect(),
+            Self::Sum(v) => v
+                .iter()
+                .map(|v| match v {
+                    fg_parser::SumOperation::Add(x) => (x, false),
+                    fg_parser::SumOperation::Subtract(x) => (x, true),
+                })
+                .collect(),
             Self::And(v) => v.iter().map(|v| (&v.var, v.neg)).collect(),
             Self::Or(v) => v.iter().map(|v| (&v.var, !v.neg)).collect(),
         }

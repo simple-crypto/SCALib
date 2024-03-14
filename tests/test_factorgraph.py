@@ -1401,41 +1401,77 @@ def test_clear_beliefs():
 
 
 def test_sub():
-    graph = """
-    NC 2
-    PROPERTY s1: z = x + -y
-    VAR MULTI x
-    VAR MULTI y
-    VAR MULTI z
-    """
-    graph2 = """
-    NC 2
+    g = """
+    NC 256
     PROPERTY s1: z = x - y
     VAR MULTI x
     VAR MULTI y
     VAR MULTI z
     """
 
-    nc = 2
+    nc = 256
     n = 10
-    for g in [graph, graph2]:
-        fg = FactorGraph(g)
-        bp = BPState(fg, n)
-        distri_x = make_distri(nc, n)
-        distri_y = make_distri(nc, n)
-        bp.set_evidence("x", distri_x)
-        bp.set_evidence("y", distri_y)
-        z_distri_ref = np.zeros(distri_x.shape)
+    fg = FactorGraph(g)
+    bp = BPState(fg, n)
+    distri_x = make_distri(nc, n)
+    distri_y = make_distri(nc, n)
+    bp.set_evidence("x", distri_x)
+    bp.set_evidence("y", distri_y)
+    z_distri_ref = np.zeros(distri_x.shape)
 
-        for x in range(nc):
-            for y in range(nc):
-                z_distri_ref[:, (x - y) % nc] += distri_x[:, x] * distri_y[:, y]
+    for x in range(nc):
+        for y in range(nc):
+            z_distri_ref[:, (x - y) % nc] += distri_x[:, x] * distri_y[:, y]
 
-        z_distri_ref = (z_distri_ref.T / np.sum(z_distri_ref, axis=1)).T
-        bp.bp_loopy(1, True)
-        distri_z = bp.get_distribution("z")
+    z_distri_ref = (z_distri_ref.T / np.sum(z_distri_ref, axis=1)).T
+    bp.bp_loopy(1, True)
+    distri_z = bp.get_distribution("z")
 
-        assert np.allclose(z_distri_ref, distri_z)
+    assert np.allclose(z_distri_ref, distri_z)
+
+
+def test_sub_multi_ops():
+    g = """
+    NC 13
+    PROPERTY s1: z = x + q - w + y
+    VAR MULTI x
+    VAR MULTI y
+    VAR MULTI z
+    VAR MULTI q
+    VAR MULTI w
+    """
+
+    nc = 13
+    n = 10
+    fg = FactorGraph(g)
+    bp = BPState(fg, n)
+    distri_x = make_distri(nc, n)
+    distri_y = make_distri(nc, n)
+    distri_q = make_distri(nc, n)
+    distri_w = make_distri(nc, n)
+
+    bp.set_evidence("x", distri_x)
+    bp.set_evidence("y", distri_y)
+    bp.set_evidence("w", distri_w)
+    bp.set_evidence("q", distri_q)
+    z_distri_ref = np.zeros(distri_x.shape)
+
+    for x in range(nc):
+        for y in range(nc):
+            for w in range(nc):
+                for q in range(nc):
+                    z_distri_ref[:, (x + q - w + y) % nc] += (
+                        distri_x[:, x]
+                        * distri_y[:, y]
+                        * distri_w[:, w]
+                        * distri_q[:, q]
+                    )
+
+    z_distri_ref = (z_distri_ref.T / np.sum(z_distri_ref, axis=1)).T
+    bp.bp_acyclic("z")
+    distri_z = bp.get_distribution("z")
+
+    assert np.allclose(z_distri_ref, distri_z)
 
 
 def test_sanity_or():

@@ -18,15 +18,20 @@ impl NVar {
 }
 
 #[derive(Debug, Clone)]
+pub(super) enum SumOperation {
+    Add(Var),
+    Subtract(Var),
+}
+
+#[derive(Debug, Clone)]
 pub(super) enum Expr {
     Not(Var),
     Lookup { var: Var, table: String },
-    Add(Vec<NVar>),
+    And(Vec<NVar>),
     Mul(Vec<Var>),
     Xor(Vec<Var>),
-    And(Vec<NVar>),
     Or(Vec<NVar>),
-    Sub(Vec<NVar>),
+    Sum(Vec<SumOperation>),
 }
 
 #[derive(Debug, Clone)]
@@ -72,25 +77,40 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
     let kw = |s| text::keyword::<_, _, Simple<char>>(s).delimited_by(pad, space);
     let var = ident.map(|s| Var(s));
     let not_var = || op('!').ignore_then(var);
-    let negate_var = || op('-').ignore_then(var);
     let nvar = || {
         var.map(|v| NVar::new(v, false))
             .or(not_var().map(|v| NVar::new(v, true)))
-            .or(negate_var().map(|v| NVar::new(v, true)))
     };
     let op_nexpr = |c, f| nvar().separated_by(op(c)).at_least(2).map(f);
     let op_expr = |c, f| var.separated_by(op(c)).at_least(2).map(f);
+
+    let signed_var = || op('+').then(var).or(op('-').then(var)).repeated();
+    let signed_expr = || var.map(|v| SumOperation::Add(v)).then(signed_var());
     let expr = ident
         .then(var.delimited_by(op('['), op(']')))
         .map(|(table, var)| Expr::Lookup { table, var })
         .or(op_expr('^', Expr::Xor as fn(_) -> _))
         .or(op_nexpr('&', Expr::And as fn(_) -> _))
         .or(op_nexpr('|', Expr::Or as fn(_) -> _))
-        .or(op_nexpr('+', Expr::Add as fn(_) -> _))
         .or(op_expr('*', Expr::Mul as fn(_) -> _))
-        .or(op_nexpr('-', Expr::Sub as fn(_) -> _))
-        .or(not_var().map(|v| Expr::Not(v)))
-        .or(negate_var().map(|v| Expr::Not(v)));
+        .or(signed_expr().map(|(x, y)| {
+            Expr::Sum(
+                vec![
+                    vec![x],
+                    y.iter()
+                        .map(|(c, v)| {
+                            if let '+' = c {
+                                SumOperation::Add(v.clone())
+                            } else {
+                                SumOperation::Subtract(v.clone())
+                            }
+                        })
+                        .collect(),
+                ]
+                .concat(),
+            )
+        }))
+        .or(not_var().map(|v| Expr::Not(v)));
     let prop_assign = var
         .then_ignore(op('='))
         .then(expr)
