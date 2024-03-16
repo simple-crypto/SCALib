@@ -1433,7 +1433,7 @@ def test_sub():
 def test_sub_multi_ops():
     g = """
     NC 13
-    PROPERTY s1: z = x + q - w + y
+    PROPERTY s1: z = -x + q - w + y
     VAR MULTI x
     VAR MULTI y
     VAR MULTI z
@@ -1460,7 +1460,7 @@ def test_sub_multi_ops():
         for y in range(nc):
             for w in range(nc):
                 for q in range(nc):
-                    z_distri_ref[:, (x + q - w + y) % nc] += (
+                    z_distri_ref[:, (-x + q - w + y) % nc] += (
                         distri_x[:, x]
                         * distri_y[:, y]
                         * distri_w[:, w]

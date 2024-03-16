@@ -19,8 +19,21 @@ impl NVar {
 
 #[derive(Debug, Clone)]
 pub(super) enum SumOperation {
-    Add(Var),
-    Subtract(Var),
+    Add,
+    Subtract,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct SignedVar {
+    pub(super) var: Var,
+    pub(super) sign: SumOperation,
+}
+
+impl From<&(SumOperation, Var)> for SignedVar {
+    fn from(op_var: &(SumOperation, Var)) -> Self {
+        let (sign, var) = op_var.clone();
+        SignedVar { var, sign }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -31,7 +44,7 @@ pub(super) enum Expr {
     Mul(Vec<Var>),
     Xor(Vec<Var>),
     Or(Vec<NVar>),
-    Sum(Vec<SumOperation>),
+    Sum(Vec<SignedVar>),
 }
 
 #[derive(Debug, Clone)]
@@ -84,8 +97,28 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
     let op_nexpr = |c, f| nvar().separated_by(op(c)).at_least(2).map(f);
     let op_expr = |c, f| var.separated_by(op(c)).at_least(2).map(f);
 
-    let signed_var = || op('+').then(var).or(op('-').then(var)).repeated();
-    let signed_expr = || var.map(|v| SumOperation::Add(v)).then(signed_var());
+    let first_sum_operand = op('-')
+        .to(SumOperation::Subtract)
+        .or(pad.to(SumOperation::Add))
+        .then(var);
+    let sum_operand = op('-')
+        .to(SumOperation::Subtract)
+        .or(op('+').to(SumOperation::Add))
+        .then(var);
+
+    let sum_expr = || {
+        first_sum_operand
+            .then(sum_operand.repeated())
+            .map(|(first, ops)| {
+                Expr::Sum(
+                    std::iter::once(&first)
+                        .chain(ops.iter())
+                        .map(Into::into)
+                        .collect::<Vec<SignedVar>>(),
+                )
+            })
+    };
+
     let expr = ident
         .then(var.delimited_by(op('['), op(']')))
         .map(|(table, var)| Expr::Lookup { table, var })
@@ -93,23 +126,7 @@ fn parser() -> impl Parser<char, Vec<Statement>, Error = Simple<char>> {
         .or(op_nexpr('&', Expr::And as fn(_) -> _))
         .or(op_nexpr('|', Expr::Or as fn(_) -> _))
         .or(op_expr('*', Expr::Mul as fn(_) -> _))
-        .or(signed_expr().map(|(x, y)| {
-            Expr::Sum(
-                vec![
-                    vec![x],
-                    y.iter()
-                        .map(|(c, v)| {
-                            if let '+' = c {
-                                SumOperation::Add(v.clone())
-                            } else {
-                                SumOperation::Subtract(v.clone())
-                            }
-                        })
-                        .collect(),
-                ]
-                .concat(),
-            )
-        }))
+        .or(sum_expr())
         .or(not_var().map(|v| Expr::Not(v)));
     let prop_assign = var
         .then_ignore(op('='))

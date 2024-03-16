@@ -254,9 +254,9 @@ impl fg_parser::Expr {
             Self::Xor(v) | Self::Mul(v) => v.iter().map(|v| (v, false)).collect(),
             Self::Sum(v) => v
                 .iter()
-                .map(|v| match v {
-                    fg_parser::SumOperation::Add(x) => (x, false),
-                    fg_parser::SumOperation::Subtract(x) => (x, true),
+                .map(|signed_var| match signed_var.sign {
+                    fg_parser::SumOperation::Add => (&signed_var.var, false),
+                    fg_parser::SumOperation::Subtract => (&signed_var.var, true),
                 })
                 .collect(),
             Self::And(v) => v.iter().map(|v| (&v.var, v.neg)).collect(),
