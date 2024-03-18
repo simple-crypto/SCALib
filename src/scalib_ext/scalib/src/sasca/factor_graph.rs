@@ -1,9 +1,8 @@
-use std::fmt;
-
-use indexmap::IndexMap;
-use thiserror::Error;
+use std::{fmt, usize};
 
 use super::{ClassVal, NamedList};
+use indexmap::IndexMap;
+use thiserror::Error;
 
 macro_rules! new_id {
     ($it:ident, $vt:ident) => {
@@ -149,6 +148,8 @@ pub struct FactorGraph {
     pub(super) petgraph: petgraph::Graph<Node, EdgeId, petgraph::Undirected>,
     pub(super) var_graph_ids: VarVec<petgraph::graph::NodeIndex>,
     pub(super) factor_graph_ids: FactorVec<petgraph::graph::NodeIndex>,
+    pub(super) cyclic_single: bool,
+    pub(super) cyclic_multi: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -201,6 +202,8 @@ pub enum FGError {
     NoEdge { var: String, factor: FactorId },
     #[error("Failure at factor {0}. Expected result {1}, got {2}.")]
     CheckFail(String, PublicValue, PublicValue),
+    #[error("")]
+    InvalidGenericFactorAssignment(String),
 }
 
 type FGResult<T> = Result<T, FGError>;
@@ -280,6 +283,7 @@ impl FactorGraph {
         &self,
         public_values: Vec<PublicValue>,
         var_assignments: VarVec<PublicValue>,
+        gen_factors: Vec<super::GenFactor>,
     ) -> FGResult<()> {
         assert_eq!(public_values.len(), self.publics.len());
         assert_eq!(var_assignments.len(), self.vars.len());
@@ -344,18 +348,83 @@ impl FactorGraph {
                         ));
                     }
                 }
-                FactorKind::GenFactor { .. } => {
-                    // We cannot verify anything, except if we were given the
-                    // value of the generalized factors as argument of this
-                    // function (then we could check that the associated
-                    // probability is non-zero).
-                    // Let us not do any verification for know (code block
-                    // intentionally left empty).
+                FactorKind::GenFactor { id, operands } => {
+                    let ops: Vec<&PublicValue> = operands
+                        .iter()
+                        .map(|op| match op {
+                            GenFactorOperand::Var(idx, ..) => &var_assignments[*idx],
+                            GenFactorOperand::Pub(idx) => &public_values[*idx],
+                        })
+                        .collect();
+                    let nmulti_ops = ops.iter().find_map(|op| {
+                        if let PublicValue::Multi(x) = op {
+                            Some(x.len())
+                        } else {
+                            None
+                        }
+                    });
+                    let nmulti_factor = if let super::GenFactor::Multi(gfv) = &gen_factors[*id] {
+                        Some(gfv.len())
+                    } else {
+                        None
+                    };
+                    let nmulti = match (nmulti_ops, nmulti_factor) {
+                        (Some(nm_ops), Some(nm_factors)) if nm_ops == nm_factors => nm_factors,
+                        (Some(nm_ops), Some(nm_factors)) => {
+                            return Err(FGError::InvalidGenericFactorAssignment(format!("Mismatch between multi declaration of GenFactor operands {} and GenFactor {}", nm_ops, nm_factors)))
+                        }
+                        (Some(nmulti), None) | (None, Some(nmulti)) => nmulti,
+                        (None, None) => 1,
+                    };
+                    for i in 0..nmulti {
+                        let gf = match &gen_factors[*id] {
+                            super::GenFactor::Single(gfs) => gfs,
+                            super::GenFactor::Multi(gfv) => &gfv[i],
+                        };
+                        let indices: Vec<ClassVal> = ops
+                            .iter()
+                            .map(|pv| match *pv {
+                                PublicValue::Single(x) => *x,
+                                PublicValue::Multi(xvec) => xvec[i],
+                            })
+                            .collect();
+                        match gf {
+                            super::GenFactorInner::Dense(dense_factor) => {
+                                if !(dense_factor[indices
+                                    .iter()
+                                    .map(|x| *x as usize)
+                                    .collect::<Vec<usize>>()
+                                    .as_slice()]
+                                    > 0.0)
+                                {
+                                    return Err(FGError::InvalidGenericFactorAssignment(format!(
+                                        "Invalid assignment to {}: {:?}",
+                                        factor_name.clone(),
+                                        indices.clone()
+                                    )));
+                                }
+                            }
+
+                            super::GenFactorInner::SparseFunctional(sf_factor) => {
+                                if !(sf_factor
+                                    .outer_iter()
+                                    .any(|x| x.as_slice().unwrap() == indices.as_slice()))
+                                {
+                                    return Err(FGError::InvalidGenericFactorAssignment(format!(
+                                        "Invalid assignment to {}: {:?}",
+                                        factor_name.clone(),
+                                        indices.clone()
+                                    )));
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
         Ok(())
     }
+
     pub(super) fn reduce_pub(&self, public_values: &[PublicValue]) -> FactorVec<PublicValue> {
         self.factors
             .values()
@@ -420,25 +489,10 @@ impl FactorGraph {
     }
 
     pub(super) fn is_cyclic(&self, multi_exec: bool) -> bool {
-        if petgraph::algo::is_cyclic_undirected(&self.petgraph) {
-            return true;
-        }
         if multi_exec {
-            return petgraph::algo::kosaraju_scc(&self.petgraph)
-                .into_iter()
-                .any(|scc| {
-                    scc.into_iter()
-                        .filter(|n| match self.petgraph[*n] {
-                            Node::Var(var_id) => {
-                                !self.vars.get_index(var_id.index()).unwrap().1.multi
-                            }
-                            Node::Factor(_) => false,
-                        })
-                        .count()
-                        > 1
-                });
+            self.cyclic_multi
         } else {
-            return false;
+            self.cyclic_single
         }
     }
 

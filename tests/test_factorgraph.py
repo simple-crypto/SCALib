@@ -1473,6 +1473,184 @@ def test_sub_multi_ops():
 
     assert np.allclose(z_distri_ref, distri_z)
 
+def test_single_gf_sanity_check():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC SINGLE f
+    PROPERTY F0: f(a,b,c,d)"""
+
+    fg = FactorGraph(graph)
+
+    bff = np.zeros((nc, nc, nc, nc))
+    n = 1
+    for a in range(nc):
+        for b in range(nc):
+            bff[a, b, (a + b) % nc, (a - b) % nc] = 1.0
+
+    bff_sparse = []
+    for a in range(nc):
+        for b in range(nc):
+            bff_sparse.append([a, b, (a + b) % nc, (a - b) % nc])
+
+    fg.sanity_check(
+        {},
+        {
+            "a": np.array([0, 0]),
+            "b": np.array([1, 1]),
+            "c": np.array([1, 1]),
+            "d": np.array([12, 12]),
+        },
+        {"f": GenFactor.dense(bff)},
+    )
+    fg.sanity_check(
+        {},
+        {
+            "a": np.array([0, 0]),
+            "b": np.array([1, 1]),
+            "c": np.array([1, 1]),
+            "d": np.array([12, 12]),
+        },
+        {"f": GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32))},
+    )
+
+
+def test_multi_gf_sanity_check():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC MULTI f
+    PROPERTY F0: f(a,b,c,d)"""
+
+    fg = FactorGraph(graph)
+
+    bff = np.zeros((nc, nc, nc, nc))
+    bff2 = np.zeros((nc, nc, nc, nc))
+    n = 1
+    for a in range(nc):
+        for b in range(nc):
+            bff[a, b, (a + b) % nc, (a - b) % nc] = 1.0
+            bff2[a, b, (a + 2 * b) % nc, (a - 2 * b) % nc] = 1.0
+
+    bff_sparse = []
+    bff2_sparse = []
+    for a in range(nc):
+        for b in range(nc):
+            bff_sparse.append([a, b, (a + b) % nc, (a - b) % nc])
+            bff2_sparse.append([a, b, (a + 2 * b) % nc, (a - 2 * b) % nc])
+    fg.sanity_check(
+        {},
+        {
+            "a": np.array([0, 0]),
+            "b": np.array([1, 1]),
+            "c": np.array([1, 2]),
+            "d": np.array([12, 11]),
+        },
+        {"f": [GenFactor.dense(bff), GenFactor.dense(bff2)]},
+    )
+    fg.sanity_check(
+        {},
+        {
+            "a": np.array([0, 0]),
+            "b": np.array([1, 1]),
+            "c": np.array([1, 2]),
+            "d": np.array([12, 11]),
+        },
+        {
+            "f": [
+                GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32)),
+                GenFactor.sparse_functional(np.array(bff2_sparse, dtype=np.uint32)),
+            ]
+        },
+    )
+
+
+def test_mixed_gf_sanity_check():
+    from scalib.attacks.factor_graph import GenFactor
+
+    nc = 13
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR SINGLE b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC MULTI f
+    PROPERTY F0: f(a,b,c,d)"""
+
+    graph2 = f"""NC {nc}
+    VAR MULTI a
+    VAR SINGLE b
+    VAR MULTI c
+    VAR MULTI d
+    GENERIC SINGLE f
+    PROPERTY F0: f(a,b,c,d)"""
+    fg = FactorGraph(graph)
+    fg2 = FactorGraph(graph2)
+
+    bff = np.zeros((nc, nc, nc, nc))
+    bff2 = np.zeros((nc, nc, nc, nc))
+    n = 1
+    for a in range(nc):
+        for b in range(nc):
+            bff[a, b, (a + b) % nc, (a - b) % nc] = 1.0
+            bff2[a, b, (a + 2 * b) % nc, (a - 2 * b) % nc] = 1.0
+
+    bff_sparse = []
+    bff2_sparse = []
+    for a in range(nc):
+        for b in range(nc):
+            bff_sparse.append([a, b, (a + b) % nc, (a - b) % nc])
+            bff2_sparse.append([a, b, (a + 2 * b) % nc, (a - 2 * b) % nc])
+    fg.sanity_check(
+        {},
+        {
+            "a": np.array([0, 0]),
+            "b": 1,
+            "c": np.array([1, 2]),
+            "d": np.array([12, 11]),
+        },
+        {
+            "f": [GenFactor.dense(bff), GenFactor.dense(bff2)],
+        },
+    )
+    fg.sanity_check(
+        {},
+        {
+            "a": np.array([0, 0]),
+            "b": 1,
+            "c": np.array([1, 2]),
+            "d": np.array([12, 11]),
+        },
+        {
+            "f": [
+                GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32)),
+                GenFactor.sparse_functional(np.array(bff2_sparse, dtype=np.uint32)),
+            ]
+        },
+    )
+
+    fg2.sanity_check(
+        {},
+        {"a": np.array([0, 1]), "b": 1, "c": np.array([1, 2]), "d": np.array([12, 0])},
+        {"f": GenFactor.dense(bff)},
+    )
+    fg2.sanity_check(
+        {},
+        {"a": np.array([0, 1]), "b": 1, "c": np.array([1, 2]), "d": np.array([12, 0])},
+        {"f": GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32))},
+    )
+
+
 
 def test_sanity_or():
     graph = """
@@ -1499,3 +1677,46 @@ def test_sanity_or():
     fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [0, 1]})
     fg.sanity_check({}, {"x": [0, 0], "a": 0, "b": [1, 0]})
     fg.sanity_check({}, {"x": [1, 1], "a": 1, "b": [1, 1]})
+
+
+def test_cycle_detection_single_factor():
+    graph_desc = """
+                NC 2
+                VAR SINGLE x
+                VAR SINGLE y
+                PROPERTY x = !y
+                """
+
+    fg = FactorGraph(graph_desc)
+    bp = BPState(fg, 2)
+    assert not bp.is_cyclic()
+
+
+def test_cycle_detection_single_factor2():
+    graph_desc = """
+                NC 2
+                VAR SINGLE x
+                VAR SINGLE y
+                VAR SINGLE z
+                PROPERTY x = !y
+                PROPERTY x = y ^ z
+                """
+
+    fg = FactorGraph(graph_desc)
+    bp = BPState(fg, 2)
+    assert bp.is_cyclic()
+
+
+def test_cycle_detection_single_factor_with_multi():
+    graph_desc = """
+                NC 2
+                VAR SINGLE x
+                VAR SINGLE y
+                VAR MULTI z
+                PROPERTY x = !y
+                PROPERTY x = y ^ z
+                """
+
+    fg = FactorGraph(graph_desc)
+    bp = BPState(fg, 2)
+    assert bp.is_cyclic()

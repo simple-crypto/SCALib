@@ -211,15 +211,15 @@ class FactorGraph:
             tables = dict()
         self._inner = _scalib_ext.FactorGraph(graph_text, tables)
 
-    def sanity_check(self, pub_assignment: ValsAssign, var_assignment: ValsAssign):
+    def sanity_check(
+        self,
+        pub_assignment: ValsAssign,
+        var_assignment: ValsAssign,
+        factor_assignment: Optional[GenFactors] = None,
+    ):
         """Verify that the graph is compatible with example variable assignments.
 
         If the graph is not compatible, raise a ``ValueError``.
-
-        Remark
-        ------
-
-        We perform no check around generic factors.
 
         Parameters
         ----------
@@ -227,12 +227,16 @@ class FactorGraph:
             For each public variable its value for all test executions.
         var_assignment:
             For each non-public variable its value for all test executions.
+        factor_assignment:
+            The probability tables (i.e., ``GenFactor`` assignments) for each generic factor.
 
         Returns
         -------
         None
         """
-        self._inner.sanity_check(pub_assignment, var_assignment)
+        if factor_assignment is None:
+            factor_assignment = dict()
+        self._inner.sanity_check(pub_assignment, var_assignment, factor_assignment)
 
     def vars(self) -> Sequence[str]:
         """Return the names of the variables in the graph."""
