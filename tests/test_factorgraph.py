@@ -1473,6 +1473,7 @@ def test_sub_multi_ops():
 
     assert np.allclose(z_distri_ref, distri_z)
 
+
 def test_single_gf_sanity_check():
     from scalib.attacks.factor_graph import GenFactor
 
@@ -1649,7 +1650,6 @@ def test_mixed_gf_sanity_check():
         {"a": np.array([0, 1]), "b": 1, "c": np.array([1, 2]), "d": np.array([12, 0])},
         {"f": GenFactor.sparse_functional(np.array(bff_sparse, dtype=np.uint32))},
     )
-
 
 
 def test_sanity_or():
