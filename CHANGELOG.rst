@@ -5,7 +5,18 @@ Changelog
 Not released
 ------------
 
-* Add ``GENERIC`` factors to ``scalib.attacks.FactorGraph``.
+v0.5.7 (2024/03/18)
+-------------------
+
+* ``scalib.attacks.FactorGraph``:
+
+    * Add ``GENERIC`` factors
+
+    * Add clear beliefs flag for BP.
+
+    * Remove divisions in belief propagation (improves numerical robustness, fixes some NaN issues).
+
+* Support python 3.12 in releases.
 
 v0.5.6 (2023/06/08)
 -------------------
