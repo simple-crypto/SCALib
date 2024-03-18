@@ -299,7 +299,7 @@ impl BPState {
                 }
                 ExprFactor::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id]),
                 ExprFactor::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32),
-                ExprFactor::ADD => {
+                ExprFactor::ADD { .. } => {
                     prop_factor!(factor_add, &self.pub_reduced[factor_id], &self.plans)
                 }
                 ExprFactor::MUL => prop_factor!(factor_mul, &self.pub_reduced[factor_id]),
@@ -658,6 +658,13 @@ fn factor_add<'a>(
     pub_red: &PublicValue,
     plans: &FftPlans,
 ) -> impl Iterator<Item = Distribution> + 'a {
+    let FactorKind::Assign {
+        expr: ExprFactor::ADD { vars_neg },
+        ..
+    } = &factor.kind
+    else {
+        unreachable!()
+    };
     // Special case for single-input ADD
     if factor.edges.len() == 2 {
         // FIXME check for negative operand
@@ -672,8 +679,9 @@ fn factor_add<'a>(
             .collect::<Vec<_>>()
             .into_iter();
     }
+
     let mut taken_dest = vec![false; factor.edges.len()];
-    let mut negated_vars = vec![false; factor.edges.len()];
+    let mut negated_vars = vars_neg.clone();
     negated_vars[0] = true;
     for dest in dest {
         taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
