@@ -299,7 +299,14 @@ impl BPState {
         Ok(())
     }
     pub fn get_state(&self, py: Python, var: &str) -> PyResult<PyObject> {
-        distr2py(py, self.get_inner().get_state(self.get_var(var)?))
+        distr2py(
+            py,
+            &self
+                .get_inner()
+                .get_state(self.get_var(var)?)
+                .read()
+                .unwrap(),
+        )
     }
     pub fn set_state(&mut self, py: Python, var: &str, distr: PyObject) -> PyResult<()> {
         let var_id = self.get_var(var)?;
@@ -316,11 +323,21 @@ impl BPState {
     }
     pub fn get_belief_to_var(&self, py: Python, var: &str, factor: &str) -> PyResult<PyObject> {
         let edge_id = self.get_edge_named(var, factor)?;
-        distr2py(py, self.get_inner().get_belief_to_var(edge_id))
+        distr2py(
+            py,
+            &self.get_inner().get_belief_to_var(edge_id).read().unwrap(),
+        )
     }
     pub fn get_belief_from_var(&self, py: Python, var: &str, factor: &str) -> PyResult<PyObject> {
         let edge_id = self.get_edge_named(var, factor)?;
-        distr2py(py, self.get_inner().get_belief_from_var(edge_id))
+        distr2py(
+            py,
+            &self
+                .get_inner()
+                .get_belief_from_var(edge_id)
+                .read()
+                .unwrap(),
+        )
     }
     pub fn propagate_var(
         &mut self,
