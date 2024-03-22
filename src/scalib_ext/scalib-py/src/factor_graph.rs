@@ -93,6 +93,15 @@ impl FactorGraph {
     pub fn factor_names(&self) -> Vec<&str> {
         self.get_inner().factor_names().collect()
     }
+    pub fn generic_factor_names(&self) -> Vec<&str> {
+        self.get_inner().generic_factor_names().collect()
+    }
+    pub fn num_classes(&self) -> usize {
+        self.get_inner().num_classes()
+    }
+    pub fn public_var_names(&self) -> Vec<&str> {
+        self.get_inner().public_var_names().collect()
+    }
     pub fn factor_scope<'s>(&'s self, factor: &str) -> PyResult<Vec<&'s str>> {
         let factor_id = self.get_factor(factor)?;
         Ok(self

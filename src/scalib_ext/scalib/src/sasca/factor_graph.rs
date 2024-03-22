@@ -261,6 +261,15 @@ impl FactorGraph {
     pub fn var_names(&self) -> impl Iterator<Item = &str> {
         self.vars.keys().map(String::as_str)
     }
+    pub fn generic_factor_names(&self) -> impl Iterator<Item = &str> {
+        self.gen_factors.keys().map(String::as_str)
+    }
+    pub fn num_classes(&self) -> usize {
+        self.nc
+    }
+    pub fn public_var_names(&self) -> impl Iterator<Item = &str> {
+        self.publics.keys().map(String::as_str)
+    }
     pub fn vars(&self) -> impl Iterator<Item = (VarId, &str)> {
         self.vars
             .keys()

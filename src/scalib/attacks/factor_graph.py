@@ -246,6 +246,19 @@ class FactorGraph:
         """Return the names of the factors in the graph."""
         return self._inner.factor_names()
 
+    def publics(self) -> Sequence[str]:
+        """Return the names of public variables in the graph."""
+        return self._inner.public_var_names()
+
+    def generics(self) -> Sequence[str]:
+        """Return the names of generic factors in the graph"""
+        return self._inner.generic_factor_names()
+
+    @property
+    def nc(self) -> int:
+        """Return the number of classes (NC) declared in the graph"""
+        return self._inner.num_classes()
+
 
 class BPState:
     """Belief propagation state associated to a :class:`FactorGraph`.
