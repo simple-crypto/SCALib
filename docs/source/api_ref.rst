@@ -10,6 +10,7 @@ API Reference
    :toctree: api
 
    metrics
+   preprocessing
    modeling
    attacks
    postprocessing

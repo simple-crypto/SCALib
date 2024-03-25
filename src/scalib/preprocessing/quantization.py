@@ -2,12 +2,11 @@ import numpy as np
 
 
 class QUANTIZER:
-    r"""Quantize a side channel traces given as as float into int16.
-        The quantizer evaluates the minimum and maximum value of the traces at each point to estimate a shift and
-        scale that minimize the loss due to rounding.
+    r"""Quantize a side channel traces given as an array of float into an array of int16.
+        The quantizer estimates a shift and scale that minimize the loss due to the rounding operation.
 
     .. math::
-        \mathrm{Quantize}(X) = (x - \mathrm{Shift}) * \mathrm{Scale}
+        \mathrm{Quantize}(X) = (x - \mathrm{Shift}) \times \mathrm{Scale}
 
     Parameters
     ----------
@@ -47,7 +46,7 @@ class QUANTIZER:
         ----------
         noisy_traces : array_like, np.float64
             Array that contains the traces to estimate the shift and scale in the quantization. The array must
-            be of dimension `(n, ns)
+            be of dimension `(n, ns)`
         """
 
         # Max/Min Centering and Multiplication by a constant prior to quantization to avoid information loss via rounding error
@@ -72,7 +71,7 @@ class QUANTIZER:
         ----------
         noisy_traces : array_like, np.float64
             Array that contains the traces to be quantized into int16. The array must
-            be of dimension `(n, ns)
+            be of dimension `(n, ns)`
         """
         quantized_traces: np.ndarray[np.int16] = (
             (noisy_traces - self._shift) * self._scale
