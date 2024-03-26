@@ -6,7 +6,13 @@ class QUANTIZER:
         The quantizer estimates a shift and scale that minimize the loss due to the rounding operation.
 
     .. math::
-        \mathrm{Quantize}(X) = (x - \mathrm{Shift}) \times \mathrm{Scale}
+        \mathrm{Quantize}( x) = (x - \mathrm{Shift}) \cdot \mathrm{Scale}
+
+    The shift and scale are computed using `n` samples as
+
+    .. math::
+        \mathrm{Shift} = \frac{1}{2} (\max_{i=1}^n x_i + \min_{i=1}^n x_i) \qquad and \qquad  \mathrm{Scale} = \frac{2^{14}}{\max_{i=1}^n x_i - \min_{i=1}^n x_i}.
+
 
     Parameters
     ----------
@@ -24,9 +30,9 @@ class QUANTIZER:
     >>> # 500 traces of 200 points
     >>> noisy_traces : np.ndarray[np.float64] = np.random.randn(500,200)
     >>> quantizer = QUANTIZER(200, np.zeros(200),np.ones(200))
-    >>> snr.fit_shift_scale(noisy_traces)
+    >>> quantizer.fit_shift_scale(noisy_traces)
     >>> quantized_traces : np.ndarray[np.int16] = quantizer.quantize(noisy_traces)
-    >>> # Can be reused directly 5000 new traces for instance
+    >>> # Can be reused directly on 5000 new traces for instance
     >>> noisy_traces : np.ndarray[np.float64] = np.random.randn(5000,200)
     >>> quantized_traces : np.ndarray[np.int16] = quantizer.quantize(noisy_traces)
     """
