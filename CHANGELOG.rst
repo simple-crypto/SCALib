@@ -5,6 +5,12 @@ Changelog
 Not released
 ------------
 
+(2024/03/21)
+------------
+
+* Fix a typo in example/aes_attack.py 
+
+
 v0.5.7 (2024/03/18)
 -------------------
 

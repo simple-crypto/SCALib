@@ -128,7 +128,7 @@ def main():
     key_distribution = np.array(key_distribution)
 
     # Scores are negative log-likelihoods.
-    # Put a lower-bound on the probabilities, oterwise we might get NaNs.
+    # Put a lower-bound on the probabilities, otherwise we might get NaNs.
     scores = -np.log2(np.maximum(key_distribution, 2**-128))
     rmin, r, rmax = rank_accuracy(scores, secret_key, 1)
 
