@@ -1,4 +1,5 @@
 __all__ = [
+    "preprocessing",
     "config",
     "attacks",
     "metrics",
