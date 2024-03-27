@@ -9,7 +9,7 @@ fn gen_binding_bignum() {
         .header("src/bignumpoly.h")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .size_t_is_usize(true)
         .prepend_enum_name(false)
         .raw_line("#[repr(C)] pub struct NTL_ZZ { _private: [u64; 1]}")
@@ -36,7 +36,7 @@ fn gen_bindings() {
         .header("src/hel_if.h")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .size_t_is_usize(true)
         .prepend_enum_name(false)
         .raw_line("#[repr(C)] pub struct NTL_ZZ { _private: [u64; 1]}")
