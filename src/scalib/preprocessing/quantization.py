@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class QUANTIZER:
+class Quantizer:
     r"""Quantize a side channel traces given as an array of float into an array of int16.
         The quantizer estimates a shift and scale that minimize the loss due to the rounding operation.
 
