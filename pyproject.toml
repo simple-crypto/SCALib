@@ -1,8 +1,8 @@
 [build-system]
 requires = [
     "setuptools>=62.4",
-     "setuptools-scm[toml]>=3.4",
-     "setuptools-scm-git-archive",
+    "setuptools-scm[toml]>=3.4",
+    "setuptools-scm-git-archive",
     "wheel",
     "setuptools-rust>=1.6",
 ]
@@ -12,32 +12,16 @@ build-backend = "setuptools.build_meta"
 write_to = "src/scalib/version.py"
 
 [tool.pytest.ini_options]
-addopts = [
-    "--cov=scalib",
-    "--doctest-modules",
-    "-ra",
-    "--pyargs",
-]
-testpaths = [
-    "tests",
-    "scalib",
-    "examples",
-]
+addopts = ["--cov=scalib", "--doctest-modules", "-ra", "--pyargs"]
+testpaths = ["tests", "scalib", "examples"]
 
 [tool.cibuildwheel]
 manylinux-x86_64-image = "ghcr.io/simple-crypto/manylinux2014_x86_64-clang:rust-1.66.1"
-build-verbosity = "1"
-build = [
-    "cp38-*",
-]
-skip = [
-    "*musllinux*",
-]
+build-verbosity = 1
+build = ["cp39-*"]
+skip = ["*musllinux*"]
 archs = "auto64"
-environment-pass = [
-    "CARGO_TARGET_DIR",
-    "CARGO_HOME",
-]
+environment-pass = ["CARGO_TARGET_DIR", "CARGO_HOME"]
 [tool.cibuildwheel.environment]
-RUST_BACKTRACE="full"
-SCALIB_AVX2="1"
+RUST_BACKTRACE = "full"
+SCALIB_AVX2 = "1"

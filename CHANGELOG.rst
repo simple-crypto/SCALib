@@ -5,6 +5,8 @@ Changelog
 Not released
 ------------
 
+* Raise minimum supported python version to 3.9.
+
 v0.5.7 (2024/03/18)
 -------------------
 
