@@ -8,8 +8,9 @@ This module contains usefull preprocessing to manipulate side channel traces..
    :recursive:
    :nosignatures:
 
+   QuantFitMethod
    Quantizer
 """
-__all__ = ["Quantizer"]
+__all__ = ["QuantFitMethod", "Quantizer"]
 
-from .quantization import Quantizer
+from .quantization import QuantFitMethod, Quantizer

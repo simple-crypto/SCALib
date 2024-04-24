@@ -1,5 +1,15 @@
 import numpy as np
-from enum import IntEnum
+from enum import Enum, auto
+
+
+class QuantFitMethod(Enum):
+    r"""An enum class used to specify how the maximum and minimum of the traces is estimated based on a set of fitting traces.
+    With method = QuantFitMethod.BOUNDS they are estimated as the minimum and maximum of the fitting trace respectively.
+    With method = QuantFitMethod.MOMENT they are estimated as the average of the fitting traces minus/plus seven standard deviations
+    """
+
+    BOUNDS = auto()
+    MOMENT = auto()
 
 
 class Quantizer:
@@ -40,7 +50,11 @@ class Quantizer:
         self._scale = scale
 
     @classmethod
-    def fit(cls, traces: np.ndarray[np.floating], gaussian: bool = True):
+    def fit(
+        cls,
+        traces: np.ndarray[np.floating],
+        method: QuantFitMethod = QuantFitMethod.MOMENT,
+    ):
         r"""Compute the shift and scale estimation from sample of `traces`
         This class method returns an instance of Quantizer with the corresponding shift and scale.
 
@@ -49,25 +63,28 @@ class Quantizer:
         traces : array_like, np.floating
             Array that contains the traces to estimate the shift and scale in the quantization. The array must
             be of dimension `(n, ns)`
-        gaussian : boolean
-            A boolean parameter set to True by default. In this case, the min and max are estimated under the Gaussianity assumption.
+        method : QuantFitMethod
+            A member of QuantFitMethod enum class that specifies how the minimum and maximum value of the trace to be quantized is estimated.
         """
 
-        # Max/Min Centering and Multiplication by a constant prior to quantization to avoid information loss via rounding error
-        max: np.ndarray[np.floating] = np.amax(traces, axis=0)
-        min: np.ndarray[np.floating] = np.amin(traces, axis=0)
+        if method == QuantFitMethod.BOUNDS:
+            # Max/Min Centering and Multiplication by a constant prior to quantization to avoid information loss via rounding error
+            max: np.ndarray[np.floating] = np.amax(traces, axis=0)
+            min: np.ndarray[np.floating] = np.amin(traces, axis=0)
 
-        if gaussian:
+        elif method == QuantFitMethod.MOMENT:
             # Gaussian Methods
             mean: np.ndarray[np.floating] = np.amax(traces, axis=0)
-            std = np.std(traces, axis=0, ddof=1)
+            std: np.ndarray[np.floating] = np.std(traces, axis=0, ddof=1)
 
             # Conservative confidence interval.
-            g_min = mean - 7 * std
-            g_max = mean + 7 * std
+            min: np.ndarray[np.floating] = mean - 7 * std
+            max: np.ndarray[np.floating] = mean + 7 * std
 
-            max = np.maximum(max, g_max)
-            min = np.minimum(min, g_min)
+        else:
+            raise ValueError(
+                "Method should be a member of QuantFitMethod enum class such as QuantFitMethod.MOMENT or QuantFitMethod.BOUNDS"
+            )
 
         # Derive shift and scale accordingly to center the traces
         shift: np.ndarray[np.floating] = (max + min) / 2
