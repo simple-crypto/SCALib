@@ -1,4 +1,5 @@
 import numpy as np
+from enum import IntEnum
 
 
 class Quantizer:
@@ -16,11 +17,9 @@ class Quantizer:
 
     Parameters
     ----------
-    ns : int
-        Number of samples in a single trace.
-    shift : np.ndarray[np.float64]
+    shift : np.ndarray[np.floating]
         The value to shift every traces.
-    scale : np.ndarray[np.float64]
+    scale : np.ndarray[np.floating]
         The value to scale every traces.
 
     Examples
@@ -28,26 +27,26 @@ class Quantizer:
     >>> from scalib.preprocessing import Quantizer
     >>> import numpy as np
     >>> # 500 traces of 200 points
-    >>> traces : np.ndarray[np.float64] = np.random.randn(500,200)
-    >>> quantizer = Quantizer.fit_shift_scale(traces)
+    >>> traces : np.ndarray[np.floating] = np.random.randn(500,200)
+    >>> quantizer = Quantizer.fit(traces)
     >>> quantized_traces : np.ndarray[np.int16] = quantizer.quantize(traces)
     >>> # Can be reused directly on 5000 new traces for instance
-    >>> traces : np.ndarray[np.float64] = np.random.randn(5000,200)
+    >>> traces : np.ndarray[np.floating] = np.random.randn(5000,200)
     >>> quantized_traces : np.ndarray[np.int16] = quantizer.quantize(traces)
     """
 
-    def __init__(self, shift: np.ndarray[np.float64], scale: np.ndarray[np.float64]):
+    def __init__(self, shift: np.ndarray[np.floating], scale: np.ndarray[np.floating]):
         self._shift = shift
         self._scale = scale
 
     @classmethod
-    def fit_shift_scale(cls, traces: np.ndarray[np.float64], gaussian=True):
+    def fit(cls, traces: np.ndarray[np.floating], gaussian: bool = True):
         r"""Compute the shift and scale estimation from sample of `traces`
         This class method returns an instance of Quantizer with the corresponding shift and scale.
 
         Parameters
         ----------
-        traces : array_like, np.float64
+        traces : array_like, np.floating
             Array that contains the traces to estimate the shift and scale in the quantization. The array must
             be of dimension `(n, ns)`
         gaussian : boolean
@@ -55,12 +54,12 @@ class Quantizer:
         """
 
         # Max/Min Centering and Multiplication by a constant prior to quantization to avoid information loss via rounding error
-        max: np.ndarray[np.float64] = np.amax(traces, axis=0)
-        min: np.ndarray[np.float64] = np.amin(traces, axis=0)
+        max: np.ndarray[np.floating] = np.amax(traces, axis=0)
+        min: np.ndarray[np.floating] = np.amin(traces, axis=0)
 
         if gaussian:
             # Gaussian Methods
-            mean: np.ndarray[np.float64] = np.amax(traces, axis=0)
+            mean: np.ndarray[np.floating] = np.amax(traces, axis=0)
             std = np.std(traces, axis=0, ddof=1)
 
             # Conservative confidence interval.
@@ -71,9 +70,9 @@ class Quantizer:
             min = np.minimum(min, g_min)
 
         # Derive shift and scale accordingly to center the traces
-        shift: np.ndarray[np.float64] = (max + min) / 2
-        width: np.ndarray[np.float64] = (max - min) / 2
-        scale: np.ndarray[np.float64] = (
+        shift: np.ndarray[np.floating] = (max + min) / 2
+        width: np.ndarray[np.floating] = (max - min) / 2
+        scale: np.ndarray[np.floating] = (
             2**14
         ) / width  # 2**14 instead of 2**15 as a safety margin.
 
@@ -83,30 +82,30 @@ class Quantizer:
         return quantizer
 
     def quantize(
-        self, traces: np.ndarray[np.float64], clip: bool = False
+        self, traces: np.ndarray[np.floating], clip: bool = False
     ) -> np.ndarray[np.int16]:
         r"""Quantize the traces provide in `traces`
 
         Parameters
         ----------
-        traces : array_like, np.float64
+        traces : array_like, np.floating
             Array that contains the traces to be quantized into int16. The array must
             be of dimension `(n, ns)`
         clip : bool
             Boolean to bypass the overflow check prior to quantization and clip the overflowing values to the boundaries.
             By default it is set to False.
         """
-        adjusted_traces: np.ndarray[np.float64] = (traces - self._shift) * self._scale
-
+        adjusted_traces: np.ndarray[np.floating] = (traces - self._shift) * self._scale
         if clip:
             adjusted_traces = np.clip(adjusted_traces, -(2**15), 2**15 - 1)
         else:
-            if (adjusted_traces > 2**15 - 1).any() or (
+            overflow: bool = (adjusted_traces > 2**15 - 1).any() or (
                 adjusted_traces < -(2**15)
-            ).any():
+            ).any()
+            if overflow:
                 raise ValueError(
                     "Overflow detected in the quantization. Update shift and scale more precisely to avoid the error. "
                 )
 
-        quantized_traces: np.ndarray[np.int16] = (adjusted_traces).astype(np.int16)
+        quantized_traces: np.ndarray[np.int16] = adjusted_traces.astype(np.int16)
         return quantized_traces
