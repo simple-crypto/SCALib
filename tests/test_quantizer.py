@@ -16,3 +16,9 @@ def test_quantizer():
 
     quantizer = Quantizer.fit(fitting_traces, QuantFitMethod.BOUNDS)
     quantized_traces: np.ndarray[np.int16] = quantizer.quantize(traces)
+
+    reconstruction: np.ndarray[np.float64] = (
+        quantized_traces / quantizer._scale + quantizer._shift
+    ).astype(np.float64)
+    reconstruction_error: np.float64 = np.linalg.norm(traces - reconstruction, axis=1)
+    assert (reconstruction_error <= 10**-2).all()

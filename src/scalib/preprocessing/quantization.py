@@ -19,11 +19,16 @@ class Quantizer:
     .. math::
         \mathrm{Quantize}( x) = (x - \mathrm{Shift}) \cdot \mathrm{Scale}
 
-    The shift and scale are computed using `n` samples as
+    The shift and scale are computed for each point using `n` samples as
 
     .. math::
-        \mathrm{Shift} = \frac{1}{2} (\max_{i=1}^n x_i + \min_{i=1}^n x_i) \qquad and \qquad  \mathrm{Scale} = \frac{2^{14}}{\max_{i=1}^n x_i - \min_{i=1}^n x_i}.
+        \mathrm{Shift}_j = \frac{1}{2} (\max_{i=1}^n x_{i,j} + \min_{i=1}^n x_{i,j}) \qquad and \qquad  \mathrm{Scale}_j = \frac{2^{14}}{\max_{i=1}^n x_{i,j} - \min_{i=1}^n x_{i,j}}.
 
+    Warning
+    ^^^^^^^
+
+    The quantization procedure operates pointwise: each point is shifted and scaled by a different value.
+    As a consequence the quantized version of the trace probably does not look like its non quantized version.
 
     Parameters
     ----------
