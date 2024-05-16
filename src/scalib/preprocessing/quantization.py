@@ -19,7 +19,7 @@ class Quantizer:
     .. math::
         \mathrm{Quantize}( x) = (x - \mathrm{Shift}) \cdot \mathrm{Scale}
 
-    The shift and scale are computed for each point using `n` samples as
+    The shift and scale are vectors whose j-th coordinate is computed using `n` samples as
 
     .. math::
         \mathrm{Shift}_j = \frac{1}{2} (\max_{i=1}^n x_{i,j} + \min_{i=1}^n x_{i,j}) \qquad and \qquad  \mathrm{Scale}_j = \frac{2^{14}}{\max_{i=1}^n x_{i,j} - \min_{i=1}^n x_{i,j}}.
