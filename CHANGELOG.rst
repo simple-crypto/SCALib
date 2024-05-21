@@ -6,6 +6,7 @@ Not released
 ------------
 
 * Raise minimum supported python version to 3.9.
+* Add ``scalib.preprocessing.Quantizer``.
 
 v0.5.7 (2024/03/18)
 -------------------
