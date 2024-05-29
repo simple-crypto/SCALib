@@ -171,13 +171,15 @@ class FactorGraph:
       is an identifier of the variable (allowed characters are letters, digits
       and underscore). One of the qualifiers `SINGLE` or `MULTI` must be given.
     - `VAR SINGLE|MULTI variable_name`: declares a variables.
-    - `PROPERTY w = x^y^z`: declares a bitwise XOR property. There can be any
+    - `PROPERTY w = x ^ y ^ z`: declares a bitwise XOR property. There can be any
       number of operands.
-    - `PROPERTY z = x&y`: declares a bitwise AND property.
+    - `PROPERTY z = x & y`: declares a bitwise AND property.
     - `PROPERTY x = t[y]`: declares a LOOKUP property (`y` is the lookup of the
       table `t` at index `y`). No public variable is allowed in this property.
     - `PROPERTY x = !y`: declares a bitwise NOT property.
       No public variable is allowed in this property.
+    - `PROPERTY x = y + z - w`: declares a modular sum (+ and - are supported,
+      with arbitrary number of terms).
     - `PROPERTY f(x, y, z)`: declares a "Generic factor" property, f must be
        declared as a GENERIC.
     - `TABLE` t = [0, 3, 2, 1]`: Declares a table that can be used in a LOOKUP.
