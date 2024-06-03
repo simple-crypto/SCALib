@@ -433,31 +433,34 @@ impl FactorGraph {
         }
         Ok(())
     }
-
+    fn reduce_pub_single_factor(
+        &self,
+        factor: &Factor,
+        public_values: &[PublicValue],
+    ) -> PublicValue {
+        match &factor.kind {
+            FactorKind::Assign {
+                expr: ExprFactor::NOT,
+                ..
+            }
+            | FactorKind::Assign {
+                expr: ExprFactor::LOOKUP { .. },
+                ..
+            }
+            | FactorKind::GenFactor { .. } => PublicValue::Single(0),
+            FactorKind::Assign { expr, .. } => self.merge_pubs(
+                expr,
+                factor
+                    .publics
+                    .iter()
+                    .map(|(pub_id, nv)| (&public_values[*pub_id], *nv)),
+            ),
+        }
+    }
     pub(super) fn reduce_pub(&self, public_values: &[PublicValue]) -> FactorVec<PublicValue> {
         self.factors
             .values()
-            .map(|factor| {
-                match &factor.kind {
-                    // Not used
-                    FactorKind::Assign {
-                        expr: ExprFactor::NOT,
-                        ..
-                    }
-                    | FactorKind::Assign {
-                        expr: ExprFactor::LOOKUP { .. },
-                        ..
-                    }
-                    | FactorKind::GenFactor { .. } => PublicValue::Single(0),
-                    FactorKind::Assign { expr, .. } => self.merge_pubs(
-                        expr,
-                        factor
-                            .publics
-                            .iter()
-                            .map(|(pub_id, nv)| (&public_values[*pub_id], *nv)),
-                    ),
-                }
-            })
+            .map(|factor| self.reduce_pub_single_factor(factor, public_values))
             .collect()
     }
     fn not(&self, x: ClassVal) -> ClassVal {
