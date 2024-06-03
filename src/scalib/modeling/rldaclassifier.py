@@ -156,7 +156,7 @@ class RLDAClassifier:
     def get_clustered_model(
         self,
         var: int,
-        t: int,
+        t: float,
         max_clusters: int = 10_000_000,
         store_associated_classes: bool = True,
     ) -> ClusteredModel:

@@ -67,7 +67,7 @@ class RLDAInformationEstimator:
     """
 
     def __init__(self, model: RLDAClassifier.ClusteredModel, max_popped_classes: int):
-        """
+        r"""
         Parameters
         ----------
         model

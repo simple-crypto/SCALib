@@ -9,11 +9,10 @@ ntl = []
 hellib = []
 
 [dependencies]
-itertools = "0.10"
+itertools = "0.12"
 arbitrary = { version = "1.2", features = ["derive"], optional = true }
-realfft = "3.2"
+realfft = "3.3"
 
 [build-dependencies]
 cc = "1.0"
-bindgen = "0.64"
-
+bindgen = "0.69"

@@ -5,11 +5,12 @@ Changelog
 Not released
 ------------
 
-(2024/03/21)
-------------
-
-* Fix a typo in example/aes_attack.py 
-
+v0.5.8 (2024/05/21)
+-------------------
+* Add ``scalib.preprocessing.Quantizer`` for conversions of floating-point
+  traces to int.
+* Support modular subtractions (generalized summation) in FactorGraph.
+* Raise minimum supported python version to 3.9.
 
 v0.5.7 (2024/03/18)
 -------------------
