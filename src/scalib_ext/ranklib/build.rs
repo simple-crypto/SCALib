@@ -29,11 +29,10 @@ fn gen_binding_bignum() {
 }
 
 fn gen_bindings() {
-    println!("cargo:rerun-if-changed=src/hel_if.h");
-    let bindings = bindgen::Builder::default()
+    let builder = bindgen::Builder::default()
         // The input header we would like to generate
         // bindings for.
-        .header("src/hel_if.h")
+        .header("src/hel_if.hpp")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
@@ -45,8 +44,8 @@ fn gen_bindings() {
         .allowlist_type("hel_.*")
         .allowlist_function("hel_.*")
         .allowlist_function("helc_.*")
-        .allowlist_recursively(false)
-        .clang_args(vec!["-x", "c++"])
+        .allowlist_recursively(false);
+    let bindings = builder
         // Finish the builder and generate the bindings.
         .generate()
         // Unwrap the Result and panic on failure.

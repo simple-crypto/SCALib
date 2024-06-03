@@ -20,7 +20,7 @@ contains state-of-the-art tools for side-channel security evaluation.
 
 - **Documentation**: https://scalib.readthedocs.io/
 - **Examples**: `examples/ <examples/>`_
-- **Chat**: `https://matrix.to/#/#scalib:matrix.org`
+- **Chat**: `https://matrix.to/#/#scalib:matrix.org <https://matrix.to/#/#scalib:matrix.org>`
 - **Source code**: https://github.com/simple-crypto/SCALib
 - **Bug reports/feature requests**: https://github.com/simple-crypto/SCALib/issues/new/choose
 - **Contributing**: https://scalib.readthedocs.io/en/stable/source/contributing.html
