@@ -6,6 +6,9 @@ import contextlib
 import signal
 import threading
 
+import numpy as np
+import numpy.typing as npt
+
 
 @contextlib.contextmanager
 def interruptible():
@@ -26,3 +29,23 @@ def interruptible():
             signal.signal(signal.SIGINT, restore_sig)
     else:
         yield
+
+
+def assert_traces(l: npt.NDArray[np.int16]):
+    if not isinstance(l, np.ndarray):
+        raise ValueError(f"The traces is not a numpy array. {type(l)}")
+    elif l.dtype != np.int16:
+        raise ValueError(f"The traces array has dtype {l.dtype}, expected np.int16.")
+    elif len(l.shape) != 2:
+        raise ValueError(f"The traces array has {len(l.shape)} dimensions, expected 2.")
+
+
+def assert_classes(x: npt.NDArray[np.uint16]):
+    if not isinstance(x, np.ndarray):
+        raise ValueError("The classes is not a numpy array.")
+    elif x.dtype != np.uint16:
+        raise ValueError(f"The classes array has dtype {x.dtype}, expected np.uint16.")
+    elif len(x.shape) != 2:
+        raise ValueError(
+            f"The classes array has {len(x.shape)} dimensions, expected 2."
+        )
