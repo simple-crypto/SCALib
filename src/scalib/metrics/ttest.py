@@ -67,7 +67,9 @@ References
 
 .. footbibliography::
 """
+
 import numpy as np
+import numpy.typing as npt
 
 from scalib import _scalib_ext
 from scalib.config import get_config
@@ -110,55 +112,52 @@ class Ttest:
     >>> import numpy as np
     >>> traces = np.random.randint(0,256,(100,200),dtype=np.int16)
     >>> X = np.random.randint(0,2,100,dtype=np.uint16)
-    >>> ttest = Ttest(200,d=3)
+    >>> ttest = Ttest(d=3)
     >>> ttest.fit_u(traces,X)
     >>> t = ttest.get_ttest()
 
     Parameters
     ----------
-    ns : int
-        Number of samples in a single trace.
     d : int
         Maximal statistical order of the :math:`t`-test.
     """
 
-    def __init__(self, ns, d):
-        self._ns = ns
+    def __init__(self, d: int):
         self._d = d
+        self._ns = None
+        self._init = False
 
-        self._ttest = _scalib_ext.Ttest(ns, d)
-
-    def fit_u(self, l, x):
+    def fit_u(self, l: npt.NDArray[np.int16], x: npt.NDArray[np.uint16]):
         r"""Updates the Ttest estimation with samples of `l` for the sets `x`.
 
         This method may be called multiple times.
 
         Parameters
         ----------
-        l : array_like, np.int16
-            Array that contains the signal. The array must
-            be of dimension `(n, ns)` and its type must be `np.int16`.
-        x : array_like, np.uint16
-            Set in which each trace belongs. Must be of shape `(n,)`, must be
-            `np.uint16` and must contain only `0` and `1`.
+        l :
+            Array that contains the signal. The array must be of dimension
+            `(n, ns)`.
+        x :
+            Set in which each trace belongs. Must be of shape `(n,)` and must
+            contain only `0` and `1`.
         """
-        nl, nsl = l.shape
-        nx = x.shape[0]
-        if nx != nl:
-            raise ValueError(f"Expected x with shape ({nl},)")
-        if nsl != self._ns:
-            raise ValueError(f"Expected second dim of l to have size {self._ns}.")
-        if not l.flags["C_CONTIGUOUS"]:
+        scalib.utils.assert_traces(l, self._ns)
+        scalib.utils.assert_classes(x, multi=False)
+        if not self._init:
+            self._init = True
+            self._ns = l.shape[1]
+            self._ttest = _scalib_ext.Ttest(self._ns, self._d)
+        if l.shape[0] != x.shape[0]:
             raise ValueError(
-                "Expected l to be a contiguous (C memory order) array. "
-                "Use np.ascontiguous to change memory representation."
+                f"Number of traces {l.shape[0]} does not match size of classes array {x.shape[0]}."
             )
-
         with scalib.utils.interruptible():
             self._ttest.update(l, x, get_config())
 
     def get_ttest(self):
         r"""Return the current Ttest estimation with an array of shape `(d,ns)`."""
+        if not self._init:
+            raise ValueError("Need to call .fit_u at least once.")
         with scalib.utils.interruptible():
             return self._ttest.get_ttest(get_config())
 
@@ -192,7 +191,8 @@ class MTtest:
         Number of variables of the :math:`t`-test.
     pois : array_like, uint32
         Array of shape ``(d,n_pois)``. Each column in `pois` will result in a
-        :math:`t`-test of the product of the traces at these :math:`d` indexes.
+        :math:`t`-test of the product of the traces at these :math:`d` indexes
+        (each index is between 0 and ns-1).
         If an index is repeated in a column, the corresponding test uses a
         higher-order moment for the corresponding point in the trace.
 
@@ -217,28 +217,29 @@ class MTtest:
 
         self._mttest = _scalib_ext.MTtest(d, self._pois)
 
-    def fit_u(self, l, x):
+    def fit_u(self, l: npt.NDArray[np.int16], x: npt.NDArray[np.uint16]):
         r"""Updates the MTtest estimation with samples of `l` for the sets `x`.
         This method may be called multiple times.
 
         Parameters
         ----------
-        l : array_like, np.int16
+        l :
             Array that contains the signal. The array must
-            be of dimension `(n, ns)` and its type must be `np.int16`.
-        x : array_like, np.uint16
-            Set in which each trace belongs. Must be of shape `(n,)`, must be
-            `np.uint16` and must contain only `0` and `1`.
+            be of dimension `(n, ns)`.
+        x :
+            Set in which each trace belongs. Must be of shape `(n,)`
+            and must contain only `0` and `1`.
         """
-        nl, _ = l.shape
-        nx = x.shape[0]
-        if not (nx == nl):
-            raise ValueError(f"Expected x with shape ({nl},)")
-
+        scalib.utils.assert_traces(l)
+        scalib.utils.assert_classes(x, multi=False)
+        if x.shape[0] != l.shape[0]:
+            raise ValueError(
+                f"Number of traces {l.shape[0]} does not match size of classes array {x.shape[0]}."
+            )
         with scalib.utils.interruptible():
             self._mttest.update(l, x, get_config())
 
-    def get_ttest(self):
+    def get_ttest(self) -> npt.NDArray[np.float64]:
         r"""Return the current MTtest estimation with an array of shape
         `(n_pois,)`. Each element in that array corresponds to a test defined by
         `pois`.

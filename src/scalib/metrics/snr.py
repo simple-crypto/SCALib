@@ -63,7 +63,10 @@ class SNR:
                 f" {nc=} given."
             )
         self._nc = nc
+        self._ns = None
+        self._nv = None
         self._use_64bit = use_64bit
+        self._init = False
 
     def fit_u(self, l: npt.NDArray[np.int16], x: npt.NDArray[np.uint16]):
         r"""Updates the SNR estimation with samples of `l` for the classes `x`.
@@ -75,35 +78,26 @@ class SNR:
         dimension `(n, ns)`.
         x : Labels for each trace. Must be of shape `(n, nv)`.
         """
-        scalib.utils.assert_traces(l)
-        scalib.utils.assert_classes(x)
-        if not hasattr(self, "_snr"):
+        scalib.utils.assert_traces(l, self._ns)
+        scalib.utils.assert_classes(x, self._nv)
+        if not self._init:
+            self._init = True
             self._ns = l.shape[1]
             self._nv = x.shape[1]
             self._snr = _scalib_ext.SNR(self._nc, self._ns, self._nv, self._use_64bit)
-        if l.shape[1] != self._ns:
-            raise ValueError(
-                f"Traces length {l.shape[1]} does not match"
-                f"previously-fitted traces ({self._ns})."
-            )
-        elif x.shape[1] != self._nv:
-            raise ValueError(
-                f"Number of variables {x.shape[1]} does not match"
-                f"previously-fitted classes ({self._nv})."
-            )
-        elif x.shape[0] != l.shape[0]:
+        if x.shape[0] != l.shape[0]:
             raise ValueError(
                 f"Number of traces {l.shape[0]} does not match size of classes array {x.shape[0]}."
             )
-        elif not l.flags.c_contiguous:
-            raise Exception("l not a C-style array.")
         # _scalib_ext uses inverted axes for x.
         # we can copy when needed, as x should be small, so this should be cheap
         x = x.transpose().astype(np.uint16, order="C", casting="equiv", copy=False)
         with scalib.utils.interruptible():
             self._snr.update(l, x, get_config())
 
-    def get_snr(self):
+    def get_snr(self) -> npt.NDArray[np.float64]:
         r"""Return the current SNR estimation with an array of shape `(np,ns)`."""
+        if not self._init:
+            raise ValueError("Need to call .fit_u at least once.")
         with scalib.utils.interruptible():
             return self._snr.get_snr(get_config())
