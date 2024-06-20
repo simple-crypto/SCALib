@@ -56,7 +56,7 @@ class SNR:
 
     """
 
-    def __init__(self, nc: int, _ns=None, _np=None, use_64bit: bool = False):
+    def __init__(self, nc: int, use_64bit: bool = False):
         if nc not in range(2, 2**16 + 1):
             raise ValueError(
                 "SNR can be computed on max 16 bit variable (and at least 2 classes),"
@@ -74,9 +74,11 @@ class SNR:
 
         Parameters
         ----------
-        l : Array that contains the leakage traces. The array must be of
-        dimension `(n, ns)`.
-        x : Labels for each trace. Must be of shape `(n, nv)`.
+        l :
+            Array that contains the leakage traces. The array must be of
+            dimension `(n, ns)`.
+        x :
+            Labels for each trace. Must be of shape `(n, nv)`.
         """
         scalib.utils.assert_traces(l, self._ns)
         scalib.utils.assert_classes(x, self._nv)

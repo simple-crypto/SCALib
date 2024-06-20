@@ -9,7 +9,7 @@ ns = 5
 
 
 def snr_inputs():
-    snr = SNR(2**8, ns, 16, True)
+    snr = SNR(2**8, True)
     while (x := np_array_queue.get()) is not None:
         (traces, k) = x
         snr.fit_u(traces, k)
@@ -23,7 +23,7 @@ def get_traces():
 
 
 def test_context_executor():
-    snr = SNR(2**8, ns, 16, True)
+    snr = SNR(2**8, True)
     snr_workers = 1
     with ContextExecutor(max_workers=snr_workers) as e:
         # Initialize the future queue with dummy futures
