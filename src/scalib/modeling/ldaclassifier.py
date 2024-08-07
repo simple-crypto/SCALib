@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import numpy.typing as npt
 
 from scalib import _scalib_ext
 from scalib.config import get_config
@@ -70,40 +71,49 @@ class LDAClassifier:
 
     Parameters
     ----------
-    nc : int
+    nc :
         Number of possible classes (e.g., 256 for 8-bit target). `nc` must
         be smaller than `2**16`.
-    p : int
+    p :
         Number of dimensions in the linear subspace.
-    ns: int
-        Number of dimensions in the leakage.
     """
 
-    def __init__(self, nc, p, ns):
+    def __init__(self, nc: int, p: int):
         self.solved = False
         self.done = False
         self.p = p
-        self.acc = _scalib_ext.LdaAcc(nc, ns)
-        assert p < nc
+        self._nc = nc
+        self._ns = None
+        self._init = False
+        if p >= nc:
+            raise ValueError("p must be at most nc")
 
-    def fit_u(self, l, x, gemm_mode=1):
+    def fit_u(
+        self, l: npt.NDArray[np.int16], x: npt.NDArray[np.uint16], gemm_mode: int = 1
+    ):
         r"""Update statistical model estimates with fresh data.
 
         Parameters
         ----------
-        l : array_like, int16
+        l :
             Array that contains the traces. The array must
             be of dimension `(n,ns)` and its type must be `int16`.
-        x : array_like, uint16
+        x :
             Labels for each trace. Must be of shape `(n)` and
             must be `uint16`.
-        gemm_mode: int (default 1)
+        gemm_mode: (default 1)
             0: use matrixmultiply matrix multiplication.
             n>0: use n threads with BLIS matrix multiplication.
             BLIS is only used on linux. Matrixmultiply is always used on other
             OSes.
             The BLIS threads (if > 1) do not belong to the SCALib threadpool.
         """
+        scalib.utils.assert_traces(l, self._ns)
+        scalib.utils.assert_classes(x, multi=False)
+        if not self._init:
+            self._init = True
+            self._ns = l.shape[1]
+            self.acc = _scalib_ext.LdaAcc(self._nc, self._ns)
         # TODO maybe there is something smarter to do here w.r.t. number of
         # threads + investigate exact BLIS behavior.
         with scalib.utils.interruptible():
@@ -117,13 +127,15 @@ class LDAClassifier:
 
         Parameters
         ----------
-        done : bool
+        done :
             True if the object will not be futher updated.
 
         Notes
         -----
         Once this has been called, predictions can be performed.
         """
+        if not self._init:
+            raise ValueError("Cannot .solve since .fit_u was never called.")
         assert (
             not self.done
         ), "Calling LDA.solve() after done flag has been set is not allowed."
@@ -135,15 +147,14 @@ class LDAClassifier:
         if done:
             del self.acc
 
-    def predict_proba(self, l):
+    def predict_proba(self, l: npt.NDArray[np.int16]) -> npt.NDArray[np.float64]:
         r"""Computes the probability for each of the classes for the traces
         contained in `l`.
 
         Parameters
         ----------
-        l : array_like, int16
-            Array that contains the traces. The array must
-            be of dimension `(n,ns)` and its type must be `int16`.
+        l :
+            Array that contains the traces. The array must be of dimension `(n,ns)`.
 
         Returns
         -------
@@ -158,26 +169,20 @@ class LDAClassifier:
         return prs
 
     def __getstate__(self):
-        dic = {
-            "solved": self.solved,
-            "p": self.p,
-        }
+        dic = self.__dict__.copy()
 
-        if not self.done:
-            dic["acc"] = self.acc.get_state()
+        if "acc" in dic:
+            dic["acc"] = dic["acc"].get_state()
+        if "lda" in dic:
+            dic["lda"] = dic["lda"].get_state()
 
-        try:
-            dic["lda"] = self.lda.get_state()
-        except AttributeError:
-            pass
         return dic
 
     def __setstate__(self, state):
-        self.solved = state["solved"]
-        self.p = state["p"]
-        self.done = not "acc" in state
+        for k, v in state:
+            setattr(self, k, v)
 
-        if not self.done:
+        if "acc" in state:
             self.acc = _scalib_ext.LdaAcc.from_state(*state["acc"])
         if "lda" in state:
             self.lda = _scalib_ext.LDA.from_state(*state["lda"])
