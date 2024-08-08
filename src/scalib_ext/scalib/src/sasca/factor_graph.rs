@@ -88,12 +88,17 @@ pub(super) enum FactorKind {
 }
 
 impl ExprFactor {
-    fn merge(&self, a: ClassVal, b: ClassVal, nc: usize) -> ClassVal {
+    fn merge(&self, a: ClassVal, b: ClassVal, nc: usize, negb: bool) -> ClassVal {
+        let (notb, minb) = if negb {
+            (((nc - 1) as ClassVal) ^ b, (nc - (b as usize)) as ClassVal)
+        } else {
+            (b, b)
+        };
         match self {
-            Self::AND { vars_neg: _ } => a & b,
-            Self::XOR => a ^ b,
-            Self::ADD { vars_neg: _ } => (((a as u64) + (b as u64)) % (nc as u64)) as ClassVal,
-            Self::MUL => (((a as u64) * (b as u64)) % (nc as u64)) as ClassVal,
+            Self::AND { vars_neg: _ } => a & notb,
+            Self::XOR => a ^ notb,
+            Self::ADD { vars_neg: _ } => (((a as u64) + (minb as u64)) % (nc as u64)) as ClassVal,
+            Self::MUL => (((a as u64) * (minb as u64)) % (nc as u64)) as ClassVal,
             Self::NOT | Self::LOOKUP { .. } => unreachable!(),
         }
     }
@@ -103,6 +108,15 @@ impl ExprFactor {
             Self::XOR | Self::ADD { vars_neg: _ } => 0,
             Self::MUL => 1,
             Self::NOT | Self::LOOKUP { .. } => unreachable!(),
+        }
+    }
+    fn neg_res(&self) -> bool {
+        match self {
+            Self::ADD { .. } => true,
+            Self::XOR => false,
+            Self::AND { .. } | Self::MUL | Self::NOT | Self::LOOKUP { .. } => {
+                unimplemented!("Case to analyze and implement.")
+            }
         }
     }
 }
@@ -180,6 +194,12 @@ impl PublicValue {
         match self {
             PublicValue::Single(x) => PublicValue::Single(f(*x)),
             PublicValue::Multi(x) => PublicValue::Multi(x.iter().cloned().map(f).collect()),
+        }
+    }
+    pub fn is_zero(&self) -> bool {
+        match self {
+            PublicValue::Single(x) => *x == 0,
+            PublicValue::Multi(x) => x.iter().all(|x| *x == 0),
         }
     }
 }
@@ -305,6 +325,7 @@ impl FactorGraph {
                         ExprFactor::AND { vars_neg } => {
                             let x = self.merge_pubs(
                                 expr,
+                                false,
                                 ops.zip(vars_neg.iter().cloned())
                                     .chain(std::iter::once((&cst, false))),
                             );
@@ -322,6 +343,7 @@ impl FactorGraph {
                         ExprFactor::XOR | ExprFactor::ADD { .. } | ExprFactor::MUL => self
                             .merge_pubs(
                                 expr,
+                                false,
                                 ops.zip(std::iter::repeat(false))
                                     .chain(std::iter::once((&cst, false))),
                             ),
@@ -440,8 +462,9 @@ impl FactorGraph {
                         ..
                     }
                     | FactorKind::GenFactor { .. } => PublicValue::Single(0),
-                    FactorKind::Assign { expr, .. } => self.merge_pubs(
+                    FactorKind::Assign { expr, has_res } => self.merge_pubs(
                         expr,
+                        !has_res,
                         factor
                             .publics
                             .iter()
@@ -457,13 +480,12 @@ impl FactorGraph {
     fn merge_pubs<'a>(
         &self,
         expr: &ExprFactor,
+        is_res_pub: bool,
         // bool is the "invserse" for every item
-        pubs: impl Iterator<Item = (&'a PublicValue, bool)>,
+        mut pubs: impl Iterator<Item = (&'a PublicValue, bool)>,
     ) -> PublicValue {
         let merge_inner = |p1: PublicValue, (p2, nv2): (&PublicValue, bool)| {
-            let f = |x: ClassVal, y: ClassVal| {
-                expr.merge(x, if nv2 { self.not(y) } else { y }, self.nc)
-            };
+            let f = |x: ClassVal, y: ClassVal| expr.merge(x, y, self.nc, nv2);
             match (p1, p2) {
                 (PublicValue::Single(c1), PublicValue::Single(c2)) => {
                     PublicValue::Single(f(c1, *c2))
@@ -485,7 +507,14 @@ impl FactorGraph {
                 }
             }
         };
-        pubs.fold(PublicValue::Single(expr.neutral(self.nc)), merge_inner)
+        let neutral = PublicValue::Single(expr.neutral(self.nc));
+        let init = if is_res_pub && expr.neg_res() {
+            let (pub_res, pub_res_neg) = pubs.next().unwrap();
+            merge_inner(neutral, (pub_res, !pub_res_neg))
+        } else {
+            neutral
+        };
+        pubs.fold(init, merge_inner)
     }
 
     pub(super) fn is_cyclic(&self, multi_exec: bool) -> bool {

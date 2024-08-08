@@ -649,7 +649,6 @@ fn factor_not<'a>(
     )
 }
 
-// TODO handle subtraction too (actually, we can re-write it as an addition by moving terms around).
 fn factor_add<'a>(
     factor: &'a Factor,
     belief_from_var: &'a mut EdgeSlice<Distribution>,
@@ -660,7 +659,7 @@ fn factor_add<'a>(
 ) -> impl Iterator<Item = Distribution> + 'a {
     let FactorKind::Assign {
         expr: ExprFactor::ADD { vars_neg },
-        ..
+        has_res,
     } = &factor.kind
     else {
         unreachable!()
@@ -682,7 +681,9 @@ fn factor_add<'a>(
 
     let mut taken_dest = vec![false; factor.edges.len()];
     let mut negated_vars = vars_neg.clone();
-    negated_vars[0] = true;
+    if *has_res {
+        negated_vars[0] = !negated_vars[0];
+    }
     for dest in dest {
         taken_dest[factor.edges.get_index_of(dest).unwrap()] = true;
     }
@@ -700,35 +701,45 @@ fn factor_add<'a>(
     let mut acc_fft_init = false;
     let mut fft_scratch = plans.r2c.make_scratch_vec();
     let mut fft_input_scratch = plans.r2c.make_input_vec();
+    if !pub_red.is_zero() {
+        let acc = belief_from_var[factor.edges[0]].new_constant(pub_red);
+        acc.fft_to(
+            fft_input_scratch.as_mut_slice(),
+            acc_fft.view_mut(),
+            fft_scratch.as_mut_slice(),
+            plans,
+            false,
+        );
+        acc_fft_init = true;
+    }
     if let Some((((v_dest, e_dest), t), dest_negated)) = uniform_op {
         if !*t || uniform_iter.next().is_some() {
             // At least 2 uniform operands, or single uniform is not in dest,
             // all dest messages are uniform.
             reset_incoming(factor, belief_from_var, &taken_dest, clear_incoming);
             return vec![uniform_template; dest.len()].into_iter();
-        } else {
-            // Single uniform op, only compute for that one.
-            for (e, negated_var) in factor.edges.values().zip(negated_vars.iter()) {
-                if e != e_dest {
-                    let negate = !(dest_negated ^ negated_var);
-                    belief_from_var[*e].fft_to(
-                        fft_input_scratch.as_mut_slice(),
-                        fft_tmp.view_mut(),
-                        fft_scratch.as_mut_slice(),
-                        plans,
-                        negate,
-                    );
+        }
+        // Single uniform op, only compute for that one.
+        for (e, negated_var) in factor.edges.values().zip(negated_vars.iter()) {
+            if e != e_dest {
+                let negate = !(dest_negated ^ negated_var);
+                belief_from_var[*e].fft_to(
+                    fft_input_scratch.as_mut_slice(),
+                    fft_tmp.view_mut(),
+                    fft_scratch.as_mut_slice(),
+                    plans,
+                    negate,
+                );
 
-                    if acc_fft_init {
-                        acc_fft *= &fft_tmp;
-                    } else {
-                        acc_fft.assign(&fft_tmp);
-                        acc_fft_init = true;
-                    }
+                if acc_fft_init {
+                    acc_fft *= &fft_tmp;
+                } else {
+                    acc_fft.assign(&fft_tmp);
+                    acc_fft_init = true;
                 }
-                if clear_incoming {
-                    belief_from_var[*e].reset();
-                }
+            }
+            if clear_incoming {
+                belief_from_var[*e].reset();
             }
         }
         let mut acc = uniform_template.clone();

@@ -556,6 +556,31 @@ def test_ADD_multiple():
     assert np.allclose(distri_z_ref, distri_z)
 
 
+def test_add_cst2():
+    """More test cases for addition with public values"""
+    nc = 256
+    n = 1
+    graph = f"""
+        NC {nc}
+        PROPERTY z = -x+y+w
+        PUB MULTI z
+        VAR MULTI x
+        VAR MULTI y
+        PUB SINGLE w
+        """
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n, {"z": [2], "w": 1})
+    distri_x = np.zeros((1, nc))
+    distri_x[0, 4] = 1.0
+    bp_state.set_evidence("x", distri_x)
+    distri_y_ref = np.zeros((1, nc))
+    # y = z + x - w = 2 + 4 - 1 = 5
+    distri_y_ref[0, 5] = 1.0
+    bp_state.bp_acyclic("y")
+    distri_y = bp_state.get_distribution("y")
+    assert np.allclose(distri_y_ref, distri_y)
+
+
 def test_MUL():
     """
     Test MUL between distributions
