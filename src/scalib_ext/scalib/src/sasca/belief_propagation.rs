@@ -666,13 +666,16 @@ fn factor_add<'a>(
     };
     // Special case for single-input ADD
     if factor.edges.len() == 2 {
-        // FIXME check for negative operand
         return dest
             .iter()
-            .map(|var| {
-                let i = factor.edges.get_index_of(var).unwrap();
-                let mut distr = belief_from_var[factor.edges[1 - i]].take_or_clone(clear_incoming);
-                distr.add_cst(pub_red, i != 0);
+            .map(|dest_var| {
+                let i_var = factor.edges.get_index_of(dest_var).unwrap();
+                let i_op = 1 - i_var;
+                let mut distr = belief_from_var[factor.edges[i_op]].take_or_clone(clear_incoming);
+                if vars_neg[i_var] ^ vars_neg[i_op] ^ !has_res {
+                    distr.negate();
+                }
+                distr.add_cst(pub_red, i_var != 0);
                 distr
             })
             .collect::<Vec<_>>()

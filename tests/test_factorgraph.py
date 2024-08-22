@@ -581,6 +581,39 @@ def test_add_cst2():
     assert np.allclose(distri_y_ref, distri_y)
 
 
+def test_add_cst3():
+    """More even more cases for addition with public values"""
+    nc = 256
+    g_pub = f"""
+    NC {nc}
+    PUB SINGLE s
+    VAR MULTI a0
+    VAR MULTI a1
+    PROPERTY s = a0 + a1
+    """
+    g_var = f"""
+    NC {nc}
+    VAR SINGLE s
+    VAR MULTI a0
+    VAR MULTI a1
+    PROPERTY s = a0 + a1
+    """
+    n = 1
+    fg_pub = FactorGraph(g_pub)
+    fg_var = FactorGraph(g_var)
+    one_distr = np.array([[1.0 if i == 1 else 0.0 for i in range(nc)]])
+    bp_pub = BPState(fg_pub, n, {"s": 1})
+    bp_pub.set_evidence("a0", one_distr)
+    bp_var = BPState(fg_var, n)
+    bp_var.set_evidence("s", one_distr[0])
+    bp_var.set_evidence("a0", one_distr)
+    bp_pub.bp_acyclic("a1")
+    bp_var.bp_acyclic("a1")
+    pub_res = bp_pub.get_distribution("a1")
+    var_res = bp_var.get_distribution("a1")
+    assert np.allclose(pub_res, var_res)
+
+
 def test_MUL():
     """
     Test MUL between distributions
