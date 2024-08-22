@@ -107,6 +107,7 @@ impl fg::FactorGraph {
         name: String,
         vars: impl Iterator<Item = (&'a fg_parser::Var, bool)>,
         build_kind: impl FnOnce(&Self, &[bool]) -> Result<fg::FactorKind, GraphBuildError>,
+        inv_pub_neg: bool,
     ) -> Result<(), GraphBuildError> {
         if self.factors.contains_key(&name) {
             return Err(GraphBuildError::MultiplePropDecl(name));
@@ -136,6 +137,7 @@ impl fg::FactorGraph {
                 multi |= v.multi;
             } else if let Some((pub_id, _, public)) = self.publics.get_full(var) {
                 is_pub.push(true);
+                let neg = if inv_pub_neg { !neg } else { neg };
                 publics.push((pub_id, neg));
                 multi |= public.multi;
             } else {
@@ -162,20 +164,25 @@ impl fg::FactorGraph {
         expr: &fg_parser::Expr,
     ) -> Result<(), GraphBuildError> {
         let vars = std::iter::once((dest, expr.neg_res())).chain(expr.vars_neg().into_iter());
-        self.add_factor(name, vars, |s, is_pub| {
-            Ok(fg::FactorKind::Assign {
-                expr: expr.as_factor_expr(
-                    |t| {
-                        s.tables
-                            .get_index_of(t)
-                            .ok_or_else(|| GraphBuildError::UnknownTable(t.to_owned()))
-                    },
-                    is_pub[0],
-                    &is_pub[0..],
-                )?,
-                has_res: !is_pub[0],
-            })
-        })
+        self.add_factor(
+            name,
+            vars,
+            |s, is_pub| {
+                Ok(fg::FactorKind::Assign {
+                    expr: expr.as_factor_expr(
+                        |t| {
+                            s.tables
+                                .get_index_of(t)
+                                .ok_or_else(|| GraphBuildError::UnknownTable(t.to_owned()))
+                        },
+                        is_pub[0],
+                        &is_pub[1..],
+                    )?,
+                    has_res: !is_pub[0],
+                })
+            },
+            matches!(expr, fg_parser::Expr::Or(_)),
+        )
     }
     fn add_genfactor<'a>(
         &mut self,
@@ -184,27 +191,32 @@ impl fg::FactorGraph {
         vars: &[fg_parser::NVar],
     ) -> Result<(), GraphBuildError> {
         let var_list = vars.iter().map(|v| (&v.var, v.neg));
-        self.add_factor(name, var_list, |s, is_pub| {
-            let mut n_pubs = 0;
-            let mut n_vars = 0;
-            let mut operands = Vec::new();
-            for (i, p) in is_pub.iter().enumerate() {
-                if *p {
-                    operands.push(fg::GenFactorOperand::Pub(n_pubs));
-                    n_pubs += 1;
-                } else {
-                    operands.push(fg::GenFactorOperand::Var(n_vars, vars[i].neg));
-                    n_vars += 1;
+        self.add_factor(
+            name,
+            var_list,
+            |s, is_pub| {
+                let mut n_pubs = 0;
+                let mut n_vars = 0;
+                let mut operands = Vec::new();
+                for (i, p) in is_pub.iter().enumerate() {
+                    if *p {
+                        operands.push(fg::GenFactorOperand::Pub(n_pubs));
+                        n_pubs += 1;
+                    } else {
+                        operands.push(fg::GenFactorOperand::Var(n_vars, vars[i].neg));
+                        n_vars += 1;
+                    }
                 }
-            }
-            Ok(fg::FactorKind::GenFactor {
-                id: s
-                    .gen_factors
-                    .get_index_of(gen_factor)
-                    .ok_or_else(|| GraphBuildError::UnknownGenFactor(gen_factor.to_owned()))?,
-                operands,
-            })
-        })
+                Ok(fg::FactorKind::GenFactor {
+                    id: s
+                        .gen_factors
+                        .get_index_of(gen_factor)
+                        .ok_or_else(|| GraphBuildError::UnknownGenFactor(gen_factor.to_owned()))?,
+                    operands,
+                })
+            },
+            false,
+        )
     }
     fn add_graph_edges(&mut self) {
         for (i, e) in self.edges.iter_enumerated() {

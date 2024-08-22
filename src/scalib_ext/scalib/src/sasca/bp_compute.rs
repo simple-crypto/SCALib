@@ -451,6 +451,14 @@ impl Distribution {
             inv_and_cst_slice(d.as_slice_mut().unwrap(), cst.get(i));
         });
     }
+    pub fn negate(&mut self) {
+        if let DistrRepr::Full(v) = &mut self.value {
+            for mut d in v.outer_iter_mut() {
+                let d = d.as_slice_mut().unwrap();
+                negate_slice_distr(d);
+            }
+        }
+    }
     pub fn add_cst(&mut self, cst: &PublicValue, sub: bool) {
         let nc = self.shape.1;
         if let DistrRepr::Full(v) = &mut self.value {
