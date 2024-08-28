@@ -912,7 +912,8 @@ fn factor_gen_factor<'a>(
         let dest_idx = factor.edges.get_index_of(dest).unwrap();
         let mut distr = belief_from_var[factor.edges[dest_idx]].clone();
         distr.ensure_full();
-        for i in 0..nmulti {
+        let nmulti_actual = if factor.multi { nmulti } else { 1 };
+        for i in 0..nmulti_actual {
             let gen_factor = match gen_factor {
                 GenFactor::Single(x) => x,
                 GenFactor::Multi(x) => &x[i],

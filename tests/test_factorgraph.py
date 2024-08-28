@@ -1,8 +1,9 @@
 import pytest
-from scalib.attacks import FactorGraph, BPState
+from scalib.attacks import FactorGraph, BPState, GenFactor
 import numpy as np
 import os
 import copy
+import itertools as it
 
 
 def normalize_distr(x):
@@ -1778,3 +1779,35 @@ def test_cycle_detection_single_factor_with_multi():
     fg = FactorGraph(graph_desc)
     bp = BPState(fg, 2)
     assert bp.is_cyclic()
+
+
+def test_generic_single_multi():
+    nc = 2
+    n_exec = 2
+    graph_desc = f"""
+        NC {nc}
+
+        VAR SINGLE A
+        VAR SINGLE B
+        VAR SINGLE C
+
+        GENERIC SINGLE XOR
+
+        PROPERTY XOR(A,B,C)
+        """
+
+    def xor(a, b):
+        return a ^ b
+
+    fg = FactorGraph(graph_desc)
+
+    XOR = np.array(
+        [[a, b, a ^ b] for a, b in it.product(range(nc), repeat=2)],
+        dtype=np.uint32,
+    )
+    gen_factors = {
+        "XOR": GenFactor.sparse_functional(XOR),
+    }
+
+    bp = BPState(fg, n_exec, gen_factors=gen_factors)
+    bp.bp_loopy(1, True)
