@@ -1811,3 +1811,20 @@ def test_generic_single_multi():
 
     bp = BPState(fg, n_exec, gen_factors=gen_factors)
     bp.bp_loopy(1, True)
+
+
+def test_factor_not_pub():
+    nc = 4
+    graph_desc = f"""
+        NC {nc}
+
+        PUB SINGLE A
+        VAR SINGLE B
+        PROPERTY B = !A
+        """
+    fg = FactorGraph(graph_desc)
+    for a in range(nc):
+        bp = BPState(fg, 1, public_values={"A": a})
+        bp.bp_acyclic("B")
+        result = bp.get_distribution("B")
+        assert np.argmax(result) == (nc - 1) ^ a

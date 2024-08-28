@@ -451,25 +451,25 @@ impl FactorGraph {
         self.factors
             .values()
             .map(|factor| {
+                let mut pubs = factor
+                    .publics
+                    .iter()
+                    .map(|(pub_id, nv)| (&public_values[*pub_id], *nv));
                 match &factor.kind {
                     // Not used
                     FactorKind::Assign {
-                        expr: ExprFactor::NOT,
-                        ..
-                    }
-                    | FactorKind::Assign {
                         expr: ExprFactor::LOOKUP { .. },
                         ..
                     }
                     | FactorKind::GenFactor { .. } => PublicValue::Single(0),
-                    FactorKind::Assign { expr, has_res } => self.merge_pubs(
-                        expr,
-                        !has_res,
-                        factor
-                            .publics
-                            .iter()
-                            .map(|(pub_id, nv)| (&public_values[*pub_id], *nv)),
-                    ),
+                    FactorKind::Assign {
+                        expr: ExprFactor::NOT,
+                        ..
+                    } => pubs
+                        .next()
+                        .map(|(val, _)| val.clone())
+                        .unwrap_or(PublicValue::Single(0)),
+                    FactorKind::Assign { expr, has_res } => self.merge_pubs(expr, !has_res, pubs),
                 }
             })
             .collect()

@@ -298,7 +298,11 @@ impl BPState {
                     prop_factor!(factor_gen_and, &self.pub_reduced[factor_id])
                 }
                 ExprFactor::XOR => prop_factor!(factor_xor, &self.pub_reduced[factor_id]),
-                ExprFactor::NOT => prop_factor!(factor_not, (self.graph.nc - 1) as u32),
+                ExprFactor::NOT => prop_factor!(
+                    factor_not,
+                    &self.pub_reduced[factor_id],
+                    (self.graph.nc - 1) as u32
+                ),
                 ExprFactor::ADD { .. } => {
                     prop_factor!(factor_add, &self.pub_reduced[factor_id], &self.plans)
                 }
@@ -638,6 +642,7 @@ fn factor_not<'a>(
     belief_from_var: &'a mut EdgeSlice<Distribution>,
     dest: &'a [VarId],
     clear_incoming: bool,
+    pub_reduced: &PublicValue,
     inv_cst: u32,
 ) -> impl Iterator<Item = Distribution> + 'a {
     factor_xor(
@@ -645,7 +650,7 @@ fn factor_not<'a>(
         belief_from_var,
         dest,
         clear_incoming,
-        &PublicValue::Single(inv_cst),
+        &pub_reduced.map(|x| x ^ inv_cst),
     )
 }
 
