@@ -70,8 +70,13 @@ pub(super) enum ExprFactor {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) enum GenFactorOperand {
-    Var(usize, bool),
-    Pub(usize),
+    Var {
+        factor_edge_id: usize,
+        negated: bool,
+    },
+    Pub {
+        pub_id: usize,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -374,8 +379,10 @@ impl FactorGraph {
                     let ops: Vec<&PublicValue> = operands
                         .iter()
                         .map(|op| match op {
-                            GenFactorOperand::Var(idx, ..) => &var_assignments[*idx],
-                            GenFactorOperand::Pub(idx) => &public_values[*idx],
+                            GenFactorOperand::Var { factor_edge_id, .. } => {
+                                &var_assignments[*factor_edge_id]
+                            }
+                            GenFactorOperand::Pub { pub_id } => &public_values[*pub_id],
                         })
                         .collect();
                     let nmulti_ops = ops.iter().find_map(|op| {
@@ -451,25 +458,25 @@ impl FactorGraph {
         self.factors
             .values()
             .map(|factor| {
+                let mut pubs = factor
+                    .publics
+                    .iter()
+                    .map(|(pub_id, nv)| (&public_values[*pub_id], *nv));
                 match &factor.kind {
                     // Not used
                     FactorKind::Assign {
-                        expr: ExprFactor::NOT,
-                        ..
-                    }
-                    | FactorKind::Assign {
                         expr: ExprFactor::LOOKUP { .. },
                         ..
                     }
                     | FactorKind::GenFactor { .. } => PublicValue::Single(0),
-                    FactorKind::Assign { expr, has_res } => self.merge_pubs(
-                        expr,
-                        !has_res,
-                        factor
-                            .publics
-                            .iter()
-                            .map(|(pub_id, nv)| (&public_values[*pub_id], *nv)),
-                    ),
+                    FactorKind::Assign {
+                        expr: ExprFactor::NOT,
+                        ..
+                    } => pubs
+                        .next()
+                        .map(|(val, _)| val.clone())
+                        .unwrap_or(PublicValue::Single(0)),
+                    FactorKind::Assign { expr, has_res } => self.merge_pubs(expr, !has_res, pubs),
                 }
             })
             .collect()

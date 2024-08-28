@@ -1,8 +1,9 @@
 import pytest
-from scalib.attacks import FactorGraph, BPState
+from scalib.attacks import FactorGraph, BPState, GenFactor
 import numpy as np
 import os
 import copy
+import itertools as it
 
 
 def normalize_distr(x):
@@ -1778,3 +1779,76 @@ def test_cycle_detection_single_factor_with_multi():
     fg = FactorGraph(graph_desc)
     bp = BPState(fg, 2)
     assert bp.is_cyclic()
+
+
+def test_generic_single_multi():
+    nc = 2
+    n_exec = 2
+    graph_desc = f"""
+        NC {nc}
+
+        VAR SINGLE A
+        VAR SINGLE B
+        VAR SINGLE C
+
+        GENERIC SINGLE XOR
+
+        PROPERTY XOR(A,B,C)
+        """
+
+    def xor(a, b):
+        return a ^ b
+
+    fg = FactorGraph(graph_desc)
+
+    XOR = np.array(
+        [[a, b, a ^ b] for a, b in it.product(range(nc), repeat=2)],
+        dtype=np.uint32,
+    )
+    gen_factors = {
+        "XOR": GenFactor.sparse_functional(XOR),
+    }
+
+    bp = BPState(fg, n_exec, gen_factors=gen_factors)
+    bp.bp_loopy(1, True)
+
+
+def test_factor_not_pub():
+    nc = 4
+    graph_desc = f"""
+        NC {nc}
+
+        PUB SINGLE A
+        VAR SINGLE B
+        PROPERTY B = !A
+        """
+    fg = FactorGraph(graph_desc)
+    for a in range(nc):
+        bp = BPState(fg, 1, public_values={"A": a})
+        bp.bp_acyclic("B")
+        result = bp.get_distribution("B")
+        assert np.argmax(result) == (nc - 1) ^ a
+
+
+def test_factor_gen_pub():
+    nc = 2
+    graph_desc = f"""
+        NC {nc}
+        PUB SINGLE A
+        VAR SINGLE B
+        GENERIC SINGLE NOT
+        PROPERTY NOT(A,B)
+        """
+    fg = FactorGraph(graph_desc)
+    not_factors = [
+        GenFactor.sparse_functional(
+            np.array([(a, (nc - 1) ^ a) for a in range(nc)], dtype=np.uint32)
+        ),
+        GenFactor.dense(np.array([[0, 1], [1, 0]], dtype=np.float64)),
+    ]
+    for nf in not_factors:
+        for a in range(nc):
+            bp = BPState(fg, 1, public_values={"A": a}, gen_factors={"NOT": nf})
+            bp.bp_acyclic("B")
+            result = bp.get_distribution("B")
+            assert np.argmax(result) == (nc - 1) ^ a
