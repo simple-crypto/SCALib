@@ -51,30 +51,28 @@ impl RankProblem {
     pub fn assert_valid(&self) -> Result<(), RankError> {
         if self.costs.len() != self.real_key.len() {
             Err("Not same length cost and key")?;
-        } else if self.real_key.len() == 0 {
+        }
+        if self.real_key.len() == 0 {
             Err("Empty key")?;
-        } else if self
+        }
+        if self
             .real_key
             .iter()
             .zip(self.costs.iter())
             .any(|(k, sc)| *k >= sc.len())
         {
             Err("Key value too large wrt cost")?;
-        } else if !self
-            .costs
-            .iter()
-            .flat_map(|sc| sc.iter())
-            .all(|s| s.is_finite())
-        {
-            Err("Non-finite cost")?;
-        } else if !self
-            .costs
-            .iter()
-            .map(|sc| sc.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap())
-            .sum::<f64>()
-            .is_finite()
-        {
-            Err("Infinite max total cost")?;
+        }
+        for s in self.costs.iter().flat_map(|sc| sc.iter()) {
+            if s.is_nan() {
+                Err("Nan score")?;
+            }
+            if *s == f64::NEG_INFINITY {
+                Err("-Inf score")?;
+            }
+        }
+        if self.key_cost() == f64::INFINITY {
+            Err("Infinite cost for the key.")?;
         }
         Ok(())
     }

@@ -23,5 +23,5 @@ impl FuzzTarget {
 
 fuzz_target!(|target: FuzzTarget| {
     let (scores, key, nb_bin, merge_nb) = target.to_problem();
-    let _ = ranklib::tests::rank2_vs_naive(&scores, &key, merge_nb, nb_bin);
+    let _ = ranklib::tests::rank2_vs_naive(&scores, &key, merge_nb, nb_bin, 1.0);
 });

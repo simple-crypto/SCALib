@@ -2,7 +2,8 @@ r"""Estimation of the rank of a true key given likelihood of sub-keys.
 
 Rank estimation estimates the rank of the full (e.g. 128-bit) key based on a
 score for each value of its (e.g 8-bit) sub-keys. The scores must be additive
-and positive (e.g. negative log probabilities).
+and positive, with lower score meaning lower rank (e.g. negative
+log-likelihoods).
 
 The `rank_accuracy` function allows to specify the desired precision of the
 bound in bits. It is the high-level, and its usage is recommended over the
