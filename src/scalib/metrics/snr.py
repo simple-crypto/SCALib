@@ -44,9 +44,9 @@ class SNR:
     >>> # 500 traces of 200 points, 8-bit samples
     >>> traces = np.random.randint(0,256,(500,200),dtype=np.int16)
     >>> # 10 variables on 4 bit (16 classes = 2^4)
-    >>> X = np.random.randint(0,16,(500,10),dtype=np.uint16)
+    >>> x = np.random.randint(0,16,(500,10),dtype=np.uint16)
     >>> snr = SNR(nc=16)
-    >>> snr.fit_u(traces,X)
+    >>> snr.fit_u(traces,x)
     >>> snr_val = snr.get_snr()
 
     Notes
@@ -68,34 +68,34 @@ class SNR:
         self._use_64bit = use_64bit
         self._init = False
 
-    def fit_u(self, l: npt.NDArray[np.int16], x: npt.NDArray[np.uint16]):
-        r"""Updates the SNR estimation with samples of `l` for the classes `x`.
+    def fit_u(self, traces: npt.NDArray[np.int16], x: npt.NDArray[np.uint16]):
+        r"""Updates the SNR estimation with samples of `traces` for the classes `x`.
         This method may be called multiple times.
 
         Parameters
         ----------
-        l :
+        traces :
             Array that contains the leakage traces. The array must be of
             dimension `(n, ns)`.
         x :
             Labels for each trace. Must be of shape `(n, nv)`.
         """
-        scalib.utils.assert_traces(l, self._ns)
+        scalib.utils.assert_traces(traces, self._ns)
         scalib.utils.assert_classes(x, self._nv)
         if not self._init:
             self._init = True
-            self._ns = l.shape[1]
+            self._ns = traces.shape[1]
             self._nv = x.shape[1]
             self._snr = _scalib_ext.SNR(self._nc, self._ns, self._nv, self._use_64bit)
-        if x.shape[0] != l.shape[0]:
+        if x.shape[0] != traces.shape[0]:
             raise ValueError(
-                f"Number of traces {l.shape[0]} does not match size of classes array {x.shape[0]}."
+                f"Number of traces {traces.shape[0]} does not match size of classes array {x.shape[0]}."
             )
         # _scalib_ext uses inverted axes for x.
         # we can copy when needed, as x should be small, so this should be cheap
-        x = x.transpose().astype(np.uint16, order="C", casting="equiv", copy=False)
+        x = np.ascontiguousarray(x.transpose())
         with scalib.utils.interruptible():
-            self._snr.update(l, x, get_config())
+            self._snr.update(traces, x, get_config())
 
     def get_snr(self) -> npt.NDArray[np.float64]:
         r"""Return the current SNR estimation with an array of shape `(np,ns)`."""

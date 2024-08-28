@@ -1,15 +1,11 @@
-from scalib.metrics import SNR, Ttest
 from scalib.modeling import LDAClassifier
-from scalib.attacks import FactorGraph, BPState
-from scalib.postprocessing import rank_accuracy
 
-from utils import sbox, gen_traces
+from utils import gen_traces
 import numpy as np
 
 
 def main():
     nc = 256
-    npoi = 2
 
     # Parameters
     std = 2
@@ -30,13 +26,11 @@ def main():
         ntraces_v, std, random_key=True, random_plaintext=True
     )
 
-    _, ns = traces_p.shape
-
     print("2. Profiling the value of the first Sbox.")
     print("")
 
-    lda = LDAClassifier(nc=256, ns=ns, p=1)
-    lda.fit_u(l=traces_p, x=labels_p["x0"].astype(np.uint16))
+    lda = LDAClassifier(nc=256, p=1)
+    lda.fit_u(traces=traces_p, x=labels_p["x0"].astype(np.uint16))
     lda.solve()
 
     def eval_info(test_traces, test_labels):

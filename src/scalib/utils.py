@@ -45,16 +45,16 @@ def assert_traces(l: npt.NDArray[np.int16], ns=None):
     elif not l.flags.c_contiguous:
         raise ValueError(
             "Expected l to be a contiguous (C memory order) array. "
-            "Use np.ascontiguous to change memory representation."
+            "Use np.ascontiguousarray() to change memory representation."
         )
 
 
-def assert_classes(x: npt.NDArray[np.uint16], nv=None, multi=True):
+def assert_classes(x: npt.NDArray, nv=None, multi=True, exp_type=np.uint16):
     expected_dim = 2 if multi else 1
     if not isinstance(x, np.ndarray):
         raise ValueError("The classes is not a numpy array.")
-    elif x.dtype != np.uint16:
-        raise ValueError(f"The classes array has dtype {x.dtype}, expected np.uint16.")
+    elif x.dtype != exp_type:
+        raise ValueError(f"The classes array has dtype {x.dtype}, expected {exp_type}.")
     elif len(x.shape) != expected_dim:
         raise ValueError(
             f"The classes array has {len(x.shape)} dimensions, expected {expected_dim}."

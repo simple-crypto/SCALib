@@ -3,6 +3,7 @@ import numpy.typing as npt
 
 from scalib import _scalib_ext
 from scalib.config import get_config
+import scalib.utils
 
 
 class RLDAClassifier:
@@ -47,7 +48,7 @@ class RLDAClassifier:
     >>> import numpy as np
     >>> traces_model = np.random.randint(0,256,(5000,10),dtype=np.int16)
     >>> labels_model = np.random.randint(0,256,(5000,1),dtype=np.uint64)
-    >>> rlda = RLDAClassifier(8, 10, 1, 3)
+    >>> rlda = RLDAClassifier(8, 3)
     >>> rlda.fit_u(traces_model, labels_model)
     >>> rlda.solve()
     >>> traces_test = np.random.randint(0,256,(5000,10),dtype=np.int16)
@@ -59,41 +60,47 @@ class RLDAClassifier:
     .. footbibliography::
     """
 
-    def __init__(self, nb: int, ns: int, nv: int, p: int):
+    def __init__(self, nb: int, p: int):
         """
         Parameters
         ----------
         nb:
             Number of bits of the profiled variables.
-        ns:
-            Number of dimensions in the leakage (trace length).
         nv:
             Number of variables to profile
         p:
             Number of dimensions in the linear subspace.
         """
-        self._ns = ns
-        self._nv = nv
-        self._inner = _scalib_ext.RLDA(nb, ns, nv, p)
+        self._ns = None
+        self._nv = None
+        self._p = p
+        self._nb = nb
+        self._init = False
         self._solved = False
 
-    def fit_u(self, l: npt.NDArray[np.int16], x: npt.NDArray[np.uint64], gemm_mode=1):
+    def fit_u(
+        self, traces: npt.NDArray[np.int16], x: npt.NDArray[np.uint64], gemm_mode=1
+    ):
         """Update statistical model estimates with additional data.
 
         This can be called multiple times, the state is accumulated.
 
         Parameters
         ----------
-        l : array_like, int16
+        traces : array_like, int16
             Array that contains the traces. Shape `(n,ns)`.
         x : array_like, uint64
             Labels for each trace. Shape `(n,nv)`.
         """
-        assert l.shape[0] == x.shape[0]
-        assert l.shape[1] == self._ns
-        assert x.shape[1] == self._nv
+        scalib.utils.assert_traces(traces, self._ns)
+        scalib.utils.assert_classes(x, self._nv, exp_type=np.uint64)
+        if not self._init:
+            self._init = True
+            self._ns = traces.shape[1]
+            self._nv = x.shape[1]
+            self._inner = _scalib_ext.RLDA(self._nb, self._ns, self._nv, self._p)
 
-        self._inner.update(l, x.T, gemm_mode, get_config())
+        self._inner.update(traces, x.T, gemm_mode, get_config())
 
     def solve(self):
         """Solve the RLDA equations.
@@ -127,14 +134,13 @@ class RLDAClassifier:
         return self._inner.get_proj_coefs()
 
     def predict_proba(
-        self, l: npt.NDArray[np.int16], var: int
+        self, traces: npt.NDArray[np.int16], var: int
     ) -> npt.NDArray[np.float64]:
-        r"""Computes the probability for each of the classes for the traces
-        contained in `l`.
+        r"""Computes the probability for each of the classes for the requested variables.
 
         Parameters
         ----------
-        l:
+        traces:
             Array that contains the traces. Shape ``(n,ns)``.
         var:
             Id (position in the ``x`` array) of the variable for which the
@@ -146,7 +152,7 @@ class RLDAClassifier:
             Probabilities. Shape `(n, nc)`.
         """
         assert self._solved, "Model not solved"
-        return self._inner.predict_proba(l, var, get_config())
+        return self._inner.predict_proba(traces, var, get_config())
 
     class ClusteredModel:
         """Clustered RLDA model, see :func:`RLDAClassifier.get_clustered_model`."""

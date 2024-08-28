@@ -21,7 +21,7 @@ class QuantFitMethod:
     """Method for esimating the scale and shift parameters of Quantizer."""
 
     @classmethod
-    def bounds(cls, margin=2.0):
+    def bounds(cls, margin=4.0):
         """Take the min and max of the training traces, fit such that the [min,
         max] range is mapped to a zero-centered interval covering a ``1/margin``
         fraction of the quantized domain: if the quantized domain is

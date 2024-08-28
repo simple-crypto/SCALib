@@ -45,7 +45,7 @@ class RLDAInformationEstimator:
     >>> import numpy as np
     >>> traces_model = np.random.randint(0,256,(5000,10),dtype=np.int16)
     >>> labels_model = np.random.randint(0,256,(5000,1),dtype=np.uint64)
-    >>> rlda = RLDAClassifier(8, 10, 1, 3)
+    >>> rlda = RLDAClassifier(8, 3)
     >>> rlda.fit_u(traces_model, labels_model)
     >>> rlda.solve()
     >>> cl = rlda.get_clustered_model(0,0.5,100, False)
@@ -77,7 +77,7 @@ class RLDAInformationEstimator:
         """
         self._inner = _scalib_ext.ItEstimator(model._inner, max_popped_classes)
 
-    def fit_u(self, traces: npt.NDArray[np.int16], labels: npt.NDArray[np.uint64]):
+    def fit_u(self, traces: npt.NDArray[np.int16], x: npt.NDArray[np.uint64]):
         """Updates the estimatore with the given traces and the corresponding labels.
 
         This can be called multiple times with parts of the dataset: the state is accumulated.
@@ -86,11 +86,11 @@ class RLDAInformationEstimator:
         ----------
         traces : array_like, int16
             Array that contains the traces. Shape: ``(n,ns)``.
-        labels : array_like, uint64
+        x : array_like, uint64
             Label for each trace. Shape ``(n,)``.
         """
-        assert traces.shape[0] == labels.shape[0]
-        self._inner.fit_u(traces, labels, get_config())
+        assert traces.shape[0] == x.shape[0]
+        self._inner.fit_u(traces, x, get_config())
 
     def get_information(
         self,

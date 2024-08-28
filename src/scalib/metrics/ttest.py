@@ -111,9 +111,9 @@ class Ttest:
     >>> from scalib.metrics import Ttest
     >>> import numpy as np
     >>> traces = np.random.randint(0,256,(100,200),dtype=np.int16)
-    >>> X = np.random.randint(0,2,100,dtype=np.uint16)
+    >>> x = np.random.randint(0,2,100,dtype=np.uint16)
     >>> ttest = Ttest(d=3)
-    >>> ttest.fit_u(traces,X)
+    >>> ttest.fit_u(traces,x)
     >>> t = ttest.get_ttest()
 
     Parameters
@@ -127,34 +127,34 @@ class Ttest:
         self._ns = None
         self._init = False
 
-    def fit_u(self, l: npt.NDArray[np.int16], x: npt.NDArray[np.uint16]):
-        r"""Updates the Ttest estimation with samples of `l` for the sets `x`.
+    def fit_u(self, traces: npt.NDArray[np.int16], x: npt.NDArray[np.uint16]):
+        r"""Updates the Ttest estimation with new data.
 
         This method may be called multiple times.
 
         Parameters
         ----------
-        l :
-            Array that contains the signal. The array must be of dimension
+        traces :
+            Array that contains the traces. The array must be of dimension
             `(n, ns)`.
         x :
             Set in which each trace belongs. Must be of shape `(n,)` and must
             contain only `0` and `1`.
         """
-        scalib.utils.assert_traces(l, self._ns)
+        scalib.utils.assert_traces(traces, self._ns)
         scalib.utils.assert_classes(x, multi=False)
         if not self._init:
             self._init = True
-            self._ns = l.shape[1]
+            self._ns = traces.shape[1]
             self._ttest = _scalib_ext.Ttest(self._ns, self._d)
-        if l.shape[0] != x.shape[0]:
+        if traces.shape[0] != x.shape[0]:
             raise ValueError(
-                f"Number of traces {l.shape[0]} does not match size of classes array {x.shape[0]}."
+                f"Number of traces {traces.shape[0]} does not match size of classes array {x.shape[0]}."
             )
         with scalib.utils.interruptible():
-            self._ttest.update(l, x, get_config())
+            self._ttest.update(traces, x, get_config())
 
-    def get_ttest(self):
+    def get_ttest(self) -> npt.NDArray[np.float64]:
         r"""Return the current Ttest estimation with an array of shape `(d,ns)`."""
         if not self._init:
             raise ValueError("Need to call .fit_u at least once.")
@@ -203,9 +203,9 @@ class MTtest:
     >>> traces = np.random.randint(0,256,(100,200),dtype=np.int16)
     >>> # Take as POIs each point in the trace combined with any of the 10 following samples.
     >>> pois = np.array([[x, x+d] for x in range(200) for d in range(10) if x + d < 200], dtype=np.uint32).T
-    >>> X = np.random.randint(0,2,100,dtype=np.uint16)
+    >>> x = np.random.randint(0,2,100,dtype=np.uint16)
     >>> mttest = MTtest(d=2,pois=pois)
-    >>> mttest.fit_u(traces,X)
+    >>> mttest.fit_u(traces,x)
     >>> t = mttest.get_ttest()
 
     """
@@ -217,27 +217,27 @@ class MTtest:
 
         self._mttest = _scalib_ext.MTtest(d, self._pois)
 
-    def fit_u(self, l: npt.NDArray[np.int16], x: npt.NDArray[np.uint16]):
-        r"""Updates the MTtest estimation with samples of `l` for the sets `x`.
+    def fit_u(self, traces: npt.NDArray[np.int16], x: npt.NDArray[np.uint16]):
+        r"""Updates the MTtest estimation with new traces.
         This method may be called multiple times.
 
         Parameters
         ----------
-        l :
+        traces :
             Array that contains the signal. The array must
             be of dimension `(n, ns)`.
         x :
             Set in which each trace belongs. Must be of shape `(n,)`
             and must contain only `0` and `1`.
         """
-        scalib.utils.assert_traces(l)
+        scalib.utils.assert_traces(traces)
         scalib.utils.assert_classes(x, multi=False)
-        if x.shape[0] != l.shape[0]:
+        if x.shape[0] != traces.shape[0]:
             raise ValueError(
-                f"Number of traces {l.shape[0]} does not match size of classes array {x.shape[0]}."
+                f"Number of traces {traces.shape[0]} does not match size of classes array {x.shape[0]}."
             )
         with scalib.utils.interruptible():
-            self._mttest.update(l, x, get_config())
+            self._mttest.update(traces, x, get_config())
 
     def get_ttest(self) -> npt.NDArray[np.float64]:
         r"""Return the current MTtest estimation with an array of shape

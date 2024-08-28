@@ -1,5 +1,3 @@
-import os
-
 import numpy as np
 import numpy.typing as npt
 
@@ -49,13 +47,16 @@ class LDAClassifier:
     -------
     >>> from scalib.modeling import LDAClassifier
     >>> import numpy as np
-    >>> x = np.random.randint(0,256,(5000,10),dtype=np.int16)
-    >>> y = np.random.randint(0,256,5000,dtype=np.uint16)
-    >>> lda = LDAClassifier(256,3,10)
-    >>> lda.fit_u(x,y, 0)
+    >>> # 5000 traces of length 10, with value between 0 and 255
+    >>> traces = np.random.randint(0,256,(5000,10),dtype=np.int16)
+    >>> # classes between 0 and 15
+    >>> x = np.random.randint(0,16,5000,dtype=np.uint16)
+    >>> lda = LDAClassifier(16,3)
+    >>> lda.fit_u(traces, x)
     >>> lda.solve()
-    >>> x = np.random.randint(0,256,(20,10),dtype=np.int16)
-    >>> predicted_proba = lda.predict_proba(x)
+    >>> # predict classes for new traces
+    >>> nt = np.random.randint(0,256,(20,10),dtype=np.int16)
+    >>> predicted_proba = lda.predict_proba(nt)
 
     Notes
     -----
@@ -89,38 +90,43 @@ class LDAClassifier:
             raise ValueError("p must be at most nc")
 
     def fit_u(
-        self, l: npt.NDArray[np.int16], x: npt.NDArray[np.uint16], gemm_mode: int = 1
+        self,
+        traces: npt.NDArray[np.int16],
+        x: npt.NDArray[np.uint16],
+        gemm_mode: int = 1,
     ):
         r"""Update statistical model estimates with fresh data.
 
         Parameters
         ----------
-        l :
+        traces :
             Array that contains the traces. The array must
             be of dimension `(n,ns)` and its type must be `int16`.
         x :
             Labels for each trace. Must be of shape `(n)` and
             must be `uint16`.
-        gemm_mode: (default 1)
-            0: use matrixmultiply matrix multiplication.
-            n>0: use n threads with BLIS matrix multiplication.
+        gemm_mode:
+            If 0: use matrixmultiply matrix multiplication.
+            If n>0: use n threads with BLIS matrix multiplication.
             BLIS is only used on linux. Matrixmultiply is always used on other
             OSes.
             The BLIS threads (if > 1) do not belong to the SCALib threadpool.
         """
-        scalib.utils.assert_traces(l, self._ns)
+        scalib.utils.assert_traces(traces, self._ns)
         scalib.utils.assert_classes(x, multi=False)
+        if self.done:
+            raise ValueError("Cannot fit_u after calling .solve(..., done=True).")
         if not self._init:
             self._init = True
-            self._ns = l.shape[1]
+            self._ns = traces.shape[1]
             self.acc = _scalib_ext.LdaAcc(self._nc, self._ns)
         # TODO maybe there is something smarter to do here w.r.t. number of
         # threads + investigate exact BLIS behavior.
         with scalib.utils.interruptible():
-            self.acc.fit(l, x, gemm_mode, get_config())
+            self.acc.fit(traces, x, gemm_mode, get_config())
         self.solved = False
 
-    def solve(self, done=False):
+    def solve(self, done: bool = False):
         r"""Estimates the PDF parameters that is the projection matrix
         :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
         :math:`\mathbf{\Sigma}`.
@@ -128,7 +134,8 @@ class LDAClassifier:
         Parameters
         ----------
         done :
-            True if the object will not be futher updated.
+            True if the object will not be futher updated (clears some internal
+            state, saving memory).
 
         Notes
         -----
@@ -136,9 +143,10 @@ class LDAClassifier:
         """
         if not self._init:
             raise ValueError("Cannot .solve since .fit_u was never called.")
-        assert (
-            not self.done
-        ), "Calling LDA.solve() after done flag has been set is not allowed."
+        if self.solved:
+            raise ValueError(
+                "Already called .solve() on this object, should not be called twice."
+            )
         with scalib.utils.interruptible():
             self.lda = self.acc.lda(self.p, get_config())
         self.solved = True
@@ -147,13 +155,12 @@ class LDAClassifier:
         if done:
             del self.acc
 
-    def predict_proba(self, l: npt.NDArray[np.int16]) -> npt.NDArray[np.float64]:
-        r"""Computes the probability for each of the classes for the traces
-        contained in `l`.
+    def predict_proba(self, traces: npt.NDArray[np.int16]) -> npt.NDArray[np.float64]:
+        r"""Computes the probability for each of the classes for the traces.
 
         Parameters
         ----------
-        l :
+        traces :
             Array that contains the traces. The array must be of dimension `(n,ns)`.
 
         Returns
@@ -161,11 +168,12 @@ class LDAClassifier:
         array_like, f64
             Probabilities. Shape `(n, nc)`.
         """
-        assert (
-            self.solved
-        ), "Call LDA.solve() before LDA.predict_proba() to compute the model."
+        if not self.solved:
+            raise ValueError(
+                "Call LDA.solve() before LDA.predict_proba() to compute the model."
+            )
         with scalib.utils.interruptible():
-            prs = self.lda.predict_proba(l, get_config())
+            prs = self.lda.predict_proba(traces, get_config())
         return prs
 
     def __getstate__(self):
@@ -179,7 +187,7 @@ class LDAClassifier:
         return dic
 
     def __setstate__(self, state):
-        for k, v in state:
+        for k, v in state.items():
             setattr(self, k, v)
 
         if "acc" in state:
@@ -216,46 +224,41 @@ class MultiLDA:
         Shape `(nv,)`.
     pois: list of array_like, int
         Indices of the POIs in the traces for each variable. That is, for
-        variable `i`, and training trace `t`, `t[pois[i]]` is the input
+        variable ``i``, and training trace ``t``, ``t[pois[i]]`` is the input
         datapoints for the LDA.
-    gemm_mode: int
-        0: use matrixmultiply matrix multiplication.
-        n>0: use n threads with BLIS matrix multiplication.
-        BLIS is only used on linux. Matrixmultiply is always used on other
-        OSes.
+    gemm_mode:
+        See :func:`LDACLassifier.fit_u`.
 
     Examples
     --------
     >>> from scalib.modeling import MultiLDA
     >>> import numpy as np
     >>> # 5000 traces with 50 points each
-    >>> x = np.random.randint(0, 256, (5000,50),dtype=np.int16)
+    >>> traces = np.random.randint(0, 256, (5000,50),dtype=np.int16)
     >>> # 5 variables (8-bit), and 5000 traces
-    >>> y = np.random.randint(0, 256, (5000, 5),dtype=np.uint16)
+    >>> x = np.random.randint(0, 256, (5000, 5),dtype=np.uint16)
     >>> # 10 POIs for each of the 5 variables
     >>> pois = [list(range(7*i, 7*i+10)) for i in range(5)]
     >>> # Keep 3 dimensions after dimensionality reduction
     >>> lda = MultiLDA(5*[256], 5*[3], pois)
-    >>> lda.fit_u(x, y)
+    >>> lda.fit_u(traces, x)
     >>> lda.solve()
     >>> # Predict the class for 20 traces.
-    >>> x = np.random.randint(0, 256, (20, 50), dtype=np.int16)
-    >>> predicted_proba = lda.predict_proba(x)
+    >>> nt = np.random.randint(0, 256, (20, 50), dtype=np.int16)
+    >>> predicted_proba = lda.predict_proba(nt)
     """
 
-    def __init__(self, ncs, ps, pois, gemm_mode=1):
+    def __init__(self, ncs, ps, pois, gemm_mode: int = 1):
         self.pois = pois
         self.gemm_mode = gemm_mode
-        self.ldas = [
-            LDAClassifier(nc, p, len(poi)) for nc, p, poi in zip(ncs, ps, pois)
-        ]
+        self.ldas = [LDAClassifier(nc, p) for nc, p in zip(ncs, ps)]
 
-    def fit_u(self, l, x):
+    def fit_u(self, traces, x):
         """Update the LDA estimates with new training data.
 
         Parameters
         ----------
-        l : array_like, int16
+        traces : array_like, int16
             Array that contains the traces. The array must
             be of dimension `(n,ns)` and its type must be `int16`.
         x : array_like, uint16
@@ -271,13 +274,15 @@ class MultiLDA:
                 list(
                     executor.map(
                         lambda i: self.ldas[i].fit_u(
-                            l[:, self.pois[i]], x[:, i], self.gemm_mode
+                            np.ascontiguousarray(traces[:, self.pois[i]]),
+                            x[:, i],
+                            self.gemm_mode,
                         ),
                         range(len(self.ldas)),
                     )
                 )
 
-    def solve(self, done=False):
+    def solve(self, done: bool = False):
         """See `LDAClassifier.solve`."""
         # Put as much work as needed to fill rayon threadpool
         with scalib.utils.interruptible():
@@ -286,12 +291,14 @@ class MultiLDA:
             ) as executor:
                 list(executor.map(lambda lda: lda.solve(done), self.ldas))
 
-    def predict_proba(self, l):
+    def predict_proba(self, traces):
         """Predict probabilities for all variables.
+
+        See `LDAClassifier.predict_proba`.
 
         Parameters
         ----------
-        l : array_like, int16
+        traces : array_like, int16
             Array that contains the traces. The array must
             be of dimension `(n,ns)`.
 
@@ -299,7 +306,6 @@ class MultiLDA:
         -------
         list of array_like, f64
             Probabilities. `nv` arrays of shape `(n, nc)`.
-        See `LDAClassifier.solve`.
         """
         # Put as much work as needed to fill rayon threadpool
         with scalib.utils.interruptible():
@@ -308,7 +314,7 @@ class MultiLDA:
             ) as executor:
                 return list(
                     executor.map(
-                        lambda i: self.ldas[i].predict_proba(l[:, self.pois[i]]),
+                        lambda i: self.ldas[i].predict_proba(traces[:, self.pois[i]]),
                         range(len(self.ldas)),
                     )
                 )
