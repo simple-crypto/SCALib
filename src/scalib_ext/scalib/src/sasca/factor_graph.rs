@@ -70,8 +70,13 @@ pub(super) enum ExprFactor {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) enum GenFactorOperand {
-    Var(usize, bool),
-    Pub(usize),
+    Var {
+        factor_edge_id: usize,
+        negated: bool,
+    },
+    Pub {
+        pub_id: usize,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -374,8 +379,10 @@ impl FactorGraph {
                     let ops: Vec<&PublicValue> = operands
                         .iter()
                         .map(|op| match op {
-                            GenFactorOperand::Var(idx, ..) => &var_assignments[*idx],
-                            GenFactorOperand::Pub(idx) => &public_values[*idx],
+                            GenFactorOperand::Var { factor_edge_id, .. } => {
+                                &var_assignments[*factor_edge_id]
+                            }
+                            GenFactorOperand::Pub { pub_id } => &public_values[*pub_id],
                         })
                         .collect();
                     let nmulti_ops = ops.iter().find_map(|op| {

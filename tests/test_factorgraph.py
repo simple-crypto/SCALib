@@ -1828,3 +1828,27 @@ def test_factor_not_pub():
         bp.bp_acyclic("B")
         result = bp.get_distribution("B")
         assert np.argmax(result) == (nc - 1) ^ a
+
+
+def test_factor_gen_pub():
+    nc = 2
+    graph_desc = f"""
+        NC {nc}
+        PUB SINGLE A
+        VAR SINGLE B
+        GENERIC SINGLE NOT
+        PROPERTY NOT(A,B)
+        """
+    fg = FactorGraph(graph_desc)
+    not_factors = [
+        GenFactor.sparse_functional(
+            np.array([(a, (nc - 1) ^ a) for a in range(nc)], dtype=np.uint32)
+        ),
+        GenFactor.dense(np.array([[0, 1], [1, 0]], dtype=np.float64)),
+    ]
+    for nf in not_factors:
+        for a in range(nc):
+            bp = BPState(fg, 1, public_values={"A": a}, gen_factors={"NOT": nf})
+            bp.bp_acyclic("B")
+            result = bp.get_distribution("B")
+            assert np.argmax(result) == (nc - 1) ^ a

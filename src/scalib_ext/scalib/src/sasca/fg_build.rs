@@ -200,10 +200,13 @@ impl fg::FactorGraph {
                 let mut operands = Vec::new();
                 for (i, p) in is_pub.iter().enumerate() {
                     if *p {
-                        operands.push(fg::GenFactorOperand::Pub(n_pubs));
+                        operands.push(fg::GenFactorOperand::Pub { pub_id: n_pubs });
                         n_pubs += 1;
                     } else {
-                        operands.push(fg::GenFactorOperand::Var(n_vars, vars[i].neg));
+                        operands.push(fg::GenFactorOperand::Var {
+                            factor_edge_id: n_vars,
+                            negated: vars[i].neg,
+                        });
                         n_vars += 1;
                     }
                 }

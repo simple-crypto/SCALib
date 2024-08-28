@@ -3,6 +3,8 @@ use std::sync::Arc;
 use itertools::Itertools;
 use thiserror::Error;
 
+use crate::sasca::factor_graph::GenFactorOperand;
+
 use super::factor_graph as fg;
 use super::factor_graph::{
     EdgeId, EdgeSlice, EdgeVec, ExprFactor, Factor, FactorGraph, FactorId, FactorKind, FactorVec,
@@ -915,6 +917,7 @@ fn factor_gen_factor<'a>(
     };
     let res: Vec<Distribution> = dest.iter().map(|dest| {
         let dest_idx = factor.edges.get_index_of(dest).unwrap();
+        let op_dest_idx = operands.iter().position(|op| if let GenFactorOperand::Var { factor_edge_id, .. } = op { *factor_edge_id == dest_idx } else { false }).expect("must have dest operand");
         let mut distr = belief_from_var[factor.edges[dest_idx]].clone();
         distr.ensure_full();
         let nmulti_actual = if factor.multi { nmulti } else { 1 };
@@ -928,10 +931,10 @@ fn factor_gen_factor<'a>(
                     assert_eq!(gen_factor.shape().len(), operands.len());
                     // First slice the array with the constants.
                     let gen_factor = gen_factor.slice_each_axis(|ax| match operands[ax.axis.index()] {
-                        fg::GenFactorOperand::Var(_, _) => ndarray::Slice::new(0, None, 1),
-                        fg::GenFactorOperand::Pub(pub_idx) => {
-                            let mut pub_val = public_values[factor.publics[pub_idx].0].get(i) as isize;
-                            if factor.publics[pub_idx].1 {
+                        fg::GenFactorOperand::Var { ..} => ndarray::Slice::new(0, None, 1),
+                        fg::GenFactorOperand::Pub { pub_id } => {
+                            let mut pub_val = public_values[factor.publics[pub_id].0].get(i) as isize;
+                            if factor.publics[pub_id].1 {
                                 if nc.is_power_of_two() {
                                     pub_val = !pub_val;
                                 } else {
@@ -944,12 +947,12 @@ fn factor_gen_factor<'a>(
                     });
                     let mut gen_factor = gen_factor.to_owned();
                     for (op_idx, op) in operands.iter().enumerate() {
-                        if op_idx != dest_idx {
-                            if let fg::GenFactorOperand::Var(var_idx, neg) = op {
-                                if *neg {
+                        if let fg::GenFactorOperand::Var { factor_edge_id, negated } = op {
+                            if *factor_edge_id != dest_idx {
+                                if *negated {
                                     todo!("Negated operands on generalized factors not yet implemented.");
                                 }
-                                let distr = &belief_from_var[factor.edges[*var_idx]];
+                                let distr = &belief_from_var[factor.edges[*factor_edge_id]];
                                 let mut new_gen_factor: ndarray::ArrayD<f64> = ndarray::ArrayD::zeros(gen_factor.slice_axis(ndarray::Axis(op_idx), ndarray::Slice::new(0, Some(1), 1)).shape());
                                 if let Some(distr) = distr.value() {
                                     for (d, gf) in distr.slice(s![i,..]).iter().zip(gen_factor.axis_chunks_iter(ndarray::Axis(op_idx), 1)) {
@@ -965,10 +968,10 @@ fn factor_gen_factor<'a>(
                         }
                     }
                     // Drop useless axes.
-                    for _ in 0..dest_idx {
+                    for _ in 0..op_dest_idx {
                         gen_factor.index_axis_inplace(ndarray::Axis(0), 0);
                     }
-                    for _ in (dest_idx+1)..operands.len() {
+                    for _ in (op_dest_idx+1)..operands.len() {
                         gen_factor.index_axis_inplace(ndarray::Axis(1), 0);
                     }
                     distr.value_mut().unwrap().slice_mut(s![i,..]).assign(&gen_factor);
@@ -980,12 +983,12 @@ fn factor_gen_factor<'a>(
                     dest.fill(0.0);
                     for op_values in gen_factor.outer_iter() {
                         let mut res = 1.0;
-                        for (op_idx, (op, val)) in operands.iter().zip(op_values.iter()).enumerate() {
-                            if op_idx != dest_idx {
-                                match op {
-                                    fg::GenFactorOperand::Var(var_idx, neg) => {
+                        for (op, val) in operands.iter().zip(op_values.iter()) {
+                            match op {
+                                fg::GenFactorOperand::Var { factor_edge_id, negated} => {
+                                    if *factor_edge_id != dest_idx {
                                         let mut val = *val;
-                                        if *neg {
+                                        if *negated {
                                             if nc.is_power_of_two() {
                                                 val = !val & ((nc - 1) as ClassVal);
                                             } else {
@@ -993,30 +996,30 @@ fn factor_gen_factor<'a>(
                                                 panic!("Cannot negate operands with non-power-of-two number of classes.");
                                             }
                                         }
-                                        let distr = &belief_from_var[factor.edges[*var_idx]];
+                                        let distr = &belief_from_var[factor.edges[*factor_edge_id]];
                                         // For uniform, we implicitly multiply by 1.0
                                         if let Some(distr) = distr.value() {
                                             res *= distr[(i, val as usize)];
                                         }
                                     }
-                                    fg::GenFactorOperand::Pub(pub_idx) => {
-                                        let mut pub_val = public_values[factor.publics[*pub_idx].0].get(i);
-                                        if factor.publics[*pub_idx].1 {
-                                            if nc.is_power_of_two() {
-                                                pub_val = !pub_val & ((nc - 1) as ClassVal);
-                                            } else {
-                                                // TODO Check that we enforce this at graph creation time and return a proper error.
-                                                panic!("Cannot negate operands with non-power-of-two number of classes.");
-                                            }
+                                }
+                                fg::GenFactorOperand::Pub{pub_id} => {
+                                    let mut pub_val = public_values[factor.publics[*pub_id].0].get(i);
+                                    if factor.publics[*pub_id].1 {
+                                        if nc.is_power_of_two() {
+                                            pub_val = !pub_val & ((nc - 1) as ClassVal);
+                                        } else {
+                                            // TODO Check that we enforce this at graph creation time and return a proper error.
+                                            panic!("Cannot negate operands with non-power-of-two number of classes.");
                                         }
-                                        if pub_val != *val {
-                                            res = 0.0;
-                                        }
+                                    }
+                                    if pub_val != *val {
+                                        res = 0.0;
                                     }
                                 }
                             }
                         }
-                        dest[op_values[dest_idx] as usize] += res;
+                        dest[op_values[op_dest_idx] as usize] += res;
                     }
                 }
             }
