@@ -1,7 +1,6 @@
 import pytest
 from scalib.metrics import Ttest
 import numpy as np
-import scipy.stats
 
 
 def reference(traces, x, D):
@@ -53,7 +52,7 @@ def test_ttest_d1():
     traces += m[labels]
 
     t_ref = reference(traces, labels, d)
-    ttest = Ttest(ns, 1)
+    ttest = Ttest(1)
     ttest.fit_u(traces, labels)
     t = ttest.get_ttest()
     assert np.allclose(t_ref, t, rtol=1e-3)
@@ -71,7 +70,7 @@ def test_ttest_d2():
     traces += m[labels]
 
     t_ref = reference(traces, labels, d)
-    ttest = Ttest(ns, d)
+    ttest = Ttest(d)
     ttest.fit_u(traces, labels)
     t = ttest.get_ttest()
     assert np.allclose(t_ref, t, rtol=1e-3)
@@ -89,7 +88,7 @@ def test_ttest_d6_multiple_fit():
     traces += m[labels]
 
     t_ref = reference(traces, labels, d)
-    ttest = Ttest(ns, d)
+    ttest = Ttest(d)
     for i in range(0, n, 10):
         ttest.fit_u(traces[i : i + 10, :], labels[i : i + 10])
     t = ttest.get_ttest()
@@ -108,24 +107,7 @@ def test_ttest_d6():
     traces += m[labels]
 
     t_ref = reference(traces, labels, d)
-    ttest = Ttest(ns, d)
+    ttest = Ttest(d)
     ttest.fit_u(traces, labels)
     t = ttest.get_ttest()
     assert np.allclose(t_ref, t, rtol=1e-3)
-
-
-def test_ttest_data_transpose():
-    ns = 100
-    d = 1
-    nc = 2
-    n = 200
-
-    m = np.random.randint(0, 2, (nc, ns))
-    traces = np.asfortranarray(np.random.randint(0, 10, (n, ns), dtype=np.int16))
-    labels = np.random.randint(0, nc, n, dtype=np.uint16)
-    traces += m[labels]
-
-    t_ref = reference(traces, labels, d)
-    ttest = Ttest(ns, 1)
-    with pytest.raises(ValueError):
-        ttest.fit_u(traces, labels)

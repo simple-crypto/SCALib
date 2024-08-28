@@ -39,7 +39,7 @@ def rlda_inner_test(ns, n_components, nb, nv):
         test_traces += m[v, test_labels[v]]
 
     ## Run SCALib RLDA and compare projection matrices
-    rlda = RLDAClassifier(nb, ns, nv, n_components)
+    rlda = RLDAClassifier(nb, n_components)
     rlda.fit_u(traces, labels.T, 1)
     rlda.solve()
 
@@ -90,7 +90,6 @@ def test_information():
     ns = 6
     n_components = 3
     nb = 8
-    nv = 1
     nc = 2**nb
     n_model = 2000
     n_test = 2000
@@ -106,7 +105,7 @@ def test_information():
     test_labels = np.random.randint(0, nc, n_test, dtype=np.uint16)
     test_traces += m[test_labels]
 
-    rlda = RLDAClassifier(nb, ns, nv, n_components)
+    rlda = RLDAClassifier(nb, n_components)
     rlda.fit_u(traces, labels[:, np.newaxis], 1)
     rlda.solve()
     prs = rlda.predict_proba(test_traces, 0)
@@ -124,10 +123,8 @@ def test_rlda_fail_empty_classes():
     ns = 6
     n_components = 3
     nb = 8
-    nv = 1
     nc = 2**nb
     n_model = 2000
-    n_test = 2000
     noise = 30
     # Generate profiling data
     m = np.ones((nc, ns), dtype=np.int16)
@@ -139,7 +136,7 @@ def test_rlda_fail_empty_classes():
     # make sure some bits have always the same value, here zero
     labels &= (nc >> 2) - 1
 
-    rlda = RLDAClassifier(nb, ns, nv, n_components)
+    rlda = RLDAClassifier(nb, n_components)
     rlda.fit_u(traces, labels[:, np.newaxis], 1)
 
     with pytest.raises(ScalibError):

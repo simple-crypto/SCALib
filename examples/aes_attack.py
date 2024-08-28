@@ -1,4 +1,4 @@
-from scalib.metrics import SNR, Ttest
+from scalib.metrics import SNR
 from scalib.modeling import LDAClassifier
 from scalib.attacks import FactorGraph, BPState
 from scalib.postprocessing import rank_accuracy
@@ -39,7 +39,7 @@ def main():
         x[:, i] = labels_p[f"x{i}"]
 
     # estimate SNR
-    snr = SNR(nc=nc, ns=ns, np=16)
+    snr = SNR(nc=nc)
     snr.fit_u(traces_p, x)
     snr_val = snr.get_snr()
 
@@ -53,8 +53,11 @@ def main():
     print("    3.1 Build LDAClassifier for each xi")
     models = []
     for i in range(16):
-        lda = LDAClassifier(nc=nc, ns=npoi, p=1)
-        lda.fit_u(l=traces_p[:, pois[i]], x=labels_p[f"x{i}"].astype(np.uint16))
+        lda = LDAClassifier(nc=nc, p=1)
+        lda.fit_u(
+            traces=np.ascontiguousarray(traces_p[:, pois[i]]),
+            x=labels_p[f"x{i}"].astype(np.uint16),
+        )
         lda.solve()
         models.append(lda)
 
@@ -113,7 +116,7 @@ def main():
         distribution = bp.get_distribution(f"k{i}")
 
         guess_key.append(np.argmax(distribution))
-        ranks.append(256 - np.where(np.argsort(distribution) == sk)[0])
+        ranks.append(256 - (np.argsort(distribution) == sk).nonzero()[0][0])
 
         secret_key.append(sk)
         key_distribution.append(distribution)
@@ -124,7 +127,7 @@ def main():
     print("        key byte ranks  :", " ".join(["%3d" % (x) for x in ranks]))
     print("")
 
-    print(f"   5.2 Estimate full log2 key rank:")
+    print("   5.2 Estimate full log2 key rank:")
     key_distribution = np.array(key_distribution)
 
     # Scores are negative log-likelihoods.
@@ -139,4 +142,5 @@ def main():
 
 
 if __name__ == "__main__":
+    print("attack")
     main()

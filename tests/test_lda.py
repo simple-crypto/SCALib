@@ -34,7 +34,7 @@ def test_lda_pickle():
     labels = np.random.randint(0, nc, n, dtype=np.uint16)
     traces += m[labels]
 
-    lda = LDAClassifier(nc, n_components, ns)
+    lda = LDAClassifier(nc, n_components)
     lda.fit_u(traces, labels, 1)
     lda.solve()
 
@@ -99,7 +99,7 @@ def test_lda():
     labels = np.random.randint(0, nc, n, dtype=np.uint16)
     traces += m[labels]
 
-    lda = LDAClassifier(nc, n_components, ns)
+    lda = LDAClassifier(nc, n_components)
     lda.fit_u(traces, labels, 1)
     lda.solve()
 
@@ -147,7 +147,7 @@ def test_lda_noproj():
     labels = np.random.randint(0, nc, n, dtype=np.uint16)
     traces += m[labels]
 
-    lda = LDAClassifier(nc, n_components, ns)
+    lda = LDAClassifier(nc, n_components)
     lda.fit_u(traces, labels, 1)
     lda.solve()
 
@@ -169,7 +169,7 @@ def test_lda_fail_bad_traces():
     n = 100
     ns = 6
     nc = 4
-    lda = LDAClassifier(nc, 3, ns)
+    lda = LDAClassifier(nc, 3)
     traces_bad = np.random.randint(0, 1, (n, ns), dtype=np.int16)
     y = np.random.randint(0, nc, n, dtype=np.uint16)
     lda.fit_u(traces_bad, y, 0)

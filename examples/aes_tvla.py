@@ -1,9 +1,6 @@
-from scalib.metrics import SNR, Ttest
-from scalib.modeling import LDAClassifier
-from scalib.attacks import FactorGraph, BPState
-from scalib.postprocessing import rank_accuracy
+from scalib.metrics import Ttest
 
-from utils import sbox, gen_traces
+from utils import gen_traces
 import numpy as np
 
 
@@ -18,7 +15,7 @@ def main():
     traces_rk, _ = gen_traces(ntraces, std, random_key=True, random_plaintext=False)
     traces_fk, _ = gen_traces(ntraces, std, random_key=False, random_plaintext=False)
     # Ttest needs the lenght of the traces, and the test order (here, two)
-    ttest = Ttest(traces_rk.shape[1], 2)
+    ttest = Ttest(2)
     # Ttest can be updated multiple times, and the order of the updates does not matter.
     ttest.fit_u(traces_rk, np.zeros((traces_rk.shape[0],), dtype=np.uint16))
     ttest.fit_u(traces_fk, np.ones((traces_fk.shape[0],), dtype=np.uint16))

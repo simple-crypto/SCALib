@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 
 from scalib import _scalib_ext
 from scalib.config import get_config
@@ -24,10 +25,6 @@ class SNR:
     nc : int
         Number of possible values for the random variable :math:`X` (e.g., 256 for 8-bit
         target). `nc` must be between :math:`2` and :math:`2^{16}` (included).
-    ns : int
-        Number of samples in a single trace.
-    np : int
-        Number of independent variables `X` for which SNR must be estimated.
     use_64bit : bool (default False)
         Use 64 bits for intermediate sums instead of 32 bits.
         When using 64-bit sums, SNR can accumulate up to :math:`2^{32}` traces, while when
@@ -47,9 +44,9 @@ class SNR:
     >>> # 500 traces of 200 points, 8-bit samples
     >>> traces = np.random.randint(0,256,(500,200),dtype=np.int16)
     >>> # 10 variables on 4 bit (16 classes = 2^4)
-    >>> X = np.random.randint(0,16,(500,10),dtype=np.uint16)
-    >>> snr = SNR(16,200,10)
-    >>> snr.fit_u(traces,X)
+    >>> x = np.random.randint(0,16,(500,10),dtype=np.uint16)
+    >>> snr = SNR(nc=16)
+    >>> snr.fit_u(traces,x)
     >>> snr_val = snr.get_snr()
 
     Notes
@@ -59,50 +56,50 @@ class SNR:
 
     """
 
-    def __init__(self, nc, ns, np=1, use_64bit=False):
+    def __init__(self, nc: int, use_64bit: bool = False):
         if nc not in range(2, 2**16 + 1):
             raise ValueError(
-                f"SNR can be computed on max 16 bit variable (and at least 2 classes), {nc=} given."
+                "SNR can be computed on max 16 bit variable (and at least 2 classes),"
+                f" {nc=} given."
             )
+        self._nc = nc
+        self._ns = None
+        self._nv = None
+        self._use_64bit = use_64bit
+        self._init = False
 
-        self._ns = ns
-        self._np = np
-        self._snr = _scalib_ext.SNR(nc, ns, np, use_64bit)
-
-    def fit_u(self, l, x):
-        r"""Updates the SNR estimation with samples of `l` for the classes `x`.
+    def fit_u(self, traces: npt.NDArray[np.int16], x: npt.NDArray[np.uint16]):
+        r"""Updates the SNR estimation with samples of `traces` for the classes `x`.
         This method may be called multiple times.
 
         Parameters
         ----------
-        l : array_like, np.int16
-            Array that contains the signal. The array must
-            be of dimension `(n, ns)` and its type must be `np.int16`.
-        x : array_like, np.uint16
-            Labels for each trace. Must be of shape `(n, np)` and must be
-            `np.uint16`.
+        traces :
+            Array that contains the leakage traces. The array must be of
+            dimension `(n, ns)`.
+        x :
+            Labels for each trace. Must be of shape `(n, nv)`.
         """
-        if not isinstance(l, np.ndarray):
-            raise ValueError("l a numpy array")
-        if not isinstance(x, np.ndarray):
-            raise ValueError("x a numpy array")
-        nl, nsl = l.shape
-        nx, npx = x.shape
-        if l.dtype != np.int16:
-            raise ValueError("l must by array of np.int16")
-        if not (npx == self._np and nx == nl):
-            raise ValueError(f"Expected x with shape ({nl}, {self._np})")
-        if not (nsl == self._ns):
-            raise Exception(f"l is too long. Expected second dim of size {self._ns}.")
-        if not l.flags.c_contiguous:
-            raise Exception(f"l not a C-style array.")
+        traces = scalib.utils.clean_traces(traces, self._ns)
+        x = scalib.utils.clean_labels(x, self._nv)
+        if not self._init:
+            self._init = True
+            self._ns = traces.shape[1]
+            self._nv = x.shape[1]
+            self._snr = _scalib_ext.SNR(self._nc, self._ns, self._nv, self._use_64bit)
+        if x.shape[0] != traces.shape[0]:
+            raise ValueError(
+                f"Number of traces {traces.shape[0]} does not match size of classes array {x.shape[0]}."
+            )
         # _scalib_ext uses inverted axes for x.
         # we can copy when needed, as x should be small, so this should be cheap
-        x = x.transpose().astype(np.uint16, order="C", casting="equiv", copy=False)
+        x = np.ascontiguousarray(x.transpose())
         with scalib.utils.interruptible():
-            self._snr.update(l, x, get_config())
+            self._snr.update(traces, x, get_config())
 
-    def get_snr(self):
+    def get_snr(self) -> npt.NDArray[np.float64]:
         r"""Return the current SNR estimation with an array of shape `(np,ns)`."""
+        if not self._init:
+            raise ValueError("Need to call .fit_u at least once.")
         with scalib.utils.interruptible():
             return self._snr.get_snr(get_config())

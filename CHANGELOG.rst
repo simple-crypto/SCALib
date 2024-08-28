@@ -5,6 +5,10 @@ Changelog
 Not released
 ------------
 
+* **Breaking** change parameter names ``l`` to ``traces`` for many functions.
+* **Breaking** remove unnecessary parameters from initializers (e.g. trace
+  length where it can be inferred).
+
 v0.5.8 (2024/05/21)
 -------------------
 * Add ``scalib.preprocessing.Quantizer`` for conversions of floating-point

@@ -69,7 +69,7 @@ def snr_run(nc, nv, ns, n, use_64bit, batch=100):
     x, y = gen_snr_data(nv, nc, ns, n)
 
     # compute SNR with SCALib
-    snr = SNR(np=nv, nc=nc, ns=ns, use_64bit=use_64bit)
+    snr = SNR(nc=nc, use_64bit=use_64bit)
 
     n_samples = np.array([[(y[:, v] == c).sum() for c in range(nc)] for v in range(nv)])
 
@@ -119,11 +119,11 @@ def test_large_snr():
     traces = np.random.randint(0, 256, (ntraces, ns), dtype=np.int16)
     nb = 16
     X = np.random.randint(0, nb, (ntraces, nv), dtype=np.uint16)
-    snr = SNR(nb, ns, nv)
+    snr = SNR(nb)
     snr.fit_u(traces, X)
     snr.get_snr()
 
-    snr = SNR(nb - 1, ns, nv)
+    snr = SNR(nb - 1)
     with pytest.raises(ScalibError):
         snr.fit_u(traces, X)
 
@@ -132,6 +132,6 @@ def test_extreme_nc():
     # Issue #54
     for nc in (1, 2**16 + 1):
         with pytest.raises(Exception):
-            SNR(nc, 10, 1)
+            SNR(nc)
     for nc in (2, 2**16):
-        SNR(nc, 10, 1)
+        SNR(nc)
