@@ -92,8 +92,8 @@ class RLDAClassifier:
         x : array_like, uint64
             Labels for each trace. Shape `(n,nv)`.
         """
-        scalib.utils.assert_traces(traces, self._ns)
-        scalib.utils.assert_classes(x, self._nv, exp_type=np.uint64)
+        traces = scalib.utils.clean_traces(traces, self._ns)
+        x = scalib.utils.clean_labels(x, self._nv, exp_type=np.uint64)
         if not self._init:
             self._init = True
             self._ns = traces.shape[1]

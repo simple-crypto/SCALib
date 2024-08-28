@@ -141,8 +141,8 @@ class Ttest:
             Set in which each trace belongs. Must be of shape `(n,)` and must
             contain only `0` and `1`.
         """
-        scalib.utils.assert_traces(traces, self._ns)
-        scalib.utils.assert_classes(x, multi=False)
+        traces = scalib.utils.clean_traces(traces, self._ns)
+        x = scalib.utils.clean_labels(x, multi=False)
         if not self._init:
             self._init = True
             self._ns = traces.shape[1]
@@ -230,8 +230,8 @@ class MTtest:
             Set in which each trace belongs. Must be of shape `(n,)`
             and must contain only `0` and `1`.
         """
-        scalib.utils.assert_traces(traces)
-        scalib.utils.assert_classes(x, multi=False)
+        traces = scalib.utils.clean_traces(traces)
+        x = scalib.utils.clean_labels(x, multi=False)
         if x.shape[0] != traces.shape[0]:
             raise ValueError(
                 f"Number of traces {traces.shape[0]} does not match size of classes array {x.shape[0]}."

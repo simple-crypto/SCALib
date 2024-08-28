@@ -112,8 +112,8 @@ class LDAClassifier:
             OSes.
             The BLIS threads (if > 1) do not belong to the SCALib threadpool.
         """
-        scalib.utils.assert_traces(traces, self._ns)
-        scalib.utils.assert_classes(x, multi=False)
+        traces = scalib.utils.clean_traces(traces, self._ns)
+        x = scalib.utils.clean_labels(x, multi=False)
         if self.done:
             raise ValueError("Cannot fit_u after calling .solve(..., done=True).")
         if not self._init:

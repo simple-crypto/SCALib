@@ -31,25 +31,25 @@ def interruptible():
         yield
 
 
-def assert_traces(l: npt.NDArray[np.int16], ns=None):
-    if not isinstance(l, np.ndarray):
-        raise ValueError(f"The traces is not a numpy array. {type(l)}")
-    elif l.dtype != np.int16:
-        raise ValueError(f"The traces array has dtype {l.dtype}, expected np.int16.")
-    elif len(l.shape) != 2:
-        raise ValueError(f"The traces array has {len(l.shape)} dimensions, expected 2.")
-    elif ns is not None and l.shape[1] != ns:
+def clean_traces(traces: npt.NDArray[np.int16], ns=None):
+    if not isinstance(traces, np.ndarray):
+        raise ValueError(f"The traces is not a numpy array. {type(traces)}")
+    elif traces.dtype != np.int16:
         raise ValueError(
-            f"Traces length {l.shape[1]} does not match previously-fitted traces ({ns})."
+            f"The traces array has dtype {traces.dtype}, expected np.int16."
         )
-    elif not l.flags.c_contiguous:
+    elif len(traces.shape) != 2:
         raise ValueError(
-            "Expected l to be a contiguous (C memory order) array. "
-            "Use np.ascontiguousarray() to change memory representation."
+            f"The traces array has {len(traces.shape)} dimensions, expected 2."
         )
+    elif ns is not None and traces.shape[1] != ns:
+        raise ValueError(
+            f"Traces length {traces.shape[1]} does not match previously-fitted traces ({ns})."
+        )
+    return np.ascontiguousarray(traces)
 
 
-def assert_classes(x: npt.NDArray, nv=None, multi=True, exp_type=np.uint16):
+def clean_labels(x: npt.NDArray, nv=None, multi=True, exp_type=np.uint16):
     expected_dim = 2 if multi else 1
     if not isinstance(x, np.ndarray):
         raise ValueError("The classes is not a numpy array.")
@@ -63,3 +63,4 @@ def assert_classes(x: npt.NDArray, nv=None, multi=True, exp_type=np.uint16):
         raise ValueError(
             f"Number of variables {x.shape[1]} does not match  previously-fitted classes ({nv})."
         )
+    return x

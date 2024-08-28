@@ -80,8 +80,8 @@ class SNR:
         x :
             Labels for each trace. Must be of shape `(n, nv)`.
         """
-        scalib.utils.assert_traces(traces, self._ns)
-        scalib.utils.assert_classes(x, self._nv)
+        traces = scalib.utils.clean_traces(traces, self._ns)
+        x = scalib.utils.clean_labels(x, self._nv)
         if not self._init:
             self._init = True
             self._ns = traces.shape[1]
