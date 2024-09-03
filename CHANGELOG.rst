@@ -5,12 +5,17 @@ Changelog
 Not released
 ------------
 
+v0.6.0 (2024/09/03)
+-------------------
+
 * **Breaking** change parameter names ``l`` to ``traces`` for many functions.
 * **Breaking** remove unnecessary parameters from initializers (e.g. trace
   length where it can be inferred).
+* Fix misc. SASCA bugs with PUB, additions, generic factors
 
 v0.5.8 (2024/05/21)
 -------------------
+
 * Add ``scalib.preprocessing.Quantizer`` for conversions of floating-point
   traces to int.
 * Support modular subtractions (generalized summation) in FactorGraph.
