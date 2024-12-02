@@ -5,7 +5,7 @@ import numpy.typing as npt
 
 from scalib import _scalib_ext
 from scalib.config import get_config
-from scalib.modeling import RLDAClassifier
+from scalib.modeling import RLDAClassifier, LDAClassifier
 
 
 class RLDAInformationEstimator:
@@ -103,3 +103,16 @@ class RLDAInformationEstimator:
         Returns the deviation of the lower bound, the upper bound, and the number of traces used for the estimation.
         """
         raise self._inner.get_deviation()
+
+
+class InformationSolver:
+
+    def __init__(self, model: RLDAClassifier | LDAClassifier):
+        if isinstance(model, RLDAClassifier):
+            self._inner = _scalib_ext.ItSolver(model._inner)
+        elif isinstance(model, LDAClassifier):
+            self._inner = _scalib_ext.ItSolver(model.lda)
+        else:
+            raise ValueError(
+                "Expected model to be of type RLDAClassifier or LDAClassifier"
+            )

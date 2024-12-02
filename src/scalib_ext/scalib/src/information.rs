@@ -1,5 +1,6 @@
-use crate::rlda::RLDAClusteredModel;
-use ndarray::{Array1, ArrayView1, ArrayView2};
+use crate::lda::LDA;
+use crate::rlda::{RLDAClusteredModel, RLDA};
+use ndarray::{Array1, Array2, ArrayView1, ArrayView2, Axis};
 use std::sync::Arc;
 
 /// Implementation of information estimator
@@ -83,5 +84,69 @@ impl ItEstimator {
             self.sum_prs2_h / self.n as f64 - f64::powi(self.sum_prs_h / self.n as f64, 2),
         );
         return (dev_l, dev_h, self.n);
+    }
+}
+
+pub enum LDAModel {
+    LDA(Arc<LDA>),
+    RLDA(Arc<RLDA>),
+}
+/// Implementation of information solver
+/// Computes the perceived or training information exactly.
+/// It computes the information using
+///     I(X,L) = H(X) + 1/n sum_i=0^n log2(Pr(X=x_i,l_i))
+/// This method is suited for models with a small number of classes
+pub struct ItSolver {
+    model: LDAModel,
+    n: usize,
+    sum_prs: f64,
+    sum_prs2: f64,
+}
+
+impl ItSolver {
+    pub fn new(model: LDAModel) -> Self {
+        Self {
+            model: match model {
+                LDAModel::LDA(a) => LDAModel::LDA(a.clone()),
+                LDAModel::RLDA(a) => LDAModel::RLDA(a.clone()),
+            },
+            n: 0,
+            sum_prs: 0.0f64,
+            sum_prs2: 0.0f64,
+        }
+    }
+
+    pub fn fit_u(&mut self, traces: ArrayView2<i16>, var_num: Option<usize>) {
+        let prs = match &self.model {
+            LDAModel::LDA(m) => m.predict_proba(traces),
+            LDAModel::RLDA(m) => {
+                m.predict_proba(traces, var_num.expect("RLDA requires a variable index"))
+            }
+        };
+
+        let sum_sum_sq = |array: &Array2<f64>| {
+            array
+                .iter()
+                .cloned()
+                .map(f64::log2)
+                .fold((0.0, 0.0), |(acc, acc_sq), x| (acc + x, acc_sq + x * x))
+        };
+        let (sum, sum_sq) = sum_sum_sq(&prs);
+        self.sum_prs += sum;
+        self.sum_prs2 += sum_sq;
+        self.n += prs.shape()[0];
+    }
+
+    pub fn get_information(&self) -> f64 {
+        let entropy = match &self.model {
+            LDAModel::LDA(m) => f64::log2(m.nc as f64),
+            LDAModel::RLDA(m) => m.nb as f64,
+        };
+        entropy + (self.sum_prs / self.n as f64)
+    }
+
+    pub fn get_deviation(&self) -> (f64, usize) {
+        let dev = self.sum_prs2 / self.n as f64 - f64::powi(self.sum_prs / self.n as f64, 2);
+        (dev, self.n)
     }
 }

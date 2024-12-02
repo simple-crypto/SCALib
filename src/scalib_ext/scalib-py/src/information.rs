@@ -1,5 +1,8 @@
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
+use scalib::{information::LDAModel, lda::LDA};
+use std::sync::Arc;
+use crate::rlda::RLDA;
 
 #[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct ItEstimator {
@@ -43,4 +46,29 @@ impl ItEstimator {
     fn get_deviation(&self) -> (f64, f64, usize) {
         self.inner.get_deviation()
     }
+}
+
+pub(crate) struct LDAModel {
+    ldamodel: scalib::information::LDAModel
+}
+impl LDAModel {
+    pub fn from_rlda(m: &mut crate::rlda::RLDA) -> Self {
+        Self {
+            ldamodel: scalib::information::LDAModel::RLDA(m.inner.as_ref().unwrap().clone()))
+        }
+    }
+}
+pub(crate) struct ItSolver {
+    inner: scalib::information::ItSolver,
+}
+
+#[pymethods]
+impl ItSolver {
+    #[new]
+    fn new(py: Python, model) -> PyResult<Self> {
+        
+        
+    }
+
+
 }
