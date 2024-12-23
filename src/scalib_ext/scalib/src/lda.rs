@@ -6,28 +6,26 @@
 //!
 //! Probability estimation for each of the classes based on leakage traces
 //! can be derived from the LDA by leveraging the previous templates.
+//!
+//! ## Algorithm
+//! Compute S_W and S_B as defined in Section 3.8.3, pp. 121-124 of
+//! R. O. Duda, P. E. Hart, D. G. Stork. Pattern Classification (Second Edition). John Wiley & Sons,
+//! Inc., New York, 2001. ISBN 0-471-05669-3.
+//! Computes S_T and S_B, then computes S_W = S_T - S_B.
+//! S_B is computed from class means.
+//! S_T is the overall scatter matrix.
+//! Algorithms for computation of means and scatter matrix are taken from
+//! Pébay, P., Terriberry, T.B., Kolla, H. et al. Numerically stable, scalable formulas for parallel
+//! and online computation of higher-order multivariate central moments with arbitrary weights.
+//! Comput Stat 31, 1305–1325 (2016). https://doi.org/10.1007/s00180-015-0637-z
 
-#![allow(dead_code)]
-
-use crate::ScalibError;
+use crate::{Result, ScalibError};
 use geigen::Geigen;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis, NewAxis};
 use nshare::{ToNalgebra, ToNdarray2};
 use std::ops::AddAssign;
 
 /// Accumulator of traces to build LDA
-///
-/// ## Algorithm
-/// Compute S_W and S_B as defined in Section 3.8.3, pp. 121-124 of
-/// R. O. Duda, P. E. Hart, D. G. Stork. Pattern Classification (Second Edition). John Wiley & Sons,
-/// Inc., New York, 2001. ISBN 0-471-05669-3.
-/// Computes S_T and S_B, then computes S_W = S_T - S_B.
-/// S_B is computed from class means.
-/// S_T is the overall scatter matrix.
-/// Algorithms for computation of means and scatter matrix are taken from
-/// Pébay, P., Terriberry, T.B., Kolla, H. et al. Numerically stable, scalable formulas for parallel
-/// and online computation of higher-order multivariate central moments with arbitrary weights.
-/// Comput Stat 31, 1305–1325 (2016). https://doi.org/10.1007/s00180-015-0637-z
 pub struct LdaAcc {
     /// Number of samples in trace
     pub ns: usize,
@@ -65,22 +63,7 @@ impl LdaAcc {
     ) -> Self {
         let mut res = Self::from_dim(nc, traces.shape()[1]);
         res.update(traces, classes, gemm_algo);
-        return res;
-    }
-
-    fn merge(&mut self, other: &Self) {
-        assert_eq!(self.nc, other.nc);
-        assert_eq!(self.traces_sum.shape()[1], other.traces_sum.shape()[1]);
-        let n = self.n.checked_add(other.n).expect("too many traces in LDA");
-        let delta_mu = &other.mu - &self.mu;
-        self.scatter += &other.scatter;
-        // TODO might be worth it to optimize with a call to gemm...
-        self.scatter +=
-            (self.n as f64) * (other.n as f64) / (n as f64) * delta_mu.t().dot(&delta_mu);
-        self.traces_sum += &other.traces_sum;
-        self.mu = self.traces_sum.sum_axis(Axis(0)) / (n as f64);
-        self.n_traces += &other.n_traces;
-        self.n = n;
+        res
     }
 
     /// Add traces to the accumulator.
@@ -135,7 +118,7 @@ impl LdaAcc {
         self.n = merged_n;
     }
 
-    pub fn get_matrices(&self) -> Result<(Array2<f64>, Array2<f64>, Array2<f64>), ScalibError> {
+    pub fn get_matrices(&self) -> Result<(Array2<f64>, Array2<f64>, Array2<f64>)> {
         if self.n_traces.iter().any(|x| *x == 0) {
             Err(ScalibError::EmptyClass)
         } else {
@@ -153,7 +136,7 @@ impl LdaAcc {
     }
 
     /// Compute the LDA with p dimensions in the projected space
-    pub fn lda(&self, p: usize) -> Result<LDA, ScalibError> {
+    pub fn lda(&self, p: usize) -> Result<LDA> {
         let (sw, sb, means_ns) = self.get_matrices()?;
         LDA::from_matrices(self.n, p, sw.view(), sb.view(), means_ns.view())
     }
@@ -208,7 +191,7 @@ impl LDA {
         sw: ArrayView2<f64>,
         sb: ArrayView2<f64>,
         means_ns: ArrayView2<f64>,
-    ) -> Result<Self, ScalibError> {
+    ) -> Result<Self> {
         let ns = sw.shape()[0];
         let nc = means_ns.shape()[0];
         // LDA here
@@ -272,6 +255,6 @@ impl LDA {
         for score_distr in scores.outer_iter_mut() {
             softmax(score_distr);
         }
-        return scores;
+        scores
     }
 }
