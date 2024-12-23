@@ -11,6 +11,8 @@ pub(crate) mod utils;
 
 use thiserror::Error;
 
+type Result<T> = std::result::Result<T, ScalibError>;
+
 #[derive(Error, Debug)]
 pub enum ScalibError {
     #[error("A class is missing data.")]
