@@ -60,8 +60,8 @@ Multiple builds with misc. trade-offs can be used, depending on what you are wor
 .. code-block::
 
    make dev
-   source .tox/dev/bin/activate # To be adapted when using powershell
    # Do the above only once, and iterate the following:
+   source .tox/dev/bin/activate # To be adapted when using powershell
    # Edit code...
    # Run the tests:
    pytest

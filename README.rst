@@ -60,10 +60,9 @@ SCALib for your CPU).
 
 **Depdendencies:**
 
-- ``python >= 3.8``,
-- the python ``build`` module (`available on PyPI <https://pypi.org/project/build>`__),
+- ``python >= 3.10``,
 - a C/C++ compiler for your platform,
-- ``clang`` (version 5.0 or later),
+- ``clang``,
 - the latest stable release of the `rust toolchain <https://rustup.rs/>`_.
 
 To install from source:
@@ -71,8 +70,7 @@ To install from source:
 .. code-block::
 
     git clone https://github.com/simple-crypto/SCALib
-    cd SCALib
-    pip install .
+    pip install ./SCALib
 
 See `CONTRIBUTING.rst <CONTRIBUTING.rst>`__ for advanced build configuration.
 
@@ -87,7 +85,7 @@ See `API documentation <https://scalib.readthedocs.io/en/stable/#available-featu
 Alternatives
 ============
 
-If your needs are not covered by SCALib, you might be more lucky with 
+If your needs are not covered by SCALib, you might be more lucky with
 `lascar <https://github.com/Ledger-Donjon/lascar>`_ or `scared <https://gitlab.com/eshard/scared>`_.
 
 Please also let us know your needs by opening a 
