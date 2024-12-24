@@ -13,7 +13,7 @@ help:
 	@echo "    fmt: Format code."
 	@echo "    wheel_local: Build a wheel for the local machine."
 	@echo "    wheel_portable: Build a wheel for with maximal portability (at the expense of efficiency)."
-	@echo "    wheel_avx2: Build a wheel with AVX2 instruction (should work on any recent x86-64)."
+	@echo "    wheel_x86_64_v3: Build a wheel for X86_64 v3 level CPUs."
 
 dev:
 	tox run -e dev
@@ -37,8 +37,8 @@ codestyle:
 fmt:
 	tox run -e fmt
 
-wheel_avx2:
-	SCALIB_AVX2=1 CARGO_TARGET_DIR=.cargo_build_avx2 pyproject-build -w -o dist/avx2
+wheel_x86_64_v3:
+	SCALIB_X86_64_V3=1 CARGO_TARGET_DIR=.cargo_build_x86_64_v3 pyproject-build -m build -w -o dist/avx2
 
 wheel_local:
 	CARGO_TARGET_DIR=.cargo_build pyproject-build -w -o dist/local

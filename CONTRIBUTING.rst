@@ -36,7 +36,7 @@ Build wheels
 ------------
 
 If you need to get wheels (e.g. to install elsewhere), you can simply
-use ``make wheel_local``, ``make wheel_avx2`` or ``make wheel_portable``.
+use ``make wheel_local``, ``make wheel_x86_64_v3`` or ``make wheel_portable``.
 (See the content of ``Makefile`` if you cannot use ``make``.)
 The wheels are stored in ``dist/``.
 
@@ -145,7 +145,7 @@ Also, when you develop, looking at generated assembly may help
 
 .. code-block::
 
-    RUSTFLAGS="-C target-feature=+avx2" cargo asm scalib::module::function --rust
+    RUSTFLAGS="-C target-cpu=x86_64_v3" cargo asm scalib::module::function --rust
     # or
     RUSTFLAGS="-C target-cpu=native" cargo asm scalib::module::function --rust
 
