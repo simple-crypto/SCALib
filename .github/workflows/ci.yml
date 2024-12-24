@@ -5,227 +5,224 @@ on:
   push:
     branches:
       - main
-    tags:        
+    tags:
       - v**
   pull_request:
     branches:
       - main
 
-
 jobs:
-    build_wheel_linux:
-        name: Build wheel on linux ${{ matrix.arch }}
-        runs-on: ubuntu-latest
-        strategy:
-            fail-fast: false
-            matrix:
-                include:
-                    - arch: x86_64 
-                    #- arch: aarch64 # This is too slow on github CI
-        steps:
-            - uses: actions/checkout@v3
-            - uses: actions/cache@v3
-              with:
-                  path: |
-                      ${{ runner.temp }}/cargo_build
-                      ${{ runner.temp }}/cargo_home
-                  key: linux-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
-            - uses: actions/setup-python@v3
-              with:
-                  python-version: "3.9"
-            - name: wheels Linux ${{ matrix.arch }}
-              uses: pypa/cibuildwheel@v2.16.5
-              env:
-                CARGO_TARGET_DIR: "/host${{ runner.temp }}/cargo_build"
-                CARGO_HOME: "/host${{ runner.temp }}/cargo_home"
-                CIBW_PLATFORM: "linux"
-            - uses: actions/upload-artifact@v3
-              with:
-                  name: dist
-                  path: ./wheelhouse/*.whl
-    checks:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v3
-            - name: Setup Python
-              uses: actions/setup-python@v3
-              with:
-                  python-version: "3.12"
-            - name: Install Tox
-              run: pip install tox
-            - name: Formatting
-              run:
-                make codestyle
-            - name: Docs
-              run:
-                make docs
-    test:
-        name: Run tests (on linux).
-        needs: [build_wheel_linux]
-        runs-on: ubuntu-latest
-        strategy:
-            fail-fast: false
-            matrix:
-                python: ["3.9", "3.12"]
-        steps:
-            - uses: actions/checkout@v3
-            - uses: actions/download-artifact@v3
-              with:
-                  name: dist
-                  path: dist
-            - name: Setup Python
-              uses: actions/setup-python@v3
-              with:
-                  python-version: ${{ matrix.python }}
-            - name: Install test deps
-              run: pip install -r tests/requirements.txt
-            - name: Install SCALib
-              run: pip install dist/scalib*manylinux*.whl
-            - name: Run tests
-              # Run tox using the version of Python in `PATH`
-              run: pytest
+  build_wheel_linux:
+    name: Build wheel on linux ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+          #- arch: aarch64 # This is too slow on github CI
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ${{ runner.temp }}/cargo_build
+            ${{ runner.temp }}/cargo_home
+          key: linux-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
+      - uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+      - name: wheels Linux ${{ matrix.arch }}
+        uses: pypa/cibuildwheel@v2.16.5
+        env:
+          CARGO_TARGET_DIR: "/host${{ runner.temp }}/cargo_build"
+          CARGO_HOME: "/host${{ runner.temp }}/cargo_home"
+          CIBW_PLATFORM: "linux"
+      - uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: ./wheelhouse/*.whl
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.12"
+      - name: Install Tox
+        run: pip install tox
+      - name: Formatting
+        run: make codestyle
+      - name: Docs
+        run: make docs
+  test:
+    name: Run tests (on linux).
+    needs: [build_wheel_linux]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: dist
+      - name: Setup Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install test deps
+        run: pip install -r tests/requirements.txt
+      - name: Install SCALib
+        run: pip install dist/scalib*manylinux*.whl
+      - name: Run tests
+        # Run tox using the version of Python in `PATH`
+        run: pytest
 
-    # Separate job because debug build.
-    rust_tests:
-        name: Run rust tests
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v3
-            - uses: actions/cache@v3
-              with:
-                  path: |
-                      ${{ runner.temp }}/cargo_build
-                      ${{ runner.temp }}/cargo_home
-                  key: linux-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
-            # Even though we don't explicitly run python, we install it to be
-            # sure that PyO3 can build properly (if needed).
-            - uses: actions/setup-python@v3
-              with:
-                  python-version: "3.12"
-            - name: Run tests
-              run: cargo test --workspace --manifest-path src/scalib_ext/Cargo.toml
-              env:
-                CARGO_TARGET_DIR: "${{ runner.temp }}/cargo_build"
-                CARGO_HOME: "${{ runner.temp }}/cargo_home"
-                RUST_BACKTRACE: "1"
+  # Separate job because debug build.
+  rust_tests:
+    name: Run rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ${{ runner.temp }}/cargo_build
+            ${{ runner.temp }}/cargo_home
+          key: linux-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
+      # Even though we don't explicitly run python, we install it to be
+      # sure that PyO3 can build properly (if needed).
+      - uses: actions/setup-python@v3
+        with:
+          python-version: "3.12"
+      - name: Run tests
+        run: cargo test --workspace --manifest-path src/scalib_ext/Cargo.toml
+        env:
+          CARGO_TARGET_DIR: "${{ runner.temp }}/cargo_build"
+          CARGO_HOME: "${{ runner.temp }}/cargo_home"
+          RUST_BACKTRACE: "1"
 
-    build_wheel_windows:
-        name: Build wheel on Windows
-        runs-on: windows-2019
-        strategy:
-            fail-fast: false
-            matrix:
-                include:
-                    - arch: x86_64 
-        steps:
-            - uses: actions/checkout@v3
-            - uses: actions/cache@v3
-              with:
-                  path: |
-                      ${{ runner.temp }}/cargo_build
-                      ${{ runner.temp }}/cargo_home
-                  key: windows-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
-            - uses: actions/setup-python@v3
-              with:
-                  python-version: "3.9"
-            - name: wheels Windows ${{ matrix.arch}}
-              uses: pypa/cibuildwheel@v2.16.5
-              env:
-                CARGO_TARGET_DIR: "${{ runner.temp }}\\cargo_build"
-                CARGO_HOME: "${{ runner.temp }}\\cargo_home"
-                CIBW_PLATFORM: "windows"
-                CIBW_TEST_COMMAND: pytest {project}/tests
-                CIBW_TEST_REQUIRES: "-r tests/requirements.txt"
-            - uses: actions/upload-artifact@v3
-              with:
-                  name: dist
-                  path: ./wheelhouse/*.whl
+  build_wheel_windows:
+    name: Build wheel on Windows
+    runs-on: windows-2019
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ${{ runner.temp }}/cargo_build
+            ${{ runner.temp }}/cargo_home
+          key: windows-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
+      - uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+      - name: wheels Windows ${{ matrix.arch}}
+        uses: pypa/cibuildwheel@v2.16.5
+        env:
+          CARGO_TARGET_DIR: "${{ runner.temp }}\\cargo_build"
+          CARGO_HOME: "${{ runner.temp }}\\cargo_home"
+          CIBW_PLATFORM: "windows"
+          CIBW_TEST_COMMAND: pytest {project}/tests
+          CIBW_TEST_REQUIRES: "-r tests/requirements.txt"
+      - uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: ./wheelhouse/*.whl
 
-    build_wheel_macos:
-        name: Build wheels on Mac Os (${{ matrix.vers }})
-        # macos-13 is on x86_64 and macos-14 is on arm64
-        runs-on: ${{ matrix.os }}
-        strategy:
-            fail-fast: false
-            matrix:
-                include:
-                   - vers: arm64
-                     os: macos-14
-                   - vers: x86_64
-                     os: macos-13
-        steps:
-            - uses: actions/checkout@v3
-            - uses: actions/cache@v3
-              with:
-                  path: |
-                      ${{ runner.temp }}/cargo_build
-                      ${{ runner.temp }}/cargo_home
-                  key: macos-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
-            - uses: actions/setup-python@v3
-              with:
-                  python-version: "3.9"
-            - name: wheels Mac Os ${{ matrix.vers }}
-              uses: pypa/cibuildwheel@v2.16.5
-              env:
-                CARGO_TARGET_DIR: "${{ runner.temp }}\\cargo_build"
-                CARGO_HOME: "${{ runner.temp }}\\cargo_home"
-                CIBW_PLATFORM: "macos"
-                CIBW_TEST_COMMAND: pytest {project}/tests
-                CIBW_TEST_REQUIRES: "-r tests/requirements.txt"
-                CIBW_ARCHS_MACOS: "${{ matrix.vers}}"
-                CIBW_ENVIRONMENT_MACOS: "SCALIB_AVX2=0"
-            - uses: actions/upload-artifact@v3
-              with:
-                  name: dist
-                  path: ./wheelhouse/*.whl
+  build_wheel_macos:
+    name: Build wheels on Mac Os (${{ matrix.vers }})
+    # macos-13 is on x86_64 and macos-14 is on arm64
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - vers: arm64
+            os: macos-14
+          - vers: x86_64
+            os: macos-13
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ${{ runner.temp }}/cargo_build
+            ${{ runner.temp }}/cargo_home
+          key: macos-wheel-cache-rust-build-cargo-v1-${{ matrix.arch}}
+      - uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+      - name: wheels Mac Os ${{ matrix.vers }}
+        uses: pypa/cibuildwheel@v2.16.5
+        env:
+          CARGO_TARGET_DIR: "${{ runner.temp }}\\cargo_build"
+          CARGO_HOME: "${{ runner.temp }}\\cargo_home"
+          CIBW_PLATFORM: "macos"
+          CIBW_TEST_COMMAND: pytest {project}/tests
+          CIBW_TEST_REQUIRES: "-r tests/requirements.txt"
+          CIBW_ARCHS_MACOS: "${{ matrix.vers}}"
+          CIBW_ENVIRONMENT_MACOS: "SCALIB_X86_64_V3=0"
+      - uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: ./wheelhouse/*.whl
 
-    build_sdist:
-        name: Build source distribution
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v3
-            - name: Build sdist
-              run: |
-                  python -m pip install build
-                  python -m build --sdist .
-            - uses: actions/upload-artifact@v3
-              with:
-                  name: dist
-                  path: dist/*.tar.gz
+  build_sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build sdist
+        run: |
+          python -m pip install build
+          python -m build --sdist .
+      - uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: dist/*.tar.gz
 
-    check_dist:
-        needs: [build_wheel_linux, build_wheel_windows, build_wheel_macos, build_sdist]
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/download-artifact@v3
-              with:
-                  name: dist
-                  path: dist
-            - name: Install twine
-              run: pip install twine
-            - name: Check dist
-              run: twine check dist/*
+  check_dist:
+    needs:
+      [build_wheel_linux, build_wheel_windows, build_wheel_macos, build_sdist]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: dist
+      - name: Install twine
+        run: pip install twine
+      - name: Check dist
+        run: twine check dist/*
 
-    release:
-        needs: [check_dist, test, checks]
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/download-artifact@v3
-              with:
-                  name: dist
-                  path: dist
-            - name: Release
-              uses: softprops/action-gh-release@v1
-              with:
-                  body: |
-                      view the CHANGELOG.rst for full changes
-                  files: |
-                      dist/*
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            - uses: pypa/gh-action-pypi-publish@release/v1
-              with:
-                  user: __token__
-                  password: ${{ secrets.PYPI_API_TOKEN }}
-
+  release:
+    needs: [check_dist, test, checks]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: dist
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body: |
+            view the CHANGELOG.rst for full changes
+          files: |
+            dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
