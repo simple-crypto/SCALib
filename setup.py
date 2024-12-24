@@ -8,34 +8,36 @@ from setuptools_rust import Binding, RustExtension
 # system).
 import setuptools_scm
 
+
 def env_true(env):
-    return env == '1'
+    return env == "1"
+
 
 noflags = env_true(os.environ.get("SCALIB_NOFLAGS"))
 portable = not noflags and env_true(os.environ.get("SCALIB_PORTABLE"))
-use_avx2 = not noflags and env_true(os.environ.get("SCALIB_AVX2"))
+x86_64_v3 = not noflags and env_true(os.environ.get("SCALIB_X86_64_V3"))
 
-if portable and use_avx2:
-    raise ValueError("Cannot have both SCALIB_PORTABLE and SCALIB_AVX2.")
+if portable and x86_64_v3:
+    raise ValueError("Cannot have both SCALIB_PORTABLE and SCALIB_X86_64_V3.")
 
-# We check only for AVX2, as this is the CI default, otherwise we assume local
+# We check only for X86_64_V3, as this is the CI default, otherwise we assume local
 # builds.
 with open("src/scalib/build_config.py", "w") as f:
-    f.write(f"REQUIRE_AVX2 = {use_avx2}\n")
+    f.write(f"REQUIRE_X86_64_V3 = {x86_64_v3}\n")
 
 
 if noflags or portable:
     rustflags = None
-elif use_avx2:
-    rustflags = "-C target-feature=+avx2"
+elif x86_64_v3:
+    rustflags = "-C target-cpu=x86-64-v3"
 else:
     rustflags = "-C target-cpu=native"
 
 if rustflags:
-    rustflags = os.environ.get('RUSTFLAGS', '') + ' ' + rustflags
+    rustflags = os.environ.get("RUSTFLAGS", "") + " " + rustflags
     os.environ["RUSTFLAGS"] = rustflags
 
-print(f"Build config: {noflags=} {portable=} {use_avx2=} {rustflags=}.")
+print(f"Build config: {noflags=} {portable=} {x86_64_v3=} {rustflags=}.")
 
 scalib_features = ["pyo3/abi3"]
 
