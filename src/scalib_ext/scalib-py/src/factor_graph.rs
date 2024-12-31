@@ -4,9 +4,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use bincode::{deserialize, serialize};
-use numpy::{PyArray, PyArray1, PyArray2};
+use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyKeyError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::pybacked::PyBackedStr;
 use pyo3::types::{PyBytes, PyList, PyTuple};
 
 use scalib::sasca;
@@ -32,19 +33,19 @@ impl FactorGraph {
 impl FactorGraph {
     #[new]
     #[pyo3(signature = (*args))]
-    fn new(args: &PyTuple) -> PyResult<Self> {
+    fn new(args: &Bound<PyTuple>) -> PyResult<Self> {
         if args.len() == 0 {
             Ok(Self { inner: None })
         } else {
             let (description, tables): (
-                &str,
-                std::collections::HashMap<String, &PyArray1<sasca::ClassVal>>,
+                PyBackedStr,
+                std::collections::HashMap<String, PyReadonlyArray1<sasca::ClassVal>>,
             ) = args.extract()?;
             let tables = tables
                 .into_iter()
-                .map(|(k, v)| PyResult::<_>::Ok((k, PyArray::to_vec(v)?)))
+                .map(|(k, v)| PyResult::<_>::Ok((k, v.as_slice()?.to_vec())))
                 .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
-            let fg = sasca::build_graph(description, tables)
+            let fg = sasca::build_graph(description.as_ref(), tables)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
             Ok(Self {
                 inner: Some(Arc::new(fg)),
@@ -52,20 +53,14 @@ impl FactorGraph {
         }
     }
 
-    pub fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
+    pub fn __getstate__<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
         let to_ser: Option<&sasca::FactorGraph> = self.inner.as_deref();
-        Ok(PyBytes::new(py, &serialize(&to_ser).unwrap()).to_object(py))
+        PyBytes::new(py, &serialize(&to_ser).unwrap())
     }
 
-    pub fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
-        match state.extract::<&PyBytes>(py) {
-            Ok(s) => {
-                let deser: Option<sasca::FactorGraph> = deserialize(s.as_bytes()).unwrap();
-                self.inner = deser.map(Arc::new);
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
+    pub fn __setstate__(&mut self, state: &Bound<PyBytes>) {
+        let deser: Option<sasca::FactorGraph> = deserialize(state.as_bytes()).unwrap();
+        self.inner = deser.map(Arc::new);
     }
 
     pub fn new_bp(
@@ -127,7 +122,8 @@ fn pyobj2pubs<'a>(
     public_values: PyObject,
     expected: impl Iterator<Item = (&'a str, bool)>,
 ) -> PyResult<Vec<sasca::PublicValue>> {
-    let mut public_values: HashMap<&str, PyObject> = public_values.extract(py)?;
+    // FIXME: move back to &str instead of String
+    let mut public_values: HashMap<String, PyObject> = public_values.extract(py)?;
     let pubs = expected
         .map(|(pub_name, multi)| {
             obj2pub(
@@ -151,7 +147,7 @@ fn pyobj2pubs<'a>(
     }
 }
 
-fn pyobj2genfactor_inner(py: Python, obj: &PyAny) -> PyResult<sasca::GenFactorInner> {
+fn pyobj2genfactor_inner(obj: &Bound<PyAny>) -> PyResult<sasca::GenFactorInner> {
     let kind: u32 = obj.getattr("kind")?.extract()?;
     let dense: u32 = obj.getattr("GenFactorKind")?.getattr("DENSE")?.extract()?;
     let sparse_functional: u32 = obj
@@ -159,25 +155,17 @@ fn pyobj2genfactor_inner(py: Python, obj: &PyAny) -> PyResult<sasca::GenFactorIn
         .getattr("SPARSE_FUNCTIONAL")?
         .extract()?;
     if kind == dense {
-        let factor: &numpy::PyArrayDyn<f64> = obj.getattr("factor")?.extract()?;
-        let factor = factor
-            .readonly()
-            .as_array()
-            .as_standard_layout()
-            .into_owned();
+        let factor: numpy::PyReadonlyArrayDyn<f64> = obj.getattr("factor")?.extract()?;
+        let factor = factor.as_array().as_standard_layout().into_owned();
         Ok(sasca::GenFactorInner::Dense(factor))
     } else if kind == sparse_functional {
-        let factor: &numpy::PyArray2<sasca::ClassVal> = obj.getattr("factor")?.extract()?;
-        let factor = factor
-            .readonly()
-            .as_array()
-            .as_standard_layout()
-            .into_owned();
+        let factor: numpy::PyReadonlyArray2<sasca::ClassVal> = obj.getattr("factor")?.extract()?;
+        let factor = factor.as_array().as_standard_layout().into_owned();
         Ok(sasca::GenFactorInner::SparseFunctional(factor))
     } else {
         Err(PyValueError::new_err((
             "Unknown kind",
-            obj.getattr("kind")?.to_object(py),
+            obj.getattr("kind")?.unbind(),
         )))
     }
 }
@@ -188,28 +176,29 @@ fn pyobj2factors<'a>(
     expected: impl Iterator<Item = (&'a str, bool)>,
 ) -> PyResult<Vec<sasca::GenFactor>> {
     // TODO validate single/para, dimensionality and dimensions.
-    let mut gen_factors: HashMap<&str, PyObject> = gen_factors.extract(py)?;
+    // FIXME: move back to &str instead of String
+    let mut gen_factors: HashMap<String, PyObject> = gen_factors.extract(py)?;
     let res = expected
         .map(|(name, multi)| {
             let gf = gen_factors
                 .remove(name)
                 .ok_or_else(|| PyKeyError::new_err(format!("Missing gen factor {}.", name)))?;
             if multi {
-                if gf.downcast::<'_, PyList>(py).is_err() {
+                if gf.downcast_bound::<PyList>(py).is_err() {
                     return Err(PyTypeError::new_err(format!(
                         "Generalized factor {} must be a list, as it is MULTI.",
                         name
                     )));
                 }
-                let obj: Vec<&PyAny> = gf.extract(py)?;
+                let obj: Vec<Bound<PyAny>> = gf.extract(py)?;
                 Ok(sasca::GenFactor::Multi(
                     obj.into_iter()
-                        .map(|obj| pyobj2genfactor_inner(py, obj))
+                        .map(|obj| pyobj2genfactor_inner(&obj))
                         .collect::<Result<Vec<_>, _>>()?,
                 ))
             } else {
-                let obj: &PyAny = gf.extract(py)?;
-                Ok(sasca::GenFactor::Single(pyobj2genfactor_inner(py, obj)?))
+                let obj: Bound<PyAny> = gf.extract(py)?;
+                Ok(sasca::GenFactor::Single(pyobj2genfactor_inner(&obj)?))
             }
         })
         .collect::<Result<Vec<sasca::GenFactor>, PyErr>>()?;
@@ -263,22 +252,16 @@ impl BPState {
 impl BPState {
     #[new]
     #[pyo3(signature = (*_args))]
-    fn new(_args: &PyTuple) -> PyResult<Self> {
+    fn new(_args: &Bound<PyTuple>) -> PyResult<Self> {
         Ok(Self { inner: None })
     }
 
-    pub fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
-        Ok(PyBytes::new(py, &serialize(&self.inner).unwrap()).to_object(py))
+    pub fn __getstate__<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &serialize(&self.inner).unwrap())
     }
 
-    pub fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
-        match state.extract::<&PyBytes>(py) {
-            Ok(s) => {
-                self.inner = deserialize(s.as_bytes()).unwrap();
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
+    pub fn __setstate__(&mut self, state: &Bound<PyBytes>) {
+        self.inner = deserialize(state.as_bytes()).unwrap();
     }
 
     pub fn is_cyclic(&self) -> bool {
@@ -298,7 +281,7 @@ impl BPState {
         self.get_inner_mut().drop_evidence(var_id);
         Ok(())
     }
-    pub fn get_state(&self, py: Python, var: &str) -> PyResult<PyObject> {
+    pub fn get_state<'py>(&self, py: Python<'py>, var: &str) -> PyResult<Bound<'py, PyAny>> {
         distr2py(py, self.get_inner().get_state(self.get_var(var)?))
     }
     pub fn set_state(&mut self, py: Python, var: &str, distr: PyObject) -> PyResult<()> {
@@ -314,11 +297,21 @@ impl BPState {
         self.get_inner_mut().drop_state(var_id);
         Ok(())
     }
-    pub fn get_belief_to_var(&self, py: Python, var: &str, factor: &str) -> PyResult<PyObject> {
+    pub fn get_belief_to_var<'py>(
+        &self,
+        py: Python<'py>,
+        var: &str,
+        factor: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let edge_id = self.get_edge_named(var, factor)?;
         distr2py(py, self.get_inner().get_belief_to_var(edge_id))
     }
-    pub fn get_belief_from_var(&self, py: Python, var: &str, factor: &str) -> PyResult<PyObject> {
+    pub fn get_belief_from_var<'py>(
+        &self,
+        py: Python<'py>,
+        var: &str,
+        factor: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let edge_id = self.get_edge_named(var, factor)?;
         distr2py(py, self.get_inner().get_belief_from_var(edge_id))
     }
@@ -390,7 +383,7 @@ impl BPState {
         &mut self,
         py: Python,
         factor: &str,
-        dest: Vec<&str>,
+        dest: Vec<PyBackedStr>,
         clear_incoming: bool,
         config: crate::ConfigWrapper,
     ) -> PyResult<()> {
@@ -398,7 +391,7 @@ impl BPState {
             let factor_id = self.get_factor(factor)?;
             let dest = dest
                 .iter()
-                .map(|v| self.get_var(v))
+                .map(|v| self.get_var(v.as_ref()))
                 .collect::<Result<Vec<_>, _>>()?;
             self.get_inner_mut()
                 .propagate_factor(factor_id, dest.as_slice(), clear_incoming);
@@ -441,23 +434,11 @@ impl BPState {
 
 fn obj2distr(py: Python, distr: PyObject, multi: bool) -> PyResult<sasca::Distribution> {
     if multi {
-        let distr: &PyArray2<f64> = distr.extract(py)?;
-        sasca::Distribution::from_array_multi(
-            distr
-                .readonly()
-                .as_array()
-                .as_standard_layout()
-                .into_owned(),
-        )
+        let distr: PyReadonlyArray2<f64> = distr.extract(py)?;
+        sasca::Distribution::from_array_multi(distr.as_array().as_standard_layout().into_owned())
     } else {
-        let distr: &PyArray1<f64> = distr.extract(py)?;
-        sasca::Distribution::from_array_single(
-            distr
-                .readonly()
-                .as_array()
-                .as_standard_layout()
-                .into_owned(),
-        )
+        let distr: PyReadonlyArray1<f64> = distr.extract(py)?;
+        sasca::Distribution::from_array_single(distr.as_array().as_standard_layout().into_owned())
     }
     .map_err(|e| PyTypeError::new_err(e.to_string()))
 }
@@ -472,14 +453,14 @@ fn obj2pub(py: Python, obj: PyObject, multi: bool) -> PyResult<sasca::PublicValu
     })
 }
 
-fn distr2py(py: Python, distr: &sasca::Distribution) -> PyResult<PyObject> {
+fn distr2py<'py>(py: Python<'py>, distr: &sasca::Distribution) -> PyResult<Bound<'py, PyAny>> {
     if let Some(d) = distr.value() {
         if distr.multi() {
-            return Ok(PyArray2::from_array(py, &d).into_py(py));
+            return Ok(PyArray2::from_array(py, &d).into_any());
         } else {
-            return Ok(PyArray1::from_array(py, &d.slice(ndarray::s![0, ..])).into_py(py));
+            return Ok(PyArray1::from_array(py, &d.slice(ndarray::s![0, ..])).into_any());
         }
     } else {
-        return Ok(py.None());
+        return Ok(py.None().into_bound(py));
     }
 }

@@ -1,7 +1,9 @@
 //! Python binding of SCALib's LDA implementation.
 
 use crate::ScalibError;
-use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, ToPyArray};
+use numpy::{
+    IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, ToPyArray,
+};
 use pyo3::prelude::*;
 
 #[pyclass]
@@ -50,10 +52,10 @@ impl LdaAcc {
         usize,
         usize,
         usize,
-        &'py PyArray2<f64>,
-        &'py PyArray2<f64>,
-        &'py PyArray1<f64>,
-        &'py PyArray1<usize>,
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray1<f64>>,
+        Bound<'py, PyArray1<usize>>,
     ) {
         (
             self.inner.ns,
@@ -67,7 +69,7 @@ impl LdaAcc {
     }
 
     /// Get the matrix sw (debug purpose)
-    fn get_sw<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
+    fn get_sw<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<f64>>> {
         match self.inner.get_matrices() {
             Ok((sw, _, _)) => Ok(sw.into_pyarray(py)),
             Err(e) => Err(ScalibError::from_scalib(e, py)),
@@ -75,7 +77,7 @@ impl LdaAcc {
     }
 
     /// Get the matrix sb (debug purpose)
-    fn get_sb<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
+    fn get_sb<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<f64>>> {
         match self.inner.get_matrices() {
             Ok((_, sb, _)) => Ok(sb.into_pyarray(py)),
             Err(e) => Err(ScalibError::from_scalib(e, py)),
@@ -83,7 +85,7 @@ impl LdaAcc {
     }
 
     /// Get the matrix mus (debug purpose)
-    fn get_mus<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray2<f64>> {
+    fn get_mus<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray2<f64>>> {
         match self.inner.get_matrices() {
             Ok((_, _, mus)) => Ok(mus.into_pyarray(py)),
             Err(e) => Err(ScalibError::from_scalib(e, py)),
@@ -125,7 +127,7 @@ impl LDA {
         py: Python<'py>,
         x: PyReadonlyArray2<i16>,
         config: crate::ConfigWrapper,
-    ) -> PyResult<&'py PyArray2<f64>> {
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let x = x.as_array();
         let prs = config.on_worker(py, |_| self.inner.predict_proba(x));
         Ok(prs.to_pyarray(py))
@@ -136,12 +138,12 @@ impl LDA {
         &self,
         py: Python<'py>,
     ) -> (
-        &'py PyArray2<f64>,
+        Bound<'py, PyArray2<f64>>,
         usize,
         usize,
         usize,
-        &'py PyArray2<f64>,
-        &'py PyArray1<f64>,
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray1<f64>>,
     ) {
         (
             self.inner.projection.to_pyarray(py),
@@ -154,7 +156,7 @@ impl LDA {
     }
 
     /// Get the projection matrix
-    fn get_projection<'py>(&self, py: Python<'py>) -> &'py PyArray2<f64> {
+    fn get_projection<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray2<f64>> {
         self.inner.projection.to_pyarray(py)
     }
 

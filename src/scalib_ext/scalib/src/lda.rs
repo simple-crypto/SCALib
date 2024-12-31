@@ -22,7 +22,7 @@
 use crate::{Result, ScalibError};
 use geigen::Geigen;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis, NewAxis};
-use nshare::{ToNalgebra, ToNdarray2};
+use nshare::{IntoNalgebra, IntoNdarray2};
 use std::ops::AddAssign;
 
 /// Accumulator of traces to build LDA

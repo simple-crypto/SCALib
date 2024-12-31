@@ -40,7 +40,7 @@ impl Ttest {
         &mut self,
         py: Python<'py>,
         config: crate::ConfigWrapper,
-    ) -> PyResult<&'py PyArray2<f64>> {
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let ttest = config.on_worker(py, |_| self.inner.get_ttest());
         Ok(ttest.to_pyarray(py))
     }
@@ -84,7 +84,7 @@ impl MTtest {
         &mut self,
         py: Python<'py>,
         config: crate::ConfigWrapper,
-    ) -> PyResult<&'py PyArray1<f64>> {
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
         let ttest = config.on_worker(py, |_| self.inner.get_ttest());
         Ok(ttest.to_pyarray(py))
     }
