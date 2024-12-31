@@ -6,7 +6,7 @@ use ndarray::{
     s, Array1, Array2, Array3, Array4, ArrayView1, ArrayView2, ArrayViewMut1, ArrayViewMut2,
     ArrayViewMut3, Axis, NewAxis, Zip,
 };
-use nshare::{ToNalgebra, ToNdarray1, ToNdarray2};
+use nshare::{IntoNalgebra, IntoNdarray1, IntoNdarray2};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;

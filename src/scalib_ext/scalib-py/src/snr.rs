@@ -58,7 +58,7 @@ impl SNR {
         &mut self,
         py: Python<'py>,
         config: crate::ConfigWrapper,
-    ) -> PyResult<&'py PyArray2<f64>> {
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let snr = config.on_worker(py, |_| match &self.inner {
             InnerSnr::Snr32bit(inner) => inner.get_snr(),
             InnerSnr::Snr64bit(inner) => inner.get_snr(),

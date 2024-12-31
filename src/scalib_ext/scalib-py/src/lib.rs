@@ -1,12 +1,11 @@
 use ndarray::parallel::prelude::*;
 use ndarray::{s, Axis};
-use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::{PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use std::error::Error;
 
-mod belief_propagation;
 mod factor_graph;
 mod information;
 mod lda;
@@ -86,7 +85,7 @@ fn partial_cp(
     _py: Python,
     traces: PyReadonlyArray2<i16>, // (len,N_sample)
     poi: PyReadonlyArray1<u32>,    // (Np,len)
-    store: &PyArray2<i16>,
+    store: Bound<PyArray2<i16>>,
 ) {
     let traces = traces.as_array();
     let poi = poi.as_array();
@@ -112,7 +111,7 @@ fn usable_parallelism(_py: Python) -> usize {
 }
 
 #[pymodule]
-fn _scalib_ext(py: Python, m: &PyModule) -> PyResult<()> {
+fn _scalib_ext(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("ScalibError", py.get_type::<ScalibError>())?;
     m.add_class::<Config>()?;
     m.add_class::<snr::SNR>()?;
@@ -128,7 +127,6 @@ fn _scalib_ext(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<thread_pool::ThreadPool>()?;
     m.add_function(wrap_pyfunction!(ranking::rank_accuracy, m)?)?;
     m.add_function(wrap_pyfunction!(ranking::rank_nbin, m)?)?;
-    m.add_function(wrap_pyfunction!(belief_propagation::run_bp, m)?)?;
     m.add_function(wrap_pyfunction!(partial_cp, m)?)?;
     m.add_function(wrap_pyfunction!(usable_parallelism, m)?)?;
 

@@ -18,7 +18,7 @@ impl RLDA {
     /// Init an empty RLDA model
     #[new]
     #[pyo3(signature = (*args))]
-    fn new(_py: Python, args: &PyTuple) -> PyResult<Self> {
+    fn new(_py: Python, args: &Bound<PyTuple>) -> PyResult<Self> {
         if args.len() == 0 {
             Ok(Self { inner: None })
         } else {
@@ -28,18 +28,12 @@ impl RLDA {
         }
     }
 
-    pub fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
-        match state.extract::<&PyBytes>(py) {
-            Ok(s) => {
-                self.inner = deserialize(s.as_bytes()).unwrap();
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
+    pub fn __setstate__(&mut self, state: &Bound<PyBytes>) {
+        self.inner = deserialize(state.as_bytes()).unwrap();
     }
 
-    pub fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
-        Ok(PyBytes::new(py, &serialize(&self.inner).unwrap()).to_object(py))
+    pub fn __getstate__<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &serialize(&self.inner).unwrap())
     }
 
     /// Add n measurements to the model
@@ -71,17 +65,17 @@ impl RLDA {
         x: PyReadonlyArray2<i16>,
         v: usize,
         config: crate::ConfigWrapper,
-    ) -> PyResult<&'py PyArray2<f64>> {
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let x = x.as_array();
         let prs = config.on_worker(py, |_| self.inner.as_ref().unwrap().predict_proba(x, v));
         Ok(prs.into_pyarray(py))
     }
 
-    fn get_proj_coefs<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray3<f64>> {
+    fn get_proj_coefs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray3<f64>>> {
         Ok(self.inner.as_ref().unwrap().proj_coefs.to_pyarray(py))
     }
 
-    fn get_norm_proj<'py>(&self, py: Python<'py>) -> PyResult<&'py PyArray3<f64>> {
+    fn get_norm_proj<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray3<f64>>> {
         Ok(self.inner.as_ref().unwrap().norm_proj.to_pyarray(py))
     }
 
@@ -119,18 +113,12 @@ impl RLDAClusteredModel {
         Ok(Self { inner: None })
     }
 
-    pub fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
-        match state.extract::<&PyBytes>(py) {
-            Ok(s) => {
-                self.inner = deserialize(s.as_bytes()).unwrap();
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
+    pub fn __setstate__(&mut self, state: &Bound<PyBytes>) {
+        self.inner = deserialize(state.as_bytes()).unwrap();
     }
 
-    pub fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
-        Ok(PyBytes::new(py, &serialize(&self.inner).unwrap()).to_object(py))
+    pub fn __getstate__<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &serialize(&self.inner).unwrap())
     }
 
     // Not used by python code, debug purpose only.
@@ -162,7 +150,7 @@ impl RLDAClusteredModel {
         py: Python<'py>,
         point: PyReadonlyArray1<f64>,
         max_n_points: usize,
-    ) -> PyResult<&'py PyArray1<usize>> {
+    ) -> PyResult<Bound<'py, PyArray1<usize>>> {
         match self
             .inner
             .as_ref()
@@ -184,7 +172,7 @@ impl RLDAClusteredModel {
         label: PyReadonlyArray1<u64>,
         max_popped_classes: usize,
         config: crate::ConfigWrapper,
-    ) -> PyResult<(&'py PyArray1<f64>, &'py PyArray1<f64>)> {
+    ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
         let x = x.as_array();
         let label = label.as_array();
         let prs = config.on_worker(py, |_| {

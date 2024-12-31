@@ -9,10 +9,13 @@ ntl = []
 hellib = []
 
 [dependencies]
-itertools = "0.12"
-arbitrary = { version = "1.2", features = ["derive"], optional = true }
-realfft = "3.3"
+itertools = "0.14"
+arbitrary = { version = "1.4", features = ["derive"], optional = true }
+realfft = "3.4"
 
 [build-dependencies]
-cc = "1.0"
-bindgen = "0.69"
+cc = "1.2"
+bindgen = "0.71"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
