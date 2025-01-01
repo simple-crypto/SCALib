@@ -35,9 +35,9 @@ impl UniCSAcc {
     /// nc: number of classes to estimate the CS for.
     pub fn new(ns: usize, d: usize, nc: usize) -> Self {
         UniCSAcc {
-            ns: ns,
-            d: d,
-            nc: nc,
+            ns,
+            d,
+            nc,
             n_traces: Array1::<u64>::zeros(nc),
             moments: Array3::<f64>::zeros((nc, d, ns)),
         }
@@ -87,7 +87,7 @@ impl UniCSAcc {
 
         // Update all the classes estimated independently
         izip!(
-            &mut self.moments.outer_iter_mut(),
+            self.moments.outer_iter_mut(),
             self.n_traces.iter(),
             moments_other.outer_iter(),
             n_traces.iter(),
@@ -176,7 +176,7 @@ impl UniCSAcc {
             izip!(
                 t.view_mut().into_slice().unwrap().iter_mut(),
                 pow.view_mut().into_slice().unwrap().iter_mut(),
-                m_full.slice(s![0, ..]).view().to_slice().unwrap().iter(),
+                m_full.index_axis(Axis(0), 0).to_slice().unwrap().iter(),
                 trace.view().to_slice().unwrap().iter()
             )
             .for_each(|(t, pow, m_full, trace)| {
@@ -226,9 +226,9 @@ impl Ttest {
         // number of required accumulators
         let accumulators = build_accumulator(ns, d);
         Ttest {
-            d: d,
-            ns: ns,
-            accumulators: accumulators,
+            d,
+            ns,
+            accumulators,
         }
     }
     /// Update the Ttest state with n fresh traces

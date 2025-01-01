@@ -205,7 +205,7 @@ pub(super) fn parse(src: &str) -> Result<Vec<Statement>, Vec<u8>> {
                 },
             )
         };
-        let report = Report::build(ReportKind::Error, (), e.span().start)
+        let report = Report::build(ReportKind::Error, e.span())
             .with_code(3)
             .with_message(msg)
             .with_label(

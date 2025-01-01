@@ -2,8 +2,7 @@
 
 use numpy::{PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
-use pyo3::types::PyList;
+use pyo3::types::{PyDict, PyList};
 
 use scalib::belief_propagation::{Func, FuncType, Var, VarType};
 
@@ -122,7 +121,7 @@ pub fn run_bp(
     let mut variables_rust: Vec<Var> = variables
         .iter()
         .map(|x| to_var(x.downcast::<PyDict>().unwrap()))
-        .collect();
+        .collect()?;
 
     config.on_worker(py, |cfg| {
         scalib::belief_propagation::run_bp(

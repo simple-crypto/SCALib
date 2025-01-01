@@ -8,8 +8,8 @@ edition = "2018"
 
 [dependencies]
 cxx = "1.0"
-ndarray = {version="0.16.1", features=["approx"]}
-thiserror = "1.0"
+ndarray = { version = "0.16.1", features = ["approx"] }
+thiserror = "2.0.9"
 
 [dev-dependencies]
 ndarray-rand = "0.15"

@@ -49,7 +49,9 @@ impl Distribution {
     pub fn from_array_single(array: ndarray::Array1<Proba>) -> Result<Self, BPError> {
         let l = array.len();
         if array.is_standard_layout() {
-            let array = array.into_shape((1, l)).expect("Non-contiguous array");
+            let array = array
+                .into_shape_with_order((1, l))
+                .expect("Non-contiguous array");
             Ok(Self {
                 multi: false,
                 shape: array.dim(),

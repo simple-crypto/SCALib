@@ -41,7 +41,7 @@ pub struct LdaAcc {
     pub n_traces: Array1<usize>,
 }
 impl LdaAcc {
-    /// Creat a new Lda accumulator with nc classes, ns samples (POIs).
+    /// Create a new Lda accumulator with nc classes, ns samples (POIs).
     pub fn from_dim(nc: usize, ns: usize) -> Self {
         Self {
             ns,
