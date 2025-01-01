@@ -18,8 +18,12 @@ The minimum dependencies for building SCALib are
 
 Moreover, for development, we use
 
-- `tox <https://pypi.org/project/tox>`_
+- `tox <https://pypi.org/project/tox>`_ with `tox-uv <https://pypi.org/project/tox-uv>`_
 - :code:`make` (optional)
+
+.. code-block::
+
+    uv tool install tox --with tox-uv
 
 Development commands
 --------------------

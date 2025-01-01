@@ -7,6 +7,7 @@ help:
 	@echo "         is editable: changes in the python source code are automatically used."
 	@echo "         (You'll still need to re-run if you update rust code.)"
 	@echo "    test: Build in release mode and run tests, also checks formatting."
+	@echo "    test_mindeps: Build in release mode and run tests using minimum version of python dependencies."
 	@echo "    coverage: Like test, but also generates detailed coverage report."
 	@echo "    docs: Generate docs."
 	@echo "    codestyle: Check fromatting."
@@ -22,6 +23,9 @@ test:
 	tox run -e fmt -- --check
 	RUST_BACKTRACE=1 CARGO_TARGET_DIR=.cargo_build cargo test --workspace --manifest-path src/scalib_ext/Cargo.toml
 	tox run -e test
+
+test_mindeps:
+	tox run -e min_deps
 
 coverage:
 	tox run -e test
