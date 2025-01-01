@@ -477,7 +477,7 @@ def test_add_cst():
     Test ADD of a constant
     """
     nc = 251
-    y_cases = [0, 1, 2, 58, 249, 250, 251, 2345]
+    y_cases = [0, 1, 2, 58, 249, 250]
     n = len(y_cases)
     distri_x = make_distri(nc, n)
 
@@ -506,7 +506,7 @@ def test_add_cst():
         for x in range(nc):
             for j in range(n):
                 if sub:
-                    new_idx = (x - y_cases[j] - w) % nc
+                    new_idx = (x - int(y_cases[j]) - w) % nc
                 else:
                     new_idx = (x + y_cases[j] + w) % nc
                 distri_z_ref[j, new_idx] = distri_x[j, x]
@@ -1852,3 +1852,25 @@ def test_factor_gen_pub():
             bp.bp_acyclic("B")
             result = bp.get_distribution("B")
             assert np.argmax(result) == (nc - 1) ^ a
+
+
+def test_cst_oob():
+    """
+    Test constant out of bound
+    """
+    nc = 5
+    y_cases = [5, 6, 2000, 2**16 - 1, 2**16, 2**32 - 1]
+
+    graph = f"""
+        # some comments
+        NC {nc}
+        PROPERTY z = x+y
+        VAR MULTI x
+        PUB MULTI y
+        VAR MULTI z
+        """
+    graph = FactorGraph(graph)
+    for y in y_cases:
+        y = np.array([y], dtype=np.uint32)
+        with pytest.raises(ValueError):
+            _ = BPState(graph, 1, {"y": y})
