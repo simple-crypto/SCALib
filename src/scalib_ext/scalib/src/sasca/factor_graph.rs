@@ -543,6 +543,10 @@ impl FactorGraph {
         propagations.reverse();
         propagations
     }
+
+    pub fn nc(&self) -> usize {
+        self.nc
+    }
 }
 
 impl Node {

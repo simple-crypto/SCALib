@@ -70,7 +70,12 @@ impl FactorGraph {
         public_values: PyObject,
         gen_factors: PyObject,
     ) -> PyResult<BPState> {
-        let pub_values = pyobj2pubs(py, public_values, self.get_inner().public_multi())?;
+        let pub_values = pyobj2pubs(
+            py,
+            public_values,
+            self.get_inner().public_multi(),
+            self.get_inner().nc(),
+        )?;
         let gen_factors = pyobj2factors(py, gen_factors, self.get_inner().gf_multi())?;
         Ok(BPState {
             inner: Some(sasca::BPState::new(
@@ -104,11 +109,12 @@ impl FactorGraph {
         factor_assignments: PyObject,
     ) -> PyResult<()> {
         let inner = self.get_inner();
-        let pub_values = pyobj2pubs(py, public_values, inner.public_multi())?;
+        let pub_values = pyobj2pubs(py, public_values, inner.public_multi(), inner.nc())?;
         let var_values = pyobj2pubs(
             py,
             var_assignments,
             inner.vars().map(|(v, vn)| (vn, inner.var_multi(v))),
+            inner.nc(),
         )?;
         let gen_factors = pyobj2factors(py, factor_assignments, self.get_inner().gf_multi())?;
         inner
@@ -121,6 +127,7 @@ fn pyobj2pubs<'a>(
     py: Python,
     public_values: PyObject,
     expected: impl Iterator<Item = (&'a str, bool)>,
+    nc: usize,
 ) -> PyResult<Vec<sasca::PublicValue>> {
     // FIXME: move back to &str instead of String
     let mut public_values: HashMap<String, PyObject> = public_values.extract(py)?;
@@ -132,6 +139,7 @@ fn pyobj2pubs<'a>(
                     .remove(pub_name)
                     .ok_or_else(|| PyKeyError::new_err(format!("Missing value {}.", pub_name)))?,
                 multi,
+                nc,
             )
         })
         .collect::<Result<Vec<sasca::PublicValue>, PyErr>>()?;
@@ -443,9 +451,15 @@ fn obj2distr(py: Python, distr: PyObject, multi: bool) -> PyResult<sasca::Distri
     .map_err(|e| PyTypeError::new_err(e.to_string()))
 }
 
-fn obj2pub(py: Python, obj: PyObject, multi: bool) -> PyResult<sasca::PublicValue> {
+fn obj2pub(py: Python, obj: PyObject, multi: bool, nc: usize) -> PyResult<sasca::PublicValue> {
     Ok(if multi {
         let obj: Vec<sasca::ClassVal> = obj.extract(py)?;
+        if let Some(v) = obj.iter().filter(|x| **x as usize >= nc).next() {
+            return Err(PyValueError::new_err(format!(
+                "Public value larger than NC ({} >= {}).",
+                *v, nc
+            )));
+        }
         sasca::PublicValue::Multi(obj)
     } else {
         let obj: sasca::ClassVal = obj.extract(py)?;
