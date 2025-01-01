@@ -8,6 +8,8 @@ Not released
 * Change CI build to require x86-64-v3 instead of just AVX2. This is roughly
   equivalent in terms of supported CPUs, but allows more instructions to be
   used.
+* Support numpy 2.
+* Raise minimum supported python version to 3.10.
 
 v0.6.0 (2024/09/03)
 -------------------
