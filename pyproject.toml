@@ -16,7 +16,7 @@ addopts = ["--cov=scalib", "--doctest-modules", "-ra", "--pyargs"]
 testpaths = ["tests", "scalib", "examples"]
 
 [tool.cibuildwheel]
-manylinux-x86_64-image = "ghcr.io/simple-crypto/manylinux2014_x86_64-clang:rust-1.66.1"
+manylinux-x86_64-image = "ghcr.io/simple-crypto/manylinux_2_28_x86_64-clang:rust-1.83.0"
 build-verbosity = 1
 build = ["cp310-*"]
 skip = ["*musllinux*"]

@@ -170,7 +170,7 @@ jobs:
           CIBW_TEST_COMMAND: pytest {project}/tests
           CIBW_TEST_REQUIRES: "-r tests/requirements.txt"
           CIBW_ARCHS_MACOS: "${{ matrix.vers}}"
-          CIBW_ENVIRONMENT_MACOS: "SCALIB_X86_64_V3=0"
+          CIBW_ENVIRONMENT_MACOS: "SCALIB_X86_64_V3=0 MACOSX_DEPLOYMENT_TARGET=10.12"
       - uses: actions/upload-artifact@v3
         with:
           name: dist
