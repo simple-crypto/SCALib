@@ -13,14 +13,14 @@ blis = ["blis-src", "blis-sys2"]
 [dependencies]
 
 # Utilities
-thiserror = "2.0"
+thiserror = "2.0.9"
 itertools = "0.14"
 rayon = "1.10"
 num-integer = "0.1"
-index_vec = { version = "0.1", features = [
+index_vec = { version = "0.1.4", features = [
     "serde",
 ] } # Type-safe indices in FactorGraph
-indexmap = { version = "1.9", features = ["serde"] } # Factor graph data
+indexmap = { version = "2.5.0", features = ["serde"] } # Factor graph data
 serde = { version = "1.0", features = [
     "derive",
     "rc",
@@ -43,7 +43,7 @@ geigen = { path = "../geigen" }
 
 # Numerical libs
 ndarray = { version = "0.16.1", features = ["rayon", "approx", "serde"] }
-blis-src = { version = "0.2.1", default-features = false, features = [
+blis-src = { version = "0.2.2", default-features = false, features = [
     "static",
     "pthreads",
 ], optional = true }
@@ -51,13 +51,14 @@ blis-sys2 = { version = "0.2.2", optional = true }
 matrixmultiply = "0.3"
 kdtree = { version = "0.7", features = ["serialize"] }
 nalgebra = "0.33.2"
-nshare = { version = "0.10", default-features = false, features = [
+nshare = { version = "0.10", no-default-features = true, features = [
     "nalgebra",
     "ndarray",
 ] }
 
-realfft = "3.4"
+realfft = "3.4.0"
 num-traits = "0.2"
+quickdiv = "0.1.1"
 
 [lib]
 bench = false

@@ -14,8 +14,8 @@ arbitrary = { version = "1.4", features = ["derive"], optional = true }
 realfft = "3.4"
 
 [build-dependencies]
-cc = "1.2"
-bindgen = "0.71"
+cc = "1.2.6"
+bindgen = "0.71.1"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
