@@ -6,6 +6,8 @@ from scalib.config import get_config
 import scalib.tools
 import scalib.utils
 
+from typing import Optional
+
 
 class LDAClassifier:
     r"""Models the leakage :math:`\mathbf{l}` with :math:`n_s` dimensions using
@@ -316,5 +318,174 @@ class MultiLDA:
                     executor.map(
                         lambda i: self.ldas[i].predict_proba(traces[:, self.pois[i]]),
                         range(len(self.ldas)),
+                    )
+                )
+
+
+class MultiLDA2:
+    """Perform LDA on `nv` distinct variables for the same leakage traces.
+
+    While functionally similar to a simple for loop, this enables solving the
+    LDA problems in parallel in a simple fashion. This also enable easy
+    handling of Points Of Interest (POIs) in long traces.
+
+    Parameters
+    ----------
+    ncs: array_like, int
+        Number of classes for each variable. Shape `(nv,)`.
+    ps: array_like, int
+        Number of dimensions to keep after dimensionality reduction for each variable.
+        Shape `(nv,)`.
+    pois: list of array_like, int
+        Indices of the POIs in the traces for each variable. That is, for
+        variable ``i``, and training trace ``t``, ``t[pois[i]]`` is the input
+        datapoints for the LDA.
+    gemm_mode:
+        See :func:`LDACLassifier.fit_u`.
+
+    Examples
+    --------
+    >>> from scalib.modeling import MultiLDA
+    >>> import numpy as np
+    >>> # 5000 traces with 50 points each
+    >>> traces = np.random.randint(0, 256, (5000,50),dtype=np.int16)
+    >>> # 5 variables (8-bit), and 5000 traces
+    >>> x = np.random.randint(0, 256, (5000, 5),dtype=np.uint16)
+    >>> # 10 POIs for each of the 5 variables
+    >>> pois = [list(range(7*i, 7*i+10)) for i in range(5)]
+    >>> # Keep 3 dimensions after dimensionality reduction
+    >>> lda = MultiLDA(5*[256], 5*[3], pois)
+    >>> lda.fit_u(traces, x)
+    >>> lda.solve()
+    >>> # Predict the class for 20 traces.
+    >>> nt = np.random.randint(0, 256, (20, 50), dtype=np.int16)
+    >>> predicted_proba = lda.predict_proba(nt)
+    """
+
+    def __init__(
+        self,
+        ncs: Optional[list[int]] = None,
+        ps: Optional[list[int]] = None,
+        pois=None,
+        gemm_mode=None,
+        *,
+        nc: Optional[int] = None,
+        p: Optional[int] = None
+    ):
+        if gemm_mode is not None:
+            import warnings
+
+            warnings.warn(
+                "gemm_mode parameter is deprecated and has no effect",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if pois is None:
+            raise ValueError("Parameter pois must not be None")
+        self._pois = pois
+        if ncs is not None:
+            import warnings
+
+            warnings.warn(
+                "ncs parameter is deprecated, use nc instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if not (all(x == ncs[0] for x in ncs)):
+                raise ValueError(
+                    "All values in nc must be equal, other cases are not supported."
+                )
+            self._nc = ncs[0]
+        else:
+            self._nc = nc
+        if ps is not None:
+            import warnings
+
+            warnings.warn(
+                "ps parameter is deprecated, use p instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if not (all(x == ps[0] for x in ps)):
+                raise ValueError(
+                    "All values in nc must be equal, other cases are not supported."
+                )
+            self._p = ps[0]
+        else:
+            self._p = p
+        self._init = False
+        self._done = False
+        self._solved = False
+
+    def fit_u(self, traces, x):
+        """Update the LDA estimates with new training data.
+
+        Parameters
+        ----------
+        traces : array_like, int16
+            Array that contains the traces. The array must
+            be of dimension `(n,ns)` and its type must be `int16`.
+        x : array_like, uint16
+            Labels for each trace. Must be of shape `(n, nv)` and
+            must be `uint16`.
+        """
+        if self._done:
+            raise ValueError("Cannot fit_u after calling .solve(..., done=True).")
+        if not self._init:
+            self._init = True
+            self._ns = traces.shape[0]
+            self._acc = _scalib_ext.MultiLda(self._ns, self._nc, self._pois)
+        with scalib.utils.interruptible():
+            self._acc.fit(traces, x, get_config())
+            self._solved = False
+
+    def solve(self, done: bool = False):
+        """See `LDAClassifier.solve`."""
+        if not self._init:
+            raise ValueError("Cannot .solve since .fit_u was never called.")
+        if self._solved:
+            raise ValueError(
+                "Already called .solve() on this object, should not be called twice."
+            )
+        with scalib.utils.interruptible():
+            self._ldas = self._acc.lda(self._p, get_config())
+
+        self._solved = True
+        self._done = done
+
+        if done:
+            del self._acc
+
+    def predict_proba(self, traces):
+        """Predict probabilities for all variables.
+
+        See `LDAClassifier.predict_proba`.
+
+        Parameters
+        ----------
+        traces : array_like, int16
+            Array that contains the traces. The array must
+            be of dimension `(n,ns)`.
+
+        Returns
+        -------
+        list of array_like, f64
+            Probabilities. `nv` arrays of shape `(n, nc)`.
+        """
+        if not self._solved:
+            raise ValueError(
+                "Call LDA.solve() before LDA.predict_proba() to compute the model."
+            )
+        # Put as much work as needed to fill rayon threadpool
+        with scalib.utils.interruptible():
+            with scalib.tools.ContextExecutor(
+                max_workers=get_config().threadpool.n_threads
+            ) as executor:
+                return list(
+                    executor.map(
+                        lambda i: self._ldas[i].predict_proba(
+                            traces[:, self._pois[i]], get_config()
+                        ),
+                        range(len(self._ldas)),
                     )
                 )
