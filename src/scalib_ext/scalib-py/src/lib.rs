@@ -9,6 +9,7 @@ use std::error::Error;
 mod factor_graph;
 mod information;
 mod lda;
+mod multi_lda;
 mod ranking;
 mod rlda;
 mod snr;
@@ -119,6 +120,7 @@ fn _scalib_ext(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<ttest::MTtest>()?;
     m.add_class::<lda::LDA>()?;
     m.add_class::<lda::LdaAcc>()?;
+    m.add_class::<multi_lda::MultiLda>()?;
     m.add_class::<rlda::RLDA>()?;
     m.add_class::<rlda::RLDAClusteredModel>()?;
     m.add_class::<information::ItEstimator>()?;

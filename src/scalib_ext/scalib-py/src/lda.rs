@@ -115,7 +115,7 @@ impl LdaAcc {
 
 #[pyclass]
 pub(crate) struct LDA {
-    inner: scalib::lda::LDA,
+    pub(crate) inner: scalib::lda::LDA,
 }
 #[pymethods]
 impl LDA {

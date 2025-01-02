@@ -1,7 +1,7 @@
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
 from scalib import ScalibError
-from scalib.modeling import LDAClassifier, MultiLDA
+from scalib.modeling import LDAClassifier, MultiLDA2
 import numpy as np
 import scipy.stats
 import pickle
@@ -181,7 +181,7 @@ def test_multilda():
     x = np.random.randint(0, 256, (5000, 50), dtype=np.int16)
     y = np.random.randint(0, 256, (5000, 5), dtype=np.uint16)
     pois = [list(range(7 * i, 7 * i + 10)) for i in range(5)]
-    lda = MultiLDA(5 * [256], 5 * [3], pois)
+    lda = MultiLDA2(5 * [256], 5 * [3], pois)
     lda.fit_u(x, y)
     lda.solve()
     x = np.random.randint(0, 256, (20, 50), dtype=np.int16)

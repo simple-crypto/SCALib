@@ -185,7 +185,7 @@ impl LDA {
     /// sw: intra-class covariance
     /// sb: intra-class covariance
     /// means_ns: means per class
-    fn from_matrices(
+    pub fn from_matrices(
         n: usize,
         p: usize,
         sw: ArrayView2<f64>,
@@ -194,6 +194,10 @@ impl LDA {
     ) -> Result<Self> {
         let ns = sw.shape()[0];
         let nc = means_ns.shape()[0];
+        assert_eq!(ns, sw.shape()[1]);
+        assert_eq!(ns, sb.shape()[0]);
+        assert_eq!(ns, sb.shape()[1]);
+        assert_eq!(ns, means_ns.shape()[1]);
         // LDA here
         // ---- Step 1
         let projection = if p == ns {
