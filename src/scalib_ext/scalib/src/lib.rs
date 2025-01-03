@@ -20,8 +20,8 @@ pub enum ScalibError {
     EmptyClass,
     #[error("An error occured in the linear algebra solver.")]
     GeigenError(#[from] geigen::GeigenError),
-    #[error("Too many traces for SNR (>= 2**32).")]
-    SnrTooManyTraces,
+    #[error("Too many traces (>= 2**32).")]
+    TooManyTraces,
     #[error(
         "Too many traces for SNR, a sum might overflow. Set use_64bit=True to solve this. \
          (There is a class with {max_n_traces} traces, upper bound for abs. leakage value: {leak_upper_bound}."
@@ -38,6 +38,10 @@ pub enum ScalibError {
     EmptyKdTree,
     #[error("No associated classes stored")]
     NoAssociatedClassesStored,
+    #[error("Too many POIs")]
+    TooManyPois,
+    #[error("POI out of bound")]
+    PoiOutOfBound,
 }
 
 #[derive(Clone)]

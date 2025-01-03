@@ -164,6 +164,7 @@ impl LdaAcc {
 ///  require O(ns*nc) computation (and storage) for the scores, while it is O(ns*p + p*nc) for the
 ///  split one (W then omega), which is interesting as long as p << nc (which is true, otherwise we
 ///  could as well take p=nc and not reduce dimensionality).
+#[derive(Debug, Clone)]
 pub struct LDA {
     /// Projection matrix to the subspace. shape of (ns,p)
     pub projection: Array2<f64>,
@@ -248,12 +249,6 @@ impl LDA {
     /// x : traces with shape (n,ns)
     /// return prs with shape (n,nc). Every row corresponds to one probability distribution
     pub fn predict_proba(&self, x: ArrayView2<i16>) -> Array2<f64> {
-        fn softmax(mut v: ndarray::ArrayViewMut1<f64>) {
-            let max = v.fold(f64::NEG_INFINITY, |x, y| f64::max(x, *y));
-            v.mapv_inplace(|x| f64::exp(x - max));
-            let tot = v.sum();
-            v /= tot;
-        }
         let x = x.mapv(|x| x as f64);
         let mut scores = x.dot(&self.projection).dot(&self.omega) + self.pk.slice(s![NewAxis, ..]);
         for score_distr in scores.outer_iter_mut() {
@@ -261,4 +256,10 @@ impl LDA {
         }
         scores
     }
+}
+pub(crate) fn softmax(mut v: ndarray::ArrayViewMut1<f64>) {
+    let max = v.fold(f64::NEG_INFINITY, |x, y| f64::max(x, *y));
+    v.mapv_inplace(|x| f64::exp(x - max));
+    let tot = v.sum();
+    v /= tot;
 }

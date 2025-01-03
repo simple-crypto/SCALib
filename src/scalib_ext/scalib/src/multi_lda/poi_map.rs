@@ -1,5 +1,7 @@
 use itertools::Itertools;
 
+use crate::{Result, ScalibError};
+
 #[derive(Debug, Clone)]
 pub struct PoiMap {
     used_pois: Vec<bool>,
@@ -8,10 +10,12 @@ pub struct PoiMap {
 }
 
 impl PoiMap {
-    pub fn new(ns: u32, pois: impl Iterator<Item = u32>) -> Result<Self, ()> {
+    pub fn new(ns: u32, pois: impl Iterator<Item = u32>) -> Result<Self> {
         let mut used_pois = vec![false; ns as usize];
         for poi in pois {
-            *used_pois.get_mut(poi as usize).ok_or(())? = true;
+            *used_pois
+                .get_mut(poi as usize)
+                .ok_or(ScalibError::PoiOutOfBound)? = true;
         }
         let new2old = used_pois
             .iter()

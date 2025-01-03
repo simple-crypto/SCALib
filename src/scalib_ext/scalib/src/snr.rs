@@ -213,11 +213,11 @@ where
         assert!(y.is_standard_layout());
         let n_traces: u32 = traces.shape()[0]
             .try_into()
-            .map_err(|_| ScalibError::SnrTooManyTraces)?;
+            .map_err(|_| ScalibError::TooManyTraces)?;
         self.tot_n_samples = self
             .tot_n_samples
             .checked_add(n_traces)
-            .ok_or(ScalibError::SnrTooManyTraces)?;
+            .ok_or(ScalibError::TooManyTraces)?;
         let mut max_n_samples: u32 = 0;
         let nc = self.nc;
         let np = self.np;
