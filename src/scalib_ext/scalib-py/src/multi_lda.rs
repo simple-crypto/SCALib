@@ -1,27 +1,21 @@
 //! Python binding of SCALib's MultiLda implementation.
 
 use crate::ScalibError;
-use numpy::{
-    IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, ToPyArray,
-};
+use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
 use pyo3::prelude::*;
 
 #[pyclass]
-pub(crate) struct MultiLda {
-    inner: scalib::multi_lda::MultiLda,
+pub(crate) struct MultiLdaAcc {
+    inner: scalib::multi_lda::MultiLdaAcc,
 }
 #[pymethods]
-impl MultiLda {
+impl MultiLdaAcc {
     #[new]
     /// Init an LDA empty LDA accumulator
-    fn new(ns: u32, nc: u16, pois: Vec<Vec<u32>>) -> PyResult<Self> {
+    fn new(py: Python, ns: u32, nc: u16, pois: Vec<Vec<u32>>) -> PyResult<Self> {
         Ok(Self {
-            inner: scalib::multi_lda::MultiLda::new(ns, nc, pois)
-                .map_err(|e| {
-                    let _: () = e;
-                    todo!("TODO ScalibError")
-                })
-                .map_err(|e| ScalibError::new_err(e))?,
+            inner: scalib::multi_lda::MultiLdaAcc::new(ns, nc, pois)
+                .map_err(|e| ScalibError::from_scalib(e, py))?,
         })
     }
     /// Add measurements to the accumulator
@@ -39,10 +33,6 @@ impl MultiLda {
         let y = y.as_array();
         config
             .on_worker(py, |_| self.inner.update(x, y))
-            .map_err(|e| {
-                let _: () = e;
-                todo!("fix this")
-            })
             .map_err(|e| ScalibError::from_scalib(e, py))
     }
 
@@ -58,11 +48,7 @@ impl MultiLda {
                 let n = self.inner.ntraces() as usize;
                 let res = self
                     .inner
-                    .get_matrices()
-                    .map_err(|_| {
-                        todo!("remove this");
-                        scalib::ScalibError::EmptyClass
-                    } /* FIXME remove this */)?
+                    .get_matrices()?
                     .into_iter()
                     .map(|(sw, sb, mus)| {
                         Ok(crate::lda::LDA {
@@ -88,12 +74,7 @@ impl MultiLda {
                 .into_iter()
                 .map(|(sw, _, _)| sw.into_pyarray(py))
                 .collect()),
-            Err(e) => Err({
-                let _: () = e;
-                todo!("fix this");
-                let e = scalib::ScalibError::EmptyClass; /* FIXME remove this */
-                ScalibError::from_scalib(e, py)
-            }),
+            Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
     }
     /// Get the matrix sb (debug purpose)
@@ -104,12 +85,7 @@ impl MultiLda {
                 .into_iter()
                 .map(|(_, sb, _)| sb.into_pyarray(py))
                 .collect()),
-            Err(e) => Err({
-                let _: () = e;
-                todo!("fix this");
-                let e = scalib::ScalibError::EmptyClass; /* FIXME remove this */
-                ScalibError::from_scalib(e, py)
-            }),
+            Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
     }
 
@@ -120,12 +96,7 @@ impl MultiLda {
                 .into_iter()
                 .map(|(_, _, mus)| mus.into_pyarray(py))
                 .collect()),
-            Err(e) => Err({
-                let _: () = e;
-                todo!("fix this");
-                let e = scalib::ScalibError::EmptyClass; /* FIXME remove this */
-                ScalibError::from_scalib(e, py)
-            }),
+            Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
     }
 
@@ -142,11 +113,6 @@ impl MultiLda {
     > {
         Ok(config
             .on_worker(py, |_| self.inner.get_matrices())
-            .map_err(|e| {
-                let _: () = e;
-                todo!("fix this");
-                scalib::ScalibError::EmptyClass
-            })
             .map_err(|e| ScalibError::from_scalib(e, py))?
             .into_iter()
             .map(|(sw, sb, mus)| {

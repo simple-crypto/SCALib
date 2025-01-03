@@ -6,7 +6,7 @@ use itertools::{izip, Itertools};
 
 use ndarray::{Array2, ArrayView2};
 
-type Result<T> = std::result::Result<T, ()>;
+use crate::{Result, ScalibError};
 
 const N: usize = 64;
 const MAX_CHUNK_SIZE: usize = 2048;
@@ -30,7 +30,11 @@ impl CovPairs {
             #[allow(clippy::single_range_in_vec_init)]
             (
                 pairs.to_vec(),
-                (0..(pairs.len().try_into().map_err(|_| ())?)).collect(),
+                (0..(pairs
+                    .len()
+                    .try_into()
+                    .map_err(|_| ScalibError::TooManyPois)?))
+                    .collect(),
                 vec![0..pairs.len()],
             )
         } else {
@@ -89,8 +93,13 @@ impl CovAcc {
         para: bool,
     ) -> Result<()> {
         assert!(traces.is_standard_layout());
-        let n_traces: u32 = traces.shape()[0].try_into().map_err(|_| ())?;
-        self.tot_n_traces = self.tot_n_traces.checked_add(n_traces).ok_or(())?;
+        let n_traces: u32 = traces.shape()[0]
+            .try_into()
+            .map_err(|_| ScalibError::TooManyTraces)?;
+        self.tot_n_traces = self
+            .tot_n_traces
+            .checked_add(n_traces)
+            .ok_or(ScalibError::TooManyTraces)?;
         let traces = BatchedTraces::<N>::new(poi_map, traces).get_batches();
         let split_at = pois.chunks[1..].iter().map(|r| r.start);
         let scatter_chunks = multi_split_at_mut(self.scatter.as_mut_slice(), split_at.clone());
@@ -166,7 +175,10 @@ fn chunk_pairs(
     ns: u32,
     max_chunk_size: usize,
 ) -> Result<(Vec<u32>, Vec<std::ops::Range<usize>>)> {
-    let n_pairs: u32 = pairs.len().try_into().map_err(|_| ())?;
+    let n_pairs: u32 = pairs
+        .len()
+        .try_into()
+        .map_err(|_| ScalibError::TooManyPois)?;
     let mut pair_to_old_idx = Vec::with_capacity(n_pairs as usize);
     let mut chunks = vec![];
     let mut j_for_i = vec![vec![]; ns as usize];

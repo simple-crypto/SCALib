@@ -434,7 +434,7 @@ class MultiLDA2:
         if not self._init:
             self._init = True
             self._ns = traces.shape[0]
-            self._acc = _scalib_ext.MultiLda(self._ns, self._nc, self._pois)
+            self._acc = _scalib_ext.MultiLdaAcc(self._ns, self._nc, self._pois)
         with scalib.utils.interruptible():
             self._acc.fit(traces, x, get_config())
             self._solved = False

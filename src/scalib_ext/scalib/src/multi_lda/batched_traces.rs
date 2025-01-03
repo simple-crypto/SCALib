@@ -17,6 +17,13 @@ impl<const N: usize> AA<N> {
         self.0.iter().map(|x| *x as i64).sum()
     }
 }
+impl<const N: usize> std::ops::AddAssign<&AA<N>> for AA<N> {
+    fn add_assign(&mut self, rhs: &AA<N>) {
+        for i in 0..N {
+            self.0[i] += rhs.0[i];
+        }
+    }
+}
 
 impl<'a, 'b, const N: usize> BatchedTraces<'a, 'b, N> {
     pub fn new(poi_map: &'b PoiMap, traces: ArrayView2<'a, i16>) -> Self {

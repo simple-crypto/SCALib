@@ -2,25 +2,58 @@ mod batched_traces;
 mod cov_pairs;
 mod poi_map;
 mod sparse_trace_sums;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
+use crate::lda::{softmax, LDA};
+
+use crate::{Result, ScalibError};
 
 pub type Class = u16;
 pub type Var = u16;
 
-use std::ops::Mul;
-
+use batched_traces::BatchedTraces;
 use cov_pairs::{CovAcc, CovPairs};
 use poi_map::PoiMap;
 use sparse_trace_sums::{SparseTraceSums, SparseTraceSumsState};
 
 use itertools::{izip, Itertools};
-use ndarray::{azip, Array2, ArrayView2, Axis};
+use ndarray::{azip, Array2, Array3, ArrayView2, Axis};
 
-type Result<T> = std::result::Result<T, ()>;
+trait RangeExt {
+    type Idx;
+    fn range_chunks(self, size: Self::Idx) -> impl Iterator<Item = Self>;
+}
+
+impl RangeExt for std::ops::Range<usize> {
+    type Idx = usize;
+    fn range_chunks(self, size: Self::Idx) -> impl Iterator<Item = Self> {
+        let l = self.len();
+        (0..(l.div_ceil(size))).map(move |i| (i * size..std::cmp::min((i + 1) * size, l)))
+    }
+}
+
+trait ArrayBaseExt<A, D> {
+    fn clone_row_major(&self) -> ndarray::Array<A, D>;
+}
+impl<A, S, D> ArrayBaseExt<A, D> for ndarray::ArrayBase<S, D>
+where
+    A: Clone,
+    S: ndarray::RawData<Elem = A> + ndarray::Data,
+    D: ndarray::Dimension,
+{
+    fn clone_row_major(&self) -> ndarray::Array<A, D> {
+        let res = ndarray::Array::<A, D>::build_uninit(self.dim(), |a| {
+            self.assign_to(a);
+        });
+        unsafe { res.assume_init() }
+    }
+}
 
 #[derive(Debug, Clone)]
 struct MultiLdaConf {
     ns: u32,
     nv: Var,
+    nc: Class,
     // Pois for each var
     pois: Vec<Vec<u32>>,
     pois_mapped: Vec<Vec<u32>>,
@@ -36,7 +69,10 @@ impl MultiLdaConf {
         for pois in pois.iter_mut() {
             pois.sort_unstable();
         }
-        let nv: Var = pois.len().try_into().map_err(|_| ())?;
+        let nv: Var = pois
+            .len()
+            .try_into()
+            .map_err(|_| ScalibError::TooManyPois)?;
         let poi_map = PoiMap::new(ns, pois.iter().flat_map(|x| x.iter().copied()))?;
         let pois_mapped = pois
             .iter()
@@ -62,6 +98,7 @@ impl MultiLdaConf {
         Ok(Self {
             ns,
             nv,
+            nc,
             pois,
             pois_mapped,
             cov_pois_offsets,
@@ -89,43 +126,41 @@ impl MultiLdaConf {
     fn npois_var(&self, var: Var) -> usize {
         self.pois_mapped[var as usize].len()
     }
+    fn n_pois(&self) -> usize {
+        self.poi_map.len() as usize
+    }
+    // Number of POI blocks for MultiLda.predict_proba
+    fn n_poi_blocks(&self) -> usize {
+        self.n_pois().div_ceil(POI_BLOCK_SIZE)
+    }
+    fn poi_block_ranges(&self) -> impl Iterator<Item = std::ops::Range<usize>> {
+        (0..self.n_pois()).range_chunks(POI_BLOCK_SIZE)
+    }
+    /// POI blocks for MultiLda.predict_proba
+    fn poi_blocks(&self) -> Vec<Vec<Vec<u16>>> {
+        assert!(POI_BLOCK_SIZE < (u16::MAX as usize));
+        self.pois_mapped
+            .iter()
+            .map(|pois| {
+                let mut res = vec![vec![]; self.n_poi_blocks()];
+                for poi in pois.iter() {
+                    let poi = *poi as usize;
+                    res[poi / POI_BLOCK_SIZE].push((poi % POI_BLOCK_SIZE) as u16);
+                }
+                res
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone)]
-struct MultiLdaState {
+struct MultiLdaAccState {
     n_traces: u32,
     trace_sums: SparseTraceSumsState,
     cov_acc: CovAcc,
 }
 
-#[derive(Debug, Clone)]
-pub struct LdaMatrices {
-    pub s_b: Array2<f64>,
-    pub s_w: Array2<f64>,
-    pub mus: Array2<f64>,
-}
-impl LdaMatrices {
-    fn from_seqs(npois: usize, s_b: Vec<f64>, s_w: Vec<f64>, mus: Array2<f64>) -> Self {
-        Self {
-            s_b: Self::seq2mat(npois, s_b.as_slice()),
-            s_w: Self::seq2mat(npois, s_w.as_slice()),
-            mus,
-        }
-    }
-    fn seq2mat(n: usize, seq: &[f64]) -> Array2<f64> {
-        let mut res = Array2::zeros((n, n));
-        for ((i, j), x) in MultiLdaConf::pairs_n(n as u32).zip(seq.iter()) {
-            res[(i as usize, j as usize)] = *x;
-            res[(j as usize, i as usize)] = *x;
-        }
-        res
-    }
-    fn to_tuple(self) -> (Array2<f64>, Array2<f64>, Array2<f64>) {
-        (self.s_w, self.s_b, self.mus)
-    }
-}
-
-impl MultiLdaState {
+impl MultiLdaAccState {
     fn new(multi_lda: &MultiLdaConf) -> Self {
         Self {
             n_traces: 0,
@@ -141,8 +176,12 @@ impl MultiLdaState {
     ) -> Result<()> {
         self.n_traces = self
             .n_traces
-            .checked_add(traces.shape()[0].try_into().map_err(|_| ())?)
-            .ok_or(())?;
+            .checked_add(
+                traces.shape()[0]
+                    .try_into()
+                    .map_err(|_| ScalibError::TooManyPois)?,
+            )
+            .ok_or(ScalibError::TooManyTraces)?;
         self.trace_sums.update(&multi_lda.trace_sums, traces, y);
         self.cov_acc
             .update_para(&multi_lda.poi_map, &multi_lda.cov_pois, traces)?;
@@ -197,7 +236,7 @@ impl MultiLdaState {
         let sums = &self.trace_sums.sums[var as usize];
         let n_traces = self.trace_sums.n_traces.index_axis(Axis(0), var as usize);
         if n_traces.iter().any(|n| *n == 0) {
-            return Err(());
+            return Err(ScalibError::EmptyClass);
         }
         // Total scatter offset by mu**2*n_tot.
         let s_t_u = multi_lda
@@ -227,12 +266,12 @@ impl MultiLdaState {
         let mus = azip!(sums.t())
             .and_broadcast(n_traces.insert_axis(Axis(1)))
             .map_collect(|s, n| (*s as f64) / (*n as f64));
-        Ok(LdaMatrices::from_seqs(
-            multi_lda.npois_var(var),
-            s_w,
-            s_b,
+        Ok(LdaMatrices {
+            s_w: LdaMatrices::seq2mat(multi_lda.npois_var(var), s_w.as_slice()),
+            s_b: LdaMatrices::seq2mat(multi_lda.npois_var(var), s_b.as_slice()),
             mus,
-        ))
+            n_traces: self.n_traces,
+        })
     }
 
     fn compute_matrices(&self, multi_lda: &MultiLdaConf) -> Result<Vec<LdaMatrices>> {
@@ -243,15 +282,15 @@ impl MultiLdaState {
 }
 
 #[derive(Debug, Clone)]
-pub struct MultiLda {
+pub struct MultiLdaAcc {
     conf: MultiLdaConf,
-    state: MultiLdaState,
+    state: MultiLdaAccState,
 }
 
-impl MultiLda {
+impl MultiLdaAcc {
     pub fn new(ns: u32, nc: Class, pois: Vec<Vec<u32>>) -> Result<Self> {
         let conf = MultiLdaConf::new(ns, nc, pois)?;
-        let state = MultiLdaState::new(&conf);
+        let state = MultiLdaAccState::new(&conf);
         Ok(Self { conf, state })
     }
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView2<Class>) -> Result<()> {
@@ -270,5 +309,211 @@ impl MultiLda {
     }
     pub fn pois(&self) -> &Vec<Vec<u32>> {
         &self.conf.pois
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LdaMatrices {
+    pub s_b: Array2<f64>,
+    pub s_w: Array2<f64>,
+    pub mus: Array2<f64>,
+    pub n_traces: u32,
+}
+
+impl LdaMatrices {
+    fn seq2mat(n: usize, seq: &[f64]) -> Array2<f64> {
+        let mut res = Array2::zeros((n, n));
+        for ((i, j), x) in MultiLdaConf::pairs_n(n as u32).zip(seq.iter()) {
+            res[(i as usize, j as usize)] = *x;
+            res[(j as usize, i as usize)] = *x;
+        }
+        res
+    }
+    fn to_tuple(self) -> (Array2<f64>, Array2<f64>, Array2<f64>) {
+        (self.s_w, self.s_b, self.mus)
+    }
+    fn lda(&self, p: u32) -> Result<LDA> {
+        LDA::from_matrices(
+            self.n_traces as usize,
+            p as usize,
+            self.s_w.view(),
+            self.s_b.view(),
+            self.mus.view(),
+        )
+    }
+}
+
+// MultiLda.predict_proba algorithm:
+//
+// Iteration dimentions:
+// - variables
+// - p (projected dimensions)
+// - samples in trace
+// - traces
+//
+// The core loop is made of FMA with one accumulator for N traces being updated
+// across the samples in the trace. That core loop body loads one f64 projection
+// coefficient and N i16 samples.
+// Therefore, we need N >= 4 for decent AVX2, N >= 32 good AVX2 at 4 cycles
+// latency and 0.5 CPI. For full cache-line usage, we also need N >= 32.
+//
+// Then we iterate over a block of POIs of a var, having the trace in L2 cache.
+// Trace L2 cache usage: tot_pois*N*2B, 8B/FMA -> if 2 FMA/cycle,
+// use 16B/cycle bandwidth.
+//
+// Then we iterate over all projection dimensions p. We use exactly the same traces, but
+// different projection coefficients and different intermediate results.
+//
+// Then we iterate over a block of variables. We keep projection coefficients and
+// intermediate results in L3 cache.
+//
+// Then we iterate over the POI blocks.
+//
+// L3 cache usage:
+// - projection coefficients: var_block_size*p*ns_per_var*8B
+// - intermediate results: var_block_size*p*N*8B
+//
+// L3 bandwidth (assuming AVX2: FMA_VEC_SIZE=4)
+// - projection coefficients: 8B/(N/FMA_VEC_SIZE)/inst = 32/N B/inst
+// - intermediate results: 8*FMA_VEC_SIZE/poi_block_size = 32/poi_block_size B/inst
+//
+// Then, we iterate over all trace blocks (in parallel over cores).
+// Finally, we iterate over varaible blocks.
+//
+// Constraints
+// N = 32
+// poi_block_size*N*2B < L2/2
+// var_block_size*p*ns_per_var*8B < L3_CCX/2 (L3_CCX = L3 aggregated per core complex/die/...)
+// var_block_size*p*N*8B < L3/ncores/4 (unlikely to be limiting)
+//
+// Now, let us make some conservative assuptions regarding cache sizes
+// - L2 = 512 kB
+// - L3_CCX = 8 MB
+// - L3/ncores = 2 MB
+const N: usize = 32;
+const L2_SIZE: usize = 512 * 1024;
+const L3_CCX: usize = 8 * 1024 * 1024;
+const L3_CORE: usize = 2 * 1024 * 1024;
+const POI_BLOCK_SIZE: usize = L2_SIZE / 2 / 2 / N;
+#[derive(Debug, Clone)]
+pub struct MultiLda {
+    p: usize,
+    conf: MultiLdaConf,
+    ldas: Vec<LDA>,
+    // indexing: [var][poi_block][poi_offset_in_block]
+    poi_blocks: Vec<Vec<Vec<u16>>>,
+}
+
+impl MultiLda {
+    pub fn from_matrices() -> Result<Self> {
+        todo!()
+    }
+    /// return the probability of each of the possible value for leakage samples
+    /// traces with shape (n,ns)
+    /// return prs with shape (nv,n,nc). Every row corresponds to one probability distribution
+    pub fn predict_proba(&self, traces: ArrayView2<i16>) -> Array3<f64> {
+        let mut res = Array3::zeros((
+            self.conf.nv as usize,
+            traces.shape()[0],
+            self.conf.nc as usize,
+        ));
+        let max_pois_per_var = self.conf.pois.iter().map(Vec::len).max().unwrap_or(1);
+        let mut var_block_size = std::cmp::min(
+            L3_CCX / 2 / 8 / max_pois_per_var / self.p,
+            L3_CORE / 4 / 8 / self.p,
+        );
+        if var_block_size == 0 {
+            eprintln!("WARNING: MultiLda.predict_proba not optimized for these parameters");
+            var_block_size = 1;
+        }
+
+        let traces_batched = BatchedTraces::<N>::new(&self.conf.poi_map, traces).get_batches();
+
+        for var_block in (0..(self.conf.nv as usize)).range_chunks(var_block_size) {
+            // Transpose with memory order.
+            let projections = var_block
+                .clone()
+                .map(|var| {
+                    /*
+                    let proj = self.ldas[var].projection.t();
+                    let mut res = Array2::zeros(proj.dim());
+                    res.assign(&proj);
+                    res
+                    */
+                    self.ldas[var].projection.t().clone_row_major()
+                })
+                .collect_vec();
+
+            let mut tmp = (0..traces_batched.len())
+                .map(|_| Array2::from_elem((var_block.len(), self.p), [0.0f64; N]))
+                .collect_vec();
+            (traces_batched.outer_iter(), tmp.as_mut_slice())
+                .into_par_iter()
+                .for_each(|(trace_batch, tmp)| {
+                    let trace_batch = trace_batch.as_slice().unwrap();
+                    for (poi_block, poi_block_range) in self.conf.poi_block_ranges().enumerate() {
+                        let trace_batch = &trace_batch[poi_block_range];
+                        for (var, mut tmp) in var_block.clone().zip(tmp.outer_iter_mut()) {
+                            let pois = self.poi_blocks[var][poi_block].as_slice();
+                            let proj = &projections[var];
+                            for (tmp, coefs) in tmp.iter_mut().zip(proj.outer_iter()) {
+                                let coefs = coefs.as_slice().unwrap();
+                                self.predict_proba_inner(tmp, trace_batch, coefs, pois);
+                            }
+                        }
+                    }
+                });
+            for (var_i, var) in var_block.clone().enumerate() {
+                let mut res = res.index_axis_mut(Axis(0), var);
+                let lda = &self.ldas[var];
+                /*
+                let mut omega = Array2::zeros(lda.omega.t().dim());
+                omega.assign(&lda.omega.t());
+                */
+                let omega = lda.omega.t().clone_row_major();
+                (res.axis_chunks_iter_mut(Axis(0), N), tmp.as_slice())
+                    .into_par_iter()
+                    .for_each(|(mut res, tmp)| {
+                        let tmp = tmp.index_axis(Axis(0), var_i);
+                        let tmp = tmp.as_slice().unwrap();
+                        for (mut res, pk, omega) in izip!(
+                            res.axis_iter_mut(Axis(1)),
+                            lda.pk.iter(),
+                            omega.outer_iter()
+                        ) {
+                            let res = res.as_slice_mut().unwrap();
+                            let omega = omega.as_slice().unwrap();
+                            let mut scores = [*pk; N];
+                            for p_i in 0..self.p {
+                                for i in 0..N {
+                                    scores[i] += tmp[p_i][i] * omega[p_i];
+                                }
+                            }
+                            for i in 0..res.len() {
+                                res[i] = scores[i];
+                            }
+                        }
+                        for res in res.outer_iter_mut() {
+                            softmax(res);
+                        }
+                    });
+            }
+        }
+        res
+    }
+    #[inline(never)]
+    fn predict_proba_inner(
+        &self,
+        acc: &mut [f64; N],
+        trace_batch: &[batched_traces::AA<N>],
+        proj_coefs: &[f64],
+        pois: &[u16],
+    ) {
+        for (coef, poi) in proj_coefs.iter().zip(pois.iter()) {
+            let samples = &trace_batch[*poi as usize];
+            for i in 0..N {
+                acc[i] += *coef * (samples.0[i] as f64);
+            }
+        }
     }
 }
