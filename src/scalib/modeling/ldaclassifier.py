@@ -210,7 +210,7 @@ class LDAClassifier:
         return self.acc.get_mus()
 
     @classmethod
-    def from_inner_solved(cls, lda):
+    def _from_inner_solved(cls, lda):
         self = cls.__new__(cls)
         self.lda = lda
         self.solved = True
@@ -346,97 +346,84 @@ class MultiLDA:
         return [lda.get_mus() for lda in self.ldas]
 
 
-class MultiLDA2:
-    """Perform LDA on `nv` distinct variables for the same leakage traces.
+class Lda:
+    r"""Models the leakage :math:`\mathbf{l}` with :math:`n_s` dimensions using
+    the linear discriminant analysis classifier (LDA) with integrated
+    dimensionality reduction.
 
-    While functionally similar to a simple for loop, this enables solving the
-    LDA problems in parallel in a simple fashion. This also enable easy
-    handling of Points Of Interest (POIs) in long traces.
+    Based on the training data, linear discriminant analysis build a linear
+    dimentionality reduction to :math:`p` dimensions that maximizes class
+    separation, for each target variable.
+    Then, for each variable, a multivariate gaussian template is fitted for
+    each class (using the same covariance matrix for all the classes) in the
+    reduced dimensionality space to predict leakage likelihood
+    :footcite:p:`LDA`.
+
+    Let :math:`\mathbf{W}` be the dimensionality reduction matrix of size
+    (:math:`p`, :math:`n_s`). The likelihood is
+
+    .. math::
+            \mathsf{\hat{f}}(\mathbf{l} | x) =
+                \frac{1}{\sqrt{(2\pi)^{p} \cdot |\mathbf{\Sigma} |}} \cdot
+                \exp^{\frac{1}{2}
+                    (\mathbf{W} \cdot \mathbf{l} - \mathbf{\mu}_x)
+                    \mathbf{\Sigma}
+                    ( \mathbf{W} \cdot \mathbf{l}-\mathbf{\mu}_x)'}
+
+    where :math:`\mathbf{\mu}_x` is the mean of the leakage for class :math:`x` in
+    the projected space (:math:`\mu_x = \mathbb{E}(\mathbf{W}\mathbf{l}_x)`, where
+    :math:`\mathbf{l}_x` denotes the leakage traces of class :math:`x`) and
+    :math:`\mathbf{\Sigma}` its covariance (:math:`\mathbf{\Sigma} =
+    \mathbb{Cov}(\mathbf{W}\mathbf{l}_x - \mathbf{\mu}_x)`).
+
+    :class:`Lda` provides the probability of each class with :meth:`predict_proba`
+    thanks to Bayes' law such that
+
+    .. math::
+        \hat{\mathsf{pr}}(x|\mathbf{l}) = \frac{\hat{\mathsf{f}}(\mathbf{l}|x)}
+                    {\sum_{x^*=0}^{n_c-1} \hat{\mathsf{f}}(\mathbf{l}|x^*)}.
+
+    Example
+    -------
+    >>> from scalib.modeling import Lda
+    >>> import numpy as np
+    >>> # 1000 traces of length 10, with value between 0 and 4091
+    >>> traces = np.random.randint(0, 4092, (1000, 10), dtype=np.int16)
+    >>> # classes between 0 and 15 (2 variables)
+    >>> x = np.random.randint(0, 16, (1000, 2), dtype=np.uint16)
+    >>> lda = Lda(nc=16, pois=[list(range(5)), list(range(4, 10))])
+    >>> lda.fit_u(traces, x)
+    >>> lda.solve(p=3) # Projection to 3 dimensions.
+    >>> # predict classes for new traces
+    >>> new_traces = np.random.randint(0, 256, (20,10), dtype=np.int16)
+    >>> predicted_proba = lda.predict_proba(new_traces)
+
+    Notes
+    -----
+    This should have similar behavior as scikit-learn's `LDA
+    <https://scikit-learn.org/stable/modules/lda_qda.html#lda-qda>`_, but it
+    has better performance and numerical properties (at the cost of
+    flexibility).
+
+    References
+    ----------
+
+    .. footbibliography::
 
     Parameters
     ----------
-    ncs: array_like, int
-        Number of classes for each variable. Shape `(nv,)`.
-    ps: array_like, int
-        Number of dimensions to keep after dimensionality reduction for each variable.
-        Shape `(nv,)`.
+    nc: int
+        Number of possible classes (e.g., 256 for 8-bit target). `nc` must
+        be smaller than `2**16`.
     pois: list of array_like, int
         Indices of the POIs in the traces for each variable. That is, for
         variable ``i``, and training trace ``t``, ``t[pois[i]]`` is the input
         datapoints for the LDA.
-    gemm_mode:
-        See :func:`LDACLassifier.fit_u`.
-
-    Examples
-    --------
-    >>> from scalib.modeling import MultiLDA
-    >>> import numpy as np
-    >>> # 5000 traces with 50 points each
-    >>> traces = np.random.randint(0, 256, (5000,50),dtype=np.int16)
-    >>> # 5 variables (8-bit), and 5000 traces
-    >>> x = np.random.randint(0, 256, (5000, 5),dtype=np.uint16)
-    >>> # 10 POIs for each of the 5 variables
-    >>> pois = [list(range(7*i, 7*i+10)) for i in range(5)]
-    >>> # Keep 3 dimensions after dimensionality reduction
-    >>> lda = MultiLDA(5*[256], 5*[3], pois)
-    >>> lda.fit_u(traces, x)
-    >>> lda.solve()
-    >>> # Predict the class for 20 traces.
-    >>> nt = np.random.randint(0, 256, (20, 50), dtype=np.int16)
-    >>> predicted_proba = lda.predict_proba(nt)
     """
 
-    def __init__(
-        self,
-        ncs: Optional[list[int]] = None,
-        ps: Optional[list[int]] = None,
-        pois=None,
-        gemm_mode=None,
-        *,
-        nc: Optional[int] = None,
-        p: Optional[int] = None
-    ):
-        if gemm_mode is not None:
-            import warnings
-
-            warnings.warn(
-                "gemm_mode parameter is deprecated and has no effect",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if pois is None:
-            raise ValueError("Parameter pois must not be None")
+    def __init__(self, *, nc: int, pois: list[np.ndarray]):
+        self._nc = nc
         self._pois = [list(sorted(x)) for x in pois]
-        if ncs is not None:
-            import warnings
-
-            warnings.warn(
-                "ncs parameter is deprecated, use nc instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if not (all(x == ncs[0] for x in ncs)):
-                raise ValueError(
-                    "All values in nc must be equal, other cases are not supported."
-                )
-            self._nc = ncs[0]
-        else:
-            self._nc = nc
-        if ps is not None:
-            import warnings
-
-            warnings.warn(
-                "ps parameter is deprecated, use p instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if not (all(x == ps[0] for x in ps)):
-                raise ValueError(
-                    "All values in nc must be equal, other cases are not supported."
-                )
-            self._p = ps[0]
-        else:
-            self._p = p
         self._init = False
         self._done = False
         self._solved = False
@@ -461,188 +448,25 @@ class MultiLDA2:
             self._acc = _scalib_ext.MultiLdaAcc(self._ns, self._nc, self._pois)
         with scalib.utils.interruptible():
             self._acc.fit(traces, x, get_config())
-            self._solved = False
-
-    def solve(self, done: bool = False):
-        """See `LDAClassifier.solve`."""
-        if not self._init:
-            raise ValueError("Cannot .solve since .fit_u was never called.")
-        if self._solved:
-            raise ValueError(
-                "Already called .solve() on this object, should not be called twice."
-            )
-        with scalib.utils.interruptible():
-            self._ldas = self._acc.ldas(self._p, get_config())
-
-        self._solved = True
-        self._done = done
-
-        if done:
-            del self._acc
-
-    def predict_proba(self, traces):
-        """Predict probabilities for all variables.
-
-        See `LDAClassifier.predict_proba`.
-
-        Parameters
-        ----------
-        traces : array_like, int16
-            Array that contains the traces. The array must
-            be of dimension `(n,ns)`.
-
-        Returns
-        -------
-        list of array_like, f64
-            Probabilities. `nv` arrays of shape `(n, nc)`.
-        """
-        if not self._solved:
-            raise ValueError(
-                "Call LDA.solve() before LDA.predict_proba() to compute the model."
-            )
-        # Put as much work as needed to fill rayon threadpool
-        with scalib.utils.interruptible():
-            with scalib.tools.ContextExecutor(
-                max_workers=get_config().threadpool.n_threads
-            ) as executor:
-                return list(
-                    executor.map(
-                        lambda i: self._ldas[i].predict_proba(
-                            traces[:, self._pois[i]], get_config()
-                        ),
-                        range(len(self._ldas)),
-                    )
-                )
-
-    def get_sw(self):
-        self._acc.get_sw()
-
-    def get_sb(self):
-        self._acc.get_sb()
-
-    def get_mus(self):
-        self._acc.get_mus()
-
-
-class MultiLDA3:
-    """Perform LDA on `nv` distinct variables for the same leakage traces.
-
-    While functionally similar to a simple for loop, this enables solving the
-    LDA problems in parallel in a simple fashion. This also enable easy
-    handling of Points Of Interest (POIs) in long traces.
-
-    Parameters
-    ----------
-    ncs: array_like, int
-        Number of classes for each variable. Shape `(nv,)`.
-    ps: array_like, int
-        Number of dimensions to keep after dimensionality reduction for each variable.
-        Shape `(nv,)`.
-    pois: list of array_like, int
-        Indices of the POIs in the traces for each variable. That is, for
-        variable ``i``, and training trace ``t``, ``t[pois[i]]`` is the input
-        datapoints for the LDA.
-    gemm_mode:
-        See :func:`LDACLassifier.fit_u`.
-
-    Examples
-    --------
-    >>> from scalib.modeling import MultiLDA
-    >>> import numpy as np
-    >>> # 5000 traces with 50 points each
-    >>> traces = np.random.randint(0, 256, (5000,50),dtype=np.int16)
-    >>> # 5 variables (8-bit), and 5000 traces
-    >>> x = np.random.randint(0, 256, (5000, 5),dtype=np.uint16)
-    >>> # 10 POIs for each of the 5 variables
-    >>> pois = [list(range(7*i, 7*i+10)) for i in range(5)]
-    >>> # Keep 3 dimensions after dimensionality reduction
-    >>> lda = MultiLDA(5*[256], 5*[3], pois)
-    >>> lda.fit_u(traces, x)
-    >>> lda.solve()
-    >>> # Predict the class for 20 traces.
-    >>> nt = np.random.randint(0, 256, (20, 50), dtype=np.int16)
-    >>> predicted_proba = lda.predict_proba(nt)
-    """
-
-    def __init__(
-        self,
-        ncs: Optional[list[int]] = None,
-        ps: Optional[list[int]] = None,
-        pois=None,
-        gemm_mode=None,
-        *,
-        nc: Optional[int] = None,
-        p: Optional[int] = None
-    ):
-        if gemm_mode is not None:
-            import warnings
-
-            warnings.warn(
-                "gemm_mode parameter is deprecated and has no effect",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if pois is None:
-            raise ValueError("Parameter pois must not be None")
-        self._pois = [list(sorted(x)) for x in pois]
-        if ncs is not None:
-            import warnings
-
-            warnings.warn(
-                "ncs parameter is deprecated, use nc instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if not (all(x == ncs[0] for x in ncs)):
-                raise ValueError(
-                    "All values in nc must be equal, other cases are not supported."
-                )
-            self._nc = ncs[0]
-        else:
-            self._nc = nc
-        if ps is not None:
-            import warnings
-
-            warnings.warn(
-                "ps parameter is deprecated, use p instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if not (all(x == ps[0] for x in ps)):
-                raise ValueError(
-                    "All values in nc must be equal, other cases are not supported."
-                )
-            self._p = ps[0]
-        else:
-            self._p = p
-        self._init = False
-        self._done = False
         self._solved = False
 
-    def fit_u(self, traces, x):
-        """Update the LDA estimates with new training data.
+    def solve(self, p: int, done: bool = True):
+        r"""Estimates the PDF parameters that is the projection matrix
+        :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
+        :math:`\mathbf{\Sigma}`.
 
         Parameters
         ----------
-        traces : array_like, int16
-            Array that contains the traces. The array must
-            be of dimension `(n,ns)` and its type must be `int16`.
-        x : array_like, uint16
-            Labels for each trace. Must be of shape `(n, nv)` and
-            must be `uint16`.
-        """
-        if self._done:
-            raise ValueError("Cannot fit_u after calling .solve(..., done=True).")
-        if not self._init:
-            self._init = True
-            self._ns = traces.shape[1]
-            self._acc = _scalib_ext.MultiLdaAcc(self._ns, self._nc, self._pois)
-        with scalib.utils.interruptible():
-            self._acc.fit(traces, x, get_config())
-            self._solved = False
+        p :
+            Number of dimensions to keep after dimensionality reduction for each variable.
+        done :
+            If True, discards intermediate state to save RAM, which prevents
+            later calls to `.fit_u`.
 
-    def solve(self, done: bool = False):
-        """See `LDAClassifier.solve`."""
+        Notes
+        -----
+        Once this has been called, predictions can be performed.
+        """
         if not self._init:
             raise ValueError("Cannot .solve since .fit_u was never called.")
         if self._solved:
@@ -650,7 +474,7 @@ class MultiLDA3:
                 "Already called .solve() on this object, should not be called twice."
             )
         with scalib.utils.interruptible():
-            self._multi_lda = self._acc.multi_lda(self._p, get_config())
+            self._multi_lda = self._acc.multi_lda(p, get_config())
 
         self._solved = True
         self._done = done
@@ -658,44 +482,44 @@ class MultiLDA3:
         if done:
             del self._acc
 
-    def ldas(self):
+    def _ldas(self, p):
         return MultiLDA.from_ldas(
             self._pois,
             [
-                LDAClassifier.from_inner_solved(lda)
-                for lda in self._acc.ldas(self._p, get_config())
+                LDAClassifier._from_inner_solved(lda)
+                for lda in self._acc.ldas(p, get_config())
             ],
         )
 
     def predict_proba(self, traces):
-        """Predict probabilities for all variables.
-
-        See `LDAClassifier.predict_proba`.
+        r"""Computes the probability for each of the classes for the traces,
+            for all variables.
 
         Parameters
         ----------
         traces : array_like, int16
-            Array that contains the traces. The array must
-            be of dimension `(n,ns)`.
+            Array that contains the traces. The array must be of dimension `(n,ns)`.
 
         Returns
         -------
         list of array_like, f64
-            Probabilities. `nv` arrays of shape `(n, nc)`.
+            Probability distributions. Shape `(nv, n, nc)`.
         """
         if not self._solved:
             raise ValueError(
-                "Call LDA.solve() before LDA.predict_proba() to compute the model."
+                "Call Lda.solve() before Lda.predict_proba() to compute the model."
             )
-        # Put as much work as needed to fill rayon threadpool
         with scalib.utils.interruptible():
             return self._multi_lda.predict_proba(traces, get_config())
 
     def get_sw(self):
+        r"""Return :math:`S_{W}` matrix (within-class scatter)."""
         return self._acc.get_sw()
 
     def get_sb(self):
+        r"""Return :math:`S_{B}` matrix (between-class scatter)."""
         return self._acc.get_sb()
 
     def get_mus(self):
+        r"""Return means matrix (classes means). Shape: ``(nc, ns)``."""
         return self._acc.get_mus()

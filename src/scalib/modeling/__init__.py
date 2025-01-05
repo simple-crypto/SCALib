@@ -17,10 +17,11 @@ variables using the same traces (but possibly different sets of POIs).
 
    LDAClassifier
    MultiLDA
+   Lda
    RLDAClassifier
 """
 
-__all__ = ["LDAClassifier", "MultiLDA", "MultiLDA2", "MultiLDA3", "RLDAClassifier"]
+__all__ = ["LDAClassifier", "MultiLDA", "Lda", "RLDAClassifier"]
 
-from .ldaclassifier import LDAClassifier, MultiLDA, MultiLDA2, MultiLDA3
+from .ldaclassifier import LDAClassifier, MultiLDA, Lda
 from .rldaclassifier import RLDAClassifier
