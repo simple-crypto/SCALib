@@ -73,25 +73,6 @@ impl CovAcc {
         pois: &CovPairs,
         traces: ArrayView2<i16>,
     ) -> Result<()> {
-        self.update_inner(poi_map, pois, traces, false)
-    }
-
-    pub fn update_para(
-        &mut self,
-        poi_map: &PoiMap,
-        pois: &CovPairs,
-        traces: ArrayView2<i16>,
-    ) -> Result<()> {
-        self.update_inner(poi_map, pois, traces, true)
-    }
-
-    fn update_inner(
-        &mut self,
-        poi_map: &PoiMap,
-        pois: &CovPairs,
-        traces: ArrayView2<i16>,
-        para: bool,
-    ) -> Result<()> {
         assert!(traces.is_standard_layout());
         let n_traces: u32 = traces.shape()[0]
             .try_into()
@@ -104,19 +85,11 @@ impl CovAcc {
         let split_at = pois.chunks[1..].iter().map(|r| r.start);
         let scatter_chunks = multi_split_at_mut(self.scatter.as_mut_slice(), split_at.clone());
         let pair_chunks = multi_split_at(pois.sorted_pairs.as_slice(), split_at);
-        if para {
-            (scatter_chunks, pair_chunks).into_par_iter().for_each(
-                |(scatter_chunk, pair_chunk)| {
-                    Self::update_chunk(&traces, scatter_chunk, pair_chunk);
-                },
-            );
-        } else {
-            for (scatter_chunk, pair_chunk) in
-                izip!(scatter_chunks.into_iter(), pair_chunks.into_iter(),)
-            {
+        (scatter_chunks, pair_chunks)
+            .into_par_iter()
+            .for_each(|(scatter_chunk, pair_chunk)| {
                 Self::update_chunk(&traces, scatter_chunk, pair_chunk);
-            }
-        }
+            });
         Ok(())
     }
     fn update_chunk(traces: &Array2<AA<N>>, scatter_chunk: &mut [i64], pair_chunk: &[(u32, u32)]) {
@@ -234,6 +207,7 @@ fn multi_split_at<T>(mut slice: &[T], split_at: impl Iterator<Item = usize>) -> 
         last = x;
         res.push(s);
     }
+    res.push(slice);
     res
 }
 fn multi_split_at_mut<T>(
@@ -248,5 +222,6 @@ fn multi_split_at_mut<T>(
         last = x;
         res.push(s);
     }
+    res.push(slice);
     res
 }

@@ -4,7 +4,6 @@ use crate::{Result, ScalibError};
 
 #[derive(Debug, Clone)]
 pub struct PoiMap {
-    used_pois: Vec<bool>,
     new2old: Vec<u32>,
     old2new: Vec<Option<u32>>,
 }
@@ -33,20 +32,10 @@ impl PoiMap {
             })
             .collect_vec();
 
-        Ok(Self {
-            used_pois,
-            new2old,
-            old2new,
-        })
-    }
-    pub fn ns(&self) -> u32 {
-        self.used_pois.len() as u32
+        Ok(Self { new2old, old2new })
     }
     pub fn len(&self) -> u32 {
         self.new2old.len() as u32
-    }
-    pub fn to_old(&self, new: u32) -> u32 {
-        self.new2old[new as usize]
     }
     pub fn to_new(&self, new: u32) -> Option<u32> {
         self.old2new[new as usize]

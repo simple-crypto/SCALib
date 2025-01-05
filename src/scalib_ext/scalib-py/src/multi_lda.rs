@@ -1,7 +1,7 @@
 //! Python binding of SCALib's MultiLda implementation.
 
 use crate::ScalibError;
-use numpy::{IntoPyArray, PyArray2, PyReadonlyArray2};
+use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray2, ToPyArray};
 use pyo3::prelude::*;
 
 #[pyclass]
@@ -21,7 +21,6 @@ impl MultiLdaAcc {
     /// Add measurements to the accumulator
     /// x: traces with shape (n,ns)
     /// y: random value realization (n,)
-    /// gemm_algo is 0 for ndarray gemm, x>0 for BLIS gemm with x threads.
     fn fit(
         &mut self,
         py: Python,
@@ -37,7 +36,7 @@ impl MultiLdaAcc {
     }
 
     /// Compute the LDA with p dimensions in the projected space
-    fn lda(
+    fn ldas(
         &self,
         py: Python,
         p: usize,
@@ -65,6 +64,13 @@ impl MultiLdaAcc {
                 res
             })
             .map_err(|e| ScalibError::from_scalib(e, py))
+    }
+
+    fn multi_lda(&self, py: Python, p: u32, config: crate::ConfigWrapper) -> PyResult<MultiLda> {
+        match config.on_worker(py, |_| self.inner.lda(p)) {
+            Ok(inner) => Ok(MultiLda { inner }),
+            Err(e) => Err(ScalibError::from_scalib(e, py)),
+        }
     }
 
     /// Get the matrix sw (debug purpose)
@@ -126,5 +132,26 @@ impl MultiLdaAcc {
     }
     fn n_traces(&self) -> u32 {
         self.inner.ntraces()
+    }
+}
+
+#[pyclass]
+pub(crate) struct MultiLda {
+    inner: scalib::multi_lda::MultiLda,
+}
+#[pymethods]
+impl MultiLda {
+    /// return the probability of each of the possible value for leakage samples
+    /// x : traces with shape (n,ns)
+    /// return prs with shape (nv,n,nc). Each last-axis view corresponds to one probability distribution.
+    fn predict_proba<'py>(
+        &self,
+        py: Python<'py>,
+        x: PyReadonlyArray2<i16>,
+        config: crate::ConfigWrapper,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let x = x.as_array();
+        let prs = config.on_worker(py, |_| self.inner.predict_proba(x));
+        Ok(prs.to_pyarray(py))
     }
 }
