@@ -12,49 +12,9 @@ pub struct BatchedTraces<'a, 'b, const N: usize> {
 #[repr(C, align(32))]
 pub struct AA<const N: usize>(pub [i16; N]);
 
-impl<const N: usize> AA<N> {
-    fn sum(&self) -> i64 {
-        self.0.iter().map(|x| *x as i64).sum()
-    }
-}
-impl<const N: usize> std::ops::AddAssign<&AA<N>> for AA<N> {
-    fn add_assign(&mut self, rhs: &AA<N>) {
-        for i in 0..N {
-            self.0[i] += rhs.0[i];
-        }
-    }
-}
-
 impl<'a, 'b, const N: usize> BatchedTraces<'a, 'b, N> {
     pub fn new(poi_map: &'b PoiMap, traces: ArrayView2<'a, i16>) -> Self {
         Self { poi_map, traces }
-    }
-    fn map<'s, T, F>(&'s self, mut f: F) -> impl Iterator<Item = T> + 's
-    where
-        F: FnMut(u32, &[AA<N>]) -> T + 's,
-        'a: 's,
-        'b: 's,
-    {
-        let mut batch: Vec<AA<N>> = vec![AA([0; N]); self.traces.shape()[1]];
-        let kept_indices: &'s _ = self.poi_map.kept_indices();
-        self.traces.axis_chunks_iter(Axis(0), N).map(move |chunk| {
-            transpose_big(chunk, batch.as_mut_slice(), kept_indices);
-            f(chunk.shape()[0] as u32, batch.as_slice())
-        })
-    }
-    fn for_each<'s, F>(&'s self, f: F)
-    where
-        F: FnMut(u32, &[AA<N>]) + 's,
-        'a: 's,
-    {
-        self.map(f).for_each(|_| {})
-    }
-    fn try_for_each<'s, F, E>(&'s self, f: F) -> std::result::Result<(), E>
-    where
-        F: FnMut(u32, &[AA<N>]) -> std::result::Result<(), E> + 's,
-        'a: 's,
-    {
-        self.map(f).try_for_each(|x| x)
     }
     // TODO: make a parallel version of this.
     #[inline(never)]
@@ -93,7 +53,7 @@ fn transpose_big<const N: usize>(
         {
             if indices_sb.len() == SUB_CHUNK_N && traces_sb.shape()[0] == SUB_CHUNK_M {
                 let mut chunk_sb_iter = chunk_sb.iter_mut();
-                let y: [&mut [i16; SUB_CHUNK_M]; SUB_CHUNK_N] = std::array::from_fn(|i| {
+                let y: [&mut [i16; SUB_CHUNK_M]; SUB_CHUNK_N] = std::array::from_fn(|_| {
                     let offset = sb_i * SUB_CHUNK_M;
                     let sl = &mut chunk_sb_iter.next().unwrap().0[offset..(offset + SUB_CHUNK_M)];
                     sl.try_into().unwrap()

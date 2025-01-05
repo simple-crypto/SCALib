@@ -1,7 +1,7 @@
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
 from scalib import ScalibError
-from scalib.modeling import LDAClassifier, MultiLDA2
+from scalib.modeling import LDAClassifier, MultiLDA, MultiLDA2, MultiLDA3
 import numpy as np
 import scipy.stats
 import pickle
@@ -181,8 +181,102 @@ def test_multilda():
     x = np.random.randint(0, 256, (5000, 50), dtype=np.int16)
     y = np.random.randint(0, 256, (5000, 5), dtype=np.uint16)
     pois = [list(range(7 * i, 7 * i + 10)) for i in range(5)]
-    lda = MultiLDA2(5 * [256], 5 * [3], pois)
+    lda = MultiLDA(5 * [256], 5 * [3], pois)
     lda.fit_u(x, y)
     lda.solve()
     x = np.random.randint(0, 256, (20, 50), dtype=np.int16)
-    predicted_proba = lda.predict_proba(x)
+    _ = lda.predict_proba(x)
+
+
+def multi_lda_data_indep(ns, nc, nv, n, n_batches, rng):
+    y = [rng.integers(0, nc, (n, nv), dtype=np.uint16) for _ in n_batches]
+    traces = [
+        rng.integers(-(2**15), 2**15, (n, ns), dtype=np.uint16) for _ in n_batches
+    ]
+    return traces, y
+
+
+def multi_lda_gen_pois_overlap(rng, ns, nv, npois):
+    pois = np.tile(np.arange(ns), (nv, 1))
+    rng.shuffle(pois, axis=1)
+    return pois[:, :npois]
+
+
+def multi_lda_gen_pois_consec(nv, npois, gap=0):
+    return np.array(
+        [np.arange(i * (npois + gap), i * (npois + gap) + npois) for i in range(nv)]
+    )
+
+
+def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_):
+    pois = np.tile(np.arange(ns), (nv, 1))
+    rng.shuffle(pois, axis=1)
+    pois = pois[:, :npois]
+    y = [rng.integers(0, nc, (n, nv), dtype=np.uint16) for _ in range(n_batches)]
+    traces = [
+        rng.integers(-maxl, maxl, (n, ns), dtype=np.int16) for _ in range(n_batches)
+    ]
+    return pois, traces, y
+
+
+def multi_lda_compare(nc, nv, p, pois, traces, x, **_):
+    ncs = [nc for _ in range(nv)]
+    ps = [p for _ in range(nv)]
+    multi_lda = MultiLDA(ncs, ps, pois=pois)
+    multi_lda3 = MultiLDA3(pois=pois, nc=nc, p=p)
+    for t, y in zip(traces, x):
+        multi_lda.fit_u(t, y)
+        multi_lda3.fit_u(t, y)
+    for mus, mus3 in zip(multi_lda.get_mus(), multi_lda3.get_mus()):
+        assert np.allclose(mus, mus3)
+    for sb, sb3 in zip(multi_lda.get_sb(), multi_lda3.get_sb()):
+        assert np.allclose(sb, sb3)
+    for sw, sw3 in zip(multi_lda.get_sw(), multi_lda3.get_sw()):
+        assert np.allclose(sw, sw3)
+    multi_lda = multi_lda3.ldas()
+    multi_lda3.solve()
+    for t in traces:
+        probas = multi_lda.predict_proba(t)
+        probas3 = multi_lda3.predict_proba(t)
+        assert np.allclose(probas, probas3)
+
+
+def test_multi_lda_compare():
+    cases = [
+        dict(ns=2, nc=2, nv=1, npois=2, n=10, n_batches=1, p=1),
+        dict(ns=2, nc=2, nv=1, npois=2, n=5, n_batches=2, p=1),
+        dict(ns=3, nc=2, nv=1, npois=2, n=5, n_batches=1, p=1, maxl=1),
+        dict(ns=20, nc=4, nv=4, npois=5, n=10, n_batches=3, p=2),
+        dict(ns=100, nc=256, nv=2, npois=20, n=500, n_batches=5, p=4),
+        dict(ns=1000, nc=4, nv=10, npois=2, n=10, n_batches=5, p=1),
+    ]
+    rng = np.random.default_rng(seed=0)
+    for case in cases:
+        print(80 * "#" + "\ncase:", case)
+        pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
+        multi_lda_compare(pois=pois, traces=traces, x=x, **case)
+
+
+def test_simple_multi_lda_compare():
+    nc = 2
+    nv = 1
+    pois = [np.array([0, 1])]
+    p = 1
+    traces = [np.array([[1, 0], [0, 1], [0, 0], [4, 4]], dtype=np.int16)]
+    x = [np.array([[0], [0], [1], [1]]).astype(np.uint16)]
+    lda = LDAClassifier(nc, p)
+    lda.fit_u(traces[0], x[0][:, 0])
+    lda.solve()
+    multi_lda_compare(nc=nc, nv=nv, p=p, pois=pois, traces=traces, x=x)
+
+
+def test_seq_multi_lda_compare():
+    nv = 100
+    npois = 5
+    nc = 4
+    rng = np.random.default_rng(seed=0)
+    _, traces, x = multi_lda_gen_indep_overlap(
+        rng, ns=nv * npois, nc=nc, nv=nv, npois=0, n=1000, n_batches=1
+    )
+    pois = [list(range(i * npois, (i + 1) * npois)) for i in range(nv)]
+    multi_lda_compare(nc=nc, nv=nv, p=2, pois=pois, traces=traces, x=x)

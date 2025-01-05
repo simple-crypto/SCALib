@@ -20,7 +20,7 @@ variables using the same traces (but possibly different sets of POIs).
    RLDAClassifier
 """
 
-__all__ = ["LDAClassifier", "MultiLDA", "MultiLDA2", "RLDAClassifier"]
+__all__ = ["LDAClassifier", "MultiLDA", "MultiLDA2", "MultiLDA3", "RLDAClassifier"]
 
-from .ldaclassifier import LDAClassifier, MultiLDA, MultiLDA2
+from .ldaclassifier import LDAClassifier, MultiLDA, MultiLDA2, MultiLDA3
 from .rldaclassifier import RLDAClassifier
