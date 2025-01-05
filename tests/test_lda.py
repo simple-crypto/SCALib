@@ -1,7 +1,7 @@
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
 from scalib import ScalibError
-from scalib.modeling import LDAClassifier, MultiLDA, MultiLDA2, MultiLDA3
+from scalib.modeling import LDAClassifier, MultiLDA, Lda
 import numpy as np
 import scipy.stats
 import pickle
@@ -208,7 +208,9 @@ def multi_lda_gen_pois_consec(nv, npois, gap=0):
     )
 
 
-def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_):
+def multi_lda_gen_indep_overlap(
+    rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_
+):
     pois = np.tile(np.arange(ns), (nv, 1))
     rng.shuffle(pois, axis=1)
     pois = pois[:, :npois]
@@ -223,7 +225,7 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, **_):
     ncs = [nc for _ in range(nv)]
     ps = [p for _ in range(nv)]
     multi_lda = MultiLDA(ncs, ps, pois=pois)
-    multi_lda3 = MultiLDA3(pois=pois, nc=nc, p=p)
+    multi_lda3 = Lda(pois=pois, nc=nc)
     for t, y in zip(traces, x):
         multi_lda.fit_u(t, y)
         multi_lda3.fit_u(t, y)
@@ -233,8 +235,8 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, **_):
         assert np.allclose(sb, sb3)
     for sw, sw3 in zip(multi_lda.get_sw(), multi_lda3.get_sw()):
         assert np.allclose(sw, sw3)
-    multi_lda = multi_lda3.ldas()
-    multi_lda3.solve()
+    multi_lda = multi_lda3._ldas(p)
+    multi_lda3.solve(p)
     for t in traces:
         probas = multi_lda.predict_proba(t)
         probas3 = multi_lda3.predict_proba(t)
