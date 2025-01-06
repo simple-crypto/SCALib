@@ -10,7 +10,7 @@ enum InnerSnr {
     Snr64bit(snr::SNR<snr::SnrType64bit>),
 }
 
-#[pyclass]
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct SNR {
     inner: InnerSnr,
 }

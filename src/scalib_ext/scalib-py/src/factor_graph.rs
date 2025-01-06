@@ -12,7 +12,7 @@ use pyo3::types::{PyBytes, PyList, PyTuple};
 
 use scalib::sasca;
 
-#[pyclass(module = "_scalib_ext")]
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct FactorGraph {
     inner: Option<Arc<sasca::FactorGraph>>,
 }
@@ -222,7 +222,7 @@ fn pyobj2factors<'a>(
     }
 }
 
-#[pyclass(module = "_scalib_ext")]
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct BPState {
     inner: Option<sasca::BPState>,
 }

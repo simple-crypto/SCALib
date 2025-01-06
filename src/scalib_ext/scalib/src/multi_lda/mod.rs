@@ -2,21 +2,22 @@ mod batched_traces;
 mod cov_pairs;
 mod poi_map;
 mod sparse_trace_sums;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
 use std::ops::Range;
 use std::sync::Arc;
 
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use serde::{Deserialize, Serialize};
+
 use crate::lda::{softmax, LDA};
-
 use crate::{Result, ScalibError};
-
-pub type Class = u16;
-pub type Var = u16;
-
 use batched_traces::BatchedTraces;
 use cov_pairs::{CovAcc, CovPairs};
 use poi_map::PoiMap;
 use sparse_trace_sums::{SparseTraceSums, SparseTraceSumsState};
+
+pub type Class = u16;
+pub type Var = u16;
 
 use itertools::{izip, Itertools};
 use ndarray::{azip, Array2, Array3, ArrayView2, ArrayViewMut2, Axis};
@@ -51,7 +52,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct MultiLdaConf {
     nv: Var,
     nc: Class,
@@ -153,7 +154,7 @@ impl MultiLdaConf {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct MultiLdaAccState {
     n_traces: u32,
     trace_sums: SparseTraceSumsState,
@@ -281,7 +282,7 @@ impl MultiLdaAccState {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiLdaAcc {
     conf: Arc<MultiLdaConf>,
     state: MultiLdaAccState,
@@ -402,7 +403,7 @@ const L2_SIZE: usize = 512 * 1024;
 const L3_CCX: usize = 8 * 1024 * 1024;
 const L3_CORE: usize = 2 * 1024 * 1024;
 const POI_BLOCK_SIZE: usize = L2_SIZE / 2 / 2 / N;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiLda {
     p: usize,
     conf: Arc<MultiLdaConf>,

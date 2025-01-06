@@ -6,7 +6,7 @@ use numpy::{
 };
 use pyo3::prelude::*;
 
-#[pyclass]
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct LdaAcc {
     inner: scalib::lda::LdaAcc,
 }
@@ -113,7 +113,7 @@ impl LdaAcc {
     }
 }
 
-#[pyclass]
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct LDA {
     pub(crate) inner: scalib::lda::LDA,
 }

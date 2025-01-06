@@ -19,11 +19,14 @@
 //! and online computation of higher-order multivariate central moments with arbitrary weights.
 //! Comput Stat 31, 1305–1325 (2016). https://doi.org/10.1007/s00180-015-0637-z
 
-use crate::{Result, ScalibError};
+use std::ops::AddAssign;
+
 use geigen::Geigen;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis, NewAxis};
 use nshare::{IntoNalgebra, IntoNdarray2};
-use std::ops::AddAssign;
+use serde::{Deserialize, Serialize};
+
+use crate::{Result, ScalibError};
 
 /// Accumulator of traces to build LDA
 pub struct LdaAcc {
@@ -164,7 +167,7 @@ impl LdaAcc {
 ///  require O(ns*nc) computation (and storage) for the scores, while it is O(ns*p + p*nc) for the
 ///  split one (W then omega), which is interesting as long as p << nc (which is true, otherwise we
 ///  could as well take p=nc and not reduce dimensionality).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LDA {
     /// Projection matrix to the subspace. shape of (ns,p)
     pub projection: Array2<f64>,
