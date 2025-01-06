@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.typing as npt
+import typing
 
 from scalib import _scalib_ext
 from scalib.config import get_config
@@ -346,7 +347,7 @@ class MultiLDA:
         return [lda.get_mus() for lda in self.ldas]
 
 
-class Lda:
+class LdaAcc:
     r"""Models the leakage :math:`\mathbf{l}` with :math:`n_s` dimensions using
     the linear discriminant analysis classifier (LDA) with integrated
     dimensionality reduction.
@@ -391,9 +392,9 @@ class Lda:
     >>> traces = np.random.randint(0, 4092, (1000, 10), dtype=np.int16)
     >>> # classes between 0 and 15 (2 variables)
     >>> x = np.random.randint(0, 16, (1000, 2), dtype=np.uint16)
-    >>> lda = Lda(nc=16, pois=[list(range(5)), list(range(4, 10))])
-    >>> lda.fit_u(traces, x)
-    >>> lda.solve(p=3) # Projection to 3 dimensions.
+    >>> lda_acc = LdaAcc(nc=16, pois=[list(range(5)), list(range(4, 10))])
+    >>> lda_acc.fit_u(traces, x)
+    >>> lda = Lda(lda_acc, p=3) # Projection to 3 dimensions.
     >>> # predict classes for new traces
     >>> new_traces = np.random.randint(0, 256, (20,10), dtype=np.int16)
     >>> predicted_proba = lda.predict_proba(new_traces)
@@ -421,12 +422,10 @@ class Lda:
         datapoints for the LDA.
     """
 
-    def __init__(self, *, nc: int, pois: list[np.ndarray]):
+    def __init__(self, *, nc: int, pois):
         self._nc = nc
         self._pois = [list(sorted(x)) for x in pois]
         self._init = False
-        self._done = False
-        self._solved = False
 
     def fit_u(self, traces, x):
         """Update the LDA estimates with new training data.
@@ -440,17 +439,39 @@ class Lda:
             Labels for each trace. Must be of shape `(n, nv)` and
             must be `uint16`.
         """
-        if self._done:
-            raise ValueError("Cannot fit_u after calling .solve(..., done=True).")
         if not self._init:
             self._init = True
             self._ns = traces.shape[1]
-            self._acc = _scalib_ext.MultiLdaAcc(self._ns, self._nc, self._pois)
+            self._inner = _scalib_ext.MultiLdaAcc(self._ns, self._nc, self._pois)
         with scalib.utils.interruptible():
-            self._acc.fit(traces, x, get_config())
-        self._solved = False
+            self._inner.fit(traces, x, get_config())
 
-    def solve(self, p: int, done: bool = True):
+    def _ldas(self, p):
+        return MultiLDA.from_ldas(
+            self._pois,
+            [
+                LDAClassifier._from_inner_solved(lda)
+                for lda in self._inner.ldas(p, get_config())
+            ],
+        )
+
+    def get_sw(self):
+        r"""Return :math:`S_{W}` matrix (within-class scatter)."""
+        return self._inner.get_sw()
+
+    def get_sb(self):
+        r"""Return :math:`S_{B}` matrix (between-class scatter)."""
+        return self._inner.get_sb()
+
+    def get_mus(self):
+        r"""Return means matrix (classes means). Shape: ``(nc, ns)``."""
+        return self._inner.get_mus()
+
+
+class Lda:
+    """See :class:`LdaAcc`."""
+
+    def __init__(self, acc: LdaAcc, *, p: int):
         r"""Estimates the PDF parameters that is the projection matrix
         :math:`\mathbf{W}`, the means :math:`\mathbf{\mu}_x` and the covariance
         :math:`\mathbf{\Sigma}`.
@@ -459,37 +480,11 @@ class Lda:
         ----------
         p :
             Number of dimensions to keep after dimensionality reduction for each variable.
-        done :
-            If True, discards intermediate state to save RAM, which prevents
-            later calls to `.fit_u`.
-
-        Notes
-        -----
-        Once this has been called, predictions can be performed.
         """
-        if not self._init:
-            raise ValueError("Cannot .solve since .fit_u was never called.")
-        if self._solved:
-            raise ValueError(
-                "Already called .solve() on this object, should not be called twice."
-            )
+        if not acc._init:
+            raise ValueError("Empty accumulator: .fit_u was never called.")
         with scalib.utils.interruptible():
-            self._multi_lda = self._acc.multi_lda(p, get_config())
-
-        self._solved = True
-        self._done = done
-
-        if done:
-            del self._acc
-
-    def _ldas(self, p):
-        return MultiLDA.from_ldas(
-            self._pois,
-            [
-                LDAClassifier._from_inner_solved(lda)
-                for lda in self._acc.ldas(p, get_config())
-            ],
-        )
+            self._inner = acc._inner.multi_lda(p, get_config())
 
     def predict_proba(self, traces):
         r"""Computes the probability for each of the classes for the traces,
@@ -505,21 +500,5 @@ class Lda:
         list of array_like, f64
             Probability distributions. Shape `(nv, n, nc)`.
         """
-        if not self._solved:
-            raise ValueError(
-                "Call Lda.solve() before Lda.predict_proba() to compute the model."
-            )
         with scalib.utils.interruptible():
-            return self._multi_lda.predict_proba(traces, get_config())
-
-    def get_sw(self):
-        r"""Return :math:`S_{W}` matrix (within-class scatter)."""
-        return self._acc.get_sw()
-
-    def get_sb(self):
-        r"""Return :math:`S_{B}` matrix (between-class scatter)."""
-        return self._acc.get_sb()
-
-    def get_mus(self):
-        r"""Return means matrix (classes means). Shape: ``(nc, ns)``."""
-        return self._acc.get_mus()
+            return self._inner.predict_proba(traces, get_config())

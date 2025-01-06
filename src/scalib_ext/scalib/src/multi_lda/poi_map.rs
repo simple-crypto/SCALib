@@ -1,8 +1,9 @@
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 
 use crate::{Result, ScalibError};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoiMap {
     new2old: Vec<u32>,
     old2new: Vec<Option<u32>>,

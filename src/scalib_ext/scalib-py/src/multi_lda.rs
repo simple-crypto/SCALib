@@ -1,10 +1,16 @@
 //! Python binding of SCALib's MultiLda implementation.
 
-use crate::ScalibError;
+use bincode::{deserialize, serialize};
 use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray2, ToPyArray};
+use pyo3::exceptions::PyValueError;
+use pyo3::intern;
 use pyo3::prelude::*;
+use pyo3::type_object::PyTypeInfo;
+use pyo3::types::{PyBytes, PyTuple};
 
-#[pyclass]
+use crate::ScalibError;
+
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct MultiLdaAcc {
     inner: scalib::multi_lda::MultiLdaAcc,
 }
@@ -133,9 +139,30 @@ impl MultiLdaAcc {
     fn n_traces(&self) -> u32 {
         self.inner.ntraces()
     }
+
+    fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(
+            py,
+            [
+                Self::type_object(py).getattr(intern!(py, "_from_bytes"))?,
+                PyTuple::new(
+                    py,
+                    [PyBytes::new(py, &serialize(&self.inner).unwrap()).into_any()],
+                )?
+                .into_any(),
+            ],
+        )
+    }
+
+    #[staticmethod]
+    fn _from_bytes(bytes: &[u8]) -> PyResult<Self> {
+        Ok(Self {
+            inner: deserialize(bytes).map_err(|_| PyValueError::new_err("Invalid state bytes."))?,
+        })
+    }
 }
 
-#[pyclass]
+#[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct MultiLda {
     inner: scalib::multi_lda::MultiLda,
 }
@@ -153,5 +180,25 @@ impl MultiLda {
         let x = x.as_array();
         let prs = config.on_worker(py, |_| self.inner.predict_proba(x));
         Ok(prs.to_pyarray(py))
+    }
+    fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        PyTuple::new(
+            py,
+            [
+                Self::type_object(py).getattr(intern!(py, "_from_bytes"))?,
+                PyTuple::new(
+                    py,
+                    [PyBytes::new(py, &serialize(&self.inner).unwrap()).into_any()],
+                )?
+                .into_any(),
+            ],
+        )
+    }
+
+    #[staticmethod]
+    fn _from_bytes(bytes: &[u8]) -> PyResult<Self> {
+        Ok(Self {
+            inner: deserialize(bytes).map_err(|_| PyValueError::new_err("Invalid state bytes."))?,
+        })
     }
 }

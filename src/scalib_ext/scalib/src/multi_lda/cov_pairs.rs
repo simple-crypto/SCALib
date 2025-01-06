@@ -1,17 +1,17 @@
-use super::batched_traces::{BatchedTraces, AA};
-use super::poi_map::PoiMap;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-
 use itertools::{izip, Itertools};
-
 use ndarray::{Array2, ArrayView2};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use serde::{Deserialize, Serialize};
 
 use crate::{Result, ScalibError};
+
+use super::batched_traces::{BatchedTraces, AA};
+use super::poi_map::PoiMap;
 
 const N: usize = 64;
 const MAX_CHUNK_SIZE: usize = 2048;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CovPairs {
     /// Pairs are pairs of POIs for which the covariance is computed.
     /// Values in `sorted_pairs` are sorted such that consecutive pairs have good memory locality
@@ -54,7 +54,7 @@ impl CovPairs {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CovAcc {
     pub tot_n_traces: u32,
     pub scatter: Vec<i64>,

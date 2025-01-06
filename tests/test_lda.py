@@ -1,7 +1,7 @@
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
 from scalib import ScalibError
-from scalib.modeling import LDAClassifier, MultiLDA, Lda
+from scalib.modeling import LDAClassifier, MultiLDA, Lda, LdaAcc
 import numpy as np
 import scipy.stats
 import pickle
@@ -208,9 +208,7 @@ def multi_lda_gen_pois_consec(nv, npois, gap=0):
     )
 
 
-def multi_lda_gen_indep_overlap(
-    rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_
-):
+def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_):
     pois = np.tile(np.arange(ns), (nv, 1))
     rng.shuffle(pois, axis=1)
     pois = pois[:, :npois]
@@ -225,7 +223,7 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, **_):
     ncs = [nc for _ in range(nv)]
     ps = [p for _ in range(nv)]
     multi_lda = MultiLDA(ncs, ps, pois=pois)
-    multi_lda3 = Lda(pois=pois, nc=nc)
+    multi_lda3 = LdaAcc(pois=pois, nc=nc)
     for t, y in zip(traces, x):
         multi_lda.fit_u(t, y)
         multi_lda3.fit_u(t, y)
@@ -236,7 +234,7 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, **_):
     for sw, sw3 in zip(multi_lda.get_sw(), multi_lda3.get_sw()):
         assert np.allclose(sw, sw3)
     multi_lda = multi_lda3._ldas(p)
-    multi_lda3.solve(p)
+    multi_lda3 = Lda(multi_lda3, p=p)
     for t in traces:
         probas = multi_lda.predict_proba(t)
         probas3 = multi_lda3.predict_proba(t)
@@ -282,3 +280,25 @@ def test_seq_multi_lda_compare():
     )
     pois = [list(range(i * npois, (i + 1) * npois)) for i in range(nv)]
     multi_lda_compare(nc=nc, nv=nv, p=2, pois=pois, traces=traces, x=x)
+
+
+def test_multi_lda_pickle():
+    ns = 10
+    nc = 4
+    n = 5000
+    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
+    labels = np.random.randint(0, nc, (n, 1), dtype=np.uint16)
+    lda_acc = LdaAcc(pois=[list(range(ns))], nc=nc)
+    lda_acc.fit_u(traces, labels)
+    dumped_lda_acc = pickle.dumps(lda_acc)
+    lda_acc2 = pickle.loads(dumped_lda_acc)
+    lda = Lda(lda_acc, p=2)
+    lda2 = Lda(lda_acc2, p=2)
+
+    dumped_lda = pickle.dumps(lda2)
+    lda2 = pickle.loads(dumped_lda)
+
+    prs = lda.predict_proba(traces)
+    prs2 = lda2.predict_proba(traces)
+
+    assert np.allclose(prs, prs2)

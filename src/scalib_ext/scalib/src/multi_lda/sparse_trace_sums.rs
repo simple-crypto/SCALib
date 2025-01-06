@@ -1,10 +1,11 @@
 use ndarray::{s, Array2, ArrayView2, Axis};
+use serde::{Deserialize, Serialize};
 
 use super::{Class, Var};
 
 // TODO: accumulator on 32-bit (tmp).
 // TODO we can get better performance by batching the "ns" axis (possibly with SIMD gather).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseTraceSums {
     nv: Var,
     nc: Class,
@@ -35,7 +36,7 @@ impl SparseTraceSums {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseTraceSumsState {
     /// Sum of all the traces corresponding to each class. Shape: (nv) (npois[i], nc).
     pub sums: Vec<Array2<i64>>,

@@ -5,7 +5,7 @@ use rayon;
 
 create_exception!(_scalib_ext, ThreadPoolError, exceptions::PyOSError);
 
-#[pyclass]
+#[pyclass(module = "scalib._scalib_ext")]
 pub struct ThreadPool {
     pub pool: rayon::ThreadPool,
 }
