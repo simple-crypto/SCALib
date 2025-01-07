@@ -181,6 +181,14 @@ impl MultiLda {
         let prs = config.on_worker(py, |_| self.inner.predict_proba(x));
         Ok(prs.to_pyarray(py))
     }
+    fn select_vars(&self, py: Python, vars: Vec<u16>) -> PyResult<Self> {
+        Ok(Self {
+            inner: self
+                .inner
+                .select_vars(&vars)
+                .map_err(|e| ScalibError::from_scalib(e, py))?,
+        })
+    }
     fn __reduce__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(
             py,

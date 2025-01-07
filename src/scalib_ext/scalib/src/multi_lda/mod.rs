@@ -73,7 +73,7 @@ impl MultiLdaAccConf {
             .len()
             .try_into()
             .map_err(|_| ScalibError::TooManyPois)?;
-        let poi_map = Arc::new(PoiMap::new(ns, &pois)?);
+        let poi_map = Arc::new(PoiMap::new(ns as usize, &pois)?);
         let trace_sums = SparseTraceSums::new(ns, nv, nc, pois.as_slice());
         let mapped_pairs = poi_map
             .new_pois_vars()
@@ -510,7 +510,33 @@ impl MultiLda {
             softmax(res);
         }
     }
+    fn n_vars(&self) -> Var {
+        self.ldas.len() as Var
+    }
     fn poi_block_ranges(&self) -> impl Iterator<Item = Range<usize>> {
         (0..(self.poi_map.len() as usize)).range_chunks(POI_BLOCK_SIZE)
+    }
+    pub fn select_vars(&self, vars: &[Var]) -> Result<Self> {
+        if vars.iter().any(|v| *v >= self.n_vars()) {
+            return Err(ScalibError::VarOutOfBound);
+        }
+        let (sub_map, full_map) = self.poi_map.select_vars(vars)?;
+        Ok(Self {
+            nc: self.nc,
+            p: self.p,
+            ldas: vars
+                .iter()
+                .map(|v| {
+                    let new_pois = sub_map
+                        .new_pois(*v)
+                        .iter()
+                        .map(|x| *x as usize)
+                        .collect_vec();
+                    self.ldas[*v as usize].select_pois(&new_pois)
+                })
+                .collect(),
+            poi_blocks: full_map.poi_blocks(),
+            poi_map: Arc::new(full_map),
+        })
     }
 }

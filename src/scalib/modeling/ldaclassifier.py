@@ -502,3 +502,22 @@ class Lda:
         """
         with scalib.utils.interruptible():
             return self._inner.predict_proba(traces, get_config())
+
+    def select_variables(self, vars: list[int]) -> "Lda":
+        r"""Make a new :class:`Lda` with only a subset of the variables (in the
+        order given by the list).
+
+        Parameters
+        ----------
+        traces :
+            List of selected variables.
+
+        Returns
+        -------
+        Lda
+            A new Lda.
+        """
+        cls = type(self)
+        new = cls.__new__(cls)
+        new._inner = self._inner.select_vars(vars)
+        return new
