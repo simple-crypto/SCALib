@@ -208,7 +208,9 @@ def multi_lda_gen_pois_consec(nv, npois, gap=0):
     )
 
 
-def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_):
+def multi_lda_gen_indep_overlap(
+    rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_
+):
     pois = np.tile(np.arange(ns), (nv, 1))
     rng.shuffle(pois, axis=1)
     pois = pois[:, :npois]

@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use super::Var;
 use crate::{Result, ScalibError};
 
+use std::borrow::Borrow;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoiMap {
     new2old: Vec<u32>,
@@ -11,11 +13,14 @@ pub struct PoiMap {
 }
 
 impl PoiMap {
-    pub fn new(ns: u32, poi_vars: &[Vec<u32>]) -> Result<Self> {
+    pub fn new<I: IntoIterator<Item = impl Borrow<u32>>>(
+        ns: usize,
+        poi_vars: impl IntoIterator<Item = I> + Clone,
+    ) -> Result<Self> {
         let mut used_pois = vec![false; ns as usize];
-        for poi in poi_vars.iter().flat_map(|x| x.iter()) {
+        for poi in poi_vars.clone().into_iter().flat_map(I::into_iter) {
             *used_pois
-                .get_mut(*poi as usize)
+                .get_mut(*poi.borrow() as usize)
                 .ok_or(ScalibError::PoiOutOfBound)? = true;
         }
         let new2old = used_pois
@@ -34,8 +39,12 @@ impl PoiMap {
             })
             .collect_vec();
         let new_poi_vars = poi_vars
-            .iter()
-            .map(|pois| pois.iter().map(|x| old2new[*x as usize].unwrap()).collect())
+            .into_iter()
+            .map(|pois| {
+                pois.into_iter()
+                    .map(|x| old2new[*x.borrow() as usize].unwrap())
+                    .collect()
+            })
             .collect();
 
         Ok(Self {
@@ -74,5 +83,17 @@ impl PoiMap {
                 res
             })
             .collect()
+    }
+    pub fn select_vars(&self, vars: &[super::Var]) -> Result<(Self, Self)> {
+        let sub_map = Self::new(self.len(), vars.iter().map(|v| self.new_pois(*v)))?;
+        let full_map = Self {
+            new2old: sub_map
+                .new2old
+                .iter()
+                .map(|x| self.new2old[*x as usize])
+                .collect(),
+            new_poi_vars: sub_map.new_poi_vars.clone(),
+        };
+        Ok((sub_map, full_map))
     }
 }
