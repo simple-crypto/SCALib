@@ -25,8 +25,8 @@ pub struct CovPairs {
 }
 
 impl CovPairs {
-    pub fn new(ns: u32, pairs: &[(u32, u32)]) -> Result<Self> {
-        let (sorted_pairs, pair_to_new_idx, chunks) = if ns as usize <= MAX_CHUNK_SIZE {
+    pub fn new(ns: usize, pairs: &[(u32, u32)]) -> Result<Self> {
+        let (sorted_pairs, pair_to_new_idx, chunks) = if ns <= MAX_CHUNK_SIZE {
             #[allow(clippy::single_range_in_vec_init)]
             (
                 pairs.to_vec(),
@@ -145,7 +145,7 @@ fn sum_prod<'a>(x: &'a AA<N>, y: &'a AA<N>) -> i64 {
 
 fn chunk_pairs(
     pairs: &[(u32, u32)],
-    ns: u32,
+    ns: usize,
     max_chunk_size: usize,
 ) -> Result<(Vec<u32>, Vec<std::ops::Range<usize>>)> {
     let n_pairs: u32 = pairs
@@ -154,7 +154,7 @@ fn chunk_pairs(
         .map_err(|_| ScalibError::TooManyPois)?;
     let mut pair_to_old_idx = Vec::with_capacity(n_pairs as usize);
     let mut chunks = vec![];
-    let mut j_for_i = vec![vec![]; ns as usize];
+    let mut j_for_i = vec![vec![]; ns];
     for (k, (i, j)) in pairs.iter().enumerate() {
         j_for_i[*i as usize].push((*j, k as u32));
     }
