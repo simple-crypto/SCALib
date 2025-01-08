@@ -152,49 +152,51 @@ fn chunk_pairs(
         .len()
         .try_into()
         .map_err(|_| ScalibError::TooManyPois)?;
-    let mut pair_to_old_idx = Vec::with_capacity(n_pairs as usize);
-    let mut chunks = vec![];
-    let mut j_for_i = vec![vec![]; ns];
+    let mut pairs_matrix = ndarray::Array2::from_elem((ns, ns), vec![]);
     for (k, (i, j)) in pairs.iter().enumerate() {
-        j_for_i[*i as usize].push((*j, k as u32));
+        let (i, j) = (*i.min(j), *i.max(j));
+        pairs_matrix[(i as usize, j as usize)].push(k as u32);
     }
-    for js in j_for_i.iter_mut() {
-        js.sort_unstable_by_key(|(j, _)| *j);
-    }
-    let i_chunks = j_for_i
-        .iter()
-        .positions(|js| !js.is_empty())
-        .chunks(max_chunk_size / 2);
-    for i_chunk in i_chunks.into_iter() {
-        let i_chunk = i_chunk.collect_vec();
-        let i_min = *i_chunk.first().unwrap();
-        let i_max = *i_chunk.last().unwrap();
-        let (mut chunk_id, mut n_items_chunk) = (0, 0);
-        let j_chunks = i_chunk
-            .iter()
-            .flat_map(|i| j_for_i[*i].iter().copied())
-            .sorted_unstable_by_key(|(j, _)| *j)
-            .dedup()
-            .chunk_by(|(j, _)| {
-                if j_for_i[*j as usize].is_empty() || !(i_min..=i_max).contains(&(*j as usize)) {
-                    if n_items_chunk >= max_chunk_size / 2 {
-                        chunk_id += 1;
-                        n_items_chunk = 0;
-                    }
-                    n_items_chunk += 1;
+    let cw = max_chunk_size / 2;
+    let mut pair_to_old_idx: Vec<u32> = vec![];
+    let mut chunks = vec![];
+    for i_chunk in 0..ns.div_ceil(cw) {
+        let i_start = i_chunk * cw;
+        let i_end = std::cmp::min((i_chunk + 1) * cw, ns);
+        let mut chunk_size = 0;
+        let mut chunk_start = pair_to_old_idx.len();
+        for j in i_start..ns {
+            let mut empty = true;
+            pair_to_old_idx.extend(
+                (i_start..i_end)
+                    .flat_map(|i| pairs_matrix[(i, j)].iter())
+                    .inspect(|_| {
+                        empty = false;
+                    }),
+            );
+            if !empty {
+                chunk_size += 1;
+                if chunk_size == cw {
+                    chunk_size = 0;
+                    chunks.push(chunk_start..pair_to_old_idx.len());
+                    chunk_start = pair_to_old_idx.len();
                 }
-                chunk_id
-            });
-        for (_, j_chunk) in j_chunks.into_iter() {
-            let start = pair_to_old_idx.len();
-            pair_to_old_idx.extend(j_chunk.map(|(_, k)| k));
-            chunks.push(start..pair_to_old_idx.len());
+            }
+        }
+        if chunk_size != 0 {
+            chunks.push(chunk_start..pair_to_old_idx.len());
         }
     }
     debug_assert!(itertools::equal(
         pair_to_old_idx.iter().copied().sorted_unstable(),
         0..n_pairs
     ));
+    assert_eq!(chunks[0].start, 0);
+    assert_eq!(chunks.last().unwrap().end, pair_to_old_idx.len());
+    assert!(chunks
+        .iter()
+        .zip(chunks[1..].iter())
+        .all(|(c, d)| c.end == d.start));
     Ok((pair_to_old_idx, chunks))
 }
 
