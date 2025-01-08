@@ -1,5 +1,6 @@
-import pickle
 import inspect
+import pickle
+import typing
 
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
@@ -11,9 +12,11 @@ from scalib.modeling import LDAClassifier, MultiLDA, Lda, LdaAcc
 
 
 def get_rng(**args):
+    """
+    Hash caller name (i.e. test name) to get the rng seed.
+    args are also hashed in the seed.
+    """
     arg = tuple(args.items())
-    # Hash caller name (i.e. test name) to get the rng seed.
-    # arg is a supplementary hash identifier
     return np.random.default_rng(seed=abs(hash((arg, inspect.stack()[1][3]))))
 
 
@@ -289,7 +292,7 @@ def test_seq_multi_lda_compare():
     nv = 100
     npois = 5
     nc = 4
-    rng = np.random.default_rng(seed=0)
+    rng = get_rng()
     _, traces, x = multi_lda_gen_indep_overlap(
         rng, ns=nv * npois, nc=nc, nv=nv, npois=0, n=1000, n_batches=1
     )
@@ -320,31 +323,35 @@ def test_multi_lda_pickle():
     assert np.allclose(prs, prs2)
 
 
-def multi_lda_select_simple(rng, nv, ns, npois, nv_sel, n_sel, maxl=2**15):
+def multi_lda_select_simple(rng, nv, ns, npois, nv_sel, n_sel, permute=True):
     nc = 4
     n = 100
-    traces = rng.integers(-maxl, maxl, (n, ns), dtype=np.int16)
-    labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
-    pois = list(np.random.permutation(range(ns))[:npois] for _ in range(nv))
+    pois, (traces,), (labels,) = multi_lda_gen_indep_overlap(
+        rng, ns, nc, nv, npois, n, n_batches=1
+    )
     lda_acc = LdaAcc(pois=pois, nc=nc)
     lda_acc.fit_u(traces, labels)
     lda_all = Lda(lda_acc, p=1)
     prs_all = lda_all.predict_proba(traces)
     # Validate for a random selection
     for _ in range(n_sel):
-        selection = list(np.random.permutation(range(nv))[:nv_sel])
+        if permute:
+            selection = list(rng.permutation(range(nv))[:nv_sel])
+        else:
+            selection = list(rng.integers(0, nv, (nv_sel,)))
         lda_s_only = lda_all.select_vars(selection)
         prt = lda_s_only.predict_proba(traces)
         assert np.allclose(prs_all[selection, ...], prt)
 
 
 def test_multi_lda_select():
-    cases = [
+    cases: list[dict[str, typing.Any]] = [
         dict(nv=5, ns=25, npois=1, nv_sel=5, n_sel=2),
         dict(nv=5, ns=25, npois=1, nv_sel=1, n_sel=2),
         dict(nv=5, ns=25, npois=1, nv_sel=2, n_sel=2),
         dict(nv=5, ns=25, npois=5, nv_sel=2, n_sel=2),
         dict(nv=5, ns=25, npois=15, nv_sel=2, n_sel=1),
+        dict(nv=5, ns=25, npois=10, nv_sel=8, n_sel=1, permute=False),
     ]
     for case in cases:
         rng = get_rng(**case)
