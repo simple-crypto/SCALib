@@ -14,7 +14,7 @@ use crate::{Result, ScalibError};
 use batched_traces::BatchedTraces;
 use cov_pairs::{CovAcc, CovPairs};
 use poi_map::PoiMap;
-use sparse_trace_sums::{SparseTraceSums, SparseTraceSumsState};
+use sparse_trace_sums::{SparseTraceSumsConf, SparseTraceSumsState};
 
 pub type Class = u16;
 pub type Var = u16;
@@ -59,7 +59,7 @@ struct MultiLdaAccConf {
     // Pois for each var
     cov_pois_offsets: Vec<usize>,
     poi_map: Arc<PoiMap>,
-    trace_sums: SparseTraceSums,
+    trace_sums: SparseTraceSumsConf,
     cov_pois: CovPairs,
 }
 
@@ -74,7 +74,7 @@ impl MultiLdaAccConf {
             .try_into()
             .map_err(|_| ScalibError::TooManyPois)?;
         let poi_map = Arc::new(PoiMap::new(ns as usize, &pois)?);
-        let trace_sums = SparseTraceSums::new(ns, nv, nc, pois.as_slice());
+        let trace_sums = SparseTraceSumsConf::new(ns, nv, nc, pois.as_slice());
         let mapped_pairs = poi_map
             .new_pois_vars()
             .iter()
