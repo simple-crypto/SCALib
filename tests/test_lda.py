@@ -208,7 +208,9 @@ def multi_lda_gen_pois_consec(nv, npois, gap=0):
     )
 
 
-def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_):
+def multi_lda_gen_indep_overlap(
+    rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_
+):
     pois = np.tile(np.arange(ns), (nv, 1))
     rng.shuffle(pois, axis=1)
     pois = pois[:, :npois]
@@ -302,3 +304,34 @@ def test_multi_lda_pickle():
     prs2 = lda2.predict_proba(traces)
 
     assert np.allclose(prs, prs2)
+
+
+def multi_lda_select_simple(nv, ns, npois, nv_sel, maxl=2**15):
+    nc = 4
+    n = 5000
+     traces = np.random.randint(-maxl, maxl, (n, ns), dtype=np.int16)
+     labels = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
+     pois = list(list(np.random.permutation(range(ns))[:npois]) for i in range(nv))
+     lda_acc.fit_u(traces, labels)
+     lda_all = Lda(lda_acc, p=1)
+     prs_all = lda_acc.predict_proba(traces)
+    # Validate for a random selection
+     selection = list(np.random.permutation(range(nv))[:nv_sel])
+     lda_s_only = lda_all.select_variables(selection)
+     prt = lda_s_only.predict_proba(traces)
+     for svi, sv in selection:
+        for ti, t in traces:
+            assert np.allclose(prs[sv,ti], prt[svi,ti])
+
+
+def test_multi_lda_select():
+    cases = [
+        dict(nv=5, ns=25, npois=1, nv_sel=5),
+        dict(nv=5, ns=25, npois=1, nv_sel=1),
+        dict(nv=5, ns=25, npois=1, nv_sel=2),
+        dict(nv=5, ns=25, npois=5, nv_sel=2),
+        dict(nv=5, ns=25, npois=10, nv_sel=2),
+        dict(nv=5, ns=25, npois=15, nv_sel=2),
+    ]
+    for case in cases:
+        multi_lda_select_simple(**case)
