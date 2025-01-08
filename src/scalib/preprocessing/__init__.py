@@ -11,6 +11,7 @@ This module contains usefull preprocessing to manipulate side channel traces..
    QuantFitMethod
    Quantizer
 """
+
 __all__ = ["QuantFitMethod", "Quantizer"]
 
 from .quantization import QuantFitMethod, Quantizer
