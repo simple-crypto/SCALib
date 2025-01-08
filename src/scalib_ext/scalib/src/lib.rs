@@ -34,14 +34,16 @@ pub enum ScalibError {
     SnrClassOutOfBound,
     #[error("Clustering failed due to maximum number of centroids reached.")]
     MaxCentroidNumber,
-    #[error("Empty KdTree, cannot get nearest centroid")]
+    #[error("Empty KdTree, cannot get nearest centroid.")]
     EmptyKdTree,
-    #[error("No associated classes stored")]
+    #[error("No associated classes stored.")]
     NoAssociatedClassesStored,
-    #[error("Too many POIs")]
+    #[error("Too many POIs.")]
     TooManyPois,
-    #[error("POI out of bound")]
+    #[error("POI out of bounds.")]
     PoiOutOfBound,
+    #[error("Variable out of bounds.")]
+    VarOutOfBound,
 }
 
 #[derive(Clone)]
