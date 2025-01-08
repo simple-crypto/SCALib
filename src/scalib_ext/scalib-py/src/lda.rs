@@ -1,7 +1,5 @@
 //! Python binding of SCALib's LDA implementation.
 
-use std::sync::Arc;
-
 use crate::ScalibError;
 use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, ToPyArray,
@@ -178,8 +176,8 @@ impl LDA {
                 ns,
                 p,
                 nc,
-                omega: Arc::new(omega.to_owned_array()),
-                pk: Arc::new(pk.to_owned_array()),
+                omega: omega.to_owned_array(),
+                pk: pk.to_owned_array(),
             },
         }
     }

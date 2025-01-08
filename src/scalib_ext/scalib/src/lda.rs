@@ -20,7 +20,6 @@
 //! Comput Stat 31, 1305–1325 (2016). https://doi.org/10.1007/s00180-015-0637-z
 
 use std::ops::AddAssign;
-use std::sync::Arc;
 
 use geigen::Geigen;
 use ndarray::{s, Array1, Array2, ArrayView1, ArrayView2, Axis, NewAxis};
@@ -179,9 +178,9 @@ pub struct LDA {
     /// Max random variable value.
     pub nc: usize,
     /// Probability mapping vectors. shape (p,nc)
-    pub omega: Arc<Array2<f64>>,
+    pub omega: Array2<f64>,
     /// Probability mapping offsets. shape (nc,)
-    pub pk: Arc<Array1<f64>>,
+    pub pk: Array1<f64>,
 }
 
 impl LDA {
@@ -244,8 +243,8 @@ impl LDA {
             ns,
             p,
             nc,
-            omega: Arc::new(omega),
-            pk: Arc::new(pk),
+            omega,
+            pk,
         })
     }
 
@@ -254,22 +253,11 @@ impl LDA {
     /// return prs with shape (n,nc). Every row corresponds to one probability distribution
     pub fn predict_proba(&self, x: ArrayView2<i16>) -> Array2<f64> {
         let x = x.mapv(|x| x as f64);
-        let mut scores = x.dot(&self.projection).dot(&*self.omega) + self.pk.slice(s![NewAxis, ..]);
+        let mut scores = x.dot(&self.projection).dot(&self.omega) + self.pk.slice(s![NewAxis, ..]);
         for score_distr in scores.outer_iter_mut() {
             softmax(score_distr);
         }
         scores
-    }
-
-    pub(crate) fn select_pois(&self, pois: &[usize]) -> Self {
-        Self {
-            projection: self.projection.select(Axis(0), pois),
-            ns: pois.len(),
-            p: self.p,
-            nc: self.nc,
-            omega: self.omega.clone(),
-            pk: self.pk.clone(),
-        }
     }
 }
 pub(crate) fn softmax(mut v: ndarray::ArrayViewMut1<f64>) {

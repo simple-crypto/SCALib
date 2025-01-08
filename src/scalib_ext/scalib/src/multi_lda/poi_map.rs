@@ -17,6 +17,10 @@ impl PoiMap {
         ns: usize,
         poi_vars: impl IntoIterator<Item = I> + Clone,
     ) -> Result<Self> {
+        assert!(poi_vars
+            .clone()
+            .into_iter()
+            .all(|p| p.into_iter().map(|x| *x.borrow()).is_sorted()));
         let mut used_pois = vec![false; ns as usize];
         for poi in poi_vars.clone().into_iter().flat_map(I::into_iter) {
             *used_pois
@@ -84,7 +88,7 @@ impl PoiMap {
             })
             .collect()
     }
-    pub fn select_vars(&self, vars: &[super::Var]) -> Result<(Self, Self)> {
+    pub fn select_vars(&self, vars: &[super::Var]) -> Result<Self> {
         let sub_map = Self::new(self.len(), vars.iter().map(|v| self.new_pois(*v)))?;
         let full_map = Self {
             new2old: sub_map
@@ -94,6 +98,6 @@ impl PoiMap {
                 .collect(),
             new_poi_vars: sub_map.new_poi_vars.clone(),
         };
-        Ok((sub_map, full_map))
+        Ok(full_map)
     }
 }

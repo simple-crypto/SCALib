@@ -365,7 +365,7 @@ const POI_BLOCK_SIZE: usize = L2_SIZE / 2 / 2 / N;
 pub struct MultiLda {
     nc: Class,
     p: usize,
-    ldas: Vec<LDA>,
+    ldas: Vec<Arc<LDA>>,
     poi_map: Arc<PoiMap>,
     // indexing: [var][poi_block][poi_offset_in_block]
     poi_blocks: Vec<Vec<Vec<u16>>>,
@@ -373,7 +373,10 @@ pub struct MultiLda {
 
 impl MultiLda {
     fn new(conf: &MultiLdaAccConf, matrices: &[LdaMatrices], p: u32) -> Result<Self> {
-        let ldas = matrices.iter().map(|m| m.lda(p)).collect::<Result<_>>()?;
+        let ldas = matrices
+            .iter()
+            .map(|m| Ok(Arc::new(m.lda(p)?)))
+            .collect::<Result<_>>()?;
         let poi_blocks = conf.poi_map.poi_blocks();
         let p = p as usize;
         Ok(Self {
@@ -520,23 +523,17 @@ impl MultiLda {
         if vars.iter().any(|v| *v >= self.n_vars()) {
             return Err(ScalibError::VarOutOfBound);
         }
-        let (sub_map, full_map) = self.poi_map.select_vars(vars)?;
+        let new_map = self.poi_map.select_vars(vars)?;
         Ok(Self {
             nc: self.nc,
             p: self.p,
+            // Since POIs are kept sorted, no need to modify kept LDAs.
             ldas: vars
                 .iter()
-                .map(|v| {
-                    let new_pois = sub_map
-                        .new_pois(*v)
-                        .iter()
-                        .map(|x| *x as usize)
-                        .collect_vec();
-                    self.ldas[*v as usize].select_pois(&new_pois)
-                })
+                .map(|v| self.ldas[*v as usize].clone())
                 .collect(),
-            poi_blocks: full_map.poi_blocks(),
-            poi_map: Arc::new(full_map),
+            poi_blocks: new_map.poi_blocks(),
+            poi_map: Arc::new(new_map),
         })
     }
 }
