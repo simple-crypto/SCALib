@@ -1,10 +1,20 @@
+import pickle
+import inspect
+
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
-from scalib import ScalibError
-from scalib.modeling import LDAClassifier, MultiLDA, Lda, LdaAcc
 import numpy as np
 import scipy.stats
-import pickle
+
+from scalib import ScalibError
+from scalib.modeling import LDAClassifier, MultiLDA, Lda, LdaAcc
+
+
+def get_rng(**args):
+    arg = tuple(args.items())
+    # Hash caller name (i.e. test name) to get the rng seed.
+    # arg is a supplementary hash identifier
+    return np.random.default_rng(seed=abs(hash((arg, inspect.stack()[1][3]))))
 
 
 def is_parallel(x, y):
@@ -23,15 +33,16 @@ def parallel_factor(x, y):
 
 
 def test_lda_pickle():
-    np.set_printoptions(threshold=np.inf)  # for debug
+    # np.set_printoptions(threshold=np.inf)
     ns = 10
     n_components = 2
     nc = 4
     n = 5000
 
-    m = np.random.randint(0, 100, (nc, ns))
-    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
-    labels = np.random.randint(0, nc, n, dtype=np.uint16)
+    rng = get_rng()
+    m = rng.integers(0, 100, (nc, ns))
+    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
+    labels = rng.integers(0, nc, n, dtype=np.uint16)
     traces += m[labels]
 
     lda = LDAClassifier(nc, n_components)
@@ -71,8 +82,8 @@ def test_lda_pickle():
     traces_t = traces_t - means_check[labels, :]
     cov_check = np.cov(traces_t.T)
 
-    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
-    labels = np.random.randint(0, nc, n, dtype=np.uint16)
+    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
+    labels = rng.integers(0, nc, n, dtype=np.uint16)
     traces += m[labels]
 
     prs = lda.predict_proba(traces)
@@ -88,15 +99,16 @@ def test_lda_pickle():
 
 
 def test_lda():
-    np.set_printoptions(threshold=np.inf)  # for debug
+    # np.set_printoptions(threshold=np.inf)
     ns = 10
     n_components = 2
     nc = 4
     n = 500
 
-    m = np.random.randint(0, 100, (nc, ns))
-    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
-    labels = np.random.randint(0, nc, n, dtype=np.uint16)
+    rng = get_rng()
+    m = rng.integers(0, 100, (nc, ns))
+    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
+    labels = rng.integers(0, nc, n, dtype=np.uint16)
     traces += m[labels]
 
     lda = LDAClassifier(nc, n_components)
@@ -142,9 +154,10 @@ def test_lda_noproj():
     nc = 4
     n = 500
 
-    m = np.random.randint(0, 100, (nc, ns))
-    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
-    labels = np.random.randint(0, nc, n, dtype=np.uint16)
+    rng = get_rng()
+    m = rng.integers(0, 100, (nc, ns))
+    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
+    labels = rng.integers(0, nc, n, dtype=np.uint16)
     traces += m[labels]
 
     lda = LDAClassifier(nc, n_components)
@@ -154,8 +167,8 @@ def test_lda_noproj():
     lda_ref = LDA_sklearn(solver="eigen", n_components=n_components)
     lda_ref.fit(traces, labels)
 
-    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
-    labels = np.random.randint(0, nc, n, dtype=np.uint16)
+    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
+    labels = rng.integers(0, nc, n, dtype=np.uint16)
     traces += m[labels]
 
     prs = lda.predict_proba(traces)
@@ -170,21 +183,23 @@ def test_lda_fail_bad_traces():
     ns = 6
     nc = 4
     lda = LDAClassifier(nc, 3)
-    traces_bad = np.random.randint(0, 1, (n, ns), dtype=np.int16)
-    y = np.random.randint(0, nc, n, dtype=np.uint16)
+    rng = get_rng()
+    traces_bad = rng.integers(0, 1, (n, ns), dtype=np.int16)
+    y = rng.integers(0, nc, n, dtype=np.uint16)
     lda.fit_u(traces_bad, y, 0)
     with pytest.raises(ScalibError):
         lda.solve()
 
 
 def test_multilda():
-    x = np.random.randint(0, 256, (5000, 50), dtype=np.int16)
-    y = np.random.randint(0, 256, (5000, 5), dtype=np.uint16)
+    rng = get_rng()
+    x = rng.integers(0, 256, (5000, 50), dtype=np.int16)
+    y = rng.integers(0, 256, (5000, 5), dtype=np.uint16)
     pois = [list(range(7 * i, 7 * i + 10)) for i in range(5)]
     lda = MultiLDA(5 * [256], 5 * [3], pois)
     lda.fit_u(x, y)
     lda.solve()
-    x = np.random.randint(0, 256, (20, 50), dtype=np.int16)
+    x = rng.integers(0, 256, (20, 50), dtype=np.int16)
     _ = lda.predict_proba(x)
 
 
@@ -208,9 +223,7 @@ def multi_lda_gen_pois_consec(nv, npois, gap=0):
     )
 
 
-def multi_lda_gen_indep_overlap(
-    rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_
-):
+def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_):
     pois = np.tile(np.arange(ns), (nv, 1))
     rng.shuffle(pois, axis=1)
     pois = pois[:, :npois]
@@ -247,13 +260,13 @@ def test_multi_lda_compare():
     cases = [
         dict(ns=2, nc=2, nv=1, npois=2, n=10, n_batches=1, p=1),
         dict(ns=2, nc=2, nv=1, npois=2, n=5, n_batches=2, p=1),
-        dict(ns=3, nc=2, nv=1, npois=2, n=5, n_batches=1, p=1, maxl=1),
+        dict(ns=3, nc=2, nv=1, npois=2, n=20, n_batches=1, p=1, maxl=100),
         dict(ns=20, nc=4, nv=4, npois=5, n=10, n_batches=3, p=2),
         dict(ns=100, nc=256, nv=2, npois=20, n=500, n_batches=5, p=4),
         dict(ns=1000, nc=4, nv=10, npois=2, n=10, n_batches=5, p=1),
     ]
-    rng = np.random.default_rng(seed=0)
     for case in cases:
+        rng = get_rng(**case)
         print(80 * "#" + "\ncase:", case)
         pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
         multi_lda_compare(pois=pois, traces=traces, x=x, **case)
@@ -288,8 +301,9 @@ def test_multi_lda_pickle():
     ns = 10
     nc = 4
     n = 5000
-    traces = np.random.randint(0, 10, (n, ns), dtype=np.int16)
-    labels = np.random.randint(0, nc, (n, 1), dtype=np.uint16)
+    rng = get_rng()
+    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
+    labels = rng.integers(0, nc, (n, 1), dtype=np.uint16)
     lda_acc = LdaAcc(pois=[list(range(ns))], nc=nc)
     lda_acc.fit_u(traces, labels)
     dumped_lda_acc = pickle.dumps(lda_acc)
@@ -306,33 +320,32 @@ def test_multi_lda_pickle():
     assert np.allclose(prs, prs2)
 
 
-def multi_lda_select_simple(nv, ns, npois, nv_sel, maxl=2**15):
+def multi_lda_select_simple(rng, nv, ns, npois, nv_sel, n_sel, maxl=2**15):
     nc = 4
-    n = 5000
-    traces = np.random.randint(-maxl, maxl, (n, ns), dtype=np.int16)
-    labels = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
-    pois = list(list(np.random.permutation(range(ns))[:npois]) for i in range(nv))
+    n = 100
+    traces = rng.integers(-maxl, maxl, (n, ns), dtype=np.int16)
+    labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
+    pois = list(np.random.permutation(range(ns))[:npois] for _ in range(nv))
     lda_acc = LdaAcc(pois=pois, nc=nc)
     lda_acc.fit_u(traces, labels)
     lda_all = Lda(lda_acc, p=1)
     prs_all = lda_all.predict_proba(traces)
     # Validate for a random selection
-    selection = list(np.random.permutation(range(nv))[:nv_sel])
-    lda_s_only = lda_all.select_variables(selection)
-    prt = lda_s_only.predict_proba(traces)
-    for svi, sv in selection:
-        for ti, t in traces:
-            assert np.allclose(prs[sv, ti], prt[svi, ti])
+    for _ in range(n_sel):
+        selection = list(np.random.permutation(range(nv))[:nv_sel])
+        lda_s_only = lda_all.select_variables(selection)
+        prt = lda_s_only.predict_proba(traces)
+        assert np.allclose(prs_all[selection, ...], prt)
 
 
 def test_multi_lda_select():
     cases = [
-        dict(nv=5, ns=25, npois=1, nv_sel=5),
-        dict(nv=5, ns=25, npois=1, nv_sel=1),
-        dict(nv=5, ns=25, npois=1, nv_sel=2),
-        dict(nv=5, ns=25, npois=5, nv_sel=2),
-        dict(nv=5, ns=25, npois=10, nv_sel=2),
-        dict(nv=5, ns=25, npois=15, nv_sel=2),
+        dict(nv=5, ns=25, npois=1, nv_sel=5, n_sel=2),
+        dict(nv=5, ns=25, npois=1, nv_sel=1, n_sel=2),
+        dict(nv=5, ns=25, npois=1, nv_sel=2, n_sel=2),
+        dict(nv=5, ns=25, npois=5, nv_sel=2, n_sel=2),
+        dict(nv=5, ns=25, npois=15, nv_sel=2, n_sel=1),
     ]
     for case in cases:
-        multi_lda_select_simple(**case)
+        rng = get_rng(**case)
+        multi_lda_select_simple(rng, **case)
