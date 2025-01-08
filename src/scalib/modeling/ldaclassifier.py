@@ -521,3 +521,159 @@ class Lda:
         new = cls.__new__(cls)
         new._inner = self._inner.select_vars(vars)
         return new
+
+
+class LDAClassifierAcc:
+    def __init__(self, nc: int):
+        self._nc = nc
+        self._ns = None
+        self._init = False
+
+    def fit_u(
+        self,
+        traces: npt.NDArray[np.int16],
+        x: npt.NDArray[np.uint16],
+        gemm_mode: int = 1,
+    ):
+        traces = scalib.utils.clean_traces(traces, self._ns)
+        x = scalib.utils.clean_labels(x, multi=False)
+        if not self._init:
+            self._init = True
+            self._ns = traces.shape[1]
+            self.acc = _scalib_ext.LdaAcc(self._nc, self._ns)
+        # TODO maybe there is something smarter to do here w.r.t. number of
+        # threads + investigate exact BLIS behavior.
+        with scalib.utils.interruptible():
+            self.acc.fit(traces, x, gemm_mode, get_config())
+
+    def __getstate__(self):
+        dic = self.__dict__.copy()
+
+        if "acc" in dic:
+            dic["acc"] = dic["acc"].get_state()
+        if "lda" in dic:
+            dic["lda"] = dic["lda"].get_state()
+
+        return dic
+
+    def __setstate__(self, state):
+        for k, v in state.items():
+            setattr(self, k, v)
+
+        if "acc" in state:
+            self.acc = _scalib_ext.LdaAcc.from_state(*state["acc"])
+        if "lda" in state:
+            self.lda = _scalib_ext.LDA.from_state(*state["lda"])
+
+    def get_sw(self):
+        r"""Return :math:`S_{W}` matrix (within-class scatter)."""
+        return self.acc.get_sw()
+
+    def get_sb(self):
+        r"""Return :math:`S_{B}` matrix (between-class scatter)."""
+        return self.acc.get_sb()
+
+    def get_mus(self):
+        r"""Return means matrix (classes means). Shape: ``(nc, ns)``."""
+        return self.acc.get_mus()
+
+
+class LDAClassifierSolved:
+    def __init__(self, acc: LDAClassifierAcc, *, p: int):
+        if not acc._init:
+            raise ValueError("Empty accumulator: .fit_u was never called.")
+        with scalib.utils.interruptible():
+            self._inner = acc.acc.lda(p, get_config())
+
+    def predict_proba(self, traces):
+        with scalib.utils.interruptible():
+            return self._inner.predict_proba(traces, get_config())
+
+    def __getstate__(self):
+        return self._inner.get_state()
+
+    def __setstate__(self, state):
+        self._inner = _scalib_ext.LDA.from_state(*state)
+
+
+class MultiLDAAcc:
+    def __init__(self, ncs, pois, gemm_mode: int = 1):
+        self.pois = [list(sorted(x)) for x in pois]
+        self.gemm_mode = gemm_mode
+        self.ldas = [LDAClassifierAcc(nc) for nc in ncs]
+
+    @classmethod
+    def from_ldas(cls, pois, ldas):
+        self = cls.__new__(cls)
+        self.pois = pois
+        self.ldas = ldas
+        return self
+
+    def fit_u(self, traces, x):
+        """Update the LDA estimates with new training data.
+
+        Parameters
+        ----------
+        traces : array_like, int16
+            Array that contains the traces. The array must
+            be of dimension `(n,ns)` and its type must be `int16`.
+        x : array_like, uint16
+            Labels for each trace. Must be of shape `(n, nv)` and
+            must be `uint16`.
+        """
+        # Try to avoid the over-subscription of CPUs.
+        num_threads = get_config().threadpool.n_threads
+        if self.gemm_mode != 0:
+            num_threads = max(1, num_threads // self.gemm_mode)
+        with scalib.utils.interruptible():
+            with scalib.tools.ContextExecutor(max_workers=num_threads) as executor:
+                list(
+                    executor.map(
+                        lambda i: self.ldas[i].fit_u(
+                            np.ascontiguousarray(traces[:, self.pois[i]]),
+                            x[:, i],
+                            self.gemm_mode,
+                        ),
+                        range(len(self.ldas)),
+                    )
+                )
+
+    def get_sw(self):
+        return [lda.get_sw() for lda in self.ldas]
+
+    def get_sb(self):
+        return [lda.get_sb() for lda in self.ldas]
+
+    def get_mus(self):
+        return [lda.get_mus() for lda in self.ldas]
+
+
+class MultiLDASolved:
+    def __init__(self, acc, p):
+        self.pois = acc.pois
+        with scalib.utils.interruptible():
+            with scalib.tools.ContextExecutor(
+                max_workers=get_config().threadpool.n_threads
+            ) as executor:
+                self._inner = list(
+                    executor.map(lambda a: LDAClassifierSolved(a, p=p), acc)
+                )
+
+    def predict_proba(self, traces):
+        with scalib.utils.interruptible():
+            with scalib.tools.ContextExecutor(
+                max_workers=get_config().threadpool.n_threads
+            ) as executor:
+                return list(
+                    executor.map(
+                        lambda i: self._inner[i].predict_proba(traces[:, self.pois[i]]),
+                        range(len(self._inner)),
+                    )
+                )
+
+    def select_vars(self, vars: list[int]):
+        cls = type(self)
+        new = cls.__new__(cls)
+        new._inner = [self._inner[v] for v in vars]
+        new.pois = [self.pois[v] for v in vars]
+        return new
