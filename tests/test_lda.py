@@ -309,19 +309,20 @@ def test_multi_lda_pickle():
 def multi_lda_select_simple(nv, ns, npois, nv_sel, maxl=2**15):
     nc = 4
     n = 5000
-     traces = np.random.randint(-maxl, maxl, (n, ns), dtype=np.int16)
-     labels = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
-     pois = list(list(np.random.permutation(range(ns))[:npois]) for i in range(nv))
-     lda_acc.fit_u(traces, labels)
-     lda_all = Lda(lda_acc, p=1)
-     prs_all = lda_acc.predict_proba(traces)
+    traces = np.random.randint(-maxl, maxl, (n, ns), dtype=np.int16)
+    labels = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
+    pois = list(list(np.random.permutation(range(ns))[:npois]) for i in range(nv))
+    lda_acc = LdaAcc(pois=pois, nc=nc)
+    lda_acc.fit_u(traces, labels)
+    lda_all = Lda(lda_acc, p=1)
+    prs_all = lda_all.predict_proba(traces)
     # Validate for a random selection
-     selection = list(np.random.permutation(range(nv))[:nv_sel])
-     lda_s_only = lda_all.select_variables(selection)
-     prt = lda_s_only.predict_proba(traces)
-     for svi, sv in selection:
+    selection = list(np.random.permutation(range(nv))[:nv_sel])
+    lda_s_only = lda_all.select_variables(selection)
+    prt = lda_s_only.predict_proba(traces)
+    for svi, sv in selection:
         for ti, t in traces:
-            assert np.allclose(prs[sv,ti], prt[svi,ti])
+            assert np.allclose(prs[sv, ti], prt[svi, ti])
 
 
 def test_multi_lda_select():
