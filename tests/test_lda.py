@@ -1,6 +1,7 @@
 import inspect
 import pickle
 import typing
+import hashlib
 
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
@@ -16,8 +17,10 @@ def get_rng(**args):
     Hash caller name (i.e. test name) to get the rng seed.
     args are also hashed in the seed.
     """
-    arg = tuple(args.items())
-    return np.random.default_rng(seed=abs(hash((arg, inspect.stack()[1][3]))))
+    # Use a deterministic hash (no need for cryptographic robustness, but
+    # python's hash() is randomly salted).
+    seed = hashlib.sha256((repr(args) + inspect.stack()[1][3]).encode()).digest()
+    return np.random.Generator(np.random.PCG64(list(seed)))
 
 
 def is_parallel(x, y):
