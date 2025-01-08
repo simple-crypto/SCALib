@@ -333,7 +333,7 @@ def multi_lda_select_simple(rng, nv, ns, npois, nv_sel, n_sel, maxl=2**15):
     # Validate for a random selection
     for _ in range(n_sel):
         selection = list(np.random.permutation(range(nv))[:nv_sel])
-        lda_s_only = lda_all.select_variables(selection)
+        lda_s_only = lda_all.select_vars(selection)
         prt = lda_s_only.predict_proba(traces)
         assert np.allclose(prs_all[selection, ...], prt)
 
