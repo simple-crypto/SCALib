@@ -73,7 +73,7 @@ impl MultiLdaAcc {
     }
 
     fn multi_lda(&self, py: Python, p: u32, config: crate::ConfigWrapper) -> PyResult<MultiLda> {
-        match config.on_worker(py, |_| self.inner.lda(p)) {
+        match config.on_worker(py, |cfg| self.inner.lda(p, cfg)) {
             Ok(inner) => Ok(MultiLda { inner }),
             Err(e) => Err(ScalibError::from_scalib(e, py)),
         }

@@ -6,6 +6,7 @@ mod sparse_trace_sums;
 use std::ops::Range;
 use std::sync::Arc;
 
+use hytra::TrAdder;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -273,8 +274,25 @@ impl MultiLdaAcc {
             .map(LdaMatrices::to_tuple)
             .collect())
     }
-    pub fn lda(&self, p: u32) -> Result<MultiLda> {
-        MultiLda::new(&self.conf, &self.state.compute_matrices(&self.conf)?, p)
+    pub fn lda(&self, p: u32, config: &crate::Config) -> Result<MultiLda> {
+        let compute_ldas = |it_cnt: &TrAdder<u64>| {
+            (0..self.conf.nv)
+                .into_par_iter()
+                .map(|var| {
+                    let matrices = self.state.compute_matrices_var(&self.conf, var)?;
+                    let res = Arc::new(matrices.lda(p)?);
+                    it_cnt.inc(1);
+                    Ok(res)
+                })
+                .collect::<Result<_>>()
+        };
+        let ldas = crate::utils::with_progress(
+            compute_ldas,
+            self.conf.nv as u64,
+            "LDA solve vars",
+            config,
+        )?;
+        Ok(MultiLda::new(&self.conf, ldas, p))
     }
 }
 
@@ -372,20 +390,16 @@ pub struct MultiLda {
 }
 
 impl MultiLda {
-    fn new(conf: &MultiLdaAccConf, matrices: &[LdaMatrices], p: u32) -> Result<Self> {
-        let ldas = matrices
-            .iter()
-            .map(|m| Ok(Arc::new(m.lda(p)?)))
-            .collect::<Result<_>>()?;
+    fn new(conf: &MultiLdaAccConf, ldas: Vec<Arc<LDA>>, p: u32) -> Self {
         let poi_blocks = conf.poi_map.poi_blocks();
         let p = p as usize;
-        Ok(Self {
+        Self {
             nc: conf.nc,
             p,
             ldas,
             poi_map: conf.poi_map.clone(),
             poi_blocks,
-        })
+        }
     }
     fn var_block_size(&self) -> usize {
         let max_pois_per_var = self
