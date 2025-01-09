@@ -502,10 +502,8 @@ impl MultiLda {
                                 scores.as_slice().unwrap(),
                             );
                             // TODO: improve the softmax.
-                            for (res, mut ll, y) in izip!(res, tmp_ll.outer_iter_mut(), y) {
-                                *res = log2_softmax_i(ll.view(), *y as usize);
-                                //softmax(ll.view_mut());
-                                //*res = ll[*y as usize].log2();
+                            for (res, ll, y) in izip!(res, tmp_ll.outer_iter(), y) {
+                                *res = log2_softmax_i(ll, *y as usize);
                             }
                         },
                     );

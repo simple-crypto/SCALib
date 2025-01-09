@@ -1,7 +1,7 @@
 //! Python binding of SCALib's MultiLda implementation.
 
 use bincode::{deserialize, serialize};
-use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray2, ToPyArray};
+use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::intern;
 use pyo3::prelude::*;

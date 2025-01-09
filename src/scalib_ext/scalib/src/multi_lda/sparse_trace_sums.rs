@@ -109,60 +109,6 @@ impl SparseTraceSumsState {
             .collect();
         Self { n_traces, sums }
     }
-    pub fn update_old(
-        &mut self,
-        conf: &SparseTraceSumsConf,
-        traces: ArrayView2<i16>,
-        y: ArrayView2<Class>,
-    ) {
-        // Update n_traces
-        for (mut n_traces, y) in self.n_traces.outer_iter_mut().zip(y.axis_iter(Axis(1))) {
-            for y in y.iter() {
-                n_traces[*y as usize] += 1;
-            }
-        }
-        // TODO refactor properly all loop blocking here. (not for now)
-        // TODO block loop around number of traces (not for now)
-        // TODO reduce bandwidth by exploiting that poi_id are consecutive.
-        // TODO transpose traces matrix (important for cache efficiency).
-        // Update sums
-        let mut sums_per_poi_sep_list = self
-            .sums
-            .iter_mut()
-            .map(|sums| sums.axis_iter_mut(Axis(0)).map(Some).collect_vec())
-            .collect_vec();
-        let mut sums_per_poi = conf
-            .vars_per_poi
-            .iter()
-            .zip(conf.poi_var_id.iter())
-            .map(|(vars, poi_ids)| {
-                vars.iter()
-                    .zip(poi_ids.iter())
-                    .map(|(var, poi_id)| {
-                        sums_per_poi_sep_list[*var as usize][*poi_id as usize]
-                            .take()
-                            .unwrap()
-                    })
-                    .collect_vec()
-            })
-            .collect_vec();
-        let traces = traces.t().clone_row_major();
-        let y = y.t().clone_row_major();
-        for (samples, vars, sums) in izip!(
-            traces.axis_iter(Axis(0)),
-            conf.vars_per_poi.iter(),
-            sums_per_poi.iter_mut(),
-        ) {
-            let samples = samples.as_slice().unwrap();
-            for (var, sums) in izip!(vars.iter(), sums.iter_mut()) {
-                let y = y.index_axis(Axis(0), *var as usize);
-                let y = y.as_slice().unwrap();
-                for (sample, y) in samples.iter().zip(y.iter()) {
-                    sums[*y as usize] += *sample as i64;
-                }
-            }
-        }
-    }
     pub fn update(
         &mut self,
         conf: &SparseTraceSumsConf,
