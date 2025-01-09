@@ -503,6 +503,26 @@ class Lda:
         with scalib.utils.interruptible():
             return self._inner.predict_proba(traces, get_config())
 
+    def predict_log2_proba_class(self, traces, x):
+        r"""Computes the log2 probability for the given class for the traces,
+            for all variables.
+
+        Parameters
+        ----------
+        traces : array_like, int16
+            Array that contains the traces. The array must be of dimension `(n,ns)`.
+        x : array_like, uint16
+            Labels for each trace. Must be of shape `(n, nv)` and
+            must be `uint16`.
+
+        Returns
+        -------
+        list of array_like, f64
+            Log2 probabilities. Shape `(nv, n)`.
+        """
+        with scalib.utils.interruptible():
+            return self._inner.predict_log2_proba_class(traces, x, get_config())
+
     def select_vars(self, vars: list[int]) -> "Lda":
         r"""Make a new :class:`Lda` with only a subset of the variables (in the
         order given by the list).

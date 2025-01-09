@@ -181,6 +181,18 @@ impl MultiLda {
         let prs = config.on_worker(py, |_| self.inner.predict_proba(x));
         Ok(prs.into_pyarray(py))
     }
+    fn predict_log2_proba_class<'py>(
+        &self,
+        py: Python<'py>,
+        x: PyReadonlyArray2<i16>,
+        y: PyReadonlyArray2<u16>,
+        config: crate::ConfigWrapper,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let x = x.as_array();
+        let y = y.as_array();
+        let prs = config.on_worker(py, |_| self.inner.predict_log2p1(x, y));
+        Ok(prs.into_pyarray(py))
+    }
     fn select_vars(&self, py: Python, vars: Vec<u16>) -> PyResult<Self> {
         Ok(Self {
             inner: self

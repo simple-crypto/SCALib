@@ -21,7 +21,13 @@ pub type Class = u16;
 pub type Var = u16;
 
 use itertools::{izip, Itertools};
-use ndarray::{azip, Array2, Array3, ArrayView2, ArrayViewMut2, Axis};
+use ndarray::{azip, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, Axis};
+
+pub(crate) fn log2_softmax_i(v: ndarray::ArrayView1<f64>, i: usize) -> f64 {
+    let max = v.fold(f64::NEG_INFINITY, |x, y| f64::max(x, *y));
+    use std::f64::consts::LOG2_E;
+    (v[i] - max) * LOG2_E - f64::log2(v.iter().map(|x| (x - max).exp()).sum())
+}
 
 trait RangeExt {
     type Idx;
@@ -260,6 +266,8 @@ impl MultiLdaAcc {
         let state = MultiLdaAccState::new(&conf);
         Ok(Self { conf, state })
     }
+    // traces: (n, ns)
+    // y: (n, nv)
     pub fn update(&mut self, traces: ArrayView2<i16>, y: ArrayView2<Class>) -> Result<()> {
         self.state.update(&self.conf, traces, y)
     }
@@ -280,7 +288,7 @@ impl MultiLdaAcc {
                 .into_par_iter()
                 .map(|var| {
                     let matrices = self.state.compute_matrices_var(&self.conf, var)?;
-                    let res = Arc::new(matrices.lda(p)?);
+                    let res = matrices.lda(p)?;
                     it_cnt.inc(1);
                     Ok(res)
                 })
@@ -383,22 +391,40 @@ const POI_BLOCK_SIZE: usize = L2_SIZE / 2 / 2 / N;
 pub struct MultiLda {
     nc: Class,
     p: usize,
-    ldas: Vec<Arc<LDA>>,
     poi_map: Arc<PoiMap>,
     // indexing: [var][poi_block][poi_offset_in_block]
     poi_blocks: Vec<Vec<Vec<u16>>>,
+    lda_states: Vec<Arc<LdaState>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LdaState {
+    // projection and omega are transposed compared to what is found on LDA.
+    projection: Array2<f64>,
+    omega: Array2<f64>,
+    pk: Array1<f64>,
 }
 
 impl MultiLda {
-    fn new(conf: &MultiLdaAccConf, ldas: Vec<Arc<LDA>>, p: u32) -> Self {
+    fn new(conf: &MultiLdaAccConf, ldas: Vec<LDA>, p: u32) -> Self {
         let poi_blocks = conf.poi_map.poi_blocks();
         let p = p as usize;
+        let lda_states = ldas
+            .iter()
+            .map(|lda| {
+                Arc::new(LdaState {
+                    projection: lda.projection.t().clone_row_major(),
+                    omega: lda.omega.t().clone_row_major(),
+                    pk: lda.pk.clone(),
+                })
+            })
+            .collect();
         Self {
             nc: conf.nc,
             p,
-            ldas,
             poi_map: conf.poi_map.clone(),
             poi_blocks,
+            lda_states,
         }
     }
     fn var_block_size(&self) -> usize {
@@ -425,58 +451,104 @@ impl MultiLda {
     /// return prs with shape (nv,n,nc). Every row corresponds to one probability distribution
     pub fn predict_proba(&self, traces: ArrayView2<i16>) -> Array3<f64> {
         let mut res = Array3::zeros((self.poi_blocks.len(), traces.shape()[0], self.nc as usize));
-
         let traces_batched = BatchedTraces::<N>::new(&self.poi_map, traces).get_batches();
-
         for var_block in (0..(self.poi_blocks.len())).range_chunks(self.var_block_size()) {
-            let mut tmp = vec![
-                Array2::from_elem((var_block.len(), self.p), [0.0f64; N]);
-                traces_batched.shape()[0]
-            ];
-            let projections = var_block
-                .clone()
-                .map(|var| self.ldas[var].projection.t().clone_row_major())
-                .collect_vec();
-            (traces_batched.outer_iter(), tmp.as_mut_slice())
-                .into_par_iter()
-                .for_each(|(trace_batch, tmp)| {
-                    self.project_thread_loop(
-                        var_block.clone(),
-                        &projections,
-                        tmp,
-                        trace_batch.as_slice().unwrap(),
-                    );
-                });
+            let scores = self.compute_scores(var_block.clone(), &traces_batched);
             for (var_i, var) in var_block.clone().enumerate() {
                 let mut res = res.index_axis_mut(Axis(0), var);
-                let lda = &self.ldas[var];
-                let omega = lda.omega.t().clone_row_major();
-                (res.axis_chunks_iter_mut(Axis(0), N), tmp.as_slice())
+                (res.axis_chunks_iter_mut(Axis(0), N), scores.as_slice())
                     .into_par_iter()
-                    .for_each(|(res, tmp)| {
-                        self.compute_proba_thread_loop(var_i, lda, &omega, res, tmp);
+                    .for_each(|(mut res, scores)| {
+                        let scores = scores.index_axis(Axis(0), var_i);
+                        self.compute_ll_thread_loop(
+                            var,
+                            res.view_mut(),
+                            scores.as_slice().unwrap(),
+                        );
+                        // TODO: improve the softmax.
+                        for res in res.outer_iter_mut() {
+                            softmax(res);
+                        }
                     });
             }
         }
         res
     }
+    /// return the log2 probability of one possible value for leakage samples
+    /// traces with shape (n,ns)
+    /// y with shape (n, nv)
+    /// return prs with shape (nv,n), proba of the corresponding y
+    pub fn predict_log2p1(&self, traces: ArrayView2<i16>, y: ArrayView2<Class>) -> Array2<f64> {
+        let mut res = Array2::zeros((self.poi_blocks.len(), traces.shape()[0]));
+        let traces_batched = BatchedTraces::<N>::new(&self.poi_map, traces).get_batches();
+        for var_block in (0..(self.poi_blocks.len())).range_chunks(self.var_block_size()) {
+            let scores = self.compute_scores(var_block.clone(), &traces_batched);
+            for (var_i, var) in var_block.clone().enumerate() {
+                let y = y.index_axis(Axis(1), var);
+                let mut res = res.index_axis_mut(Axis(0), var);
+                (
+                    res.axis_chunks_iter_mut(Axis(0), N),
+                    scores.as_slice(),
+                    y.axis_chunks_iter(Axis(0), N),
+                )
+                    .into_par_iter()
+                    .for_each_init(
+                        || Array2::zeros((N, self.nc as usize)),
+                        |tmp_ll, (res, scores, y)| {
+                            let scores = scores.index_axis(Axis(0), var_i);
+                            self.compute_ll_thread_loop(
+                                var,
+                                tmp_ll.view_mut(),
+                                scores.as_slice().unwrap(),
+                            );
+                            // TODO: improve the softmax.
+                            for (res, mut ll, y) in izip!(res, tmp_ll.outer_iter_mut(), y) {
+                                *res = log2_softmax_i(ll.view(), *y as usize);
+                                //softmax(ll.view_mut());
+                                //*res = ll[*y as usize].log2();
+                            }
+                        },
+                    );
+            }
+        }
+        res
+    }
+    fn compute_scores(
+        &self,
+        var_block: Range<usize>,
+        traces_batched: &Array2<batched_traces::AA<N>>,
+    ) -> Vec<Array2<[f64; N]>> {
+        let mut scores = vec![
+            Array2::from_elem((var_block.len(), self.p), [0.0f64; N]);
+            traces_batched.shape()[0]
+        ];
+        (traces_batched.outer_iter(), scores.as_mut_slice())
+            .into_par_iter()
+            .for_each(|(trace_batch, scores)| {
+                self.project_thread_loop(
+                    var_block.clone(),
+                    scores,
+                    trace_batch.as_slice().unwrap(),
+                );
+            });
+        scores
+    }
 
     fn project_thread_loop(
         &self,
         var_block: Range<usize>,
-        projections: &[Array2<f64>],
-        tmp: &mut Array2<[f64; N]>,
+        scores: &mut Array2<[f64; N]>,
         trace_batch: &[batched_traces::AA<N>],
     ) {
-        tmp.fill([0.0; N]);
+        scores.fill([0.0; N]);
         for (poi_block, poi_block_range) in self.poi_block_ranges().enumerate() {
             let trace_batch = &trace_batch[poi_block_range];
-            for (var, mut tmp) in var_block.clone().zip(tmp.outer_iter_mut()) {
+            for (var, mut scores) in var_block.clone().zip(scores.outer_iter_mut()) {
                 let pois = self.poi_blocks[var][poi_block].as_slice();
-                let proj = &projections[var];
-                for (tmp, coefs) in tmp.iter_mut().zip(proj.outer_iter()) {
+                let proj = &self.lda_states[var].projection;
+                for (scores, coefs) in scores.iter_mut().zip(proj.outer_iter()) {
                     let coefs = coefs.as_slice().unwrap();
-                    self.project_inner_loop(tmp, trace_batch, coefs, pois);
+                    self.project_inner_loop(scores, trace_batch, coefs, pois);
                 }
             }
         }
@@ -497,38 +569,32 @@ impl MultiLda {
         }
     }
 
-    fn compute_proba_thread_loop(
-        &self,
-        var_i: usize,
-        lda: &LDA,
-        omega: &Array2<f64>,
-        mut res: ArrayViewMut2<f64>,
-        tmp: &Array2<[f64; N]>,
-    ) {
-        let tmp = tmp.index_axis(Axis(0), var_i);
-        let tmp = tmp.as_slice().unwrap();
+    fn compute_ll_thread_loop(&self, var: usize, mut res: ArrayViewMut2<f64>, scores: &[[f64; N]]) {
         for (mut res, pk, omega) in izip!(
             res.axis_iter_mut(Axis(1)),
-            lda.pk.iter(),
-            omega.outer_iter()
+            self.lda_states[var].pk.iter(),
+            self.lda_states[var].omega.outer_iter()
         ) {
-            let omega = omega.as_slice().unwrap();
-            let mut scores = [*pk; N];
-            for p_i in 0..self.p {
-                for i in 0..N {
-                    scores[i] += tmp[p_i][i] * omega[p_i];
-                }
-            }
+            let log_likelihood = self.ll_from_scores(scores, *pk, omega);
             for i in 0..res.len() {
-                res[i] = scores[i];
+                res[i] = log_likelihood[i];
             }
-        }
-        for res in res.outer_iter_mut() {
-            softmax(res);
         }
     }
+
+    #[inline(always)]
+    fn ll_from_scores(&self, scores: &[[f64; N]], pk: f64, omega: ArrayView1<f64>) -> [f64; N] {
+        let omega = omega.as_slice().unwrap();
+        let mut log_likelihood = [pk; N];
+        for p_i in 0..self.p {
+            for i in 0..N {
+                log_likelihood[i] += scores[p_i][i] * omega[p_i];
+            }
+        }
+        log_likelihood
+    }
     fn n_vars(&self) -> Var {
-        self.ldas.len() as Var
+        self.lda_states.len() as Var
     }
     fn poi_block_ranges(&self) -> impl Iterator<Item = Range<usize>> {
         (0..(self.poi_map.len() as usize)).range_chunks(POI_BLOCK_SIZE)
@@ -541,13 +607,13 @@ impl MultiLda {
         Ok(Self {
             nc: self.nc,
             p: self.p,
-            // Since POIs are kept sorted, no need to modify kept LDAs.
-            ldas: vars
-                .iter()
-                .map(|v| self.ldas[*v as usize].clone())
-                .collect(),
             poi_blocks: new_map.poi_blocks(),
             poi_map: Arc::new(new_map),
+            // Since POIs are kept sorted, no need to modify kept LDAs.
+            lda_states: vars
+                .iter()
+                .map(|v| self.lda_states[*v as usize].clone())
+                .collect(),
         })
     }
 }

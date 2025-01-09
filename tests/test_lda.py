@@ -240,7 +240,7 @@ def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15
     return pois, traces, y
 
 
-def multi_lda_compare(nc, nv, p, pois, traces, x, **_):
+def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
     ncs = [nc for _ in range(nv)]
     ps = [p for _ in range(nv)]
     multi_lda = MultiLDA(ncs, ps, pois=pois)
@@ -256,20 +256,35 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, **_):
         assert np.allclose(sw, sw3)
     multi_lda = multi_lda3._ldas(p)
     multi_lda3 = Lda(multi_lda3, p=p)
-    for t in traces:
+    for t, y in zip(traces, x):
         probas = multi_lda.predict_proba(t)
         probas3 = multi_lda3.predict_proba(t)
         assert np.allclose(probas, probas3)
+        if test_lp:
+            lp = multi_lda3.predict_log2_proba_class(t, y)
+            lp3 = np.log2(
+                probas3[
+                    np.arange(probas3.shape[0])[:, np.newaxis],
+                    np.arange(probas3.shape[1])[np.newaxis, :],
+                    y.T,
+                ]
+            )
+            print("y", y)
+            print("log2(p3)", np.log2(probas3))
+            print("lp", lp)
+            print("lp3", lp3)
+            assert np.allclose(lp, lp3)
 
 
 def test_multi_lda_compare():
+    base_case = dict(ns=2, nc=2, nv=1, npois=1, n=10, n_batches=1, p=1, test_lp=True)
     cases = [
-        dict(ns=2, nc=2, nv=1, npois=2, n=10, n_batches=1, p=1),
-        dict(ns=2, nc=2, nv=1, npois=2, n=5, n_batches=2, p=1),
-        dict(ns=3, nc=2, nv=1, npois=2, n=20, n_batches=1, p=1, maxl=100),
-        dict(ns=20, nc=4, nv=4, npois=5, n=10, n_batches=3, p=2),
-        dict(ns=100, nc=256, nv=2, npois=20, n=500, n_batches=5, p=4),
-        dict(ns=1000, nc=4, nv=10, npois=2, n=10, n_batches=5, p=1),
+        base_case,
+        base_case | dict(n=5, n_batches=2),
+        base_case | dict(ns=3, n=20, maxl=100),
+        base_case | dict(ns=20, nc=4, nv=4, npois=5, n_batches=3, p=2),
+        base_case | dict(ns=100, nc=256, nv=2, npois=20, n=500, n_batches=5, p=4),
+        base_case | dict(ns=1000, nc=4, nv=10, n_batches=5),
     ]
     for case in cases:
         rng = get_rng(**case)
