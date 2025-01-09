@@ -425,6 +425,7 @@ class LdaAcc:
     def __init__(self, *, nc: int, pois):
         self._nc = nc
         self._pois = [list(sorted(x)) for x in pois]
+        self._nv = len(self._pois)
         self._init = False
 
     def fit_u(self, traces, x):
@@ -443,6 +444,8 @@ class LdaAcc:
             self._init = True
             self._ns = traces.shape[1]
             self._inner = _scalib_ext.MultiLdaAcc(self._ns, self._nc, self._pois)
+        traces = scalib.utils.clean_traces(traces, self._ns)
+        x = scalib.utils.clean_labels(x, self._nv)
         with scalib.utils.interruptible():
             self._inner.fit(traces, x, get_config())
 
@@ -485,6 +488,8 @@ class Lda:
             raise ValueError("Empty accumulator: .fit_u was never called.")
         with scalib.utils.interruptible():
             self._inner = acc._inner.multi_lda(p, get_config())
+        self._nv = acc._nv
+        self._ns = acc._ns
 
     def predict_proba(self, traces):
         r"""Computes the probability for each of the classes for the traces,
@@ -500,6 +505,7 @@ class Lda:
         list of array_like, f64
             Probability distributions. Shape `(nv, n, nc)`.
         """
+        traces = scalib.utils.clean_traces(traces, self._ns)
         with scalib.utils.interruptible():
             return self._inner.predict_proba(traces, get_config())
 
@@ -520,6 +526,9 @@ class Lda:
         list of array_like, f64
             Log2 probabilities. Shape `(nv, n)`.
         """
+        traces = scalib.utils.clean_traces(traces, self._ns)
+        x = scalib.utils.clean_labels(x, self._nv)
+
         with scalib.utils.interruptible():
             return self._inner.predict_log2_proba_class(traces, x, get_config())
 
@@ -540,6 +549,8 @@ class Lda:
         cls = type(self)
         new = cls.__new__(cls)
         new._inner = self._inner.select_vars(vars)
+        new._nv = len(vars)
+        new._ns = self._ns
         return new
 
 
