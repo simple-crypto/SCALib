@@ -431,7 +431,7 @@ impl MultiLda {
         for var_block in (0..(self.poi_blocks.len())).range_chunks(self.var_block_size()) {
             let mut tmp = vec![
                 Array2::from_elem((var_block.len(), self.p), [0.0f64; N]);
-                traces_batched.len()
+                traces_batched.shape()[0]
             ];
             let projections = var_block
                 .clone()

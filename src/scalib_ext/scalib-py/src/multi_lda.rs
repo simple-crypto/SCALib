@@ -179,7 +179,7 @@ impl MultiLda {
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         let x = x.as_array();
         let prs = config.on_worker(py, |_| self.inner.predict_proba(x));
-        Ok(prs.to_pyarray(py))
+        Ok(prs.into_pyarray(py))
     }
     fn select_vars(&self, py: Python, vars: Vec<u16>) -> PyResult<Self> {
         Ok(Self {
