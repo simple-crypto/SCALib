@@ -8,8 +8,25 @@ use crate::{Result, ScalibError};
 use super::batched_traces::{BatchedTraces, AA};
 use super::poi_map::PoiMap;
 
+// TODO: make this adaptative ?
+// TODO: make sample indices u16 instead of u32 when possible.
+//
+// Ideally, MAX_PAIRS_CHUNK_SIZE is 16 bytes per pair (indices and sum), fit in half L3 per core
+// (1MB).
+// Traces is 2*N bytes per poi, should fit in half L2 cache (256 kB), and N >= 64 for decent
+// compute efficiency, which would give chunk size of 2**11.
+// Let's assume that 1 pair at N=64 takes ~4 clock cyles to be computed, and we are allowed
+// 1GB/s/core, which amounts to 1B/pair, giving MAX_CHUNK_SIZE=2**9.
+// That's however quite bad: it means that we will almost never reach the MAX_PAIRS_CHUNK_SIZE:
+// at best we have num_pairs = (MAX_CHUNK_SIZE/2)**2.
+// So we go for something a bit more aggressive using 2MB of L3 per core, 2**17 pairs.
+// We then get MAX_CHUNK_SIZE=2**10, and in the best case, num_pairs=2**18, so in
+// "half bad" cases, we can actually reach optimal efficiency.
+// There isn't much to gain by scaling down N (maybe reduce a bit L3 memory traffic, but it
+// shouldn't be an issue anyway).
+const MAX_PAIRS_CHUNK_SIZE: usize = 1 << 17;
+const MAX_CHUNK_SIZE: usize = 1 << 10;
 const N: usize = 64;
-const MAX_CHUNK_SIZE: usize = 2048;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CovPairs {
@@ -26,26 +43,8 @@ pub struct CovPairs {
 
 impl CovPairs {
     pub fn new(ns: usize, pairs: &[(u32, u32)]) -> Result<Self> {
-        let (sorted_pairs, pair_to_new_idx, chunks) = if ns <= MAX_CHUNK_SIZE {
-            #[allow(clippy::single_range_in_vec_init)]
-            (
-                pairs.to_vec(),
-                (0..(pairs
-                    .len()
-                    .try_into()
-                    .map_err(|_| ScalibError::TooManyPois)?))
-                    .collect(),
-                vec![0..pairs.len()],
-            )
-        } else {
-            let (pair_to_old_idx, chunks) = chunk_pairs(pairs, ns, MAX_CHUNK_SIZE)?;
-            let mut pair_to_new_idx = vec![0; pairs.len()];
-            for (i, k) in pair_to_old_idx.iter().enumerate() {
-                pair_to_new_idx[*k as usize] = i as u32;
-            }
-            let sorted_pairs = pair_to_new_idx.iter().map(|k| pairs[*k as usize]).collect();
-            (sorted_pairs, pair_to_new_idx, chunks)
-        };
+        let (sorted_pairs, pair_to_new_idx, chunks) =
+            chunk_pairs(pairs, ns, MAX_CHUNK_SIZE, MAX_PAIRS_CHUNK_SIZE)?;
         Ok(Self {
             sorted_pairs,
             chunks,
@@ -147,8 +146,9 @@ fn chunk_pairs(
     pairs: &[(u32, u32)],
     ns: usize,
     max_chunk_size: usize,
-) -> Result<(Vec<u32>, Vec<std::ops::Range<usize>>)> {
-    let n_pairs: u32 = pairs
+    max_pair_chunk_size: usize,
+) -> Result<(Vec<(u32, u32)>, Vec<u32>, Vec<std::ops::Range<usize>>)> {
+    let _: u32 = pairs
         .len()
         .try_into()
         .map_err(|_| ScalibError::TooManyPois)?;
@@ -158,46 +158,88 @@ fn chunk_pairs(
         pairs_matrix[(i as usize, j as usize)].push(k as u32);
     }
     let cw = max_chunk_size / 2;
-    let mut pair_to_old_idx: Vec<u32> = vec![];
+    let mut pair_to_new_idx = vec![0; pairs.len()];
+    let mut sorted_pairs = vec![];
     let mut chunks = vec![];
-    for i_chunk in 0..ns.div_ceil(cw) {
-        let i_start = i_chunk * cw;
-        let i_end = std::cmp::min((i_chunk + 1) * cw, ns);
-        let mut chunk_size = 0;
-        let mut chunk_start = pair_to_old_idx.len();
+    // TODO: extend i_chunk len when there is only a single j chunk
+    for i_chunk_id in 0..ns.div_ceil(cw) {
+        let i_start = i_chunk_id * cw;
+        let i_end = std::cmp::min((i_chunk_id + 1) * cw, ns);
+        let i_chunk = i_start..i_end;
+        let mut chunk_start = sorted_pairs.len();
+        let mut used_i = vec![false; i_end - i_start];
+        let mut chunk_poi_used = 0;
         for j in i_start..ns {
-            let mut empty = true;
-            pair_to_old_idx.extend(
-                (i_start..i_end)
-                    .flat_map(|i| pairs_matrix[(i, j)].iter())
-                    .inspect(|_| {
-                        empty = false;
-                    }),
-            );
-            if !empty {
-                chunk_size += 1;
-                if chunk_size == cw {
-                    chunk_size = 0;
-                    chunks.push(chunk_start..pair_to_old_idx.len());
-                    chunk_start = pair_to_old_idx.len();
+            // Check if we can add this j without making the chunk too big.
+            let mut n_new_poi_pairs = 0;
+            let mut n_newly_used_i = 0;
+            let mut j_is_a_new_i = false;
+            for i in i_chunk.clone() {
+                if !pairs_matrix[(i, j)].is_empty() {
+                    n_new_poi_pairs += 1;
+                    if !used_i[i - i_start] {
+                        n_newly_used_i += 1;
+                        if i == j {
+                            j_is_a_new_i = true;
+                        }
+                    }
+                }
+            }
+            let j_reused = j_is_a_new_i || (i_chunk.contains(&j) && used_i[j - i_start]);
+            let n_newly_used = n_newly_used_i + if j_reused { 0 } else { 1 };
+            // If not possible, start a new chunk.
+            if chunk_poi_used + n_newly_used > max_chunk_size
+                || (sorted_pairs.len() - chunk_start) + n_new_poi_pairs > max_pair_chunk_size
+            {
+                chunks.push(chunk_start..sorted_pairs.len());
+                chunk_start = sorted_pairs.len();
+                used_i.fill(false);
+                chunk_poi_used = 0;
+            }
+            // Add all pairs to the current chunk.
+            let mut used_j = false;
+            for i in i_start..i_end {
+                let ks = &pairs_matrix[(i, j)];
+                for k in ks {
+                    pair_to_new_idx[*k as usize] = sorted_pairs.len() as u32;
+                }
+                if !ks.is_empty() {
+                    sorted_pairs.push((i as u32, j as u32));
+                    if !used_i[i - i_start] {
+                        used_i[i - i_start] = true;
+                        chunk_poi_used += 1;
+                    }
+                    if !used_j {
+                        if i_chunk.contains(&j) {
+                            if !used_i[j - i_start] {
+                                used_i[j - i_start] = true;
+                                chunk_poi_used += 1;
+                            }
+                        } else {
+                            chunk_poi_used += 1;
+                        }
+                    }
+                    used_j = true;
                 }
             }
         }
-        if chunk_size != 0 {
-            chunks.push(chunk_start..pair_to_old_idx.len());
+        if chunk_start != sorted_pairs.len() {
+            chunks.push(chunk_start..sorted_pairs.len());
         }
     }
-    debug_assert!(itertools::equal(
-        pair_to_old_idx.iter().copied().sorted_unstable(),
-        0..n_pairs
-    ));
-    assert_eq!(chunks[0].start, 0);
-    assert_eq!(chunks.last().unwrap().end, pair_to_old_idx.len());
+    assert!(pairs
+        .iter()
+        .enumerate()
+        .all(|(k, (i, j))| sorted_pairs[pair_to_new_idx[k] as usize] == (*i.min(j), *i.max(j))));
+    if !pairs.is_empty() {
+        assert_eq!(chunks[0].start, 0);
+        assert_eq!(chunks.last().unwrap().end, sorted_pairs.len());
+    }
     assert!(chunks
         .iter()
         .zip(chunks[1..].iter())
         .all(|(c, d)| c.end == d.start));
-    Ok((pair_to_old_idx, chunks))
+    Ok((sorted_pairs, pair_to_new_idx, chunks))
 }
 
 fn multi_split_at<T>(mut slice: &[T], split_at: impl Iterator<Item = usize>) -> Vec<&[T]> {
