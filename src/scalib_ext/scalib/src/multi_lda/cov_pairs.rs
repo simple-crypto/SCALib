@@ -38,17 +38,17 @@ pub struct CovPairs {
     /// good cache locality.
     chunks: Vec<std::ops::Range<usize>>,
     /// Mapping between orignal pair indices and the corresponding pair in `sorted_pairs`.
-    pub pair_to_new_idx: Vec<u32>,
+    pub pairs_to_new_idx: Array2<u32>,
 }
 
 impl CovPairs {
-    pub fn new(ns: usize, pairs: &[(u32, u32)]) -> Result<Self> {
-        let (sorted_pairs, pair_to_new_idx, chunks) =
+    pub fn new(ns: usize, pairs: impl Iterator<Item = (u32, u32)>) -> Result<Self> {
+        let (sorted_pairs, pairs_to_new_idx, chunks) =
             chunk_pairs(pairs, ns, MAX_CHUNK_SIZE, MAX_PAIRS_CHUNK_SIZE)?;
         Ok(Self {
             sorted_pairs,
             chunks,
-            pair_to_new_idx,
+            pairs_to_new_idx,
         })
     }
 }
@@ -143,22 +143,19 @@ fn sum_prod<'a>(x: &'a AA<N>, y: &'a AA<N>) -> i64 {
 }
 
 fn chunk_pairs(
-    pairs: &[(u32, u32)],
+    pairs: impl Iterator<Item = (u32, u32)>,
     ns: usize,
     max_chunk_size: usize,
     max_pair_chunk_size: usize,
-) -> Result<(Vec<(u32, u32)>, Vec<u32>, Vec<std::ops::Range<usize>>)> {
-    let _: u32 = pairs
-        .len()
-        .try_into()
-        .map_err(|_| ScalibError::TooManyPois)?;
-    let mut pairs_matrix = ndarray::Array2::from_elem((ns, ns), vec![]);
-    for (k, (i, j)) in pairs.iter().enumerate() {
-        let (i, j) = (*i.min(j), *i.max(j));
-        pairs_matrix[(i as usize, j as usize)].push(k as u32);
+) -> Result<(Vec<(u32, u32)>, Array2<u32>, Vec<std::ops::Range<usize>>)> {
+    let mut pairs_matrix = Array2::from_elem((ns, ns), false);
+    for (i, j) in pairs {
+        pairs_matrix[(i as usize, j as usize)] = true;
     }
+    let n_pairs = pairs_matrix.iter().filter(|x| **x).count();
+    let _: i32 = n_pairs.try_into().map_err(|_| ScalibError::TooManyPois)?;
     let cw = max_chunk_size / 2;
-    let mut pair_to_new_idx = vec![0; pairs.len()];
+    let mut pairs_to_new_idx = Array2::from_elem((ns, ns), u32::MAX);
     let mut sorted_pairs = vec![];
     let mut chunks = vec![];
     // TODO: extend i_chunk len when there is only a single j chunk
@@ -175,7 +172,7 @@ fn chunk_pairs(
             let mut n_newly_used_i = 0;
             let mut j_is_a_new_i = false;
             for i in i_chunk.clone() {
-                if !pairs_matrix[(i, j)].is_empty() {
+                if pairs_matrix[(i, j)] {
                     n_new_poi_pairs += 1;
                     if !used_i[i - i_start] {
                         n_newly_used_i += 1;
@@ -199,11 +196,8 @@ fn chunk_pairs(
             // Add all pairs to the current chunk.
             let mut used_j = false;
             for i in i_start..i_end {
-                let ks = &pairs_matrix[(i, j)];
-                for k in ks {
-                    pair_to_new_idx[*k as usize] = sorted_pairs.len() as u32;
-                }
-                if !ks.is_empty() {
+                if pairs_matrix[(i, j)] {
+                    pairs_to_new_idx[(i, j)] = sorted_pairs.len() as u32;
                     sorted_pairs.push((i as u32, j as u32));
                     if !used_i[i - i_start] {
                         used_i[i - i_start] = true;
@@ -227,19 +221,11 @@ fn chunk_pairs(
             chunks.push(chunk_start..sorted_pairs.len());
         }
     }
-    assert!(pairs
-        .iter()
-        .enumerate()
-        .all(|(k, (i, j))| sorted_pairs[pair_to_new_idx[k] as usize] == (*i.min(j), *i.max(j))));
-    if !pairs.is_empty() {
-        assert_eq!(chunks[0].start, 0);
-        assert_eq!(chunks.last().unwrap().end, sorted_pairs.len());
-    }
     assert!(chunks
         .iter()
         .zip(chunks[1..].iter())
         .all(|(c, d)| c.end == d.start));
-    Ok((sorted_pairs, pair_to_new_idx, chunks))
+    Ok((sorted_pairs, pairs_to_new_idx, chunks))
 }
 
 fn multi_split_at<T>(mut slice: &[T], split_at: impl Iterator<Item = usize>) -> Vec<&[T]> {

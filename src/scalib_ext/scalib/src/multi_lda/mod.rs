@@ -82,13 +82,7 @@ impl MultiLdaAccConf {
             .map_err(|_| ScalibError::TooManyPois)?;
         let poi_map = Arc::new(PoiMap::new(ns as usize, &pois)?);
         let trace_sums = SparseTraceSumsConf::new(ns, nv, nc, pois.as_slice());
-        let mapped_pairs = poi_map
-            .new_pois_vars()
-            .iter()
-            .flat_map(|pois| {
-                Self::pairs_n(pois.len() as u32).map(|(i, j)| (pois[i as usize], pois[j as usize]))
-            })
-            .collect_vec();
+        let mapped_pairs = (0..nv).flat_map(|v| poi_map.mapped_pairs(v));
         let cov_pois_offsets = pois
             .iter()
             .scan(0, |acc, x| {
@@ -98,7 +92,7 @@ impl MultiLdaAccConf {
             })
             .collect_vec();
 
-        let cov_pois = CovPairs::new(poi_map.len(), mapped_pairs.as_slice())?;
+        let cov_pois = CovPairs::new(poi_map.len(), mapped_pairs)?;
         Ok(Self {
             nv,
             nc,
@@ -213,8 +207,12 @@ impl MultiLdaAccState {
         }
         // Total scatter offset by mu**2*n_tot.
         let s_t_u = multi_lda
-            .var_covpoi_pairs_idxs(var)
-            .map(|k| self.cov_acc.scatter[multi_lda.cov_pois.pair_to_new_idx[k] as usize])
+            .poi_map
+            .mapped_pairs(var)
+            .map(|(i, j)| {
+                self.cov_acc.scatter
+                    [multi_lda.cov_pois.pairs_to_new_idx[(i as usize, j as usize)] as usize]
+            })
             .collect_vec();
         let (s_b_u_int, s_b_u_frac) = self.s_b_u(multi_lda, var);
         // No overflow: intermediate bounded by 2*(i16::MIN)**2*n_tot_traces
