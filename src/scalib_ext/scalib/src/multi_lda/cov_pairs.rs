@@ -28,6 +28,7 @@ const MAX_PAIRS_CHUNK_SIZE: usize = 1 << 17;
 const MAX_CHUNK_SIZE: usize = 1 << 10;
 const N: usize = 64;
 
+// TODO: if ns is too large, use roaring bitset for pairs_to_new_idx
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CovPairs {
     /// Pairs are pairs of POIs for which the covariance is computed.

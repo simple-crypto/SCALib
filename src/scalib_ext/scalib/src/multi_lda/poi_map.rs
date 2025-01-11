@@ -72,17 +72,25 @@ impl PoiMap {
         self.new_pois(var).len()
     }
     /// POI blocks for MultiLda.predict_proba
-    pub fn poi_blocks(&self) -> Vec<Vec<Vec<u16>>> {
+    pub fn poi_blocks(&self) -> Vec<Vec<(std::ops::Range<usize>, Vec<u16>)>> {
         use super::POI_BLOCK_SIZE;
         assert!(POI_BLOCK_SIZE < (u16::MAX as usize));
         let n_poi_blocks = self.len().div_ceil(POI_BLOCK_SIZE);
         self.new_pois_vars()
             .iter()
             .map(|pois| {
-                let mut res = vec![vec![]; n_poi_blocks];
+                let mut res = vec![(0..0, vec![]); n_poi_blocks];
                 for poi in pois.iter() {
                     let poi = *poi as usize;
-                    res[poi / POI_BLOCK_SIZE].push((poi % POI_BLOCK_SIZE) as u16);
+                    res[poi / POI_BLOCK_SIZE]
+                        .1
+                        .push((poi % POI_BLOCK_SIZE) as u16);
+                }
+                let mut npois = 0;
+                for (r, pois) in res.iter_mut() {
+                    let new_npois = npois + pois.len();
+                    *r = npois..new_npois;
+                    npois = new_npois;
                 }
                 res
             })
@@ -98,6 +106,13 @@ impl PoiMap {
                 .collect(),
             new_poi_vars: sub_map.new_poi_vars.clone(),
         };
+        debug_assert!(vars.iter().enumerate().all(|(i, v)| itertools::equal(
+            self.new_pois(*v).iter().map(|p| self.new2old[*p as usize]),
+            full_map
+                .new_pois(i as Var)
+                .iter()
+                .map(|p| full_map.new2old[*p as usize])
+        )));
         Ok(full_map)
     }
     pub fn mapped_pairs(&self, var: Var) -> impl Iterator<Item = (u32, u32)> + '_ {

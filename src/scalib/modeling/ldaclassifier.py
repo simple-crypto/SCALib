@@ -470,6 +470,10 @@ class LdaAcc:
         r"""Return means matrix (classes means). Shape: ``(nc, ns)``."""
         return self._inner.get_mus()
 
+    def get_matrices(self):
+        r"""Return (sw, sb, mus)."""
+        return self._inner.get_matrices()
+
 
 class Lda:
     """See :class:`LdaAcc`."""

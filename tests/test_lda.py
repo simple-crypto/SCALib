@@ -307,15 +307,23 @@ def test_simple_multi_lda_compare():
 
 
 def test_seq_multi_lda_compare():
-    nv = 100
-    npois = 5
-    nc = 4
-    rng = get_rng()
-    _, traces, x = multi_lda_gen_indep_overlap(
-        rng, ns=nv * npois, nc=nc, nv=nv, npois=0, n=1000, n_batches=1
-    )
-    pois = [list(range(i * npois, (i + 1) * npois)) for i in range(nv)]
-    multi_lda_compare(nc=nc, nv=nv, p=2, pois=pois, traces=traces, x=x)
+    cases = [
+        dict(nv=100, npois=5, nc=4, n=1000, p=2),
+        dict(nv=2000, npois=5, nc=2, n=30, p=1),
+    ]
+    for case in cases:
+        print(80 * "#" + "\ncase:", case)
+        nv = case["nv"]
+        npois = case["npois"]
+        nc = case["nc"]
+        n = case["n"]
+        p = case["p"]
+        rng = get_rng(**case)
+        _, traces, x = multi_lda_gen_indep_overlap(
+            rng, ns=nv * npois, nc=nc, nv=nv, npois=0, n=n, n_batches=1
+        )
+        pois = [list(range(i * npois, (i + 1) * npois)) for i in range(nv)]
+        multi_lda_compare(nc=nc, nv=nv, p=p, pois=pois, traces=traces, x=x)
 
 
 def test_multi_lda_pickle():

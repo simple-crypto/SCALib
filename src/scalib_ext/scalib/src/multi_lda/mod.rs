@@ -38,7 +38,7 @@ impl RangeExt for Range<usize> {
     type Idx = usize;
     fn range_chunks(self, size: Self::Idx) -> impl Iterator<Item = Self> {
         let l = self.len();
-        (0..(l.div_ceil(size))).map(move |i| (i * size..std::cmp::min((i + 1) * size, l)))
+        (0..(l.div_ceil(size))).map(move |i| (i * size)..std::cmp::min((i + 1) * size, l))
     }
 }
 
@@ -390,15 +390,18 @@ pub struct MultiLda {
     nc: Class,
     p: usize,
     poi_map: Arc<PoiMap>,
-    // indexing: [var][poi_block][poi_offset_in_block]
-    poi_blocks: Vec<Vec<Vec<u16>>>,
+    // poi_blocks[var][poi_block].0: indices of the block's POIs within all POIs of that var.
+    // poi_blocks[var][poi_block].1: indices of POIs relative to the block offset (i*POI_BLOCK_SIZE)
+    poi_blocks: Vec<Vec<(Range<usize>, Vec<u16>)>>,
     lda_states: Vec<Arc<LdaState>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LdaState {
     // projection and omega are transposed compared to what is found on LDA.
+    // shape (p, ns)
     projection: Array2<f64>,
+    // shape (nc, p)
     omega: Array2<f64>,
     pk: Array1<f64>,
 }
@@ -444,17 +447,20 @@ impl MultiLda {
             var_block_size
         }
     }
+    fn nv(&self) -> usize {
+        self.poi_blocks.len()
+    }
     /// return the probability of each of the possible value for leakage samples
     /// traces with shape (n,ns)
     /// return prs with shape (nv,n,nc). Every row corresponds to one probability distribution
     pub fn predict_proba(&self, traces: ArrayView2<i16>) -> Array3<f64> {
-        let mut res = Array3::zeros((self.poi_blocks.len(), traces.shape()[0], self.nc as usize));
+        let mut res = Array3::zeros((self.nv(), traces.shape()[0], self.nc as usize));
         let traces_batched = BatchedTraces::<N>::new(&self.poi_map, traces).get_batches();
-        for var_block in (0..(self.poi_blocks.len())).range_chunks(self.var_block_size()) {
-            let scores = self.compute_scores(var_block.clone(), &traces_batched);
+        for var_block in (0..(self.nv())).range_chunks(self.var_block_size()) {
+            let p_traces = self.project_traces(var_block.clone(), &traces_batched);
             for (var_i, var) in var_block.clone().enumerate() {
                 let mut res = res.index_axis_mut(Axis(0), var);
-                (res.axis_chunks_iter_mut(Axis(0), N), scores.as_slice())
+                (res.axis_chunks_iter_mut(Axis(0), N), p_traces.as_slice())
                     .into_par_iter()
                     .for_each(|(mut res, scores)| {
                         let scores = scores.index_axis(Axis(0), var_i);
@@ -480,7 +486,7 @@ impl MultiLda {
         let mut res = Array2::zeros((self.poi_blocks.len(), traces.shape()[0]));
         let traces_batched = BatchedTraces::<N>::new(&self.poi_map, traces).get_batches();
         for var_block in (0..(self.poi_blocks.len())).range_chunks(self.var_block_size()) {
-            let scores = self.compute_scores(var_block.clone(), &traces_batched);
+            let scores = self.project_traces(var_block.clone(), &traces_batched);
             for (var_i, var) in var_block.clone().enumerate() {
                 let y = y.index_axis(Axis(1), var);
                 let mut res = res.index_axis_mut(Axis(0), var);
@@ -509,42 +515,42 @@ impl MultiLda {
         }
         res
     }
-    fn compute_scores(
+    fn project_traces(
         &self,
         var_block: Range<usize>,
         traces_batched: &Array2<batched_traces::AA<N>>,
     ) -> Vec<Array2<[f64; N]>> {
-        let mut scores = vec![
+        let mut p_traces = vec![
             Array2::from_elem((var_block.len(), self.p), [0.0f64; N]);
             traces_batched.shape()[0]
         ];
-        (traces_batched.outer_iter(), scores.as_mut_slice())
+        (traces_batched.outer_iter(), p_traces.as_mut_slice())
             .into_par_iter()
-            .for_each(|(trace_batch, scores)| {
+            .for_each(|(trace_batch, p_traces)| {
                 self.project_thread_loop(
                     var_block.clone(),
-                    scores,
+                    p_traces,
                     trace_batch.as_slice().unwrap(),
                 );
             });
-        scores
+        p_traces
     }
 
     fn project_thread_loop(
         &self,
         var_block: Range<usize>,
-        scores: &mut Array2<[f64; N]>,
+        p_traces: &mut Array2<[f64; N]>,
         trace_batch: &[batched_traces::AA<N>],
     ) {
-        scores.fill([0.0; N]);
         for (poi_block, poi_block_range) in self.poi_block_ranges().enumerate() {
-            let trace_batch = &trace_batch[poi_block_range];
-            for (var, mut scores) in var_block.clone().zip(scores.outer_iter_mut()) {
-                let pois = self.poi_blocks[var][poi_block].as_slice();
+            let trace_batch = &trace_batch[poi_block_range.clone()];
+            for (var, mut p_trace_chunk) in var_block.clone().zip(p_traces.outer_iter_mut()) {
+                let pois_var_range = &self.poi_blocks[var][poi_block].0;
+                let pois = self.poi_blocks[var][poi_block].1.as_slice();
                 let proj = &self.lda_states[var].projection;
-                for (scores, coefs) in scores.iter_mut().zip(proj.outer_iter()) {
-                    let coefs = coefs.as_slice().unwrap();
-                    self.project_inner_loop(scores, trace_batch, coefs, pois);
+                for (p_sample_chunk, coefs) in p_trace_chunk.iter_mut().zip(proj.outer_iter()) {
+                    let coefs = &coefs.as_slice().unwrap()[pois_var_range.clone()];
+                    self.project_inner_loop(p_sample_chunk, trace_batch, coefs, pois);
                 }
             }
         }
