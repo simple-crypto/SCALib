@@ -12,6 +12,13 @@ pub struct PoiMap {
     new_poi_vars: Vec<Vec<u32>>,
 }
 
+//#[test]
+//fn test_dev()  {
+//    let test_a = vec![(1,2),(3,4),(5,6)];
+//    let testoption:Vec<Option<u16>> = vec![None;10];
+//    assert!(false, "Test coucou {:?}", testoption);
+//}
+
 impl PoiMap {
     pub fn new<I: IntoIterator<Item = impl Borrow<u32>>>(
         ns: usize,
@@ -21,36 +28,30 @@ impl PoiMap {
             .clone()
             .into_iter()
             .all(|p| p.into_iter().map(|x| *x.borrow()).is_sorted()));
-        let mut used_pois = vec![false; ns as usize];
-        for poi in poi_vars.clone().into_iter().flat_map(I::into_iter) {
-            *used_pois
-                .get_mut(*poi.borrow() as usize)
-                .ok_or(ScalibError::PoiOutOfBound)? = true;
-        }
-        let new2old = used_pois
-            .iter()
-            .positions(|x| *x)
-            .map(|x| x as u32)
-            .collect_vec();
-        let mut cnt: u32 = 0;
-        let old2new = used_pois
-            .iter()
-            .map(|x| {
-                x.then(|| {
-                    cnt += 1;
-                    cnt - 1
-                })
-            })
-            .collect_vec();
-        let new_poi_vars = poi_vars
-            .into_iter()
-            .map(|pois| {
-                pois.into_iter()
-                    .map(|x| old2new[*x.borrow() as usize].unwrap())
-                    .collect()
-            })
-            .collect();
 
+        let mut new2old = Vec::new();
+        let mut old2new: Vec<Option<u32>> = vec![None; ns as usize];
+        let mut new_poi_vars = Vec::new();
+        for pois in poi_vars {
+            let new_poi_var = pois
+                .into_iter()
+                .map(|poi| -> Result<u32> {
+                    let poi = *poi.borrow();
+                    let new_poi = old2new
+                        .get_mut(poi as usize)
+                        .ok_or(ScalibError::PoiOutOfBound)?;
+                    Ok(if let Some(new_poi) = new_poi {
+                        *new_poi
+                    } else {
+                        let n_pois = new2old.len() as u32;
+                        *new_poi = Some(n_pois);
+                        new2old.push(poi);
+                        n_pois
+                    })
+                })
+                .collect::<Result<_>>()?;
+            new_poi_vars.push(new_poi_var);
+        }
         Ok(Self {
             new2old,
             new_poi_vars,

@@ -146,8 +146,8 @@ fn sum_prod<'a>(x: &'a AA<N>, y: &'a AA<N>) -> i64 {
 fn chunk_pairs(
     pairs: impl Iterator<Item = (u32, u32)>,
     ns: usize,
-    max_chunk_size: usize,
-    max_pair_chunk_size: usize,
+    chunk_max_pois: usize,
+    chunk_max_pairs: usize,
 ) -> Result<(Vec<(u32, u32)>, Array2<u32>, Vec<std::ops::Range<usize>>)> {
     let mut pairs_matrix = Array2::from_elem((ns, ns), false);
     for (i, j) in pairs {
@@ -155,7 +155,7 @@ fn chunk_pairs(
     }
     let n_pairs = pairs_matrix.iter().filter(|x| **x).count();
     let _: i32 = n_pairs.try_into().map_err(|_| ScalibError::TooManyPois)?;
-    let cw = max_chunk_size / 2;
+    let cw = chunk_max_pois / 2;
     let mut pairs_to_new_idx = Array2::from_elem((ns, ns), u32::MAX);
     let mut sorted_pairs = vec![];
     let mut chunks = vec![];
@@ -186,8 +186,8 @@ fn chunk_pairs(
             let j_reused = j_is_a_new_i || (i_chunk.contains(&j) && used_i[j - i_start]);
             let n_newly_used = n_newly_used_i + if j_reused { 0 } else { 1 };
             // If not possible, start a new chunk.
-            if chunk_poi_used + n_newly_used > max_chunk_size
-                || (sorted_pairs.len() - chunk_start) + n_new_poi_pairs > max_pair_chunk_size
+            if chunk_poi_used + n_newly_used > chunk_max_pois
+                || (sorted_pairs.len() - chunk_start) + n_new_poi_pairs > chunk_max_pairs
             {
                 chunks.push(chunk_start..sorted_pairs.len());
                 chunk_start = sorted_pairs.len();
@@ -196,7 +196,7 @@ fn chunk_pairs(
             }
             // Add all pairs to the current chunk.
             let mut used_j = false;
-            for i in i_start..i_end {
+            for i in i_chunk.clone() {
                 if pairs_matrix[(i, j)] {
                     pairs_to_new_idx[(i, j)] = sorted_pairs.len() as u32;
                     sorted_pairs.push((i as u32, j as u32));
