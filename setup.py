@@ -9,6 +9,37 @@ from setuptools_rust import Binding, RustExtension
 import setuptools_scm
 
 
+# BEGIN RUSTFLAGS hack
+from setuptools_rust import build
+
+old_prepare_build_environment = build._prepare_build_environment
+
+
+def new_prepare_build_environment():
+    import inspect
+
+    env = old_prepare_build_environment()
+    ext = inspect.stack()[1][0].f_locals["ext"]
+    try:
+        env["RUSTFLAGS"] = " ".join([env.get("RUSTFLAGS", ""), ext.more_rustflags])
+    except AttributeError:
+        pass
+    print("injected RUSTFLAGS", env.get("RUSTFLAGS"))
+    return env
+
+
+build._prepare_build_environment = new_prepare_build_environment
+
+
+class RustExtensionFlags(RustExtension):
+    def __init__(self, *args, more_rustflags, **kwargs):
+        super(RustExtensionFlags, self).__init__(*args, **kwargs)
+        self.more_rustflags = more_rustflags
+
+
+# END RUSTFLAGS hack
+
+
 def env_true(env):
     return env == "1"
 
@@ -33,9 +64,9 @@ elif x86_64_v3:
 else:
     rustflags = "-C target-cpu=native"
 
-if rustflags:
-    rustflags = os.environ.get("RUSTFLAGS", "") + " " + rustflags
-    os.environ["RUSTFLAGS"] = rustflags
+# if rustflags:
+#    rustflags = os.environ.get("RUSTFLAGS", "") + " " + rustflags
+#    os.environ["RUSTFLAGS"] = rustflags
 
 print(f"Build config: {noflags=} {portable=} {x86_64_v3=} {rustflags=}.")
 
@@ -49,12 +80,21 @@ setup(
         "Bug Tracker": "https://github.com/simple-crypto/scalib/issues",
     },
     rust_extensions=[
-        RustExtension(
+        RustExtensionFlags(
             "scalib._scalib_ext",
             path="src/scalib_ext/scalib-py/Cargo.toml",
             binding=Binding.PyO3,
             features=scalib_features,
             py_limited_api=True,
-        )
+            rust_version=">=1.83",
+            more_rustflags=rustflags,
+        ),
+        RustExtension(
+            "scalib._cpu_check",
+            path="src/scalib_ext/cpu-check/Cargo.toml",
+            binding=Binding.PyO3,
+            py_limited_api=True,
+            rust_version=">=1.83",
+        ),
     ],
 )

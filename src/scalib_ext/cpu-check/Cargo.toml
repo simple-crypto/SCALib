@@ -1,0 +1,13 @@
+[package]
+name = "cpu-check"
+version = "0.1.0"
+authors = ["Gaëtan Cassiers <gaetan.cassiers@uclouvain.be>"]
+edition = "2021"
+
+[lib]
+name = "cpu_check"
+crate-type = ["cdylib"]
+
+[dependencies.pyo3]
+version = "0.23.3"
+features = ["extension-module", "abi3-py310"]

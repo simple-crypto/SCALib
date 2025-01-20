@@ -54,13 +54,14 @@ autodoc_typehints = "description"
 # python path.
 autodoc_mock_imports = [
     "scalib._scalib_ext",
+    "scalib._cpu_check",
     "scalib.version",
     "scalib.build_config",
     "numpy",
     "cpuinfo",
 ]
 
-linkcheck_ignore = [r'https://mathoverflow.net/a/273060']
+linkcheck_ignore = [r"https://mathoverflow.net/a/273060"]
 
 import sys
 
