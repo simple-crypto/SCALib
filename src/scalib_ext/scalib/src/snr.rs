@@ -66,10 +66,10 @@ use std::convert::TryInto;
 pub trait NativeInt: PrimInt + Signed + WrappingAdd + Send + Sync {}
 impl<T: PrimInt + Signed + WrappingAdd + Send + Sync> NativeInt for T {}
 
-pub trait SnrType {
+pub trait SnrType: std::fmt::Debug {
     const UPDATE_SNR_CHUNK_SIZE: usize;
-    type SumAcc;
-    type Sample;
+    type SumAcc: NativeInt;
+    type Sample: NativeInt;
     fn sample2tmp(s: Self::Sample) -> i32;
     fn sample2i64(s: Self::Sample) -> i64;
     fn tmp2acc(s: i32) -> Self::SumAcc;
@@ -156,7 +156,7 @@ where
 
 impl<T> SNR<T>
 where
-    T: SnrType<Sample = i16> + std::fmt::Debug,
+    T: SnrType<Sample = i16>,
     T::SumAcc: NativeInt,
 {
     /// Create a new SNR state.

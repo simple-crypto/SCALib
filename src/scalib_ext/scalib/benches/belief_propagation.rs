@@ -1,6 +1,4 @@
-use criterion::{
-    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
-};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ndarray::{s, Array1, Array2};
 use std::fmt;
 #[inline(always)]
@@ -103,7 +101,8 @@ fn xors_bench(c: &mut Criterion) {
     for ni in [2].iter() {
         let id = fmt::format(format_args!("n_inputs_{}", *ni));
         let mut group = c.benchmark_group(id);
-        for nc in [2, 4, 8, 16, 32, 64, 128, 256].iter() {
+        //for nc in [2, 4, 8, 16, 32, 64, 128, 256].iter() {
+        for nc in [2].iter() {
             group.bench_with_input(BenchmarkId::new("xors", nc), nc, |b, nc| {
                 b.iter(|| {
                     let mut inputs: Vec<Array2<f64>> = (0..*ni as usize)
