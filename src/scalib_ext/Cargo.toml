@@ -1,9 +1,4 @@
 [workspace]
 
-members = [
-    "geigen",
-    "scalib",
-    "ranklib",
-    "scalib-py"
-]
+members = ["geigen", "scalib", "ranklib", "scalib-py", "cpu-check"]
 resolver = "2"

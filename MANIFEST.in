@@ -14,6 +14,7 @@ recursive-include src/scalib_ext/ranklib *
 recursive-include src/scalib_ext/geigen *
 recursive-include src/scalib_ext/scalib *
 recursive-include src/scalib_ext/scalib-py *
+recursive-include src/scalib_ext/cpu-check *
 include src/scalib_ext/Cargo.toml
 include src/scalib_ext/Cargo.lock
 exclude src/scalib/_scalib_ext.abi3.so
