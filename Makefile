@@ -12,6 +12,7 @@ help:
 	@echo "    docs: Generate docs."
 	@echo "    codestyle: Check fromatting."
 	@echo "    fmt: Format code."
+	@echo "    bench: Run Rust benchmarks (assuming x86_64 v3 level CPU)."
 	@echo "    wheel_local: Build a wheel for the local machine."
 	@echo "    wheel_portable: Build a wheel for with maximal portability (at the expense of efficiency)."
 	@echo "    wheel_x86_64_v3: Build a wheel for X86_64 v3 level CPUs."
@@ -49,3 +50,6 @@ wheel_local:
 
 wheel_portable:
 	SCALIB_PORTABLE=1 CARGO_TARGET_DIR=.cargo_build_portable  pyproject-build -w -o dist/portable
+
+bench:
+	cd src/scalib_ext/scalib; RUSTFLAGS="-C target-cpu=x86-64-v3" CARGO_TARGET_DIR=../target_bench cargo bench

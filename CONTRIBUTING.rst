@@ -75,7 +75,11 @@ Multiple builds with misc. trade-offs can be used, depending on what you are wor
 - When developping tests, you can do the same as for Python development, but
   using the ``test`` environment to run the test faster!
 
+- Running benchmarks (those are implemented in ``src/scalib_ext/scalib/benches``:
 
+.. code-block::
+
+   make bench
 
 Before committing or pull request
 ---------------------------------
