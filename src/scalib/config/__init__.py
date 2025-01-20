@@ -105,11 +105,10 @@ class Config:
         n_threads: Optional[int] = None,
         show_progress: Optional[bool] = None,
     ):
-        self.inner = _scalib_ext.Config()
         if show_progress is not None:
-            self.inner.show_progress(show_progress)
+            self.inner = _scalib_ext.Config(show_progress)
         else:
-            self.inner.show_progress(get_config().inner.progress())
+            self.inner = get_config().inner
         if threadpool is not None:
             self.threadpool = threadpool
         elif n_threads is not None:

@@ -19,17 +19,17 @@ where
         let finished_ref = &finished;
         let it_cnt_ref = &it_cnt;
         // spawn progress bar thread
-        let pb_thread_handle = config.show_progress.then(|| {
+        let pb_thread_handle = config.progress_min_time.map(|t| {
             s.spawn(move || {
                 // Let's first wait for at least config.progress_min_time (unless
                 // finished is set in the meantime).
                 let start_init_wait = std::time::Instant::now();
                 loop {
                     let elapsed = start_init_wait.elapsed();
-                    if elapsed >= config.progress_min_time {
+                    if elapsed >= t {
                         break;
                     }
-                    thread::park_timeout(config.progress_min_time - elapsed);
+                    thread::park_timeout(t - elapsed);
                     if finished_ref.load(std::sync::atomic::Ordering::Acquire) {
                         return;
                     }

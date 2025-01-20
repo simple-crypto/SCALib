@@ -42,16 +42,14 @@ pub struct Config {
 #[pymethods]
 impl Config {
     #[new]
-    fn new() -> Self {
+    fn new(show_progress: bool) -> Self {
         Self {
-            inner: Default::default(),
+            inner: if show_progress {
+                scalib::Config::with_default_timing()
+            } else {
+                scalib::Config::no_progress()
+            },
         }
-    }
-    fn show_progress(&mut self, show: bool) {
-        self.inner.show_progress = show;
-    }
-    fn progress(&self) -> bool {
-        self.inner.show_progress
     }
 }
 

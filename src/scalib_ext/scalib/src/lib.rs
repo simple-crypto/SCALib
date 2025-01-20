@@ -39,20 +39,23 @@ pub enum ScalibError {
     NoAssociatedClassesStored,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
-    /// Show progress bars
-    pub show_progress: bool,
     /// Computation time after which a progress bar is displayed.
     /// This avoids showing progress bars for negligible amounts of time.
-    pub progress_min_time: std::time::Duration,
+    /// If None, never display the progress bar
+    progress_min_time: Option<std::time::Duration>,
 }
 
-impl std::default::Default for Config {
-    fn default() -> Self {
+impl Config {
+    pub fn with_default_timing() -> Self {
         Self {
-            show_progress: true,
-            progress_min_time: std::time::Duration::from_millis(500),
+            progress_min_time: Some(std::time::Duration::from_millis(500)),
+        }
+    }
+    pub fn no_progress() -> Self {
+        Self {
+            progress_min_time: None,
         }
     }
 }
