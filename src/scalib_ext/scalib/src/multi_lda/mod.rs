@@ -114,10 +114,6 @@ impl MultiLdaAccConf {
     fn npairs_var(&self, var: Var) -> usize {
         Self::npairs_n(self.poi_map.n_pois(var))
     }
-    fn var_covpoi_pairs_idxs(&self, var: Var) -> Range<usize> {
-        let start = self.cov_pois_offsets[var as usize];
-        start..(start + self.npairs_var(var))
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

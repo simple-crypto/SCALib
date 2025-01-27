@@ -3,7 +3,6 @@ use ndarray::{Array1, Array2};
 use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::RandomExt;
 use scalib::ttest;
-use std::time::Duration;
 
 fn bench_mttest(c: &mut Criterion) {
     let mut group = c.benchmark_group("ttest_update");
