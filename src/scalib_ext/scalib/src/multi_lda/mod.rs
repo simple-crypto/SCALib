@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize};
 use crate::lda::{softmax, LDA};
 use crate::{Result, ScalibError};
 use batched_traces::BatchedTraces;
-use cov_pairs::{CovAcc, CovPairs};
+pub use cov_pairs::{CovAcc, CovPairs};
 use poi_map::PoiMap;
-use sparse_trace_sums::{SparseTraceSumsConf, SparseTraceSumsState};
+pub use sparse_trace_sums::{SparseTraceSumsConf, SparseTraceSumsState};
 
 pub type Class = u16;
 pub type Var = u16;
@@ -60,13 +60,14 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct MultiLdaAccConf {
+pub struct MultiLdaAccConf {
     nv: Var,
     nc: Class,
+    ns: u32,
     // Pois for each var
     cov_pois_offsets: Vec<usize>,
     poi_map: Arc<PoiMap>,
-    trace_sums: SparseTraceSumsConf,
+    pub trace_sums: SparseTraceSumsConf,
     cov_pois: CovPairs,
 }
 
@@ -96,6 +97,7 @@ impl MultiLdaAccConf {
         Ok(Self {
             nv,
             nc,
+            ns,
             cov_pois_offsets,
             poi_map,
             trace_sums,
@@ -114,17 +116,13 @@ impl MultiLdaAccConf {
     fn npairs_var(&self, var: Var) -> usize {
         Self::npairs_n(self.poi_map.n_pois(var))
     }
-    fn var_covpoi_pairs_idxs(&self, var: Var) -> Range<usize> {
-        let start = self.cov_pois_offsets[var as usize];
-        start..(start + self.npairs_var(var))
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct MultiLdaAccState {
+pub struct MultiLdaAccState {
     n_traces: u32,
-    trace_sums: SparseTraceSumsState,
-    cov_acc: CovAcc,
+    pub trace_sums: SparseTraceSumsState,
+    pub cov_acc: CovAcc,
 }
 
 impl MultiLdaAccState {
@@ -141,12 +139,15 @@ impl MultiLdaAccState {
         traces: ArrayView2<i16>,
         y: ArrayView2<Class>,
     ) -> Result<()> {
+        assert_eq!(traces.shape()[0], y.shape()[0]);
+        assert_eq!(traces.shape()[1], multi_lda.ns as usize);
+        assert_eq!(y.shape()[1], multi_lda.nv as usize);
         self.n_traces = self
             .n_traces
             .checked_add(
                 traces.shape()[0]
                     .try_into()
-                    .map_err(|_| ScalibError::TooManyPois)?,
+                    .map_err(|_| ScalibError::TooManyVars)?,
             )
             .ok_or(ScalibError::TooManyTraces)?;
         self.trace_sums.update(&multi_lda.trace_sums, traces, y);
@@ -254,8 +255,8 @@ impl MultiLdaAccState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiLdaAcc {
-    conf: MultiLdaAccConf,
-    state: MultiLdaAccState,
+    pub conf: MultiLdaAccConf,
+    pub state: MultiLdaAccState,
 }
 
 impl MultiLdaAcc {
