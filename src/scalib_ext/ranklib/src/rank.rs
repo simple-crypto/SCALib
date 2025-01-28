@@ -207,16 +207,31 @@ impl RankProblem {
             Err("Bin count out of limits.")?;
         }
         let (hist, bin_size): (H, _) = self.build_histogram(nb_bins)?;
-        return Ok(rank_in_histogram(
-            self.key_costs().sum::<f64>(),
-            &hist,
-            bin_size,
-            self.costs.len(),
-        ));
+        let hist = hist.scale_back();
+        match hist.type_str() {
+            "F64Hist" => {
+                return Ok(rank_in_histogram_scaled(
+                    self.key_costs().sum::<f64>(),
+                    &hist,
+                    bin_size,
+                    self.costs.len(),
+                ));
+            }
+            #[cfg(feature = "ntl")]
+            "BigNumHist" => {
+                return Ok(rank_in_histogram(
+                    self.key_costs().sum::<f64>(),
+                    &hist,
+                    bin_size,
+                    self.costs.len(),
+                ));
+            }
+            &_ => todo!(),
+        }
     }
 }
-
 /// Count elements with lower cost
+#[cfg(feature = "ntl")]
 fn rank_in_histogram<H: Histogram>(
     real_key_cost: f64,
     histo: &H,
@@ -248,6 +263,42 @@ fn rank_in_histogram<H: Histogram>(
         rank_min,
         rank_min.max(sum_hist(bin_real_key) + (coefs[bin_real_key] / 2.0).ceil()),
         sum_hist(bin_bound_max + 1),
+    );
+}
+/// Count elements with lower cost in scaled histograms
+fn rank_in_histogram_scaled<H: Histogram>(
+    real_key_cost: f64,
+    histo: &H,
+    bin_size: f64,
+    nb_subkeys: usize,
+) -> RankEstimation {
+    let margin = (nb_subkeys as f64) / 2.0 + 1e-20;
+    let coefs = histo.coefs_f64();
+    let coefs_upper = histo.coefs_f64_upper();
+    // bound by histo.len is needed due to greedy histogram growth
+    let bin_real_key = std::cmp::min(coefs.len() - 1, cost2bin(real_key_cost, bin_size));
+    let bin_bound_max = std::cmp::min(
+        coefs.len() - 1,
+        (cost2bin_f(real_key_cost, bin_size) + margin).floor() as usize,
+    );
+    let bin_bound_min = std::cmp::min(
+        coefs.len() - 1,
+        (cost2bin_f(real_key_cost, bin_size) - margin).ceil() as usize,
+    );
+    debug_assert!(bin_bound_min <= bin_real_key);
+    debug_assert!(bin_real_key <= bin_bound_max);
+    let sum_hist = |end| coefs[..end].iter().copied().sum::<f64>();
+    let sum_hist_upper = |end| coefs_upper[..end].iter().copied().sum::<f64>();
+    let rank_max = 1.0 + sum_hist_upper(bin_bound_max);
+    // We must add one to the minimum rank to include the real key.
+    let rank_min = 1.0 + sum_hist(bin_bound_min);
+    // For the est, it might not be included, if the real key is between the real bin and the max.
+    // Take the average of the two for the est
+    return RankEstimation::new(
+        rank_min,
+        rank_min.max(((sum_hist(bin_real_key) + (coefs[bin_real_key] / 2.0).ceil()) 
+            + (sum_hist_upper(bin_real_key) + (coefs_upper[bin_real_key] / 2.0).floor())) / 2.0),
+        rank_max,
     );
 }
 
