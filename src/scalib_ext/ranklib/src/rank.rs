@@ -296,8 +296,11 @@ fn rank_in_histogram_scaled<H: Histogram>(
     // Take the average of the two for the est
     return RankEstimation::new(
         rank_min,
-        rank_min.max(((sum_hist(bin_real_key) + (coefs[bin_real_key] / 2.0).ceil()) 
-            + (sum_hist_upper(bin_real_key) + (coefs_upper[bin_real_key] / 2.0).floor())) / 2.0),
+        rank_min.max(
+            ((sum_hist(bin_real_key) + (coefs[bin_real_key] / 2.0).ceil())
+                + (sum_hist_upper(bin_real_key) + (coefs_upper[bin_real_key] / 2.0).floor()))
+                / 2.0,
+        ),
         rank_max,
     );
 }
