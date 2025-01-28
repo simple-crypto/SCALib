@@ -289,19 +289,19 @@ fn rank_in_histogram_scaled<H: Histogram>(
     debug_assert!(bin_real_key <= bin_bound_max);
     let sum_hist = |end| coefs[..end].iter().copied().sum::<f64>();
     let sum_hist_upper = |end| coefs_upper[..end].iter().copied().sum::<f64>();
-    let rank_max = 1.0 + sum_hist_upper(bin_bound_max);
     // We must add one to the minimum rank to include the real key.
     let rank_min = 1.0 + sum_hist(bin_bound_min);
+    let rank_min_upper = 1.0 + sum_hist_upper(bin_bound_min);
     // For the est, it might not be included, if the real key is between the real bin and the max.
     // Take the average of the two for the est
     return RankEstimation::new(
-        rank_min,
+        (rank_min + rank_min_upper) / 2.0,
         rank_min.max(
             ((sum_hist(bin_real_key) + (coefs[bin_real_key] / 2.0).ceil())
                 + (sum_hist_upper(bin_real_key) + (coefs_upper[bin_real_key] / 2.0).floor()))
                 / 2.0,
         ),
-        rank_max,
+        (sum_hist(bin_bound_max + 1) + sum_hist_upper(bin_bound_max + 1)) / 2.0,
     );
 }
 
