@@ -40,6 +40,8 @@ pub enum ScalibError {
     NoAssociatedClassesStored,
     #[error("Too many POIs.")]
     TooManyPois,
+    #[error("Too many variables.")]
+    TooManyVars,
     #[error("POI out of bounds.")]
     PoiOutOfBound,
     #[error("Variable out of bounds.")]

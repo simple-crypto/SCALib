@@ -115,13 +115,16 @@ impl SparseTraceSumsState {
         traces: ArrayView2<i16>,
         y: ArrayView2<Class>,
     ) {
+        assert_eq!(y.shape()[1], conf.nv as usize);
         let mut sums = Self::split_sums(&mut self.sums, conf);
         for (traces, y) in izip!(
             traces.axis_chunks_iter(Axis(0), conf.traces_block_size),
             y.axis_chunks_iter(Axis(0), conf.traces_block_size),
         ) {
             let traces = traces.t().clone_row_major();
+            assert_eq!(y.shape()[1], conf.nv as usize);
             let y = y.t().clone_row_major();
+            assert_eq!(y.shape()[0], conf.nv as usize);
             for (mut n_traces, y) in self.n_traces.outer_iter_mut().zip(y.outer_iter()) {
                 for y in y.iter() {
                     n_traces[*y as usize] += 1;
@@ -173,6 +176,7 @@ impl SparseTraceSumsState {
         (vs, pois, sums).into_par_iter().for_each(|(v, poi, sums)| {
             let samples = traces.index_axis(Axis(0), *poi as usize);
             let samples = samples.as_slice().unwrap();
+            assert!((*v as usize) < y.shape()[0]);
             let y = y.index_axis(Axis(0), usize::from(*v));
             let y = y.as_slice().unwrap();
             for (s, y) in samples.iter().zip(y.iter()) {
