@@ -65,15 +65,17 @@ fn bench_mlda_init_inner(
 
 fn bench_mlda_init(c: &mut Criterion) {
     let nc = 256;
-    for ns in [1000000, 10000] {
-        let mut group = c.benchmark_group(format!("MLDA init ns:{}", ns));
-        // Dense
-        bench_mlda_init_inner(nc, ns, 100, 1000, 4000, &mut group);
-        // Sparser
-        bench_mlda_init_inner(nc, ns, 100000, 10, 4000, &mut group);
-        // Sparse ++
-        bench_mlda_init_inner(nc, ns, 100000, 10, 100000, &mut group);
-    }
+    let mut group = c.benchmark_group(format!("MLDA init {}", 0));
+    // Dense
+    bench_mlda_init_inner(nc, 1000000, 100, 1000, 4000, &mut group);
+    // Sparse
+    bench_mlda_init_inner(nc, 1000000, 100, 10, 4000, &mut group);
+    // Sparser
+    bench_mlda_init_inner(nc, 1000000, 100, 10, 100000, &mut group);
+    // Sparcer ++ / small load
+    bench_mlda_init_inner(nc, 1000000, 10000, 1, 1000000, &mut group);
+    // Sparcer ++ / big load ---> Disabled due to memory shortage
+    //bench_mlda_init_inner(nc, 1000000, 10000, 10, 1000000, &mut group);
 }
 
 fn bench_mlda_update_sums_inner(
@@ -124,6 +126,6 @@ criterion_group! {
     name = benches;
     // This can be any expression that returns a `Criterion` object.
     config = Criterion::default().significance_level(0.1).sample_size(10);
-    targets = bench_mlda_init, bench_mlda_update_sums
+    targets = bench_mlda_init//, bench_mlda_update_sums
 }
 criterion_main!(benches);
