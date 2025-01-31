@@ -49,17 +49,18 @@ fn bench_mlda_init_inner(
     max_npois: usize,
     group: &mut BenchMarkGroup,
 ) {
-    // Generate t
-    let mut prng = Prng::seed_from_u64(0);
-    // First, generate the POis
-    let pois: Vec<Vec<u32>> = gen_pois_with_maxpois(npois, ns, max_npois, nv, &mut prng);
-    group.bench_with_input(
+    group.bench_function(
         BenchmarkId::new(
             format!("nv:{} ; npois:{} [max: {}]", nv, npois, max_npois),
             nv,
         ),
-        &nv,
-        |b, _| b.iter(|| MultiLdaAcc::new(ns, nc, pois.clone())),
+        |b| {
+            // Generate t
+            let mut prng = Prng::seed_from_u64(0);
+            // First, generate the POis
+            let pois: Vec<Vec<u32>> = gen_pois_with_maxpois(npois, ns, max_npois, nv, &mut prng);
+            b.iter(|| MultiLdaAcc::new(ns, nc, pois.clone()))
+        },
     );
 }
 
