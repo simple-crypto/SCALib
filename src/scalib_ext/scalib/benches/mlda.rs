@@ -88,21 +88,24 @@ fn bench_mlda_update_sums_inner(
     n: usize,
     group: &mut BenchMarkGroup,
 ) {
-    // Create the prng used for POIs generation
-    let mut prng = Prng::seed_from_u64(0);
-    let pois: Vec<Vec<u32>> = gen_pois_with_maxpois(npois, ns, max_npois, nv, &mut prng);
-    // Genereate the useful data
-    let t = gen_traces(n, ns as usize);
-    let x = gen_classes(nv, n, nc as usize);
-    // Instanciate the mlda object
-    let mut mlda = MultiLdaAcc::new(ns, nc, pois).unwrap();
     group.bench_with_input(
         BenchmarkId::new(
-            format!("nv:{} ; npois:{} [max:{}]", nv, npois, max_npois),
+            format!(
+                "ns:{} ; nv:{} ; npois:{} [max:{}]",
+                ns, nv, npois, max_npois
+            ),
             nv,
         ),
         &nv,
         |b, _| {
+            // Create the prng used for POIs generation
+            let mut prng = Prng::seed_from_u64(0);
+            let pois: Vec<Vec<u32>> = gen_pois_with_maxpois(npois, ns, max_npois, nv, &mut prng);
+            // Genereate the useful data
+            let t = gen_traces(n, ns as usize);
+            let x = gen_classes(nv, n, nc as usize);
+            // Instanciate the mlda object
+            let mut mlda = MultiLdaAcc::new(ns, nc, pois).unwrap();
             b.iter(|| {
                 mlda.state
                     .trace_sums
@@ -115,18 +118,20 @@ fn bench_mlda_update_sums_inner(
 fn bench_mlda_update_sums(c: &mut Criterion) {
     let nc = 256;
     let n = 10000;
-    for ns in [10000, 100000] {
-        let mut group = c.benchmark_group(format!("MLDA update sum ns:{}", ns));
-        bench_mlda_update_sums_inner(nc, ns, 10, 1, 1000, n, &mut group);
-        // Disabled because too long to execute
-        //bench_mlda_update_sums_inner(nc, ns, 50000, 1, 1000, n, &mut group);
-    }
+    let mut group = c.benchmark_group("MLDA update sum");
+    bench_mlda_update_sums_inner(nc, 10000, 10, 1, 1000, n, &mut group);
+    // Disabled because too long to execute
+    bench_mlda_update_sums_inner(nc, 100000, 10, 1, 1000, n, &mut group);
+    // Disabled because too long to execute
+    //bench_mlda_update_sums_inner(nc, 10000, 50000, 1, 1000, n, &mut group);
+    // Disabled because too long to execute
+    //bench_mlda_update_sums_inner(nc, 100000, 50000, 1, 1000, n, &mut group);
 }
 
 criterion_group! {
     name = benches;
     // This can be any expression that returns a `Criterion` object.
     config = Criterion::default().significance_level(0.1).sample_size(10);
-    targets = bench_mlda_init//, bench_mlda_update_sums
+    targets = bench_mlda_update_sums
 }
 criterion_main!(benches);
