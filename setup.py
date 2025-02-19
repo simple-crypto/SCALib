@@ -70,7 +70,7 @@ else:
 
 print(f"Build config: {noflags=} {portable=} {x86_64_v3=} {rustflags=}.")
 
-scalib_features = ["pyo3/abi3"]
+scalib_features = ["pyo3/abi3", "ntl"]
 
 if env_true(os.environ.get("SCALIB_BLIS")):
     scalib_features.append("blis")
