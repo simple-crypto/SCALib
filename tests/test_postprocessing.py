@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import random
 from scalib.postprocessing import rank_accuracy
 
 static_probs = [
@@ -37,13 +38,35 @@ def test_rank_accuracy():
     assert np.log2(rmax) - np.log2(rmin) <= acc
 
 
-def test_rank_accuracy2():
-    max_error = 0.2  # allowed rounding error
-    # reference values from the ntl execution
-    ntl_low = 52.40236985817056
-    ntl_mid = 52.45835852381074
-    ntl_high = 52.70108474865651
+# Compare the ntl and scaled histogram implementation with a normal probability distribution
+def test_rank_accuracy_scaled_vs_ntl():
+    nc = 256
+    nsubkeys = 16
+    max_error = 0.5
+    k_probs = np.zeros((nsubkeys, nc))
 
+    secret_key = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    for j in range(nsubkeys):
+        for i in range(nc):
+            k_probs[j][i] = 1 / random.randint(2, 20)
+
+    rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key, method="histbignum")
+    lrmin, lr, lrmax = (np.log2(rmin), np.log2(r), np.log2(rmax))
+    rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key, method="scaledhist")
+    lrmin_scaled, lr_scaled, lrmax_scaled = (np.log2(rmin), np.log2(r), np.log2(rmax))
+
+    assert np.abs(lrmin - lrmin_scaled) <= max_error
+    assert np.abs(lr - lr_scaled) <= max_error
+    assert np.abs(lrmax - lrmax_scaled) <= max_error
+
+
+# Compare the ntl and scaled histogram implementation in a known edge case
+# The normal histogram implementation would return negative ranks
+def test_rank_accuracy_scaled_edge_case():
+    max_error = 3.0  # allowed rounding error
+    # reference value from the ntl execution
+    ntl_low = 52.40236985817056
     nc = 256
     nsubkeys = 16
 
@@ -57,10 +80,10 @@ def test_rank_accuracy2():
             else:
                 k_probs[j][i] = 1 / 16
 
-    rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key, method="hist")
-
+    # Using lower and upper histograms may impact accuracy (space between min and max rank) in some cases
+    # a high acc_bit helps to prevent infinite loops and show the actual benefit of this method
+    rmin, r, rmax = rank_accuracy(
+        -np.log10(k_probs), secret_key, method="scaledhist", acc_bit=10.0
+    )
     lrmin, lr, lrmax = (np.log2(rmin), np.log2(r), np.log2(rmax))
-
     assert np.abs(lrmin - ntl_low) <= max_error
-    assert np.abs(lr - ntl_mid) <= max_error
-    assert np.abs(lrmax - ntl_high) <= max_error

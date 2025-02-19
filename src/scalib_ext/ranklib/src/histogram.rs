@@ -6,18 +6,24 @@ mod bnp {
     #![allow(non_snake_case)]
     include!(concat!(env!("OUT_DIR"), "/binding_bnp.rs"));
 }
+//f64 has a 53 bit mantissa, to allow multiplications in the convolution use roughly the sqrt of the mantissa as limit
+const CONV_LIMIT: f64 = 67108864.0 as f64; //limit at 2^26
 
-const CONV_LIMIT: f64 = 34359738368.0 as f64; //define a certain limit
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistogramType {
+    F64Hist,
+    ScaledF64Hist,
+    BigNumHist,
+}
 
 pub trait Histogram {
     fn new(size: usize) -> Self;
-    fn type_str(&self) -> &'static str;
-    fn rescale(&self) -> Self;
     fn convolve(&self, other: &Self) -> Self;
     fn coefs_f64(&self) -> Vec<f64>;
     fn coefs_f64_upper(&self) -> Vec<f64>;
     fn from_elems(size: usize, iter: impl Iterator<Item = usize>) -> Self;
     fn scale_back(self) -> Self;
+    fn histogram_type(&self) -> HistogramType;
 }
 
 type FFT = std::sync::Arc<dyn realfft::RealToComplex<f64>>;
@@ -28,7 +34,14 @@ pub struct F64Hist {
     state: Vec<f64>,
     fft: FFT,
     ifft: IFFT,
+}
+
+#[derive(Clone)]
+pub struct ScaledF64Hist {
+    state_lower: Vec<f64>,
     state_upper: Vec<f64>,
+    fft: FFT,
+    ifft: IFFT,
     scale: f64,
 }
 
@@ -39,48 +52,92 @@ impl Histogram for F64Hist {
             state: vec![0.0; size],
             fft: planner.plan_fft_forward(2 * size),
             ifft: planner.plan_fft_inverse(2 * size),
-            state_upper: vec![0.0; size],
-            scale: 1.0,
         }
-    }
-    fn type_str(&self) -> &'static str {
-        return "F64Hist";
-    }
-    fn rescale(&self) -> Self {
-        let sum: f64 = self.state_upper.iter().sum();
-        let scaler = if sum > CONV_LIMIT {
-            sum / CONV_LIMIT
-        } else {
-            1.0
-        };
-        let new_scale = self.scale * scaler;
-        let new_state: Vec<f64> = self.state.iter().map(|s| (s / scaler).floor()).collect();
-        let new_upper_state: Vec<f64> = self
-            .state_upper
-            .iter()
-            .map(|s| (s / scaler).ceil())
-            .collect();
-
-        return Self {
-            state: new_state,
-            fft: self.fft.clone(),
-            ifft: self.ifft.clone(),
-            state_upper: new_upper_state,
-            scale: new_scale,
-        };
     }
     fn convolve(&self, other: &Self) -> Self {
         assert_eq!(self.state.len(), other.state.len());
+        let mut self_tr = {
+            let mut tr = self.fft.make_output_vec();
+            let mut input = vec![0.0; 2 * self.state.len()];
+            input
+                .iter_mut()
+                .zip(self.state.iter())
+                .for_each(|(i, s)| *i = *s);
+            self.fft.process(&mut input, &mut tr).unwrap();
+            tr
+        };
+        let other_tr = {
+            let mut tr = self.fft.make_output_vec();
+            let mut input = vec![0.0; 2 * self.state.len()];
+            input
+                .iter_mut()
+                .zip(other.state.iter())
+                .for_each(|(i, s)| *i = *s / (self.state.len() as f64 * 2.0));
+            self.fft.process(&mut input, &mut tr).unwrap();
+            tr
+        };
+        self_tr
+            .iter_mut()
+            .zip(other_tr.iter())
+            .for_each(|(s, o)| *s *= *o);
+        let mut res = vec![0.0; 2 * self.state.len()];
+        self.ifft.process(&mut self_tr, &mut res).unwrap();
+        return Self {
+            state: res[..self.state.len()].iter().map(|x| x.round()).collect(),
+            fft: self.fft.clone(),
+            ifft: self.ifft.clone(),
+        };
+    }
+    fn coefs_f64(&self) -> Vec<f64> {
+        self.state.clone()
+    }
+    fn coefs_f64_upper(&self) -> Vec<f64> {
+        unimplemented!()
+    }
+    fn from_elems(size: usize, iter: impl Iterator<Item = usize>) -> Self {
+        let mut res = Self::new(size);
+        for elem in iter {
+            if elem < size {
+                res.state[elem] += 1.0;
+            }
+        }
+        return res;
+    }
+    fn scale_back(self) -> Self {
+        self
+    }
+    fn histogram_type(&self) -> HistogramType {
+        HistogramType::F64Hist
+    }
+}
+impl Histogram for ScaledF64Hist {
+    fn new(size: usize) -> Self {
+        let mut planner = realfft::RealFftPlanner::<f64>::new();
+        Self {
+            state_lower: vec![0.0; size],
+            state_upper: vec![0.0; size],
+            fft: planner.plan_fft_forward(2 * size),
+            ifft: planner.plan_fft_inverse(2 * size),
+            scale: 1.0,
+        }
+    }
+    /// Convolve two histogram objects
+    /// Each histogram object includes a compressed _lower and _upper histogram
+    /// The _lower and _upper histograms are convolved separatley
+    /// Multiply the scales of the histogram objects to keep track of the compression ratio
+    /// other: the histogram we want to convolve with
+    fn convolve(&self, other: &Self) -> Self {
+        assert_eq!(self.state_lower.len(), other.state_lower.len());
         assert_eq!(self.state_upper.len(), other.state_upper.len());
         let first_histogram = self.rescale();
         let second_histogram = other.rescale();
 
         let mut self_tr = {
             let mut tr = first_histogram.fft.make_output_vec();
-            let mut input = vec![0.0; 2 * first_histogram.state.len()];
+            let mut input = vec![0.0; 2 * first_histogram.state_lower.len()];
             input
                 .iter_mut()
-                .zip(first_histogram.state.iter())
+                .zip(first_histogram.state_lower.iter())
                 .for_each(|(i, s)| *i = *s);
             first_histogram.fft.process(&mut input, &mut tr).unwrap();
             tr
@@ -97,11 +154,11 @@ impl Histogram for F64Hist {
         };
         let other_tr = {
             let mut tr = first_histogram.fft.make_output_vec();
-            let mut input = vec![0.0; 2 * first_histogram.state.len()];
+            let mut input = vec![0.0; 2 * first_histogram.state_lower.len()];
             input
                 .iter_mut()
-                .zip(second_histogram.state.iter())
-                .for_each(|(i, s)| *i = *s / (first_histogram.state.len() as f64 * 2.0));
+                .zip(second_histogram.state_lower.iter())
+                .for_each(|(i, s)| *i = *s / (first_histogram.state_lower.len() as f64 * 2.0));
             first_histogram.fft.process(&mut input, &mut tr).unwrap();
             tr
         };
@@ -124,7 +181,7 @@ impl Histogram for F64Hist {
             .zip(other_tr_upper.iter())
             .for_each(|(s, o)| *s *= *o);
 
-        let mut res = vec![0.0; 2 * first_histogram.state.len()];
+        let mut res = vec![0.0; 2 * first_histogram.state_lower.len()];
         let mut res_upper = vec![0.0; 2 * first_histogram.state_upper.len()];
         first_histogram
             .ifft
@@ -135,7 +192,7 @@ impl Histogram for F64Hist {
             .process(&mut self_tr_upper, &mut res_upper)
             .unwrap();
         return Self {
-            state: res[..first_histogram.state.len()]
+            state_lower: res[..first_histogram.state_lower.len()]
                 .iter()
                 .map(|x| x.round())
                 .collect(),
@@ -149,7 +206,7 @@ impl Histogram for F64Hist {
         };
     }
     fn coefs_f64(&self) -> Vec<f64> {
-        self.state.clone()
+        self.state_lower.clone()
     }
     fn coefs_f64_upper(&self) -> Vec<f64> {
         self.state_upper.clone()
@@ -158,18 +215,55 @@ impl Histogram for F64Hist {
         let mut res = Self::new(size);
         for elem in iter {
             if elem < size {
-                res.state[elem] += 1.0;
+                res.state_lower[elem] += 1.0;
                 res.state_upper[elem] += 1.0;
             }
         }
         return res;
     }
+    /// Multiply the compressed histograms by the scaling factor to restore the original bin counts
     fn scale_back(self) -> Self {
         let new_scale = 1.0;
-        let new_state: Vec<f64> = self.state.iter().map(|s| (s * self.scale)).collect();
+        let new_state: Vec<f64> = self.state_lower.iter().map(|s| (s * self.scale)).collect();
         let new_upper_state: Vec<f64> = self.state_upper.iter().map(|s| (s * self.scale)).collect();
         return Self {
-            state: new_state,
+            state_lower: new_state,
+            fft: self.fft.clone(),
+            ifft: self.ifft.clone(),
+            state_upper: new_upper_state,
+            scale: new_scale,
+        };
+    }
+    fn histogram_type(&self) -> HistogramType {
+        HistogramType::ScaledF64Hist
+    }
+}
+impl ScaledF64Hist {
+    /// Check whether the sum of the bin counts exceeds the predefined limit for safe convolution
+    /// If exceeds, adjust the state values by a scaling factor to ensure they remain within the convolution limit
+    /// Multiply the original scale by the new scaling factor to accurately track the total compression of the histogram
+    fn rescale(&self) -> Self {
+        let sum: f64 = self.state_upper.iter().sum();
+        let scaler = if sum > CONV_LIMIT {
+            sum / CONV_LIMIT
+        } else {
+            1.0
+        };
+        let new_scale = self.scale * scaler;
+        let temp_scaler: f64 = 1.0 / scaler;
+        let new_state: Vec<f64> = self
+            .state_lower
+            .iter()
+            .map(|s| (s * temp_scaler).floor())
+            .collect();
+        let new_upper_state: Vec<f64> = self
+            .state_upper
+            .iter()
+            .map(|s| (s * temp_scaler).ceil())
+            .collect();
+
+        return Self {
+            state_lower: new_state,
             fft: self.fft.clone(),
             ifft: self.ifft.clone(),
             state_upper: new_upper_state,
@@ -185,12 +279,6 @@ pub struct BigNumHist(*mut bnp::NTL_ZZX, usize);
 impl Histogram for BigNumHist {
     fn new(nb_bins: usize) -> Self {
         return Self(unsafe { bnp::bnp_new_ZZX() }, nb_bins);
-    }
-    fn type_str(&self) -> &'static str {
-        return "BigNumHist";
-    }
-    fn rescale(&self) -> Self {
-        unimplemented!();
     }
     fn convolve(&self, other: &Self) -> Self {
         assert_eq!(self.1, other.1);
@@ -222,6 +310,9 @@ impl Histogram for BigNumHist {
     }
     fn scale_back(self) -> Self {
         self
+    }
+    fn histogram_type(&self) -> HistogramType {
+        HistogramType::BigNumHist
     }
 }
 
