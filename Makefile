@@ -1,4 +1,4 @@
-.PHONY: dev test devtest coverage docs codestyle fmt wheel help
+.PHONY: dev test devtest coverage docs docs-ci codestyle fmt wheel help
 
 help:
 	@echo "Commands for SCALib development:"
@@ -33,8 +33,13 @@ coverage:
 	tox run -e coverage
 	@echo "Open htmlcov/index.html to see detailled coverage information."
 
+# Docs without linkcheck because servers don't like github CI.
+docs-ci:
+	tox run -e docs -- html
+
 docs:
-	tox run -e docs
+	tox run -e docs -- html
+	tox run -e docs -- linkcheck
 
 codestyle:
 	tox run -e fmt -- --check
