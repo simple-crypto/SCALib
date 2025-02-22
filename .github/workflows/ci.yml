@@ -59,7 +59,7 @@ jobs:
       - name: Formatting
         run: make codestyle
       - name: Docs
-        run: make docs
+        run: make docs-ci
   test:
     name: Run tests (on linux).
     needs: [build_wheel_linux]
