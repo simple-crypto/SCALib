@@ -249,7 +249,9 @@ jobs:
           pattern: dist-*
           merge-multiple: true
       - name: Install twine
-        run: pip install twine
+        run: |
+          pip install -U packaging # Workaround for broken twine dependency
+          pip install twine
       - name: Check dist
         run: twine check dist/*
 
