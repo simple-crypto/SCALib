@@ -38,8 +38,7 @@ def test_rank_accuracy():
     assert np.log2(rmax) - np.log2(rmin) <= acc
 
 
-
-#NTL would be needed for that
+# NTL would be needed for that
 """
 # Compare the ntl and scaled histogram implementation with a normal probability distribution
 def test_rank_accuracy_scaled_vs_ntl():
@@ -89,6 +88,7 @@ def test_rank_accuracy_scaled_edge_cases():
     rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key)
     assert np.abs(lrmin - lrmin_scaled) <= max_error
 """
+
 
 # Compare the ntl and scaled histogram implementation in a known edge case
 # The normal histogram implementation would return negative ranks
