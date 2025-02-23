@@ -100,7 +100,7 @@ def rank_nbin(costs, key, nbins, method="hist"):
         )
 
 
-def rank_accuracy(costs, key, acc_bit=1.0, method="hist", max_nb_bin=2**26):
+def rank_accuracy(costs, key, acc_bit=1.0, method="scaledhist", max_nb_bin=2**26):
     r"""Estimate the rank of the full keys based on scores based on histograms.
 
     Parameters
@@ -121,7 +121,8 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="hist", max_nb_bin=2**26):
     method : string
         Method used to estimate the rank. Can be the following:
 
-        * "hist": using histograms (default).
+        * "scaledhist": using scaled histograms (default).
+        * "hist": using histograms.
         * "ntl": using NTL library, allows better precision.
     max_nb_bin : int, default: 2**26
         Maximum number of bins to use.

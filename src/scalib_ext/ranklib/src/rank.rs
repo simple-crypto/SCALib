@@ -187,8 +187,8 @@ impl RankProblem {
                         .filter(|bin| *bin < nb_bins),
                 )
             })
-            .fold(None, |acc: Option<H>, hist| {
-                acc.map(|x| x.convolve(&hist)).or(Some(hist))
+            .fold(None, |acc: Option<H>, mut hist| {
+                acc.map(|mut x| x.convolve(&mut hist)).or(Some(hist))
             })
             .expect("Some subkey");
         return Ok((hist, bin_size));

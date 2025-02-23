@@ -18,7 +18,7 @@ pub enum HistogramType {
 
 pub trait Histogram {
     fn new(size: usize) -> Self;
-    fn convolve(&self, other: &Self) -> Self;
+    fn convolve(&mut self, other: &mut Self) -> Self;
     fn coefs_f64(&self) -> Vec<f64>;
     fn coefs_f64_upper(&self) -> Vec<f64>;
     fn from_elems(size: usize, iter: impl Iterator<Item = usize>) -> Self;
@@ -54,7 +54,7 @@ impl Histogram for F64Hist {
             ifft: planner.plan_fft_inverse(2 * size),
         }
     }
-    fn convolve(&self, other: &Self) -> Self {
+    fn convolve(&mut self, other: &mut Self) -> Self {
         assert_eq!(self.state.len(), other.state.len());
         let mut self_tr = {
             let mut tr = self.fft.make_output_vec();
@@ -126,50 +126,50 @@ impl Histogram for ScaledF64Hist {
     /// The _lower and _upper histograms are convolved separatley
     /// Multiply the scales of the histogram objects to keep track of the compression ratio
     /// other: the histogram we want to convolve with
-    fn convolve(&self, other: &Self) -> Self {
+    fn convolve(&mut self, other: &mut Self) -> Self {
         assert_eq!(self.state_lower.len(), other.state_lower.len());
         assert_eq!(self.state_upper.len(), other.state_upper.len());
-        let first_histogram = self.rescale();
-        let second_histogram = other.rescale();
+        self.rescale();
+        other.rescale();
 
         let mut self_tr = {
-            let mut tr = first_histogram.fft.make_output_vec();
-            let mut input = vec![0.0; 2 * first_histogram.state_lower.len()];
+            let mut tr = self.fft.make_output_vec();
+            let mut input = vec![0.0; 2 * self.state_lower.len()];
             input
                 .iter_mut()
-                .zip(first_histogram.state_lower.iter())
+                .zip(self.state_lower.iter())
                 .for_each(|(i, s)| *i = *s);
-            first_histogram.fft.process(&mut input, &mut tr).unwrap();
+            self.fft.process(&mut input, &mut tr).unwrap();
             tr
         };
         let mut self_tr_upper = {
-            let mut tr = first_histogram.fft.make_output_vec();
-            let mut input = vec![0.0; 2 * first_histogram.state_upper.len()];
+            let mut tr = self.fft.make_output_vec();
+            let mut input = vec![0.0; 2 * self.state_upper.len()];
             input
                 .iter_mut()
-                .zip(first_histogram.state_upper.iter())
+                .zip(self.state_upper.iter())
                 .for_each(|(i, s)| *i = *s);
-            first_histogram.fft.process(&mut input, &mut tr).unwrap();
+            self.fft.process(&mut input, &mut tr).unwrap();
             tr
         };
         let other_tr = {
-            let mut tr = first_histogram.fft.make_output_vec();
-            let mut input = vec![0.0; 2 * first_histogram.state_lower.len()];
+            let mut tr = self.fft.make_output_vec();
+            let mut input = vec![0.0; 2 * self.state_lower.len()];
             input
                 .iter_mut()
-                .zip(second_histogram.state_lower.iter())
-                .for_each(|(i, s)| *i = *s / (first_histogram.state_lower.len() as f64 * 2.0));
-            first_histogram.fft.process(&mut input, &mut tr).unwrap();
+                .zip(other.state_lower.iter())
+                .for_each(|(i, s)| *i = *s / (self.state_lower.len() as f64 * 2.0));
+            self.fft.process(&mut input, &mut tr).unwrap();
             tr
         };
         let other_tr_upper = {
-            let mut tr = first_histogram.fft.make_output_vec();
-            let mut input = vec![0.0; 2 * first_histogram.state_upper.len()];
+            let mut tr = self.fft.make_output_vec();
+            let mut input = vec![0.0; 2 * self.state_upper.len()];
             input
                 .iter_mut()
-                .zip(second_histogram.state_upper.iter())
-                .for_each(|(i, s)| *i = *s / (first_histogram.state_upper.len() as f64 * 2.0));
-            first_histogram.fft.process(&mut input, &mut tr).unwrap();
+                .zip(other.state_upper.iter())
+                .for_each(|(i, s)| *i = *s / (self.state_upper.len() as f64 * 2.0));
+            self.fft.process(&mut input, &mut tr).unwrap();
             tr
         };
         self_tr
@@ -181,28 +181,24 @@ impl Histogram for ScaledF64Hist {
             .zip(other_tr_upper.iter())
             .for_each(|(s, o)| *s *= *o);
 
-        let mut res = vec![0.0; 2 * first_histogram.state_lower.len()];
-        let mut res_upper = vec![0.0; 2 * first_histogram.state_upper.len()];
-        first_histogram
-            .ifft
-            .process(&mut self_tr, &mut res)
-            .unwrap();
-        first_histogram
-            .ifft
+        let mut res = vec![0.0; 2 * self.state_lower.len()];
+        let mut res_upper = vec![0.0; 2 * self.state_upper.len()];
+        self.ifft.process(&mut self_tr, &mut res).unwrap();
+        self.ifft
             .process(&mut self_tr_upper, &mut res_upper)
             .unwrap();
         return Self {
-            state_lower: res[..first_histogram.state_lower.len()]
+            state_lower: res[..self.state_lower.len()]
                 .iter()
                 .map(|x| x.round())
                 .collect(),
-            fft: first_histogram.fft.clone(),
-            ifft: first_histogram.ifft.clone(),
-            state_upper: res_upper[..first_histogram.state_upper.len()]
+            fft: self.fft.clone(),
+            ifft: self.ifft.clone(),
+            state_upper: res_upper[..self.state_upper.len()]
                 .iter()
                 .map(|x| x.round())
                 .collect(),
-            scale: first_histogram.scale * second_histogram.scale,
+            scale: self.scale * other.scale,
         };
     }
     fn coefs_f64(&self) -> Vec<f64> {
@@ -242,33 +238,20 @@ impl ScaledF64Hist {
     /// Check whether the sum of the bin counts exceeds the predefined limit for safe convolution
     /// If exceeds, adjust the state values by a scaling factor to ensure they remain within the convolution limit
     /// Multiply the original scale by the new scaling factor to accurately track the total compression of the histogram
-    fn rescale(&self) -> Self {
+    fn rescale(&mut self) {
         let sum: f64 = self.state_upper.iter().sum();
-        let scaler = if sum > CONV_LIMIT {
-            sum / CONV_LIMIT
-        } else {
-            1.0
-        };
-        let new_scale = self.scale * scaler;
-        let temp_scaler: f64 = 1.0 / scaler;
-        let new_state: Vec<f64> = self
-            .state_lower
-            .iter()
-            .map(|s| (s * temp_scaler).floor())
-            .collect();
-        let new_upper_state: Vec<f64> = self
-            .state_upper
-            .iter()
-            .map(|s| (s * temp_scaler).ceil())
-            .collect();
-
-        return Self {
-            state_lower: new_state,
-            fft: self.fft.clone(),
-            ifft: self.ifft.clone(),
-            state_upper: new_upper_state,
-            scale: new_scale,
-        };
+        if sum > CONV_LIMIT {
+            let scaler: f64 = sum / CONV_LIMIT;
+            let temp_scaler: f64 = 1.0 / scaler;
+            self.scale *= scaler;
+            self.state_lower
+                .iter_mut()
+                .zip(self.state_upper.iter_mut())
+                .for_each(|(low, up)| {
+                    *low = (*low * temp_scaler).floor();
+                    *up = (*up * temp_scaler).ceil();
+                });
+        }
     }
 }
 
@@ -280,7 +263,7 @@ impl Histogram for BigNumHist {
     fn new(nb_bins: usize) -> Self {
         return Self(unsafe { bnp::bnp_new_ZZX() }, nb_bins);
     }
-    fn convolve(&self, other: &Self) -> Self {
+    fn convolve(&mut self, other: &mut Self) -> Self {
         assert_eq!(self.1, other.1);
         let res = Self::new(self.1);
         unsafe {
