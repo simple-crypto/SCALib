@@ -127,7 +127,7 @@ impl PoiMap {
     /// and `i <= j`.
     pub fn mapped_pairs(&self, var: Var) -> impl Iterator<Item = (u32, u32)> + '_ {
         let pois = self.new_pois(var);
-        super::MultiLdaAccConf::pairs_n(pois.len() as u32)
+        super::MultiLdaAcc::pairs_n(pois.len() as u32)
             .map(|(i, j)| (pois[i as usize], pois[j as usize]))
     }
     /// Return a "batched" representation that takes chunks of N traces, then each poi is an array
