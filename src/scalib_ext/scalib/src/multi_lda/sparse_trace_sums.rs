@@ -1,5 +1,5 @@
 use itertools::{izip, Itertools};
-use ndarray::{Array2, ArrayView2, Axis};
+use ndarray::{Array2, ArrayView1, ArrayView2, Axis};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -107,9 +107,9 @@ impl SparseTraceSumsConf {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseTraceSumsState {
     /// Sum of all the traces corresponding to each class. Shape: (nv) (npois[i], nc).
-    pub sums: Vec<Array2<i64>>,
+    sums: Vec<Array2<i64>>,
     /// Number of traces for each class. Shape: (nv, nc).
-    pub n_traces: Array2<u32>,
+    n_traces: Array2<u32>,
 }
 
 impl SparseTraceSumsState {
@@ -206,5 +206,12 @@ impl SparseTraceSumsState {
                 sums[usize::from(*y)] += i64::from(*s);
             }
         });
+    }
+
+    pub(crate) fn sums_var(&self, var: Var) -> &Array2<i64> {
+        &self.sums[var as usize]
+    }
+    pub(crate) fn ntraces_var(&self, var: Var) -> ArrayView1<u32> {
+        self.n_traces.index_axis(Axis(0), var as usize)
     }
 }

@@ -1,5 +1,5 @@
-mod cov_pairs;
 mod poi_map;
+mod scatter_pairs;
 mod sparse_trace_sums;
 mod utils;
 
@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::lda::{softmax, LDA};
 use crate::{Result, ScalibError};
-pub use cov_pairs::{CovAcc, CovPairs};
 pub use poi_map::{PoiMap, AA};
+pub use scatter_pairs::ScatterPairs;
 pub use sparse_trace_sums::{SparseTraceSumsConf, SparseTraceSumsState};
 use utils::{log2_softmax_i, ArrayBaseExt, RangeExt};
 
@@ -39,8 +39,7 @@ pub struct MultiLdaAcc {
     pub trace_sums_conf: SparseTraceSumsConf,
     pub trace_sums: SparseTraceSumsState,
     /// Trace global scatter.
-    pub cov_pois: CovPairs,
-    pub cov_acc: CovAcc,
+    pub cov_pois: ScatterPairs,
 }
 
 impl MultiLdaAcc {
@@ -65,7 +64,7 @@ impl MultiLdaAcc {
             })
             .collect_vec();
 
-        let cov_pois = CovPairs::new(poi_map.len(), mapped_pairs)?;
+        let cov_pois = ScatterPairs::new(poi_map.len(), mapped_pairs)?;
         Ok(Self {
             nv,
             nc,
@@ -75,7 +74,6 @@ impl MultiLdaAcc {
             n_traces: 0,
             trace_sums: SparseTraceSumsState::new(&trace_sums_conf),
             trace_sums_conf,
-            cov_acc: CovAcc::new(&cov_pois),
             cov_pois,
         })
     }
@@ -95,7 +93,7 @@ impl MultiLdaAcc {
             )
             .ok_or(ScalibError::TooManyTraces)?;
         self.trace_sums.update(&self.trace_sums_conf, traces, y);
-        self.cov_acc.update(&self.poi_map, &self.cov_pois, traces)?;
+        self.cov_pois.update(&self.poi_map, traces)?;
         Ok(())
     }
 
@@ -104,9 +102,12 @@ impl MultiLdaAcc {
     }
 
     /// Between-class scatter decomposed in integer part and fractional part.
-    fn s_b_u(&self, var: Var) -> (Vec<i64>, Vec<f64>) {
-        let sums = &self.trace_sums.sums[var as usize];
-        let n_traces = self.trace_sums.n_traces.index_axis(Axis(0), var as usize);
+    fn s_b_u(
+        &self,
+        var: Var,
+        sums: &Array2<i64>,
+        n_traces: ArrayView1<u32>,
+    ) -> (Vec<i64>, Vec<f64>) {
         let mut s_b_u_int = vec![0; self.npairs_var(var)];
         let mut s_b_u_frac = vec![0.0; self.npairs_var(var)];
         for (class_sum, n_traces) in sums.axis_iter(Axis(1)).zip(n_traces.iter()) {
@@ -151,8 +152,8 @@ impl MultiLdaAcc {
         // s_b = s_b_u - ts**2/n
         // s_w = s_t_u - s_b_u
         // where s_t_u is computed by CovAcc and s_b_u can be derived from per-class sums.
-        let sums = &self.trace_sums.sums[var as usize];
-        let n_traces = self.trace_sums.n_traces.index_axis(Axis(0), var as usize);
+        let sums = self.trace_sums.sums_var(var);
+        let n_traces = self.trace_sums.ntraces_var(var);
         if n_traces.iter().any(|n| *n == 0) {
             return Err(ScalibError::EmptyClass);
         }
@@ -161,11 +162,11 @@ impl MultiLdaAcc {
             .poi_map
             .mapped_pairs(var)
             .map(|(i, j)| {
-                self.cov_acc.scatter
+                self.cov_pois.scatter
                     [self.cov_pois.pairs_to_new_idx[(i as usize, j as usize)] as usize]
             })
             .collect_vec();
-        let (s_b_u_int, s_b_u_frac) = self.s_b_u(var);
+        let (s_b_u_int, s_b_u_frac) = self.s_b_u(var, sums, n_traces);
         // No overflow: intermediate bounded by 2*(i16::MIN)**2*n_tot_traces
         let s_w = izip!(s_t_u.into_iter(), s_b_u_int.iter(), s_b_u_frac.iter())
             .map(|(t, b_i, b_f)| ((t - *b_i) as f64) - *b_f)
@@ -195,17 +196,10 @@ impl MultiLdaAcc {
             n_traces: self.n_traces,
         })
     }
-    fn compute_matrices(&self) -> Result<Vec<LdaMatrices>> {
-        (0..self.nv)
-            .map(|var| self.compute_matrices_var(var))
-            .collect()
-    }
     pub fn get_matrices(&self) -> Result<Vec<(Array2<f64>, Array2<f64>, Array2<f64>)>> {
-        Ok(self
-            .compute_matrices()?
-            .into_iter()
-            .map(LdaMatrices::to_tuple)
-            .collect())
+        Ok((0..self.nv)
+            .map(|var| Ok(LdaMatrices::to_tuple(self.compute_matrices_var(var)?)))
+            .collect::<Result<_>>()?)
     }
     pub fn lda(&self, p: u32, config: &crate::Config) -> Result<MultiLda> {
         let compute_ldas = |it_cnt: &TrAdder<u64>| {
