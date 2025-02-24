@@ -1,24 +1,33 @@
 use itertools::{izip, Itertools};
-use ndarray::{Array2, ArrayView2, Axis};
+use ndarray::{Array2, ArrayView1, ArrayView2, Axis};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
 use super::{ArrayBaseExt, Class, RangeExt, Var};
 
+/// Configuration for per-variable trace sums.
 // TODO: accumulator on 32-bit (tmp).
 // TODO we can get better performance by batching the "ns" axis (possibly with SIMD gather).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseTraceSumsConf {
+    /// Trace length
+    ns: u32,
+    /// Number of variables
     nv: Var,
+    /// Number of classes
     nc: Class,
-    // Number of pois for each var
+    /// Number of pois for each var
     n_pois: Vec<usize>,
-    // For each point in trace, the list of vars for which we have that POI.
+    /// For each point in trace, the list of vars which have that POI.
     vars_per_poi: Vec<Vec<Var>>,
-    // Id of POI for each var in vars_per_poi
+    /// For each element in vars_per_poi, the corresponding index of the POI in the list of POIs
+    /// for that var ("poi id").
     poi_var_id: Vec<Vec<u16>>,
-    poi_v_poiid_chunks: Vec<(Vec<u32>, Vec<Var>, Vec<usize>)>,
-    traces_block_size: usize,
+    /// List of (var, poi) structured as a list of blocks.
+    /// Each block is an unzipped list (i.e., 3 lists of the same length) of (poi, var, poi id).
+    poi_v_poiid_blocks: Vec<(Vec<u32>, Vec<Var>, Vec<usize>)>,
+    /// Number of traces in a batch.
+    traces_batch_size: usize,
 }
 impl SparseTraceSumsConf {
     /// pois: for each var, list of pois
@@ -54,12 +63,12 @@ impl SparseTraceSumsConf {
         // we can load 1 accumulator every 32 operations.
         // Therefore, block size along traces should be at least 32*nc.
         const TRACES_BLOCK_SIZE_PER_CLASS: usize = 32;
-        let traces_block_size = TRACES_BLOCK_SIZE_PER_CLASS * usize::from(nc);
+        let traces_batch_size = TRACES_BLOCK_SIZE_PER_CLASS * usize::from(nc);
         // We evenly split the L3 cache between class storage and trace storage.
         // At 2 bytes per element, we get:
-        let var_block_size = L3_CACHE_SIZE / 2 / 2 / traces_block_size;
-        let poi_block_size = L3_CACHE_SIZE / 2 / 2 / traces_block_size;
-        let poi_v_poiid_chunks = (0..usize::from(nv))
+        let var_block_size = L3_CACHE_SIZE / 2 / 2 / traces_batch_size;
+        let poi_block_size = L3_CACHE_SIZE / 2 / 2 / traces_batch_size;
+        let poi_v_poiid_blocks = (0..usize::from(nv))
             .range_chunks(var_block_size)
             .flat_map(|var_block| {
                 let poisv = itertools::sorted_unstable(var_block.flat_map(|v| {
@@ -69,11 +78,11 @@ impl SparseTraceSumsConf {
                         .map(move |(poi_id, p)| (*p, v as u16, poi_id))
                 }));
                 let poisv_per_poi = poisv.into_iter().chunk_by(|(p, _, _)| *p);
-                let poisv_per_poi_chunks = poisv_per_poi.into_iter().chunks(poi_block_size);
-                poisv_per_poi_chunks
+                let poisv_per_poi_blocks = poisv_per_poi.into_iter().chunks(poi_block_size);
+                poisv_per_poi_blocks
                     .into_iter()
-                    .map(move |poisv_per_poi_chunk| {
-                        poisv_per_poi_chunk
+                    .map(move |poisv_per_poi_block| {
+                        poisv_per_poi_block
                             .flat_map(|(_, poisv)| poisv)
                             .multiunzip()
                     })
@@ -82,23 +91,25 @@ impl SparseTraceSumsConf {
             .collect();
 
         Self {
+            ns,
             nv,
             nc,
             n_pois,
             vars_per_poi,
             poi_var_id,
-            poi_v_poiid_chunks,
-            traces_block_size,
+            poi_v_poiid_blocks,
+            traces_batch_size,
         }
     }
 }
 
+/// Accumulator for trace sums.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseTraceSumsState {
     /// Sum of all the traces corresponding to each class. Shape: (nv) (npois[i], nc).
-    pub sums: Vec<Array2<i64>>,
+    sums: Vec<Array2<i64>>,
     /// Number of traces for each class. Shape: (nv, nc).
-    pub n_traces: Array2<u32>,
+    n_traces: Array2<u32>,
 }
 
 impl SparseTraceSumsState {
@@ -109,30 +120,38 @@ impl SparseTraceSumsState {
             .collect();
         Self { n_traces, sums }
     }
+    /// traces shape (ntraces, ns)
+    /// y shape: (ntraces, nv)
     pub fn update(
         &mut self,
         conf: &SparseTraceSumsConf,
         traces: ArrayView2<i16>,
         y: ArrayView2<Class>,
     ) {
+        assert_eq!(traces.shape()[0], y.shape()[0]);
+        assert_eq!(traces.shape()[1], conf.ns as usize);
         assert_eq!(y.shape()[1], conf.nv as usize);
         let mut sums = Self::split_sums(&mut self.sums, conf);
         for (traces, y) in izip!(
-            traces.axis_chunks_iter(Axis(0), conf.traces_block_size),
-            y.axis_chunks_iter(Axis(0), conf.traces_block_size),
+            traces.axis_chunks_iter(Axis(0), conf.traces_batch_size),
+            y.axis_chunks_iter(Axis(0), conf.traces_batch_size),
         ) {
             let traces = traces.t().clone_row_major();
-            assert_eq!(y.shape()[1], conf.nv as usize);
             let y = y.t().clone_row_major();
-            assert_eq!(y.shape()[0], conf.nv as usize);
             for (mut n_traces, y) in self.n_traces.outer_iter_mut().zip(y.outer_iter()) {
                 for y in y.iter() {
                     n_traces[*y as usize] += 1;
                 }
             }
-            Self::update_trace_chunk(conf, &mut sums, &traces, &y);
+            Self::update_trace_batch(conf, &mut sums, &traces, &y);
         }
     }
+    /// Split sums according to the blocks defined in the conf.
+    /// Each block gets a list of references to sums (each ref is a slice containing the
+    /// accumulator for all classes).
+    // TODO: it might be better to have a contiguous storage that follows a representation similar
+    // to the order in the output of this function, then have a one-time conversion to the current
+    // accumulator representation at the end.
     fn split_sums<'s>(
         sums: &'s mut Vec<Array2<i64>>,
         conf: &SparseTraceSumsConf,
@@ -141,7 +160,7 @@ impl SparseTraceSumsState {
             .iter_mut()
             .map(|sums| sums.axis_iter_mut(Axis(0)).map(Some).collect_vec())
             .collect_vec();
-        conf.poi_v_poiid_chunks
+        conf.poi_v_poiid_blocks
             .iter()
             .map(|(_, vars, poi_ids)| {
                 izip!(vars.iter(), poi_ids.iter())
@@ -156,16 +175,20 @@ impl SparseTraceSumsState {
             })
             .collect_vec()
     }
-    fn update_trace_chunk(
+    /// Update sums for one batch of traces.
+    /// traces is (ntraces, ns) and y is (ntraces, nv)
+    fn update_trace_batch(
         conf: &SparseTraceSumsConf,
         sums: &mut [Vec<&mut [i64]>],
         traces: &Array2<i16>,
         y: &Array2<Class>,
     ) {
-        for ((pois, vars, _), sums) in izip!(conf.poi_v_poiid_chunks.iter(), sums.iter_mut()) {
+        for ((pois, vars, _), sums) in izip!(conf.poi_v_poiid_blocks.iter(), sums.iter_mut()) {
             Self::update_inner(sums, vars, pois, traces, y);
         }
     }
+    /// Update sums for one block.
+    /// traces is (ntraces, ns), y is (ntraces, nv)
     fn update_inner(
         sums: &mut [&mut [i64]],
         vs: &[Var],
@@ -183,5 +206,12 @@ impl SparseTraceSumsState {
                 sums[usize::from(*y)] += i64::from(*s);
             }
         });
+    }
+
+    pub(crate) fn sums_var(&self, var: Var) -> &Array2<i64> {
+        &self.sums[var as usize]
+    }
+    pub(crate) fn ntraces_var(&self, var: Var) -> ArrayView1<u32> {
+        self.n_traces.index_axis(Axis(0), var as usize)
     }
 }
