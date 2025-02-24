@@ -92,7 +92,7 @@ impl Histogram for F64Hist {
         self.state.clone()
     }
     fn coefs_f64_upper(&self) -> Vec<f64> {
-        unimplemented!()
+        self.state.clone()
     }
     fn from_elems(size: usize, iter: impl Iterator<Item = usize>) -> Self {
         let mut res = Self::new(size);
@@ -276,7 +276,7 @@ impl Histogram for BigNumHist {
         self.coefs().collect()
     }
     fn coefs_f64_upper(&self) -> Vec<f64> {
-        unimplemented!()
+        self.coefs().collect()
     }
     fn from_elems(nb_bins: usize, iter: impl Iterator<Item = usize>) -> Self {
         unsafe {
