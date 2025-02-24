@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Result, ScalibError};
 
-use super::batched_traces::{BatchedTraces, AA};
-use super::poi_map::PoiMap;
+use super::poi_map::{PoiMap, AA};
 
 // TODO: make this adaptative ?
 // TODO: make sample indices u16 instead of u32 when possible.
@@ -81,7 +80,7 @@ impl CovAcc {
             .tot_n_traces
             .checked_add(n_traces)
             .ok_or(ScalibError::TooManyTraces)?;
-        let traces = BatchedTraces::<N>::new(poi_map, traces).get_batches();
+        let traces = poi_map.select_batches::<N>(traces);
         let split_at = pois.chunks[1..].iter().map(|r| r.start);
         let scatter_chunks = multi_split_at_mut(self.scatter.as_mut_slice(), split_at.clone());
         let pair_chunks = multi_split_at(pois.sorted_pairs.as_slice(), split_at);

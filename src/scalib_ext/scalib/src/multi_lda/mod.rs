@@ -1,4 +1,3 @@
-mod batched_traces;
 mod cov_pairs;
 mod poi_map;
 mod sparse_trace_sums;
@@ -12,9 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::lda::{softmax, LDA};
 use crate::{Result, ScalibError};
-use batched_traces::BatchedTraces;
 pub use cov_pairs::{CovAcc, CovPairs};
-use poi_map::PoiMap;
+pub use poi_map::{PoiMap, AA};
 pub use sparse_trace_sums::{SparseTraceSumsConf, SparseTraceSumsState};
 
 pub type Class = u16;
@@ -66,12 +64,13 @@ pub struct MultiLdaAccConf {
     ns: u32,
     // Pois for each var
     cov_pois_offsets: Vec<usize>,
-    poi_map: Arc<PoiMap>,
+    pub poi_map: Arc<PoiMap>,
     pub trace_sums: SparseTraceSumsConf,
-    cov_pois: CovPairs,
+    pub cov_pois: CovPairs,
 }
 
 impl MultiLdaAccConf {
+    #[inline(never)]
     fn new(ns: u32, nc: Class, mut pois: Vec<Vec<u32>>) -> Result<Self> {
         // Sort POIs: required for SparseTraceSums and has not impact on the LDA result.
         for pois in pois.iter_mut() {
@@ -126,6 +125,7 @@ pub struct MultiLdaAccState {
 }
 
 impl MultiLdaAccState {
+    #[inline(never)]
     fn new(multi_lda: &MultiLdaAccConf) -> Self {
         Self {
             n_traces: 0,
@@ -456,7 +456,7 @@ impl MultiLda {
     /// return prs with shape (nv,n,nc). Every row corresponds to one probability distribution
     pub fn predict_proba(&self, traces: ArrayView2<i16>) -> Array3<f64> {
         let mut res = Array3::zeros((self.nv(), traces.shape()[0], self.nc as usize));
-        let traces_batched = BatchedTraces::<N>::new(&self.poi_map, traces).get_batches();
+        let traces_batched = self.poi_map.select_batches::<N>(traces);
         for var_block in (0..(self.nv())).range_chunks(self.var_block_size()) {
             let p_traces = self.project_traces(var_block.clone(), &traces_batched);
             for (var_i, var) in var_block.clone().enumerate() {
@@ -485,7 +485,7 @@ impl MultiLda {
     /// return prs with shape (nv,n), proba of the corresponding y
     pub fn predict_log2p1(&self, traces: ArrayView2<i16>, y: ArrayView2<Class>) -> Array2<f64> {
         let mut res = Array2::zeros((self.poi_blocks.len(), traces.shape()[0]));
-        let traces_batched = BatchedTraces::<N>::new(&self.poi_map, traces).get_batches();
+        let traces_batched = self.poi_map.select_batches::<N>(traces);
         for var_block in (0..(self.poi_blocks.len())).range_chunks(self.var_block_size()) {
             let scores = self.project_traces(var_block.clone(), &traces_batched);
             for (var_i, var) in var_block.clone().enumerate() {
@@ -519,7 +519,7 @@ impl MultiLda {
     fn project_traces(
         &self,
         var_block: Range<usize>,
-        traces_batched: &Array2<batched_traces::AA<N>>,
+        traces_batched: &Array2<AA<N>>,
     ) -> Vec<Array2<[f64; N]>> {
         let mut p_traces = vec![
             Array2::from_elem((var_block.len(), self.p), [0.0f64; N]);
@@ -541,7 +541,7 @@ impl MultiLda {
         &self,
         var_block: Range<usize>,
         p_traces: &mut Array2<[f64; N]>,
-        trace_batch: &[batched_traces::AA<N>],
+        trace_batch: &[AA<N>],
     ) {
         for (poi_block, poi_block_range) in self.poi_block_ranges().enumerate() {
             let trace_batch = &trace_batch[poi_block_range.clone()];
@@ -560,7 +560,7 @@ impl MultiLda {
     fn project_inner_loop(
         &self,
         acc: &mut [f64; N],
-        trace_batch: &[batched_traces::AA<N>],
+        trace_batch: &[AA<N>],
         proj_coefs: &[f64],
         pois: &[u16],
     ) {

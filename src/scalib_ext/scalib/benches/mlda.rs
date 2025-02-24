@@ -169,16 +169,16 @@ fn bench_mlda_update_covs(c: &mut Criterion) {
     let mut group = c.benchmark_group("MLDA update cov");
     // Passing, most time allocating paris_matrix with from_elem
     bench_mlda_update_covs_inner(nc, 10000, 10, 1, 1000, n, &mut group);
-    bench_mlda_update_covs_inner(nc, 10000, 10, 100, 1000, n, &mut group);
-    // Long duration, most time allocating paris_matrix with from_elem
-    bench_mlda_update_covs_inner(nc, 100000, 10, 1, 1000, n, &mut group);
-    bench_mlda_update_covs_inner(nc, 100000, 10, 100, 1000, n, &mut group);
-    // Long duration, most time allocating paris_matrix with from_elem
-    bench_mlda_update_covs_inner(nc, 10000, 50000, 1, 1000, n, &mut group);
-    bench_mlda_update_covs_inner(nc, 10000, 50000, 100, 1000, n, &mut group);
-    // Long duration, most time allocating paris_matrix with from_elem
-    bench_mlda_update_covs_inner(nc, 100000, 50000, 1, 1000, n, &mut group);
-    bench_mlda_update_covs_inner(nc, 100000, 50000, 100, 1000, n, &mut group);
+    //bench_mlda_update_covs_inner(nc, 10000, 10, 100, 1000, n, &mut group);
+    //// Long duration, most time allocating paris_matrix with from_elem
+    //bench_mlda_update_covs_inner(nc, 100000, 10, 1, 1000, n, &mut group);
+    //bench_mlda_update_covs_inner(nc, 100000, 10, 100, 1000, n, &mut group);
+    //// Long duration, most time allocating paris_matrix with from_elem
+    //bench_mlda_update_covs_inner(nc, 10000, 50000, 1, 1000, n, &mut group);
+    //bench_mlda_update_covs_inner(nc, 10000, 50000, 100, 1000, n, &mut group);
+    //// Long duration, most time allocating paris_matrix with from_elem
+    //bench_mlda_update_covs_inner(nc, 100000, 50000, 1, 1000, n, &mut group);
+    //bench_mlda_update_covs_inner(nc, 100000, 50000, 100, 1000, n, &mut group);
 }
 
 criterion_group! {
