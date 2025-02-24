@@ -12,6 +12,14 @@ That function gives direct, lower-level control to the core algorithm, allowing
 to specify the number of bins in the histograms (whereas `rank_accuracy` tunes
 this parameter automatically).
 
+By default, the `rank_accuracy` function uses scaled histograms for convolution. 
+Unlike the standard histogram approach, this method scales down the bins before
+each convolution by a factor chosen to prevent exceeding a predefined limit.
+After the convolution, the histogram is scaled back to restore its original magnitude.
+This ensures correct functionality by avoiding negative values due to f64 overflows.
+Additionally, two histograms are used — one for the lower bound and one for the upper
+bound — to mitigate rounding errors and maintain precision.
+
 Examples
 --------
 
@@ -82,7 +90,8 @@ def rank_nbin(costs, key, nbins, method="hist"):
     method : string
         Method used to estimate the rank. Can be the following:
 
-        * "hist": using histograms (default).
+        * "scaledhist": using two scaled histograms (default).
+        * "hist": using histograms.
         * "naive": enumerate possible keys (very slow).
         * "histbignum": using NTL library, allows better precision.
 
@@ -121,7 +130,7 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="scaledhist", max_nb_bin=2**26
     method : string
         Method used to estimate the rank. Can be the following:
 
-        * "scaledhist": using scaled histograms (default).
+        * "scaledhist": using two scaled histograms (default).
         * "hist": using histograms.
         * "ntl": using NTL library, allows better precision.
     max_nb_bin : int, default: 2**26

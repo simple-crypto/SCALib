@@ -23,6 +23,46 @@ static_probs = [
 ]
 
 
+def test_rank_accuracy_hist():
+    nc = 256
+    nsubkeys = 4
+    acc = 0.2
+
+    costs = np.zeros((nsubkeys, nc)) + 0.1
+    secret_key = np.random.randint(0, nc, nsubkeys)
+    costs[np.arange(nsubkeys), secret_key] = 1.0
+
+    rmin, r, rmax = rank_accuracy(
+        -np.log10(costs), secret_key, acc_bit=acc, method="hist"
+    )
+
+    assert r == 1.0
+    assert np.log2(rmax) - np.log2(rmin) <= acc
+
+
+# Compare the hist and scaled histogram implementation with a normal probability distribution
+def test_rank_accuracy_scaled_vs_hist():
+    nc = 256
+    nsubkeys = 16
+    max_error = 0.5
+    k_probs = np.zeros((nsubkeys, nc))
+
+    secret_key = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    for j in range(nsubkeys):
+        for i in range(nc):
+            k_probs[j][i] = 1 / random.randint(2, 20)
+
+    rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key, method="hist")
+    lrmin, lr, lrmax = (np.log2(rmin), np.log2(r), np.log2(rmax))
+    rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key, method="scaledhist")
+    lrmin_scaled, lr_scaled, lrmax_scaled = (np.log2(rmin), np.log2(r), np.log2(rmax))
+
+    assert np.abs(lrmin - lrmin_scaled) <= max_error
+    assert np.abs(lr - lr_scaled) <= max_error
+    assert np.abs(lrmax - lrmax_scaled) <= max_error
+
+
 def test_rank_accuracy():
     nc = 256
     nsubkeys = 4
@@ -38,8 +78,6 @@ def test_rank_accuracy():
     assert np.log2(rmax) - np.log2(rmin) <= acc
 
 
-# NTL would be needed for that
-"""
 # Compare the ntl and scaled histogram implementation with a normal probability distribution
 def test_rank_accuracy_scaled_vs_ntl():
     nc = 256
@@ -82,12 +120,10 @@ def test_rank_accuracy_scaled_edge_cases():
     rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key, method="histbignum")
     lrmin, lr, lrmax = (np.log2(rmin), np.log2(r), np.log2(rmax))
     rmin, r, rmax = rank_accuracy(
-        -np.log10(k_probs), secret_key, method="scaledhist", acc_bit=7.0
+        -np.log10(k_probs), secret_key, method="scaledhist", acc_bit=10.0
     )
     lrmin_scaled, lr_scaled, lrmax_scaled = (np.log2(rmin), np.log2(r), np.log2(rmax))
-    rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key)
     assert np.abs(lrmin - lrmin_scaled) <= max_error
-"""
 
 
 # Compare the ntl and scaled histogram implementation in a known edge case
