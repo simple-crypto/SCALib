@@ -14,7 +14,7 @@ use crate::lda::{softmax, LDA};
 use crate::{Result, ScalibError};
 use batched_traces::BatchedTraces;
 pub use cov_pairs::{CovAcc, CovPairs};
-use poi_map::PoiMap;
+pub use poi_map::PoiMap;
 pub use sparse_trace_sums::{SparseTraceSumsConf, SparseTraceSumsState};
 
 pub type Class = u16;
@@ -66,12 +66,13 @@ pub struct MultiLdaAccConf {
     ns: u32,
     // Pois for each var
     cov_pois_offsets: Vec<usize>,
-    poi_map: Arc<PoiMap>,
+    pub poi_map: Arc<PoiMap>,
     pub trace_sums: SparseTraceSumsConf,
-    cov_pois: CovPairs,
+    pub cov_pois: CovPairs,
 }
 
 impl MultiLdaAccConf {
+    #[inline(never)]
     fn new(ns: u32, nc: Class, mut pois: Vec<Vec<u32>>) -> Result<Self> {
         // Sort POIs: required for SparseTraceSums and has not impact on the LDA result.
         for pois in pois.iter_mut() {
@@ -126,6 +127,7 @@ pub struct MultiLdaAccState {
 }
 
 impl MultiLdaAccState {
+    #[inline(never)]
     fn new(multi_lda: &MultiLdaAccConf) -> Self {
         Self {
             n_traces: 0,

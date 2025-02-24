@@ -20,6 +20,7 @@ impl<'a, 'b, const N: usize> BatchedTraces<'a, 'b, N> {
     #[inline(never)]
     pub fn get_batches(&self) -> Array2<AA<N>> {
         let n_batches = self.traces.shape()[0].div_ceil(N);
+        // Why self.traces.shape()[1] and not number of POIs in poi_map ?
         let mut res = Array2::from_elem((n_batches, self.traces.shape()[1]), AA([0; N]));
         let chunk_iter = self.traces.axis_chunks_iter(Axis(0), N);
         for (chunk, mut batch) in chunk_iter.zip(res.outer_iter_mut()) {
