@@ -16,7 +16,7 @@ use crate::lda::{softmax, LDA};
 use crate::{Result, ScalibError};
 pub use poi_map::{PoiMap, AA};
 pub use scatter_pairs::ScatterPairs;
-pub use sparse_trace_sums::{SparseTraceSumsConf, SparseTraceSumsState};
+pub use sparse_trace_sums::SparseTraceSums;
 use utils::{log2_softmax_i, ArrayBaseExt, RangeExt};
 
 pub type Class = u16;
@@ -36,8 +36,7 @@ pub struct MultiLdaAcc {
     /// Number of traces.
     n_traces: u32,
     /// Per-class sums.
-    pub trace_sums_conf: SparseTraceSumsConf,
-    pub trace_sums: SparseTraceSumsState,
+    pub trace_sums: SparseTraceSums,
     /// Trace global scatter.
     pub cov_pois: ScatterPairs,
 }
@@ -53,7 +52,7 @@ impl MultiLdaAcc {
             .try_into()
             .map_err(|_| ScalibError::TooManyPois)?;
         let poi_map = Arc::new(PoiMap::new(ns as usize, &pois)?);
-        let trace_sums_conf = SparseTraceSumsConf::new(ns, nv, nc, pois.as_slice());
+        let trace_sums = SparseTraceSums::new(ns, nv, nc, pois.as_slice());
         let mapped_pairs = (0..nv).flat_map(|v| poi_map.mapped_pairs(v));
         let cov_pois_offsets = pois
             .iter()
@@ -72,8 +71,7 @@ impl MultiLdaAcc {
             cov_pois_offsets,
             poi_map,
             n_traces: 0,
-            trace_sums: SparseTraceSumsState::new(&trace_sums_conf),
-            trace_sums_conf,
+            trace_sums,
             cov_pois,
         })
     }
@@ -92,7 +90,7 @@ impl MultiLdaAcc {
                     .map_err(|_| ScalibError::TooManyVars)?,
             )
             .ok_or(ScalibError::TooManyTraces)?;
-        self.trace_sums.update(&self.trace_sums_conf, traces, y);
+        self.trace_sums.update(traces, y);
         self.cov_pois.update(&self.poi_map, traces)?;
         Ok(())
     }
@@ -166,7 +164,7 @@ impl MultiLdaAcc {
                     [self.cov_pois.pairs_to_new_idx[(i as usize, j as usize)] as usize]
             })
             .collect_vec();
-        let (s_b_u_int, s_b_u_frac) = self.s_b_u(var, sums, n_traces);
+        let (s_b_u_int, s_b_u_frac) = self.s_b_u(var, &sums, n_traces);
         // No overflow: intermediate bounded by 2*(i16::MIN)**2*n_tot_traces
         let s_w = izip!(s_t_u.into_iter(), s_b_u_int.iter(), s_b_u_frac.iter())
             .map(|(t, b_i, b_f)| ((t - *b_i) as f64) - *b_f)
