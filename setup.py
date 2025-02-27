@@ -72,8 +72,10 @@ print(f"Build config: {noflags=} {portable=} {x86_64_v3=} {rustflags=}.")
 
 scalib_features = ["pyo3/abi3"]
 
-if env_true("SCALIB_BLIS"):
+if env_true(os.environ.get("SCALIB_BLIS")):
     scalib_features.append("blis")
+if env_true(os.environ.get("SCALIB_NTL")):
+    scalib_features.append("ntl")
 
 setup(
     project_urls={
