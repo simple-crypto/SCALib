@@ -53,11 +53,14 @@ References
 .. footbibliography::
 """
 
+__all__ = ["rank_nbin", "rank_accuracy", "HAS_NTL"]
 import math
 
 from scalib import _scalib_ext
 from scalib.config import get_config
 import scalib.utils
+
+HAS_NTL: bool = _scalib_ext.HAS_NTL
 
 
 def rank_nbin(costs, key, nbins, method="hist"):

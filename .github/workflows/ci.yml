@@ -38,6 +38,7 @@ jobs:
           CARGO_TARGET_DIR: "/host${{ runner.temp }}/cargo_build"
           CARGO_HOME: "/host${{ runner.temp }}/cargo_home"
           CIBW_PLATFORM: "linux"
+          CIBW_ENVIRONMENT_LINUX: "SCALIB_NTL=1"
       - uses: actions/upload-artifact@v4
         with:
           name: dist-wheel_linux-${{ matrix.arch }}
@@ -93,7 +94,7 @@ jobs:
           echo dist/scalib*manylinux*.whl >> reqs.txt
           uv pip install -r reqs.txt
       - name: Run tests
-        run: $VIRTUAL_ENV/bin/pytest
+        run: TEST_NTL=1 $VIRTUAL_ENV/bin/pytest
 
   test_mindeps:
     name: Run tests (on linux) - minimum dependency versions.
@@ -128,7 +129,7 @@ jobs:
           echo dist/scalib*manylinux*.whl >> reqs.txt
           uv pip install --resolution lowest-direct -r reqs.txt
       - name: Run tests
-        run: $VIRTUAL_ENV/bin/pytest
+        run: TEST_NTL=1 $VIRTUAL_ENV/bin/pytest
 
   # Separate job because debug build.
   rust_tests:

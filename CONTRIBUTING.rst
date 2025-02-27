@@ -81,6 +81,10 @@ Multiple builds with misc. trade-offs can be used, depending on what you are wor
 
    make bench
 
+- When developping key rank estimation, use ``SCALIB_TEST_NTL=1 SCALIB_NTL=1
+  tox run -e test`` to run tests that require NTL build (you may need to force
+  tox to re-build with `-r`).
+
 Before committing or pull request
 ---------------------------------
 

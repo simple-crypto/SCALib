@@ -108,6 +108,11 @@ fn usable_parallelism(_py: Python) -> usize {
     std::cmp::min(num_cpus::get(), num_cpus::get_physical())
 }
 
+#[cfg(feature = "ntl")]
+const HAS_NTL: bool = true;
+#[cfg(not(feature = "ntl"))]
+const HAS_NTL: bool = false;
+
 #[pymodule]
 fn _scalib_ext(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("ScalibError", py.get_type::<ScalibError>())?;
@@ -127,6 +132,7 @@ fn _scalib_ext(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ranking::rank_nbin, m)?)?;
     m.add_function(wrap_pyfunction!(partial_cp, m)?)?;
     m.add_function(wrap_pyfunction!(usable_parallelism, m)?)?;
+    m.add("HAS_NTL", HAS_NTL)?;
 
     Ok(())
 }
