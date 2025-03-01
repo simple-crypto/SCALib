@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 import random
 from scalib.postprocessing import rank_accuracy
+import os
 
 static_probs = [
     [0.5, 0.25, 0.25, 0.125],
@@ -79,6 +80,7 @@ def test_rank_accuracy():
 
 
 # Compare the ntl and scaled histogram implementation with a normal probability distribution
+@pytest.mark.skipif(os.getenv("SCALIB_TEST_NTL") != "1", reason="Not testing NTL.")
 def test_rank_accuracy_scaled_vs_ntl():
     nc = 256
     nsubkeys = 16
@@ -103,6 +105,7 @@ def test_rank_accuracy_scaled_vs_ntl():
 
 # Compare the ntl and scaled histogram implementation in rand edge cases
 # The normal histogram implementation would most likely return negative ranks
+@pytest.mark.skipif(os.getenv("SCALIB_TEST_NTL") != "1", reason="Not testing NTL.")
 def test_rank_accuracy_scaled_edge_cases():
     nc = 256
     nsubkeys = 16
