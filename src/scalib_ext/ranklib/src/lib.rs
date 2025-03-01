@@ -49,6 +49,7 @@ pub enum RankingMethod {
     #[cfg(feature = "hellib")]
     Hellib,
     Hist,
+    ScaledHist,
     #[cfg(feature = "ntl")]
     HistBigNum,
 }
@@ -78,6 +79,9 @@ impl RankingMethod {
                 rank_hellib(&problem.costs, &problem.real_key, nb_bin, merge.unwrap())
             }
             RankingMethod::Hist => merged_problem.rank_hist::<histogram::F64Hist>(nb_bin),
+            RankingMethod::ScaledHist => {
+                merged_problem.rank_hist::<histogram::ScaledF64Hist>(nb_bin)
+            }
             #[cfg(feature = "ntl")]
             RankingMethod::HistBigNum => merged_problem.rank_hist::<histogram::BigNumHist>(nb_bin),
         }
