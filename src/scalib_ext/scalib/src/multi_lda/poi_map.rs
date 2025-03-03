@@ -14,7 +14,7 @@ pub struct PoiMap {
     new2old: Vec<u32>,
     /// For each variable of interest, list of its POIs in the reduced traces.
     // TODO: have indices be i16 when possible.
-    new_poi_vars: Vec<Vec<u32>>,
+    pub new_poi_vars: Vec<Vec<u32>>,
 }
 
 impl PoiMap {
@@ -143,6 +143,22 @@ impl PoiMap {
             transpose_big(chunk, batch.as_slice_mut().unwrap(), self.kept_indices());
         }
         res
+    }
+
+    #[inline(never)]
+    pub fn select_transpose(&self, traces: ArrayView2<i16>) -> Array2<i16> {
+        /*
+        let mut res = Array2::zeros((self.len(), traces.shape()[0]));
+        for ti in 0..traces.shape()[0] {
+            for (poi_i, poi) in self.new2old.iter().enumerate() {
+                res[(poi_i, ti)] = traces([ti, poi]);
+            }
+        }
+        res
+        */
+        Array2::from_shape_fn((self.len(), traces.shape()[0]), |(poi_i, ti)| {
+            traces[(ti, self.new2old[poi_i] as usize)]
+        })
     }
 }
 
