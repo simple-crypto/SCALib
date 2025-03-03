@@ -4,6 +4,9 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
 use super::{ArrayBaseExt, Class, RangeExt, Var};
+use std::sync::Arc;
+
+use super::poi_map::PoiMap;
 
 /// Configuration for per-variable trace sums.
 // TODO: accumulator on 32-bit (tmp).
@@ -26,7 +29,7 @@ pub struct SparseTraceSums {
     /// List of (var, poi) structured as a list of blocks.
     /// Each block is an unzipped list (i.e., 3 lists of the same length) of (poi, var, poi id).
     poi_v_poiid_blocks: Vec<(Vec<u32>, Vec<Var>, Vec<usize>)>,
-    /// For each var, and for each POI of that , the corresponding block and index in blocks, as
+    /// For each var, and for each POI of that variable , the corresponding block and index in blocks, as
     /// per the representation in poi_v_poiid_blocks.
     var_pois_in_blocks: Vec<Vec<(usize, usize)>>,
     /// Number of traces in a batch.
@@ -36,21 +39,32 @@ pub struct SparseTraceSums {
     sums: Vec<Array2<i64>>,
     /// Number of traces for each class. Shape: (nv, nc).
     n_traces: Array2<u32>,
+    // TODO: poi map
+    poi_map: Arc<PoiMap>,
 }
 impl SparseTraceSums {
     /// pois: for each var, list of pois
-    pub fn new(ns: u32, nv: u16, nc: u16, pois: &[Vec<u32>]) -> Self {
+    pub fn new(ns: u32, nv: u16, nc: u16, poi_map: Arc<PoiMap>) -> Self {
+        let pois = &poi_map.new_poi_vars;
+        //pub fn new(ns: u32, nv: u16, nc: u16, pois: &[Vec<u32>]) -> Self {
+        // So here, we are in fact interested in dealing with poi_map.new_poi_vars
         for pois in pois {
             assert!(pois.is_sorted(), "POIs not sorted");
         }
+        // For each variable, recover the amount of pois used
         let n_pois = pois.iter().map(Vec::len).collect();
+        // For each pois, recover the list of variables that relies on it.
+        // Conceptually the inverse of poi_map.new_poi_vars
         let mut vars_per_poi = vec![vec![]; ns as usize];
         for (var, pois_v) in pois.iter().enumerate() {
             for poi in pois_v {
                 vars_per_poi[*poi as usize].push(var as Var);
             }
         }
+        // After the poi_var_id loop, var_poi_count = n_pois?
+        // var_poi_count seems to be useful only for building poi_var_id.
         let mut var_poi_count = vec![0u16; nv as usize];
+        // For each POI, compute the index of each poi associated, relative to each var.
         let poi_var_id = vars_per_poi
             .iter()
             .map(|vars| {
@@ -120,6 +134,7 @@ impl SparseTraceSums {
             traces_batch_size,
             n_traces,
             sums,
+            poi_map,
         }
     }
 
@@ -133,23 +148,31 @@ impl SparseTraceSums {
             traces.axis_chunks_iter(Axis(0), self.traces_batch_size),
             y.axis_chunks_iter(Axis(0), self.traces_batch_size),
         ) {
-            let traces = traces.t().clone_row_major();
-            let y = y.t().clone_row_major();
+            // Basically, transpose the batch of traces and values
+            let traces = self.poi_map.select_transpose(traces);
+            let y = y.t().clone_row_major(); // shape=(nv, traces_batch_size)
+
+            // Here, each tuple (n_traces, y) is in fact a tuple holding
+            // -n_traces: the mutable vector of nc element for a single variable
+            // -y, the vector of batch_size elements containing the classes
+            // associated to each of the variables.
+            // Here, the only purpose of he loop is to update the counter
+            // for every classes encountered, for every variables.
             for (mut n_traces, y) in self.n_traces.outer_iter_mut().zip(y.outer_iter()) {
                 for y in y.iter() {
                     n_traces[*y as usize] += 1;
                 }
-            }
+            // Iterate over the block (which are list of tuple (v, poi))
             for ((pois, vars, _), sums) in
                 izip!(self.poi_v_poiid_blocks.iter(), self.sums.iter_mut())
             {
-                Self::update_inner(sums, vars, pois, &traces, &y);
+                Self::update_block(sums, vars, pois, &traces, &y);
             }
         }
     }
     /// Update sums for one block.
     /// traces is (ntraces, ns), y is (ntraces, nv)
-    fn update_inner(
+    fn update_block(
         sums: &mut Array2<i64>,
         vs: &[Var],
         pois: &[u32],

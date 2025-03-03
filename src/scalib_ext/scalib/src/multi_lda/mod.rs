@@ -52,7 +52,7 @@ impl MultiLdaAcc {
             .try_into()
             .map_err(|_| ScalibError::TooManyPois)?;
         let poi_map = Arc::new(PoiMap::new(ns as usize, &pois)?);
-        let trace_sums = SparseTraceSums::new(ns, nv, nc, pois.as_slice());
+        let trace_sums = SparseTraceSums::new(ns, nv, nc, poi_map.clone());
         let mapped_pairs = (0..nv).flat_map(|v| poi_map.mapped_pairs(v));
         let cov_pois_offsets = pois
             .iter()
