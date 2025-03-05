@@ -45,12 +45,9 @@ pub struct SparseTraceSums {
 impl SparseTraceSums {
     /// pois: for each var, list of pois
     pub fn new(ns: u32, nv: u16, nc: u16, poi_map: Arc<PoiMap>) -> Self {
+        // So here, we are in fact interested in dealing with poi_map.new_poi_vars
         let pois = &poi_map.new_poi_vars;
         //pub fn new(ns: u32, nv: u16, nc: u16, pois: &[Vec<u32>]) -> Self {
-        // So here, we are in fact interested in dealing with poi_map.new_poi_vars
-        for pois in pois {
-            assert!(pois.is_sorted(), "POIs not sorted");
-        }
         // For each variable, recover the amount of pois used
         let n_pois = pois.iter().map(Vec::len).collect();
         // For each pois, recover the list of variables that relies on it.
@@ -162,6 +159,7 @@ impl SparseTraceSums {
                 for y in y.iter() {
                     n_traces[*y as usize] += 1;
                 }
+            }
             // Iterate over the block (which are list of tuple (v, poi))
             for ((pois, vars, _), sums) in
                 izip!(self.poi_v_poiid_blocks.iter(), self.sums.iter_mut())
