@@ -35,7 +35,10 @@ fn gen_pois_with_maxpois(
         // shuffle
         work.shuffle(rng);
         // fetch
-        pois.push(work[0..npois].to_vec())
+        let mut sorted_pois = work[0..npois].to_vec();
+        sorted_pois.sort();
+        assert!(sorted_pois.is_sorted(), "POIs not sorted");
+        pois.push(sorted_pois)
     }
     pois
 }
@@ -147,7 +150,7 @@ fn bench_mlda_ll_update_global_inner(
     group.bench_with_input(
         BenchmarkId::new(
             format!(
-                "INNER-GLOB nv:{} ; ns:{} ; npois:{} [max:{}]",
+                "GLOB nv:{} ; ns:{} ; npois:{} [max:{}]",
                 nv, ns, npois, max_npois
             ),
             nv,
@@ -176,6 +179,7 @@ fn bench_mlda_ll_update_all(
     bench_mlda_ll_update_sums_inner(seed, nc, ns, nv, npois, max_npois, n, group);
     bench_mlda_ll_update_scatterpairs_inner(seed, nc, ns, nv, npois, max_npois, n, group);
     bench_mlda_ll_update_global_inner(seed, nc, ns, nv, npois, max_npois, n, group);
+    println!("\n");
 }
 
 fn bench_mlda_update_top(c: &mut Criterion) {
@@ -183,7 +187,10 @@ fn bench_mlda_update_top(c: &mut Criterion) {
     let nc = 256;
     let n = 10000;
     let mut group = c.benchmark_group("MLDA update low-level");
-    bench_mlda_ll_update_all(seed, nc, 10000, 10, 1, 1000, n, &mut group);
+    bench_mlda_ll_update_all(seed, nc, 10000, 1, 1, 10000, n, &mut group);
+    bench_mlda_ll_update_all(seed, nc, 10000, 1, 1000, 10000, n, &mut group);
+    bench_mlda_ll_update_all(seed, nc, 10000, 100, 1, 10000, n, &mut group);
+    bench_mlda_ll_update_all(seed, nc, 10000, 100, 1000, 10000, n, &mut group);
 }
 
 criterion_group! {
