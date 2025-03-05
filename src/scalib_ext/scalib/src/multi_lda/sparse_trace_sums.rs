@@ -162,6 +162,7 @@ impl SparseTraceSums {
                 for y in y.iter() {
                     n_traces[*y as usize] += 1;
                 }
+            }
             // Iterate over the block (which are list of tuple (v, poi))
             for ((pois, vars, _), sums) in
                 izip!(self.poi_v_poiid_blocks.iter(), self.sums.iter_mut())
