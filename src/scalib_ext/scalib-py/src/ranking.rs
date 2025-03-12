@@ -51,6 +51,7 @@ fn str2method(s: &str) -> Result<ranklib::RankingMethod, &str> {
     match s {
         "naive" => Ok(ranklib::RankingMethod::Naive),
         "hist" => Ok(ranklib::RankingMethod::Hist),
+        "scaledhist" => Ok(ranklib::RankingMethod::ScaledHist),
         #[cfg(feature = "ntl")]
         "histbignum" => Ok(ranklib::RankingMethod::HistBigNum),
         #[cfg(not(feature = "ntl"))]
