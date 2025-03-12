@@ -94,7 +94,7 @@ jobs:
           echo dist/scalib*manylinux*.whl >> reqs.txt
           uv pip install -r reqs.txt
       - name: Run tests
-        run: TEST_NTL=1 $VIRTUAL_ENV/bin/pytest
+        run: SCALIB_TEST_NTL=1 $VIRTUAL_ENV/bin/pytest
 
   test_mindeps:
     name: Run tests (on linux) - minimum dependency versions.
@@ -129,7 +129,7 @@ jobs:
           echo dist/scalib*manylinux*.whl >> reqs.txt
           uv pip install --resolution lowest-direct -r reqs.txt
       - name: Run tests
-        run: TEST_NTL=1 $VIRTUAL_ENV/bin/pytest
+        run: SCALIB_TEST_NTL=1 $VIRTUAL_ENV/bin/pytest
 
   # Separate job because debug build.
   rust_tests:
