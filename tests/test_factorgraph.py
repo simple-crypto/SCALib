@@ -355,8 +355,8 @@ def test_and_not_or():
         VAR MULTI nb
         PROPERTY nb = !b
         PROPERTY a = x & p
-        PROPERTY b = nt & ny 
-        PROPERTY nz = na | nb 
+        PROPERTY b = nt & ny
+        PROPERTY nz = na | nb
         """
     graph = FactorGraph(graph)
     bp_state = BPState(graph, n, {"p": p, "t": t})
@@ -1097,6 +1097,115 @@ def test_sparse_factor_xor():
     bp.bp_loopy(10, False)
     bp2.bp_loopy(10, False)
     assert np.allclose(bp.get_distribution("c"), bp2.get_distribution("c"))
+
+
+def test_propagate_selected():
+    nc = 256
+    graph = f"""NC {nc}
+    VAR MULTI a
+    VAR MULTI b
+    VAR MULTI c
+    VAR MULTI d
+    PROPERTY F0: c = a ^ b
+    PROPERTY F1: d = a & b"""
+    fg = FactorGraph(graph)
+    n = 4
+    bp_select = BPState(fg, n)
+    bp_all = BPState(fg, n)
+
+    for var in ["a", "b", "c", "d"]:
+        distr = make_distri(nc, n)
+        bp_select.set_evidence(var, distr)
+        bp_all.set_evidence(var, distr)
+
+    # propagate all
+    bp_all.propagate_var("a")
+    bp_all.propagate_var("b")
+    bp_all.propagate_var("c")
+    bp_all.propagate_factor("F0")
+
+    # propagate on selected edges
+    bp_select.propagate_var("a", ["F0"])
+    bp_select.propagate_var("b", ["F0"])
+    bp_select.propagate_factor("F0", ["c"])
+
+    # belief F0 to c comes from distr_a, distr_a
+    assert np.allclose(
+        bp_select.get_belief_to_var("c", "F0"), bp_all.get_belief_to_var("c", "F0")
+    )
+
+    # propagate all
+    bp_all.propagate_var("a", clear_beliefs=False)
+    bp_all.propagate_var("b", clear_beliefs=False)
+    bp_all.propagate_var("d", clear_beliefs=False)
+    bp_all.propagate_factor("F1")
+
+    # propagate on selected edges
+    bp_select.propagate_var("a", ["F1"])
+    bp_select.propagate_var("b", ["F1"])
+    bp_select.propagate_var("d", ["F1"])
+    bp_select.propagate_factor("F1", ["d"])
+
+    # belief from F1 to d comes from distr_a, distr_a in bp_select but from F0->a->F1 x F0->b->F1 in bp_all
+    assert not (
+        np.allclose(
+            bp_select.get_belief_to_var("d", "F1"), bp_all.get_belief_to_var("d", "F1")
+        )
+    )
+
+    # modifiy belief from F1 to d in bp_select to match with bp_all
+    bp_select.propagate_var("c", clear_beliefs=False)
+    bp_select.propagate_factor("F0", ["a", "b"])
+    bp_select.propagate_var("a", ["F1"], clear_beliefs=False)
+    bp_select.propagate_var("b", ["F1"], clear_beliefs=False)
+    bp_select.propagate_factor("F1", ["d", "a"])
+    assert np.allclose(
+        bp_select.get_belief_from_var("c", "F0"), bp_all.get_belief_from_var("c", "F0")
+    )
+    assert np.allclose(
+        bp_select.get_belief_to_var("a", "F0"), bp_all.get_belief_to_var("a", "F0")
+    )
+    assert np.allclose(
+        bp_select.get_belief_to_var("b", "F0"), bp_all.get_belief_to_var("b", "F0")
+    )
+    assert np.allclose(
+        bp_select.get_belief_from_var("a", "F1"), bp_all.get_belief_from_var("a", "F1")
+    )
+    assert np.allclose(
+        bp_select.get_belief_from_var("b", "F1"), bp_all.get_belief_from_var("b", "F1")
+    )
+    assert np.allclose(
+        bp_select.get_belief_to_var("d", "F1"), bp_all.get_belief_to_var("d", "F1")
+    )
+    assert np.allclose(
+        bp_select.get_belief_to_var("a", "F1"), bp_all.get_belief_to_var("a", "F1")
+    )
+    assert bp_select.get_belief_to_var("b", "F1") is None
+    assert bp_all.get_belief_to_var("b", "F1") is not None
+    x = bp_all.get_belief_to_var("b", "F1")
+    assert not np.allclose(x, x[0])  # Should not be uniform.
+
+    # update belief to F0 with F1->a and F1->b
+    bp_all.propagate_var("a")
+    bp_all.propagate_var("b")
+
+    # only update belief from a
+    bp_select.propagate_var("a")
+    bp_select.propagate_var("b")
+
+    assert np.allclose(
+        bp_select.get_belief_from_var("a", "F0"), bp_all.get_belief_from_var("a", "F0")
+    )
+    assert not np.allclose(
+        bp_select.get_belief_from_var("b", "F0"), bp_all.get_belief_from_var("b", "F0")
+    )
+
+    bp_all.propagate_factor("F0")
+    bp_select.propagate_factor("F0")
+
+    assert not np.allclose(
+        bp_select.get_belief_to_var("c", "F0"), bp_all.get_belief_to_var("c", "F0")
+    )
 
 
 def test_sparse_factor_xor_multi():
