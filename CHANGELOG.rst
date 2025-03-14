@@ -11,10 +11,11 @@ Not released
   used.
 * Support numpy 2.
 * Raise minimum supported python version to 3.10.
-
 * Added a new histogram-based ranking method called 'scaledhist'. 
   This method enables correct FFT convolutions using scaled 
   histograms and improves precision by incorporating upper and lower histograms.
+* In ``BPState`` add a `vars` parameter to ``propagate_factor`` and a
+  ``factors`` pararameter to ``propagate_var``.
 
 v0.6.0 (2024/09/03)
 -------------------

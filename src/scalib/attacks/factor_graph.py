@@ -436,7 +436,9 @@ class BPState:
         """
         return self._inner.get_belief_from_var(var, factor)
 
-    def propagate_var(self, var: str, clear_beliefs: bool = True):
+    def propagate_var(
+        self, var: str, factors: list[str] | None = None, clear_beliefs: bool = True
+    ):
         """Run belief propagation on variable var.
 
         This fetches beliefs from adjacent factors, computes the var
@@ -444,15 +446,24 @@ class BPState:
 
         Parameters
         ----------
-        var : string
+        var:
             Identifier of the variable.
+        factors:
+            New beliefs are propagated from the variable to these factors. If
+            ``None``, then we propagate to all adjacent factors.
         clear_beliefs:
-            Whether to clear beliefs between vars -> factors. Setting to False can help debugging. Default value is True.
+            Whether to clear beliefs between ``vars -> factors``. Setting to
+            ``False`` can help debugging. Default value is ``True``.
 
         """
-        return self._inner.propagate_var(var, get_config(), clear_beliefs)
+        if factors is None:
+            return self._inner.propagate_var(var, get_config(), clear_beliefs)
+        else:
+            return self._inner.propagate_var_to(
+                var, factors, get_config(), clear_beliefs, clear_evidence=False
+            )
 
-    def propagate_factor(self, factor: str):
+    def propagate_factor(self, factor: str, vars: list[str] | None = None):
         """Run belief propagation on the given factor.
 
         This fetches beliefs from adjacent variables and sends updated beliefs
@@ -462,9 +473,16 @@ class BPState:
         ----------
         factor:
             Identifier of the variable.
-
+        vars:
+            New beliefs are propagated from the factor to these variables. If
+            ``None``, then we propagate to all adjacent variables.
         """
-        return self._inner.propagate_factor_all(factor, get_config())
+        if vars is None:
+            return self._inner.propagate_factor_all(factor, config=get_config())
+        else:
+            return self._inner.propagate_factor(
+                factor, vars, clear_incoming=False, config=get_config()
+            )
 
     def debug(self):
         """Debug-print the current state."""
