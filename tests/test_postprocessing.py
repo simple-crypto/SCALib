@@ -109,7 +109,7 @@ def test_rank_accuracy_scaled_vs_ntl():
 def test_rank_accuracy_scaled_edge_cases():
     nc = 256
     nsubkeys = 16
-    max_error = 3.0
+    max_error = 10.0
     k_probs = np.zeros((nsubkeys, nc))
     secret_key = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
@@ -123,10 +123,14 @@ def test_rank_accuracy_scaled_edge_cases():
     rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key, method="histbignum")
     lrmin, lr, lrmax = (np.log2(rmin), np.log2(r), np.log2(rmax))
     rmin, r, rmax = rank_accuracy(
-        -np.log10(k_probs), secret_key, method="scaledhist", acc_bit=10.0
+        -np.log10(k_probs), secret_key, method="scaledhist", acc_bit=max_error
     )
+    assert rmin >= 0
+    assert r >= 0
+    assert rmax >= 0
     lrmin_scaled, lr_scaled, lrmax_scaled = (np.log2(rmin), np.log2(r), np.log2(rmax))
     assert np.abs(lrmin - lrmin_scaled) <= max_error
+    assert np.abs(lrmax - lrmax_scaled) <= max_error
 
 
 # Compare the ntl and scaled histogram implementation in a known edge case
