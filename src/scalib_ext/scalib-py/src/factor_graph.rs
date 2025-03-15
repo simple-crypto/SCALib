@@ -336,6 +336,26 @@ impl BPState {
             Ok(())
         })
     }
+    pub fn propagate_var_to(
+        &mut self,
+        py: Python,
+        var: &str,
+        dest: Vec<PyBackedStr>,
+        config: crate::ConfigWrapper,
+        clear_beliefs: bool,
+        clear_evidence: bool,
+    ) -> PyResult<()> {
+        config.on_worker(py, |_| {
+            let var_id = self.get_var(var)?;
+            let edge_ids = dest
+                .iter()
+                .map(|d| self.get_edge(var_id, self.get_factor(d)?))
+                .collect::<Result<Vec<_>, _>>()?;
+            self.get_inner_mut()
+                .propagate_var_to(var_id, edge_ids, clear_beliefs, clear_evidence);
+            Ok(())
+        })
+    }
     pub fn propagate_all_vars(
         &mut self,
         py: Python,
