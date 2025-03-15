@@ -1,5 +1,4 @@
 import os
-import sys
 
 from setuptools import setup
 from setuptools_rust import Binding, RustExtension
@@ -7,37 +6,6 @@ from setuptools_rust import Binding, RustExtension
 # Ensure these are present (in case we are not using PEP-518 compatible build
 # system).
 import setuptools_scm
-
-
-# BEGIN RUSTFLAGS hack
-from setuptools_rust import build
-
-old_prepare_build_environment = build._prepare_build_environment
-
-
-def new_prepare_build_environment():
-    import inspect
-
-    env = old_prepare_build_environment()
-    ext = inspect.stack()[1][0].f_locals["ext"]
-    try:
-        env["RUSTFLAGS"] = " ".join([env.get("RUSTFLAGS", ""), ext.more_rustflags])
-    except AttributeError:
-        pass
-    print("injected RUSTFLAGS", env.get("RUSTFLAGS"))
-    return env
-
-
-build._prepare_build_environment = new_prepare_build_environment
-
-
-class RustExtensionFlags(RustExtension):
-    def __init__(self, *args, more_rustflags, **kwargs):
-        super(RustExtensionFlags, self).__init__(*args, **kwargs)
-        self.more_rustflags = more_rustflags
-
-
-# END RUSTFLAGS hack
 
 
 def env_true(env):
@@ -56,17 +24,14 @@ if portable and x86_64_v3:
 with open("src/scalib/build_config.py", "w") as f:
     f.write(f"REQUIRE_X86_64_V3 = {x86_64_v3}\n")
 
+rustflags = os.environ.get("RUSTFLAGS", "")
 
 if noflags or portable:
-    rustflags = None
+    pass
 elif x86_64_v3:
-    rustflags = "-C target-cpu=x86-64-v3"
+    rustflags += " -C target-cpu=x86-64-v3"
 else:
-    rustflags = "-C target-cpu=native"
-
-# if rustflags:
-#    rustflags = os.environ.get("RUSTFLAGS", "") + " " + rustflags
-#    os.environ["RUSTFLAGS"] = rustflags
+    rustflags += " -C target-cpu=native"
 
 print(f"Build config: {noflags=} {portable=} {x86_64_v3=} {rustflags=}.")
 
@@ -77,26 +42,26 @@ if env_true(os.environ.get("SCALIB_BLIS")):
 if env_true(os.environ.get("SCALIB_NTL")):
     scalib_features.append("ntl")
 
+extension_args = dict(
+    binding=Binding.PyO3,
+    py_limited_api=True,
+    rust_version=">=1.83",
+)
+
 setup(
-    project_urls={
-        "Bug Tracker": "https://github.com/simple-crypto/scalib/issues",
-    },
     rust_extensions=[
-        RustExtensionFlags(
+        RustExtension(
             "scalib._scalib_ext",
             path="src/scalib_ext/scalib-py/Cargo.toml",
-            binding=Binding.PyO3,
             features=scalib_features,
-            py_limited_api=True,
-            rust_version=">=1.83",
-            more_rustflags=rustflags,
+            env=os.environ | {"RUSTFLAGS": rustflags},
+            **extension_args,
         ),
         RustExtension(
             "scalib._cpu_check",
             path="src/scalib_ext/cpu-check/Cargo.toml",
-            binding=Binding.PyO3,
-            py_limited_api=True,
-            rust_version=">=1.83",
+            **extension_args,
         ),
     ],
+    options={"bdist_wheel": {"py_limited_api": "cp310"}},
 )

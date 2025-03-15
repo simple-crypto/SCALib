@@ -56,7 +56,7 @@ jobs:
         with:
           version: "0.5.13"
       - name: Install Tox
-        run: uv tool install tox
+        run: uv tool install tox --with tox-uv
       - name: Formatting
         run: make codestyle
       - name: Docs

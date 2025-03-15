@@ -1,15 +1,39 @@
 [build-system]
 requires = [
-    "setuptools>=62.4",
-    "setuptools-scm[toml]>=3.4",
+    "setuptools>=76.0",
+    "setuptools-scm[toml]>=8.2",
     "setuptools-scm-git-archive",
     "wheel",
-    "setuptools-rust>=1.6",
+    "setuptools-rust>=1.11",
 ]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "scalib"
+authors = [{ name = "SCALib contributors", email = "info@simple-crypto.org" }]
+maintainers = [
+    { name = "Gaëtan Cassiers", email = "gaetan.cassiers@uclouvain.be" },
+]
+description = "Side-Channel Analysis Library"
+readme = "README.rst"
+requires-python = ">=3.10"
+license = { text = "GNU AGPL 3.0" }
+# Waiting for setuptools to support PEP639
+#license = "AGPL-3.0-only"
+#license-files = ["COPYRIGHT", "COPYING"]
+dynamic = ["version"]
+dependencies = ["numpy >=1.26.0,<3"]
+
+[project.urls]
+Homepage = "https://github.com/simple-crypto/SCALib"
+Documentation = "https://https://scalib.readthedocs.io/"
+Repository = "https://github.com/simple-crypto/SCALib.git"
+Issues = "https://github.com/simple-crypto/SCALib/issues"
+Changelog = "https://github.com/simple-crypto/SCALib/blob/main/CHANGELOG.rst"
+
+
 [tool.setuptools_scm]
-write_to = "src/scalib/version.py"
+version_file = "src/scalib/version.py"
 
 [tool.pytest.ini_options]
 addopts = ["--cov=scalib", "--doctest-modules", "-ra", "--pyargs"]
