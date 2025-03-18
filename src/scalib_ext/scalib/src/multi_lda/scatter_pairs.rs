@@ -122,6 +122,10 @@ impl ScatterPairs {
             }
         }
     }
+
+    pub(crate) fn get_scatter(&self, i: u32, j: u32) -> i64 {
+        self.scatter[self.pairs_to_new_idx[(i as usize, j as usize)] as usize]
+    }
 }
 
 /// Compute the dot product of the vectors x and y

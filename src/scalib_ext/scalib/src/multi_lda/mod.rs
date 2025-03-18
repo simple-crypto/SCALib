@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use hytra::TrAdder;
 use itertools::{izip, Itertools};
+use nalgebra::Scalar;
 use ndarray::{azip, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, Axis};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -99,7 +100,124 @@ impl MultiLdaAcc {
         self.n_traces
     }
 
+    #[inline(never)]
+    fn new_s_b(&self, var: Var, sums: &Array2<i64>, n_traces: ArrayView1<u32>) -> Vec<f64> {
+        let mut s_b: Vec<f64> = vec![0.0; self.npairs_var(var)];
+        let sx: Vec<f64> = sums.sum_axis(Axis(1)).iter().map(|e| *e as f64).collect();
+        let n = n_traces.sum();
+        for (nxi, sum_xi) in n_traces.iter().zip(sums.axis_iter(Axis(1))) {
+            let scale = (*nxi as f64) / (n as f64);
+            let inv_nxi_sqrt = 1.0 / (*nxi as f64).sqrt();
+            let p = sum_xi
+                .iter()
+                .zip(sx.iter())
+                .map(|(sxi, sx)| ((*sxi as f64) - sx * scale) * inv_nxi_sqrt)
+                .collect_vec();
+            for (k, (i, j)) in self.var_pairs(var).enumerate() {
+                s_b[k] += p[i as usize] * p[j as usize];
+            }
+        }
+        s_b
+    }
+
+    #[inline(never)]
+    fn new_s_b_mat(&self, var: Var, sums: &Array2<i64>, n_traces: ArrayView1<u32>) -> Array2<f64> {
+        // Compute total amount of traces
+        let n = n_traces.sum();
+        // Compute the total sum if trace as a matrix of shape (npois, 1);
+        let sx = sums
+            .sum_axis(Axis(1))
+            .insert_axis(Axis(1))
+            .mapv(|e| e as f64);
+        // Compute the scaling factor per class as a matrix of shape (1, nc)
+        let scale_xi: Vec<f64> = n_traces
+            .into_iter()
+            .map(|e| ((1.0 / (*e as f64)) as f64).sqrt())
+            .collect();
+        // Compute the matrix containing the scaling factor for Sx
+        // as a matrix of shape (1, nc)
+        let inv_n = 1.0 / (n as f64);
+        let scale_sx = n_traces
+            .mapv(|e| (e as f64) * inv_n * -1.0)
+            .insert_axis(Axis(0));
+        // Compute the scaled total sum matrix of shape (npois, nc)
+        let scaled_sx = sx.dot(&scale_sx);
+        // Compute the total unscaled-matrix of shape (npois, nc)
+        let mut scaled_sx = scaled_sx + sums.mapv(|e| e as f64);
+        for (mut c, s) in scaled_sx
+            .columns_mut()
+            .into_iter()
+            .zip(scale_xi.into_iter())
+        {
+            c *= s;
+        }
+        // Compute sb
+        let scaled_sx_t = scaled_sx.t();
+        scaled_sx.dot(&scaled_sx_t)
+    }
+
+    #[inline(never)]
+    fn new_compute_matrices_var(&self, var: Var) -> Result<LdaMatrices> {
+        // LDA matrices computation.
+        // x == data, xi == data with class i
+        // n == number of traces, ni == number of traces with class i
+        // Sx(.) == sum over all traces
+        // Sxi(.) == sum over traces of class i
+        // mu = Sx(x)/n (average)
+        //
+        // # Classic LDA definitions:
+        // - between-class scatter: s_b = Si(ni*cmui**2)
+        // - within-class scatter: s_w = Si(Sxi((xi-mui)**2))
+        // - total scatter: s_t = Sx((x-mu)**2)
+        //
+        // - between-class scatter
+        //    s_b = Si((Sxi(xi)-ni*mu)**2/ni)
+        //        = Si((P)**2/ni)
+        //    P = Sxi(xi)-(Sx(x)*ni/n)
+        // - s_t = s_t_u - Sx(x)**2/n
+        //      - s_t_u computed out of CovAcc, over 64 bits
+        //          -> (signed -> 2**15)**2 * n -> 62-bit
+        //      s_t = (s_t_u*n - Sx(x)**2) as f64 / n as f64
+        // - s_w = s_t - s_b
+
+        // shape (n_pois, nc)
+        let sums = self.trace_sums.sums_var(var);
+        // shape (nc, )
+        let n_traces = self.trace_sums.ntraces_var(var);
+        if n_traces.iter().any(|n| *n == 0) {
+            return Err(ScalibError::EmptyClass);
+        }
+        // Compute the total sum of traces
+        let s_x = sums.sum_axis(Axis(1)); // shape (npois, )
+                                          // Compute the total amount of traces used
+        let n = n_traces.sum();
+        let s_b = self.new_s_b_mat(var, &sums, n_traces);
+        let mut s_w = Array2::zeros((sums.shape()[0], sums.shape()[0]));
+        for (i, j) in self.var_pairs(var) {
+            let (i, j) = (i as usize, j as usize);
+            let i2 = self.poi_map.new_pois(var)[i];
+            let j2 = self.poi_map.new_pois(var)[j];
+            // Total scatter offset by mu**2*n_tot.
+            let s_t_u_e = self.cov_pois.get_scatter(i2, j2);
+            let t = (s_t_u_e as i128) * (n as i128) - (s_x[i] as i128) * (s_x[j] as i128);
+            let s_t_e = (t as f64) * (1.0 / (n as f64));
+            let s_w_e = s_t_e - s_b[(i, j)];
+            s_w[(i, j)] = s_w_e;
+            s_w[(j, i)] = s_w_e;
+        }
+        let mus = azip!(sums.t())
+            .and_broadcast(n_traces.insert_axis(Axis(1)))
+            .map_collect(|s, n| (*s as f64) / (*n as f64));
+        Ok(LdaMatrices {
+            s_w,
+            s_b,
+            mus,
+            n_traces: self.n_traces,
+        })
+    }
+
     /// Between-class scatter decomposed in integer part and fractional part.
+    #[inline(never)]
     fn s_b_u(
         &self,
         var: Var,
@@ -125,6 +243,7 @@ impl MultiLdaAcc {
         (s_b_u_int, s_b_u_frac)
     }
     /// Compute matrices for solving an LDA.
+    #[inline(never)]
     fn compute_matrices_var(&self, var: Var) -> Result<LdaMatrices> {
         // LDA matrices computation.
         // x == data, xi == data with class i
@@ -150,6 +269,17 @@ impl MultiLdaAcc {
         // s_b = s_b_u - ts**2/n
         // s_w = s_t_u - s_b_u
         // where s_t_u is computed by CovAcc and s_b_u can be derived from per-class sums.
+        //
+        //
+        //
+        // - mu = ... (f64)
+        // - between-class scatter s_b = Si((Sxi(xi)-ni*mu)**2/ni),
+        //      Sxi(xi)-(Sx(x)*ni/n)
+        // - s_t = s_t_u - Sx(x)**2/n
+        //      s_t_u 64-bit (signed -> 2**15)**2 * n -> 62-bit
+        //      s_t = (s_t_u*n - Sx(x)**2) as f64 / n as f64
+        //      [/not to be done/ (d, r) = (Sx(x)**2 // n, Sx(x)**2 % n) s_t = (s_t_u - d) as f64 + r as f64 / n as f64 ]
+        // - s_w = s_t - s_b
         let sums = self.trace_sums.sums_var(var);
         let n_traces = self.trace_sums.ntraces_var(var);
         if n_traces.iter().any(|n| *n == 0) {
@@ -159,10 +289,7 @@ impl MultiLdaAcc {
         let s_t_u = self
             .poi_map
             .mapped_pairs(var)
-            .map(|(i, j)| {
-                self.cov_pois.scatter
-                    [self.cov_pois.pairs_to_new_idx[(i as usize, j as usize)] as usize]
-            })
+            .map(|(i, j)| self.cov_pois.get_scatter(i, j))
             .collect_vec();
         let (s_b_u_int, s_b_u_frac) = self.s_b_u(var, &sums, n_traces);
         // No overflow: intermediate bounded by 2*(i16::MIN)**2*n_tot_traces
@@ -196,15 +323,16 @@ impl MultiLdaAcc {
     }
     pub fn get_matrices(&self) -> Result<Vec<(Array2<f64>, Array2<f64>, Array2<f64>)>> {
         Ok((0..self.nv)
-            .map(|var| Ok(LdaMatrices::to_tuple(self.compute_matrices_var(var)?)))
+            .map(|var| Ok(LdaMatrices::to_tuple(self.new_compute_matrices_var(var)?)))
             .collect::<Result<_>>()?)
     }
+    #[inline(never)]
     pub fn lda(&self, p: u32, config: &crate::Config) -> Result<MultiLda> {
         let compute_ldas = |it_cnt: &TrAdder<u64>| {
             (0..self.nv)
                 .into_par_iter()
                 .map(|var| {
-                    let matrices = self.compute_matrices_var(var)?;
+                    let matrices = self.new_compute_matrices_var(var)?;
                     let res = matrices.lda(p)?;
                     it_cnt.inc(1);
                     Ok(res)
