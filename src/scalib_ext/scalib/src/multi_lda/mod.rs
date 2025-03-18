@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use hytra::TrAdder;
 use itertools::{izip, Itertools};
-use ndarray::{azip, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, Axis};
+use ndarray::{Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, Axis, Zip};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -99,6 +99,7 @@ impl MultiLdaAcc {
         self.n_traces
     }
 
+    /// sums shape: npoi*nc
     fn s_b_mat(&self, sums: &Array2<i64>, n_traces: ArrayView1<u32>) -> Array2<f64> {
         // Between-class scatter matrix computation
         // x == data, xi == data with class i
@@ -115,44 +116,20 @@ impl MultiLdaAcc {
         // Simplified formulation (used here, constant 1/n factor omitted)
         // s_b = Sum_i[(1/ni)*(Sxi - ni*Sx/n)(Sxi- ni*Sx/n)]
         //
-        // Compute total amount of traces
-        let n = n_traces.sum();
         // Compute the total sum if trace as a matrix of shape (npois, 1);
-        let sx = sums
-            .sum_axis(Axis(1))
-            .insert_axis(Axis(1))
-            .mapv(|e| e as f64);
-        // Compute the scaling factor per class as a matrix of shape (1, nc)
-        let scale_xi: Vec<f64> = n_traces
-            .into_iter()
-            .map(|e| ((1.0 / (*e as f64)) as f64).sqrt())
-            .collect();
-        // Compute the matrix containing the scaling factor for Sx
-        // as a matrix of shape (1, nc). Here the constant division is computed as
-        // an inverse mulitplication to avoid inefficient division.
-        let inv_n = 1.0 / (n as f64);
-        let scale_sx = n_traces
-            .mapv(|ni| (ni as f64) * inv_n * -1.0)
-            .insert_axis(Axis(0));
-        // Compute the scaled total sum matrix of shape (npois, nc), containing where the columns
-        // equal the values ni*Sx/n
-        let scaled_sx = sx.dot(&scale_sx);
-        // Compute the total unscaled-matrix of shape (npois, nc), where the colmuns hold the
-        // values of (Sxi - ni*Sx/n)
-        let mut scaled_sx = scaled_sx + sums.mapv(|e| e as f64);
-        // Scale the resulting matrix, such that the (1/ni) scaling factor
-        // is embbeded into the squaring process.
-        for (mut c, s) in scaled_sx
-            .columns_mut()
-            .into_iter()
-            .zip(scale_xi.into_iter())
-        {
-            c *= s;
-        }
-        // Compute the final s_b matrix, by computing the squaring with
-        // a dot product.
-        let scaled_sx_t = scaled_sx.t();
-        scaled_sx.dot(&scaled_sx_t)
+        let inv_n = 1.0 / (n_traces.sum() as f64);
+        let mu = sums.sum_axis(Axis(1)).mapv(|e| (e as f64) * inv_n);
+        let n_traces_f = n_traces.mapv(|x| x as f64);
+        let inv_n_traces_sqrt = n_traces_f.mapv(|x| 1.0 / x.sqrt());
+        // (Sxi - ni*Sx/n)/sqrt(ni)
+        let c_sxi_sqrtni = Zip::from(sums)
+            .and_broadcast(&mu.insert_axis(Axis(1)))
+            .and_broadcast(&n_traces_f.insert_axis(Axis(0)))
+            .and_broadcast(&inv_n_traces_sqrt.insert_axis(Axis(0)))
+            .map_collect(|sum, mu, ni, inv_ni_sqrt| ((*sum as f64) - *ni * *mu) * *inv_ni_sqrt);
+        // Compute the final s_b matrix, by computing the squaring
+        // as the result of the dot product between the matric and its transpose.
+        c_sxi_sqrtni.dot(&(c_sxi_sqrtni.t()))
     }
 
     fn compute_matrices_var(&self, var: Var) -> Result<LdaMatrices> {
@@ -193,7 +170,7 @@ impl MultiLdaAcc {
         let s_b = self.s_b_mat(&sums, n_traces);
         ///// Within-class scatter computation.
         let mut s_w = Array2::zeros((sums.shape()[0], sums.shape()[0]));
-        let inv_v = 1.0 / (n as f64);
+        let inv_n = 1.0 / (n as f64);
         for (i, j) in self.var_pairs(var) {
             let (i, j) = (i as usize, j as usize);
             let i2 = self.poi_map.new_pois(var)[i];
@@ -203,14 +180,16 @@ impl MultiLdaAcc {
             // Computation of (s_t_u*n - Sx(x)**2) for the target POI pair.
             let t = (s_t_u_e as i128) * (n as i128) - (s_x[i] as i128) * (s_x[j] as i128);
             // Computation of the Within-class element relative to the target POI pair.
-            let s_t_e = (t as f64) * inv_v;
-            let s_w_e = s_t_e - s_b[(i, j)];
+            // in practice, performs the operation s_t - s_b, and populate the s_w matrix
+            // at proper location.
+            let s_w_e = ((t as f64) * inv_n) - s_b[(i, j)];
             s_w[(i, j)] = s_w_e;
             s_w[(j, i)] = s_w_e;
         }
-        let mus = azip!(sums.t())
-            .and_broadcast(n_traces.insert_axis(Axis(1)))
-            .map_collect(|s, n| (*s as f64) / (*n as f64));
+        let inv_ni = n_traces.mapv(|x| 1.0 / (x as f64));
+        let mus = Zip::from(sums.t())
+            .and_broadcast(&inv_ni.insert_axis(Axis(1)))
+            .map_collect(|s, inv_ni| (*s as f64) * inv_ni);
         Ok(LdaMatrices {
             s_w,
             s_b,
