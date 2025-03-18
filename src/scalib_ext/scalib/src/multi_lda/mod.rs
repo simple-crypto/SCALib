@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use hytra::TrAdder;
 use itertools::{izip, Itertools};
-use nalgebra::Scalar;
 use ndarray::{azip, Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, Axis};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -100,28 +99,22 @@ impl MultiLdaAcc {
         self.n_traces
     }
 
-    #[inline(never)]
-    fn new_s_b(&self, var: Var, sums: &Array2<i64>, n_traces: ArrayView1<u32>) -> Vec<f64> {
-        let mut s_b: Vec<f64> = vec![0.0; self.npairs_var(var)];
-        let sx: Vec<f64> = sums.sum_axis(Axis(1)).iter().map(|e| *e as f64).collect();
-        let n = n_traces.sum();
-        for (nxi, sum_xi) in n_traces.iter().zip(sums.axis_iter(Axis(1))) {
-            let scale = (*nxi as f64) / (n as f64);
-            let inv_nxi_sqrt = 1.0 / (*nxi as f64).sqrt();
-            let p = sum_xi
-                .iter()
-                .zip(sx.iter())
-                .map(|(sxi, sx)| ((*sxi as f64) - sx * scale) * inv_nxi_sqrt)
-                .collect_vec();
-            for (k, (i, j)) in self.var_pairs(var).enumerate() {
-                s_b[k] += p[i as usize] * p[j as usize];
-            }
-        }
-        s_b
-    }
-
-    #[inline(never)]
-    fn new_s_b_mat(&self, var: Var, sums: &Array2<i64>, n_traces: ArrayView1<u32>) -> Array2<f64> {
+    fn s_b_mat(&self, sums: &Array2<i64>, n_traces: ArrayView1<u32>) -> Array2<f64> {
+        // Between-class scatter matrix computation
+        // x == data, xi == data with class i
+        // n == number of traces, ni == number of traces with class i
+        // Sx(.) == sum over all traces
+        // Sxi(.) == sum over traces of class i
+        // mu = Sx(x)/n (average)
+        // mui = Sxi(xi)/ni
+        // ^T= transpose operator
+        //
+        // Classical computation performed as
+        // s_b = 1/n Sum_i[ ni*(mui - mu)(mui - mu)^T]
+        //
+        // Simplified formulation (used here, constant 1/n factor omitted)
+        // s_b = Sum_i[(1/ni)*(Sxi - ni*Sx/n)(Sxi- ni*Sx/n)]
+        //
         // Compute total amount of traces
         let n = n_traces.sum();
         // Compute the total sum if trace as a matrix of shape (npois, 1);
@@ -135,15 +128,20 @@ impl MultiLdaAcc {
             .map(|e| ((1.0 / (*e as f64)) as f64).sqrt())
             .collect();
         // Compute the matrix containing the scaling factor for Sx
-        // as a matrix of shape (1, nc)
+        // as a matrix of shape (1, nc). Here the constant division is computed as
+        // an inverse mulitplication to avoid inefficient division.
         let inv_n = 1.0 / (n as f64);
         let scale_sx = n_traces
-            .mapv(|e| (e as f64) * inv_n * -1.0)
+            .mapv(|ni| (ni as f64) * inv_n * -1.0)
             .insert_axis(Axis(0));
-        // Compute the scaled total sum matrix of shape (npois, nc)
+        // Compute the scaled total sum matrix of shape (npois, nc), containing where the columns
+        // equal the values ni*Sx/n
         let scaled_sx = sx.dot(&scale_sx);
-        // Compute the total unscaled-matrix of shape (npois, nc)
+        // Compute the total unscaled-matrix of shape (npois, nc), where the colmuns hold the
+        // values of (Sxi - ni*Sx/n)
         let mut scaled_sx = scaled_sx + sums.mapv(|e| e as f64);
+        // Scale the resulting matrix, such that the (1/ni) scaling factor
+        // is embbeded into the squaring process.
         for (mut c, s) in scaled_sx
             .columns_mut()
             .into_iter()
@@ -151,13 +149,13 @@ impl MultiLdaAcc {
         {
             c *= s;
         }
-        // Compute sb
+        // Compute the final s_b matrix, by computing the squaring with
+        // a dot product.
         let scaled_sx_t = scaled_sx.t();
         scaled_sx.dot(&scaled_sx_t)
     }
 
-    #[inline(never)]
-    fn new_compute_matrices_var(&self, var: Var) -> Result<LdaMatrices> {
+    fn compute_matrices_var(&self, var: Var) -> Result<LdaMatrices> {
         // LDA matrices computation.
         // x == data, xi == data with class i
         // n == number of traces, ni == number of traces with class i
@@ -187,20 +185,25 @@ impl MultiLdaAcc {
         if n_traces.iter().any(|n| *n == 0) {
             return Err(ScalibError::EmptyClass);
         }
-        // Compute the total sum of traces
-        let s_x = sums.sum_axis(Axis(1)); // shape (npois, )
-                                          // Compute the total amount of traces used
+        // Compute the total sum of traces with shape (npois, )
+        let s_x = sums.sum_axis(Axis(1));
+        // Total amount of traces used
         let n = n_traces.sum();
-        let s_b = self.new_s_b_mat(var, &sums, n_traces);
+        //// Between-class scatter computation.
+        let s_b = self.s_b_mat(&sums, n_traces);
+        ///// Within-class scatter computation.
         let mut s_w = Array2::zeros((sums.shape()[0], sums.shape()[0]));
+        let inv_v = 1.0 / (n as f64);
         for (i, j) in self.var_pairs(var) {
             let (i, j) = (i as usize, j as usize);
             let i2 = self.poi_map.new_pois(var)[i];
             let j2 = self.poi_map.new_pois(var)[j];
             // Total scatter offset by mu**2*n_tot.
             let s_t_u_e = self.cov_pois.get_scatter(i2, j2);
+            // Computation of (s_t_u*n - Sx(x)**2) for the target POI pair.
             let t = (s_t_u_e as i128) * (n as i128) - (s_x[i] as i128) * (s_x[j] as i128);
-            let s_t_e = (t as f64) * (1.0 / (n as f64));
+            // Computation of the Within-class element relative to the target POI pair.
+            let s_t_e = (t as f64) * inv_v;
             let s_w_e = s_t_e - s_b[(i, j)];
             s_w[(i, j)] = s_w_e;
             s_w[(j, i)] = s_w_e;
@@ -215,124 +218,17 @@ impl MultiLdaAcc {
             n_traces: self.n_traces,
         })
     }
-
-    /// Between-class scatter decomposed in integer part and fractional part.
-    #[inline(never)]
-    fn s_b_u(
-        &self,
-        var: Var,
-        sums: &Array2<i64>,
-        n_traces: ArrayView1<u32>,
-    ) -> (Vec<i64>, Vec<f64>) {
-        let mut s_b_u_int = vec![0; self.npairs_var(var)];
-        let mut s_b_u_frac = vec![0.0; self.npairs_var(var)];
-        for (class_sum, n_traces) in sums.axis_iter(Axis(1)).zip(n_traces.iter()) {
-            let class_sum = class_sum.iter().copied().collect_vec();
-            let n_traces_d = quickdiv::DivisorI128::new(*n_traces as i128);
-            for (k, (i, j)) in self.var_pairs(var).enumerate() {
-                let x = (class_sum[i as usize] as i128) * (class_sum[j as usize] as i128);
-                // No overflow: this is bounded by (i16::MIN)**2*n_traces
-                let x_int = (x / n_traces_d) as i64;
-                // No overflow: this is bounded by (i16::MIN)**2*n_traces
-                let x_rem = (x % n_traces_d) as i32;
-                // No overflow: this is bounded by (i16::MIN)**2*n_tot_traces
-                s_b_u_int[k] += x_int;
-                s_b_u_frac[k] += (x_rem as f64) / (*n_traces as f64);
-            }
-        }
-        (s_b_u_int, s_b_u_frac)
-    }
-    /// Compute matrices for solving an LDA.
-    #[inline(never)]
-    fn compute_matrices_var(&self, var: Var) -> Result<LdaMatrices> {
-        // LDA matrices computation.
-        // x == data, xi == data with class i
-        // n == number of traces, ni == number of traces with class i
-        // Sx(.) == sum over all traces
-        // Si(.) == sum over classes
-        // Sxi(.) == sum over traces of class i
-        // mu = Sx(x)/n (average)
-        // mui = Sxi(xi)/ni (class average)
-        // cmui = mui-mu (centered class average)
-        //
-        // # Classic LDA definitions:
-        // - between-class scatter: s_b = Si(ni*cmui**2)
-        // - within-class scatter: s_w = Si(Sxi((xi-mui)**2))
-        // - total scatter: s_t = Sx((x-mu)**2)
-        //
-        // # Simplified expressions:
-        // let
-        // - uncentered total scatter s_t_u = Sx(x**2),
-        // - uncentered between-class scatter s_b_u = Si(Sxi(xi)**2/ni),
-        // - total of all traces ts = Sx(x)
-        // we have
-        // s_b = s_b_u - ts**2/n
-        // s_w = s_t_u - s_b_u
-        // where s_t_u is computed by CovAcc and s_b_u can be derived from per-class sums.
-        //
-        //
-        //
-        // - mu = ... (f64)
-        // - between-class scatter s_b = Si((Sxi(xi)-ni*mu)**2/ni),
-        //      Sxi(xi)-(Sx(x)*ni/n)
-        // - s_t = s_t_u - Sx(x)**2/n
-        //      s_t_u 64-bit (signed -> 2**15)**2 * n -> 62-bit
-        //      s_t = (s_t_u*n - Sx(x)**2) as f64 / n as f64
-        //      [/not to be done/ (d, r) = (Sx(x)**2 // n, Sx(x)**2 % n) s_t = (s_t_u - d) as f64 + r as f64 / n as f64 ]
-        // - s_w = s_t - s_b
-        let sums = self.trace_sums.sums_var(var);
-        let n_traces = self.trace_sums.ntraces_var(var);
-        if n_traces.iter().any(|n| *n == 0) {
-            return Err(ScalibError::EmptyClass);
-        }
-        // Total scatter offset by mu**2*n_tot.
-        let s_t_u = self
-            .poi_map
-            .mapped_pairs(var)
-            .map(|(i, j)| self.cov_pois.get_scatter(i, j))
-            .collect_vec();
-        let (s_b_u_int, s_b_u_frac) = self.s_b_u(var, &sums, n_traces);
-        // No overflow: intermediate bounded by 2*(i16::MIN)**2*n_tot_traces
-        let s_w = izip!(s_t_u.into_iter(), s_b_u_int.iter(), s_b_u_frac.iter())
-            .map(|(t, b_i, b_f)| ((t - *b_i) as f64) - *b_f)
-            .collect_vec();
-        // Offset for s_b.
-        let ts = sums.sum_axis(Axis(1));
-        let tot_ntraces_d = quickdiv::DivisorI128::new(self.n_traces as i128);
-        let s_b = izip!(
-            s_b_u_int.into_iter(),
-            s_b_u_frac.into_iter(),
-            self.var_pairs(var)
-        )
-        .map(|(b_i, b_f, (i, j))| {
-            let x = (ts[i as usize] as i128) * (ts[j as usize] as i128);
-            let c_i = (x / tot_ntraces_d) as i64;
-            let c_f = (((x % tot_ntraces_d) as i32) as f64) / (self.n_traces as f64);
-            ((b_i - c_i) as f64) + (b_f - c_f)
-        })
-        .collect_vec();
-        let mus = azip!(sums.t())
-            .and_broadcast(n_traces.insert_axis(Axis(1)))
-            .map_collect(|s, n| (*s as f64) / (*n as f64));
-        Ok(LdaMatrices {
-            s_w: LdaMatrices::seq2mat(self.poi_map.n_pois(var), s_w.as_slice()),
-            s_b: LdaMatrices::seq2mat(self.poi_map.n_pois(var), s_b.as_slice()),
-            mus,
-            n_traces: self.n_traces,
-        })
-    }
     pub fn get_matrices(&self) -> Result<Vec<(Array2<f64>, Array2<f64>, Array2<f64>)>> {
         Ok((0..self.nv)
-            .map(|var| Ok(LdaMatrices::to_tuple(self.new_compute_matrices_var(var)?)))
+            .map(|var| Ok(LdaMatrices::to_tuple(self.compute_matrices_var(var)?)))
             .collect::<Result<_>>()?)
     }
-    #[inline(never)]
     pub fn lda(&self, p: u32, config: &crate::Config) -> Result<MultiLda> {
         let compute_ldas = |it_cnt: &TrAdder<u64>| {
             (0..self.nv)
                 .into_par_iter()
                 .map(|var| {
-                    let matrices = self.new_compute_matrices_var(var)?;
+                    let matrices = self.compute_matrices_var(var)?;
                     let res = matrices.lda(p)?;
                     it_cnt.inc(1);
                     Ok(res)
@@ -352,9 +248,6 @@ impl MultiLdaAcc {
     fn npairs_n(n: usize) -> usize {
         n * (n + 1) / 2
     }
-    fn npairs_var(&self, var: Var) -> usize {
-        Self::npairs_n(self.poi_map.n_pois(var))
-    }
 }
 
 /// Matrices for solving an LDA
@@ -371,16 +264,6 @@ pub struct LdaMatrices {
 }
 
 impl LdaMatrices {
-    /// Reconstitute a symmetric matrix from the unique set of coefficients as iterated by
-    /// MultiLdaAcc::pairs_n.
-    fn seq2mat(n: usize, seq: &[f64]) -> Array2<f64> {
-        let mut res = Array2::zeros((n, n));
-        for ((i, j), x) in MultiLdaAcc::pairs_n(n as u32).zip(seq.iter()) {
-            res[(i as usize, j as usize)] = *x;
-            res[(j as usize, i as usize)] = *x;
-        }
-        res
-    }
     fn to_tuple(self) -> (Array2<f64>, Array2<f64>, Array2<f64>) {
         (self.s_w, self.s_b, self.mus)
     }

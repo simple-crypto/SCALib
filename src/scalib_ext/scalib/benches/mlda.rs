@@ -4,8 +4,8 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ndarray::{Array1, Array2};
 use ndarray_rand::RandomExt;
 use ndarray_rand::{rand::SeedableRng, rand_distr::Uniform};
-use scalib::lda::{LdaAcc, LDA};
-use scalib::multi_lda::{Class, MultiLda, MultiLdaAcc};
+use scalib::lda::LdaAcc;
+use scalib::multi_lda::{Class, MultiLdaAcc};
 
 use ndarray_rand::rand::prelude::SliceRandom;
 use rand_xoshiro::Xoshiro256StarStar as Prng;
