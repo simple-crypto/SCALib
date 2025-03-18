@@ -205,7 +205,6 @@ fn bench_mlda_update_top(c: &mut Criterion) {
 /////// Next, similar but with the old Lda object to check the performances
 // Update only
 fn bench_univariate_old_lda_update(nc: Class, ns: u32, n: usize, group: &mut BenchMarkGroup) {
-    // Sums
     group.bench_with_input(
         BenchmarkId::new(format!("UNI-UPDATE-OLD nv:{} ; ns:{}", 1, ns), ns),
         &ns,
@@ -223,7 +222,6 @@ fn bench_univariate_old_lda_update(nc: Class, ns: u32, n: usize, group: &mut Ben
 }
 
 fn bench_univariate_mlda_update(nc: Class, ns: u32, n: usize, group: &mut BenchMarkGroup) {
-    // Sums
     group.bench_with_input(
         BenchmarkId::new(format!("UNI-UPDATE-NEW nv:{} ; ns:{}", 1, ns), ns),
         &ns,
@@ -254,7 +252,6 @@ fn bench_univariate_old_lda_solve(
     p: u32,
     group: &mut BenchMarkGroup,
 ) {
-    // Sums
     group.bench_with_input(
         BenchmarkId::new(
             format!("UNI-SOLVE-OLD nv:{} ; ns:{} ; ndim:{}", 1, ns, p),
@@ -276,7 +273,6 @@ fn bench_univariate_old_lda_solve(
 }
 
 fn bench_univariate_mlda_solve(nc: Class, ns: u32, n: usize, p: u32, group: &mut BenchMarkGroup) {
-    // Sums
     group.bench_with_input(
         BenchmarkId::new(
             format!("UNI-SOLVE-NEW nv:{} ; ns:{} ; ndim:{}", 1, ns, p),
@@ -305,6 +301,65 @@ fn bench_univariate_solve(nc: Class, ns: u32, n: usize, p: u32, group: &mut Benc
     println!("\n");
 }
 
+// Predict proba
+fn bench_univariate_old_lda_predict(
+    nc: Class,
+    ns: u32,
+    n: usize,
+    p: u32,
+    group: &mut BenchMarkGroup,
+) {
+    group.bench_with_input(
+        BenchmarkId::new(
+            format!("UNI-PREDICT-OLD nv:{} ; ns:{} ; ndim:{}", 1, ns, p),
+            p,
+        ),
+        &p,
+        |b, _| {
+            // Generate the inputs
+            let (t, _) = generate_case_data(1, nc, ns, n);
+            let x = Array1::<u16>::random(n, Uniform::new(0, nc as u16));
+            // Create the old mlda object will do an update on the fly
+            let mut lda = LdaAcc::new(nc as usize, t.view(), x.view(), 1);
+            lda.update(t.view(), x.view(), 1);
+            let ldares = lda.lda(p as usize).unwrap();
+            b.iter(|| {
+                let _prs = ldares.predict_proba(t.view());
+            })
+        },
+    );
+}
+
+fn bench_univariate_mlda_predict(nc: Class, ns: u32, n: usize, p: u32, group: &mut BenchMarkGroup) {
+    group.bench_with_input(
+        BenchmarkId::new(
+            format!("UNI-PREDICT-NEW nv:{} ; ns:{} ; ndim:{}", 1, ns, p),
+            p,
+        ),
+        &p,
+        |b, _| {
+            // Pois, which is in fact all the time samples
+            let pois: Vec<Vec<u32>> = vec![(0..ns).into_iter().collect()];
+            // Creation of the Mlda instance
+            let mut mlda = MultiLdaAcc::new(ns, nc, pois).unwrap();
+            // Generate the inputs
+            let (t, x) = generate_case_data(1, nc, ns, n);
+            let _ = mlda.update(t.view(), x.view());
+            let config = scalib::Config::no_progress();
+            let ldares = mlda.lda(p, &config).unwrap();
+            b.iter(|| {
+                let _prs = ldares.predict_proba(t.view());
+            })
+        },
+    );
+}
+
+fn bench_univariate_predict(nc: Class, ns: u32, n: usize, p: u32, group: &mut BenchMarkGroup) {
+    bench_univariate_old_lda_predict(nc, ns, n, p, group);
+    bench_univariate_mlda_predict(nc, ns, n, p, group);
+    println!("\n");
+}
+
 fn bench_univariate(c: &mut Criterion) {
     let mut group = c.benchmark_group("LDA vs MLDA");
     let ns = 1000;
@@ -313,6 +368,8 @@ fn bench_univariate(c: &mut Criterion) {
     bench_univariate_update(nc, ns, n, &mut group);
     bench_univariate_solve(nc, ns, n, 1, &mut group);
     bench_univariate_solve(nc, ns, n, 8, &mut group);
+    bench_univariate_predict(nc, ns, n, 1, &mut group);
+    bench_univariate_predict(nc, ns, n, 8, &mut group);
 }
 
 criterion_group! {
