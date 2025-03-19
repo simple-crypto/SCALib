@@ -1983,3 +1983,26 @@ def test_cst_oob():
         y = np.array([y], dtype=np.uint32)
         with pytest.raises(ValueError):
             _ = BPState(graph, 1, {"y": y})
+
+
+def test_set_drop_state():
+    nc = 2
+    n = 1
+    distri_x = np.array([[0.6, 0.4]])
+    graph = f"""
+            PROPERTY y = !x
+            VAR MULTI x
+            VAR MULTI y
+            NC {nc}
+            """
+    graph = FactorGraph(graph)
+    bp_state = BPState(graph, n)
+    bp_state.set_evidence("x", distri_x)
+    bp_state.bp_loopy(2, True)
+    assert bp_state.get_distribution("x") is not None
+    assert bp_state.get_distribution("y") is not None
+    bp_state.drop_distribution("x")
+    assert bp_state.get_distribution("x") is None
+    with pytest.warns(DeprecationWarning):
+        bp_state.set_distribution("y", None)
+    assert bp_state.get_distribution("y") is None
