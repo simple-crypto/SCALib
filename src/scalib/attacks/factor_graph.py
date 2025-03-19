@@ -1,6 +1,8 @@
 from typing import Sequence, Mapping, Union, Optional
 from dataclasses import dataclass
 from enum import IntEnum
+import warnings
+
 import numpy as np
 import numpy.typing as npt
 
@@ -378,6 +380,12 @@ class BPState:
     ):
         r"""Sets current distribution of a variable in the BP.
 
+        .. deprecated:: 0.6.1
+            This method only impacts subsequent calls to ``get_distribution``
+            and does not affect the subsequent behavior of belief propagation,
+            its use is therefore probably incorrect.
+            For dropping state in order to reduce RAM usage, use ``drop_distribution``.
+
         Parameters
         ----------
         var :
@@ -387,10 +395,30 @@ class BPState:
             If `var` is MULTI, must be of shape `(nexec,nc)`.
             If None, sets the distribution to uniform.
         """
+        warnings.warn(
+            "This method does not affect the subsequent behavior of belief propagation. "
+            + "Usage is probably incorrect. For dropping state (memory usage savings), "
+            + "use drop_distribution.",
+            DeprecationWarning,
+        )
         if distribution is None:
             self._inner.drop_state(var)
         else:
             self._inner.set_state(var, distribution)
+
+    def drop_distribution(self, var: str):
+        r"""Delete the current distribution of a variable in the BP.
+
+        This method only impacts subsequent calls to ``get_distribution``
+        and does not affect the subsequent behavior of belief propagation,
+        its main use-case is therefore reducing RAM usage.
+
+        Parameters
+        ----------
+        var :
+            Identifier of the variable for which the distribution is deleted.
+        """
+        self._inner.drop_state(var)
 
     def get_belief_to_var(
         self, var: str, factor: str
