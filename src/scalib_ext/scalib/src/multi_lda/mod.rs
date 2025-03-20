@@ -3,6 +3,7 @@ mod scatter_pairs;
 mod sparse_trace_sums;
 mod utils;
 
+use std::cmp;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -516,6 +517,33 @@ impl MultiLda {
                 acc[i] += *coef * (samples.0[i] as f64);
             }
         }
+    }
+
+    // Project the traces for all the vars
+    // traces: input traces of shape (ntraces, ns)
+    // returns: a vec of size nv, where every element is an array of shape (ntraces, p) contiaining
+    // the projected traces for a variable.
+    pub fn project(&self, traces: ArrayView2<i16>) -> Vec<Array2<f64>> {
+        let n = traces.shape()[0];
+        let mut p_traces = vec![Array2::<f64>::zeros((n, self.p)); self.n_vars() as usize];
+        let traces_batched = self.poi_map.select_batches::<N>(traces);
+        for var_block in (0..(self.poi_blocks.len())).range_chunks(self.var_block_size()) {
+            // nbatches arrays of shape (len(var_block), p)), where a[i,j] contains the
+            // batch_traces_projected[v_i, j], for the variable var_block[v_i] at the j-th
+            // dimension in the linear subspace.
+            let v_p_traces = self.project_traces(var_block.clone(), &traces_batched);
+            for (bi, p_batch_trace) in v_p_traces.into_iter().enumerate() {
+                for (vi, v) in var_block.clone().into_iter().enumerate() {
+                    for pi in 0..self.p {
+                        let batch = p_batch_trace[[vi, pi]];
+                        for ni in (0..(cmp::min(n - (bi * N), batch.len()))) {
+                            p_traces[v][[(bi * N) + ni, pi]] = batch[ni];
+                        }
+                    }
+                }
+            }
+        }
+        p_traces
     }
 
     /// For a var, write in res the log likelihoods given the projected traces

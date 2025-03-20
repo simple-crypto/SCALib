@@ -96,6 +96,7 @@ class LDAClassifier:
         self,
         traces: npt.NDArray[np.int16],
         x: npt.NDArray[np.uint16],
+        # TODO: add depreciation
         gemm_mode: int = 1,
     ):
         r"""Update statistical model estimates with fresh data.
@@ -116,17 +117,20 @@ class LDAClassifier:
             The BLIS threads (if > 1) do not belong to the SCALib threadpool.
         """
         traces = scalib.utils.clean_traces(traces, self._ns)
-        x = scalib.utils.clean_labels(x, multi=False)
+        x = scalib.utils.clean_labels(x[:, np.newaxis], nv=1, multi=True)
         if self.done:
             raise ValueError("Cannot fit_u after calling .solve(..., done=True).")
         if not self._init:
             self._init = True
             self._ns = traces.shape[1]
-            self.acc = _scalib_ext.LdaAcc(self._nc, self._ns)
+            # self.acc = _scalib_ext.LdaAcc(self._nc, self._ns)
+            self.acc = _scalib_ext.MultiLdaAcc(
+                self._ns, self._nc, np.arange(self._ns, dtype=np.uint32)[np.newaxis, :]
+            )
         # TODO maybe there is something smarter to do here w.r.t. number of
         # threads + investigate exact BLIS behavior.
         with scalib.utils.interruptible():
-            self.acc.fit(traces, x, gemm_mode, get_config())
+            self.acc.fit(traces, x, get_config())
         self.solved = False
 
     def solve(self, done: bool = False):
@@ -151,7 +155,7 @@ class LDAClassifier:
                 "Already called .solve() on this object, should not be called twice."
             )
         with scalib.utils.interruptible():
-            self.lda = self.acc.lda(self.p, get_config())
+            self.mlda = self.acc.multi_lda(self.p, get_config())
         self.solved = True
         self.done = done
 
@@ -176,44 +180,42 @@ class LDAClassifier:
                 "Call LDA.solve() before LDA.predict_proba() to compute the model."
             )
         with scalib.utils.interruptible():
-            prs = self.lda.predict_proba(traces, get_config())
+            prs = self.mlda.predict_proba(traces, get_config())
         return prs
-
-    def __getstate__(self):
-        dic = self.__dict__.copy()
-
-        if "acc" in dic:
-            dic["acc"] = dic["acc"].get_state()
-        if "lda" in dic:
-            dic["lda"] = dic["lda"].get_state()
-
-        return dic
-
-    def __setstate__(self, state):
-        for k, v in state.items():
-            setattr(self, k, v)
-
-        if "acc" in state:
-            self.acc = _scalib_ext.LdaAcc.from_state(*state["acc"])
-        if "lda" in state:
-            self.lda = _scalib_ext.LDA.from_state(*state["lda"])
 
     def get_sw(self):
         r"""Return :math:`S_{W}` matrix (within-class scatter)."""
-        return self.acc.get_sw()
+        return self.acc.get_sw()[0]
 
     def get_sb(self):
         r"""Return :math:`S_{B}` matrix (between-class scatter)."""
-        return self.acc.get_sb()
+        return self.acc.get_sb()[0]
 
     def get_mus(self):
         r"""Return means matrix (classes means). Shape: ``(nc, ns)``."""
-        return self.acc.get_mus()
+        return self.acc.get_mus()[0]
+
+    def project(self, traces: npt.NDArray[np.int16]) -> npt.NDArray[np.float64]:
+        r"""Project the traces in the sub-linear space.
+
+        Parameters
+        ----------
+        traces:
+            Array that contains the traces. The array must be of dimension `(n,ns)`.
+
+        Returns
+        -------
+        array_like, f64
+            Projected traces. Shape `(n, self.p)`
+        """
+        if not (self.solved):
+            raise ValueError("Cannot project the trace since .solve() was never called")
+        return self.mlda.project(traces, get_config())[0]
 
     @classmethod
-    def _from_inner_solved(cls, lda):
+    def _from_inner_solved(cls, mlda):
         self = cls.__new__(cls)
-        self.lda = lda
+        self.mlda = mlda
         self.solved = True
         self.done = True
         return self
