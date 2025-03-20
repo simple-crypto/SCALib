@@ -61,23 +61,14 @@ def test_lda_pickle():
     lda_ref = LDA_sklearn(solver="eigen", n_components=n_components)
     lda_ref.fit(traces, labels)
 
-    lda_projection = lda.lda.get_projection()
-    lda_ref_projection = lda_ref.scalings_[:, :n_components]
+    # Project traces with SCALib
+    ptraces = lda.project(traces)
+    # Project traces woth sklearn
+    ptraces_sklearn = lda_ref.transform(traces)
     projections_similar = all(
-        is_parallel(x, y) for x, y in zip(lda_projection.T, lda_ref_projection.T)
+        [is_parallel(a, b) for a, b in zip(ptraces.T, ptraces_sklearn.T)]
     )
-    print("lda_projection")
-    print(lda_projection)
-    print("lda_ref_projection")
-    print(lda_ref_projection)
-    assert projections_similar, (lda_projection, lda_ref_projection)
-    # To correct if projection vectors are opposite.
-    parallel_factors = np.array(
-        [parallel_factor(x, y) for x, y in zip(lda_projection.T, lda_ref_projection.T)]
-    )
-
-    print("parallel_factors")
-    print(parallel_factors)
+    assert projections_similar, (ptraces, ptraces_sklearn)
 
     # generate means and cov in subspace
     traces_t = (lda_ref.scalings_[:, :n_components].T @ traces.T).T
@@ -121,19 +112,17 @@ def test_lda():
     lda.fit_u(traces, labels, 1)
     lda.solve()
 
-    lda_ref = LDA_sklearn(solver="eigen")
+    lda_ref = LDA_sklearn(solver="eigen", n_components=n_components)
     lda_ref.fit(traces, labels)
 
-    lda_projection = lda.lda.get_projection()
-    lda_ref_projection = lda_ref.scalings_[:, :n_components]
+    # Project traces with SCALib
+    ptraces = lda.project(traces)
+    # Project traces woth sklearn
+    ptraces_sklearn = lda_ref.transform(traces)
     projections_similar = all(
-        is_parallel(x, y) for x, y in zip(lda_projection.T, lda_ref_projection.T)
+        [is_parallel(a, b) for a, b in zip(ptraces.T, ptraces_sklearn.T)]
     )
-    print("lda_projection")
-    print(lda_projection)
-    print("lda_ref_projection")
-    print(lda_ref_projection)
-    assert projections_similar, (lda_projection, lda_ref_projection)
+    assert projections_similar, (ptraces, ptraces_sklearn)
 
     # Verify value of means by accessor
     ref_means = lda_ref.means_

@@ -6,6 +6,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::type_object::PyTypeInfo;
+use pyo3::types::PyList;
 use pyo3::types::{PyBytes, PyTuple};
 
 use crate::ScalibError;
@@ -192,6 +193,16 @@ impl MultiLda {
         let y = y.as_array();
         let prs = config.on_worker(py, |_| self.inner.predict_log2p1(x, y));
         Ok(prs.into_pyarray(py))
+    }
+    fn project<'py>(
+        &self,
+        py: Python<'py>,
+        traces: PyReadonlyArray2<i16>,
+        config: crate::ConfigWrapper,
+    ) -> PyResult<Vec<Bound<'py, PyArray2<f64>>>> {
+        let traces = traces.as_array();
+        let p_traces = config.on_worker(py, |_| self.inner.project(traces.view()));
+        Ok(p_traces.into_iter().map(|a| a.into_pyarray(py)).collect())
     }
     fn select_vars(&self, py: Python, vars: Vec<u16>) -> PyResult<Self> {
         Ok(Self {
