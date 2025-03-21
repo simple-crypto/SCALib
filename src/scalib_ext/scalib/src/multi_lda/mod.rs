@@ -10,7 +10,7 @@ use std::sync::Arc;
 use hytra::TrAdder;
 use itertools::{izip, Itertools};
 use ndarray::{Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, Axis, Zip};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{Inspect, IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
 use crate::lda::{softmax, LDA};
@@ -40,10 +40,26 @@ pub struct MultiLdaAcc {
     pub trace_sums: SparseTraceSums,
     /// Trace global scatter.
     pub cov_pois: ScatterPairs,
+    // For each variable the input list of pois (copy of original input).
+    // Solely purpose is to generate scatter and mean matrices accessor with
+    // original POI order.
+    map_input_pois: Vec<Vec<usize>>,
+}
+
+pub fn argsort<T: Ord>(data: &[T]) -> Vec<usize> {
+    let mut indices = (0..data.len()).collect::<Vec<usize>>();
+    indices.sort_by_key(|&i| &data[i]);
+    indices
 }
 
 impl MultiLdaAcc {
     pub fn new(ns: u32, nc: Class, mut pois: Vec<Vec<u32>>) -> Result<Self> {
+        // Generate the inverse map for poi sorting, per variable
+        let map_input_pois = pois
+            .clone()
+            .into_iter()
+            .map(|v| argsort(&(argsort(&v))))
+            .collect();
         // Sort POIs: required for SparseTraceSums and has not impact on the LDA result.
         for pois in pois.iter_mut() {
             pois.sort_unstable();
@@ -74,6 +90,7 @@ impl MultiLdaAcc {
             n_traces: 0,
             trace_sums,
             cov_pois,
+            map_input_pois,
         })
     }
 
@@ -198,11 +215,61 @@ impl MultiLdaAcc {
             n_traces: self.n_traces,
         })
     }
-    pub fn get_matrices(&self) -> Result<Vec<(Array2<f64>, Array2<f64>, Array2<f64>)>> {
-        Ok((0..self.nv)
-            .map(|var| Ok(LdaMatrices::to_tuple(self.compute_matrices_var(var)?)))
-            .collect::<Result<_>>()?)
+
+    // Generate a re-ordered mean matrix associated to a specific variable
+    // mat: mean matrix of shape (self.nv, self.poi_map.new_pois_vars[v].len())
+    // v: a variable index
+    fn order_mu_matrix(&self, mat: &Array2<f64>, v: Var) -> Array2<f64> {
+        let mut o_mat = Array2::<f64>::zeros(mat.dim());
+        for (ni, c) in self.map_input_pois[v as usize]
+            .clone()
+            .into_iter()
+            .zip(mat.columns().into_iter())
+        {
+            for (ce, e) in o_mat.column_mut(ni).iter_mut().zip(c.into_iter()) {
+                *ce = *e;
+            }
+        }
+        o_mat
     }
+
+    // Generate a re-ordered scatter matrix associated to a specific variable
+    // mat: mean matrix of shape (self.nv, self.poi_map.new_pois_vars[v].len())
+    // v: a variable index
+    fn order_scatter_matrix(&self, mat: &Array2<f64>, v: Var) -> Array2<f64> {
+        let mut o_mat = Array2::<f64>::zeros(mat.dim());
+        for (i, ie) in self.map_input_pois[v as usize]
+            .clone()
+            .into_iter()
+            .enumerate()
+        {
+            for (j, je) in self.map_input_pois[v as usize]
+                .clone()
+                .into_iter()
+                .enumerate()
+            {
+                o_mat[[i, j]] = mat[[ie, je]];
+            }
+        }
+        o_mat
+    }
+
+    // Return the LDA matrices, following the POI indexing provided in input
+    pub fn get_matrices(&self) -> Result<Vec<(Array2<f64>, Array2<f64>, Array2<f64>)>> {
+        let vec_tuples = (0..self.nv)
+            .map(|var| match self.compute_matrices_var(var) {
+                Ok(m) => Ok(LdaMatrices::to_tuple(LdaMatrices {
+                    s_b: self.order_scatter_matrix(&m.s_b, var),
+                    s_w: self.order_scatter_matrix(&m.s_w, var),
+                    mus: self.order_mu_matrix(&m.mus, var),
+                    n_traces: m.n_traces,
+                })),
+                Err(e) => Err(e),
+            })
+            .collect();
+        vec_tuples
+    }
+
     pub fn lda(&self, p: u32, config: &crate::Config) -> Result<MultiLda> {
         let compute_ldas = |it_cnt: &TrAdder<u64>| {
             (0..self.nv)
@@ -536,7 +603,7 @@ impl MultiLda {
                 for (vi, v) in var_block.clone().into_iter().enumerate() {
                     for pi in 0..self.p {
                         let batch = p_batch_trace[[vi, pi]];
-                        for ni in (0..(cmp::min(n - (bi * N), batch.len()))) {
+                        for ni in 0..(cmp::min(n - (bi * N), batch.len())) {
                             p_traces[v][[(bi * N) + ni, pi]] = batch[ni];
                         }
                     }

@@ -42,37 +42,6 @@ impl MultiLdaAcc {
             .map_err(|e| ScalibError::from_scalib(e, py))
     }
 
-    /// Compute the LDA with p dimensions in the projected space
-    fn ldas(
-        &self,
-        py: Python,
-        p: usize,
-        config: crate::ConfigWrapper,
-    ) -> PyResult<Vec<crate::lda::LDA>> {
-        config
-            .on_worker(py, |_| {
-                let n = self.inner.ntraces() as usize;
-                let res = self
-                    .inner
-                    .get_matrices()?
-                    .into_iter()
-                    .map(|(sw, sb, mus)| {
-                        Ok(crate::lda::LDA {
-                            inner: scalib::lda::LDA::from_matrices(
-                                n,
-                                p,
-                                sw.view(),
-                                sb.view(),
-                                mus.view(),
-                            )?,
-                        })
-                    })
-                    .collect::<Result<Vec<crate::lda::LDA>, _>>();
-                res
-            })
-            .map_err(|e| ScalibError::from_scalib(e, py))
-    }
-
     fn multi_lda(&self, py: Python, p: u32, config: crate::ConfigWrapper) -> PyResult<MultiLda> {
         match config.on_worker(py, |cfg| self.inner.lda(p, cfg)) {
             Ok(inner) => Ok(MultiLda { inner }),
@@ -80,7 +49,7 @@ impl MultiLdaAcc {
         }
     }
 
-    /// Get the matrix sw (debug purpose)
+    /// Get the matrix sw
     fn get_sw<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyArray2<f64>>>> {
         match self.inner.get_matrices() {
             Ok(m) => Ok(m
@@ -90,7 +59,7 @@ impl MultiLdaAcc {
             Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
     }
-    /// Get the matrix sb (debug purpose)
+    /// Get the matrix sb
 
     fn get_sb<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyArray2<f64>>>> {
         match self.inner.get_matrices() {
@@ -102,7 +71,7 @@ impl MultiLdaAcc {
         }
     }
 
-    /// Get the matrix mus (debug purpose)
+    /// Get the matrix mus
     fn get_mus<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyArray2<f64>>>> {
         match self.inner.get_matrices() {
             Ok(m) => Ok(m
@@ -137,6 +106,7 @@ impl MultiLdaAcc {
             })
             .collect())
     }
+
     fn n_traces(&self) -> u32 {
         self.inner.ntraces()
     }
