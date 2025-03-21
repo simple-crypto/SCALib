@@ -28,8 +28,6 @@ __all__ = [
     "LdaAcc",
     "Lda",
     "RLDAClassifier",
-    "MultiLDASolved",
-    "MultiLDAAcc",
 ]
 
 from .ldaclassifier import (
@@ -37,7 +35,5 @@ from .ldaclassifier import (
     MultiLDA,
     LdaAcc,
     Lda,
-    MultiLDAAcc,
-    MultiLDASolved,
 )
 from .rldaclassifier import RLDAClassifier

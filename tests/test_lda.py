@@ -229,6 +229,44 @@ def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15
     return pois, traces, y
 
 
+def ldaacc_sklearn_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
+    traces = traces[0]
+    x = x[0]
+    ldas_ref = [LDA_sklearn(solver="eigen", n_components=p) for _ in range(nv)]
+    ldaacc = LdaAcc(nc=nc, pois=pois)
+    # Fit SKlean
+    for i, (pi, xi) in enumerate(zip(pois, x.T)):
+        ldas_ref[i].fit(traces[:, pi].reshape([traces.shape[0], len(pi)]), xi)
+    # Fit LdaAcc, one trace at a time
+    for t, y in zip(traces, x):
+        # Fit the scalib lda
+        ldaacc.fit_u(t[np.newaxis, :], y[np.newaxis, :])
+    # Check the mus matrix
+    for mu, mu_ref in zip(ldaacc.get_mus(), [lda.means_ for lda in ldas_ref]):
+        np.allclose(mu, mu_ref)
+    ## Check the scatter matrix
+    # for sw, sw_ref in zip(ldaacc.get_sw(), [lda.covariance_ for lda in ldas_ref]):
+    #    np.allclose(sw / traces.shape[0], sw_ref, rtol=1e-5)
+
+
+def test_ldaacc_sklearn_compare():
+    base_case = dict(ns=2, nc=2, nv=1, npois=1, n=10, n_batches=1, p=1, test_lp=True)
+    cases = [
+        base_case,
+        base_case | dict(n=5, n_batches=2),
+        base_case | dict(ns=3, n=20, maxl=100),
+        base_case | dict(ns=20, nc=4, nv=4, n=20, npois=5, n_batches=3, p=2),
+        base_case | dict(ns=100, nc=256, nv=2, npois=20, n=5000, n_batches=5, p=4),
+        base_case | dict(ns=1000, nc=4, nv=10, n=500, n_batches=5),
+    ]
+    for case in cases:
+        rng = get_rng(**case)
+        print(80 * "#" + "\ncase:", case)
+        pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
+        ldaacc_sklearn_compare(pois=pois, traces=traces, x=x, **case)
+
+
+# TODO depreciate this test
 def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
     ncs = [nc for _ in range(nv)]
     ps = [p for _ in range(nv)]

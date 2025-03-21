@@ -42,6 +42,7 @@ impl MultiLdaAcc {
             .map_err(|e| ScalibError::from_scalib(e, py))
     }
 
+    /*
     /// Compute the LDA with p dimensions in the projected space
     fn ldas(
         &self,
@@ -72,6 +73,7 @@ impl MultiLdaAcc {
             })
             .map_err(|e| ScalibError::from_scalib(e, py))
     }
+    */
 
     fn multi_lda(&self, py: Python, p: u32, config: crate::ConfigWrapper) -> PyResult<MultiLda> {
         match config.on_worker(py, |cfg| self.inner.lda(p, cfg)) {
@@ -137,6 +139,7 @@ impl MultiLdaAcc {
             })
             .collect())
     }
+
     fn n_traces(&self) -> u32 {
         self.inner.ntraces()
     }
