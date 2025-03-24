@@ -1,13 +1,12 @@
+import warnings
+
 import numpy as np
 import numpy.typing as npt
-import typing
 
 from scalib import _scalib_ext
 from scalib.config import get_config
 import scalib.tools
 import scalib.utils
-
-from typing import Optional
 
 
 class LDAClassifier:
@@ -91,12 +90,15 @@ class LDAClassifier:
         self._init = False
         if p >= nc:
             raise ValueError("p must be at most nc")
+        warnings.warn(
+            "LdaClassfier is deprecated. Use LdaAcc instead.", DeprecationWarning
+        )
 
     def fit_u(
         self,
         traces: npt.NDArray[np.int16],
         x: npt.NDArray[np.uint16],
-        gemm_mode: int = None,
+        gemm_mode: int | None = None,
     ):
         r"""Update statistical model estimates with fresh data.
 
@@ -126,10 +128,6 @@ class LDAClassifier:
         with scalib.utils.interruptible():
             self.acc.fit(traces, x, get_config())
         self.solved = False
-        if gemm_mode is not None:
-            print(
-                "Warning: gemm_mode is depreciated (not used anymore) and is kept for API compatibility. It will be removed in a future release."
-            )
 
     def solve(self, done: bool = False):
         r"""Estimates the PDF parameters that is the projection matrix
@@ -253,14 +251,13 @@ class MultiLDA:
     >>> predicted_proba = lda.predict_proba(nt)
     """
 
-    def __init__(self, ncs, ps, pois, gemm_mode: int = None, n_threads=0):
+    def __init__(self, ncs, ps, pois, gemm_mode: int | None = None, n_threads=0):
         self.pois = [list(sorted(x)) for x in pois]
         self.n_threads = n_threads
-        if gemm_mode is not None:
-            print(
-                "Warning: gemm_mode is depreciated (not used anymore) and is kept for API compatibility. It will be removed in a future release."
-            )
         self.ldas = [LDAClassifier(nc, p) for nc, p in zip(ncs, ps)]
+        warnings.warn(
+            "LdaClassfier is deprecated. Use LdaAcc instead.", DeprecationWarning
+        )
 
     def fit_u(self, traces, x):
         """Update the LDA estimates with new training data.
