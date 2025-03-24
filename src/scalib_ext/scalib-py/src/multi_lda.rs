@@ -6,7 +6,6 @@ use pyo3::exceptions::PyValueError;
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::type_object::PyTypeInfo;
-use pyo3::types::PyList;
 use pyo3::types::{PyBytes, PyTuple};
 
 use crate::ScalibError;

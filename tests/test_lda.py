@@ -112,6 +112,9 @@ def test_lda():
     lda.fit_u(traces, labels, 1)
     lda.solve()
 
+    pr = lda.predict_proba(traces)
+    print(pr.shape)
+
     lda_ref = LDA_sklearn(solver="eigen", n_components=n_components)
     lda_ref.fit(traces, labels)
 
@@ -287,7 +290,7 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
     multi_lda.solve(done=False)
     multi_lda3 = Lda(multi_lda3, p=p)
     for t, y in zip(traces, x):
-        probas = np.array(multi_lda.predict_proba(t))[:, 0, :, :]
+        probas = np.array(multi_lda.predict_proba(t))
         probas3 = multi_lda3.predict_proba(t)
         assert np.allclose(probas, probas3)
         if test_lp:

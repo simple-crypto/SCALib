@@ -109,11 +109,7 @@ class LDAClassifier:
             Labels for each trace. Must be of shape `(n)` and
             must be `uint16`.
         gemm_mode:
-            If 0: use matrixmultiply matrix multiplication.
-            If n>0: use n threads with BLIS matrix multiplication.
-            BLIS is only used on linux. Matrixmultiply is always used on other
-            OSes.
-            The BLIS threads (if > 1) do not belong to the SCALib threadpool.
+            Depreciated, kept for API compatibility.
         """
         traces = scalib.utils.clean_traces(traces, self._ns)
         x = scalib.utils.clean_labels(x[:, np.newaxis], nv=1, multi=True)
@@ -182,7 +178,7 @@ class LDAClassifier:
                 "Call LDA.solve() before LDA.predict_proba() to compute the model."
             )
         with scalib.utils.interruptible():
-            prs = self.mlda.predict_proba(traces, get_config())
+            prs = self.mlda.predict_proba(traces, get_config())[0]
         return prs
 
     def get_sw(self):
@@ -235,6 +231,8 @@ class MultiLDA:
         datapoints for the LDA.
     gemm_mode:
         See :func:`LDACLassifier.fit_u`.
+    n_threads:
+        If set to a value bigger than 0, specifies the amount of threads to use for parallel processing of the variables.
 
     Examples
     --------
@@ -255,13 +253,13 @@ class MultiLDA:
     >>> predicted_proba = lda.predict_proba(nt)
     """
 
-    def __init__(self, ncs, ps, pois, gemm_mode: int = None):
+    def __init__(self, ncs, ps, pois, gemm_mode: int = None, n_threads=0):
         self.pois = [list(sorted(x)) for x in pois]
+        self.n_threads = n_threads
         if gemm_mode is not None:
             print(
                 "Warning: gemm_mode is depreciated (not used anymore) and is kept for API compatibility. It will be removed in a future release."
             )
-        self.gemm_mode = 1
         self.ldas = [LDAClassifier(nc, p) for nc, p in zip(ncs, ps)]
 
     def fit_u(self, traces, x):
@@ -278,8 +276,8 @@ class MultiLDA:
         """
         # Try to avoid the over-subscription of CPUs.
         num_threads = get_config().threadpool.n_threads
-        if self.gemm_mode != 0:
-            num_threads = max(1, num_threads // self.gemm_mode)
+        if self.n_threads > 0:
+            num_threads = min(self.n_threads, num_threads)
         with scalib.utils.interruptible():
             with scalib.tools.ContextExecutor(max_workers=num_threads) as executor:
                 list(
@@ -287,7 +285,6 @@ class MultiLDA:
                         lambda i: self.ldas[i].fit_u(
                             np.ascontiguousarray(traces[:, self.pois[i]]),
                             x[:, i],
-                            self.gemm_mode,
                         ),
                         range(len(self.ldas)),
                     )

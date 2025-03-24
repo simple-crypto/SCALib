@@ -10,7 +10,7 @@ use std::sync::Arc;
 use hytra::TrAdder;
 use itertools::{izip, Itertools};
 use ndarray::{Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, Axis, Zip};
-use rayon::iter::{Inspect, IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
 use crate::lda::{softmax, LDA};
