@@ -378,7 +378,7 @@ class LdaAcc:
 
     Example
     -------
-    >>> from scalib.modeling import Lda
+    >>> from scalib.modeling import Lda, LdaAcc
     >>> import numpy as np
     >>> # 1000 traces of length 10, with value between 0 and 4091
     >>> traces = np.random.randint(0, 4092, (1000, 10), dtype=np.int16)
