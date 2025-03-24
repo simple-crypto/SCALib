@@ -17,6 +17,8 @@ Not released
 * In ``BPState``, add a `vars` parameter to ``propagate_factor`` and a
   ``factors`` pararameter to ``propagate_var`` (#190).
 * In ``BPState``, deprecate ``set_distribution``, replace by ``drop_distribution`` (#190).
+* Add ``LdaAcc`` and ``Lda`` classes: more efficient multi-variable LDA, with API separation between fit and prediction steps (#192).
+* Deprecate ``LdaClassifier`` and ``MultiLda`` (#192)
 
 v0.6.0 (2024/09/03)
 -------------------
