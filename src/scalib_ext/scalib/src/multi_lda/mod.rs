@@ -40,9 +40,9 @@ pub struct MultiLdaAcc {
     pub trace_sums: SparseTraceSums,
     /// Trace global scatter.
     pub cov_pois: ScatterPairs,
-    // For each variable the input list of pois (copy of original input).
-    // Solely purpose is to generate scatter and mean matrices accessor with
-    // original POI order.
+    // For each variable, the argsort of the vector of POIs.
+    // (Used in reshuffling in original order means and scatter when they are genereated for
+    // external inspection.)
     map_input_pois: Vec<Vec<usize>>,
 }
 
@@ -55,11 +55,7 @@ pub fn argsort<T: Ord>(data: &[T]) -> Vec<usize> {
 impl MultiLdaAcc {
     pub fn new(ns: u32, nc: Class, mut pois: Vec<Vec<u32>>) -> Result<Self> {
         // Generate the inverse map for poi sorting, per variable
-        let map_input_pois = pois
-            .clone()
-            .into_iter()
-            .map(|v| argsort(&(argsort(&v))))
-            .collect();
+        let map_input_pois = pois.clone().into_iter().map(|v| argsort(&v)).collect();
         // Sort POIs: required for SparseTraceSums and has not impact on the LDA result.
         for pois in pois.iter_mut() {
             pois.sort_unstable();
@@ -221,14 +217,8 @@ impl MultiLdaAcc {
     // v: a variable index
     fn order_mu_matrix(&self, mat: &Array2<f64>, v: Var) -> Array2<f64> {
         let mut o_mat = Array2::<f64>::zeros(mat.dim());
-        for (ni, c) in self.map_input_pois[v as usize]
-            .clone()
-            .into_iter()
-            .zip(mat.columns().into_iter())
-        {
-            for (ce, e) in o_mat.column_mut(ni).iter_mut().zip(c.into_iter()) {
-                *ce = *e;
-            }
+        for (ni, c) in self.map_input_pois[v as usize].iter().zip(mat.columns()) {
+            o_mat.column_mut(*ni).assign(&c);
         }
         o_mat
     }
@@ -238,17 +228,9 @@ impl MultiLdaAcc {
     // v: a variable index
     fn order_scatter_matrix(&self, mat: &Array2<f64>, v: Var) -> Array2<f64> {
         let mut o_mat = Array2::<f64>::zeros(mat.dim());
-        for (i, ie) in self.map_input_pois[v as usize]
-            .clone()
-            .into_iter()
-            .enumerate()
-        {
-            for (j, je) in self.map_input_pois[v as usize]
-                .clone()
-                .into_iter()
-                .enumerate()
-            {
-                o_mat[[i, j]] = mat[[ie, je]];
+        for (i, ie) in self.map_input_pois[v as usize].iter().enumerate() {
+            for (j, je) in self.map_input_pois[v as usize].iter().enumerate() {
+                o_mat[[*ie, *je]] = mat[[i, j]];
             }
         }
         o_mat

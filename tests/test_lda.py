@@ -232,26 +232,25 @@ def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15
     return pois, traces, y
 
 
-def ldaacc_sklearn_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
-    traces = traces[0]
-    x = x[0]
+def ldaacc_sklearn_compare(nc, nv, p, pois, traces, x, **_):
+    traces_all = np.vstack(traces)
+    x_all = np.vstack(x)
     ldas_ref = [LDA_sklearn(solver="eigen", n_components=p) for _ in range(nv)]
     ldaacc = LdaAcc(nc=nc, pois=pois)
     # Fit SKlean
-    for i, (pi, xi) in enumerate(zip(pois, x.T)):
-        ldas_ref[i].fit(traces[:, pi].reshape([traces.shape[0], len(pi)]), xi)
-    # Fit LdaAcc, one trace at a time
+    for i, (pi, xi) in enumerate(zip(pois, x_all.T)):
+        ldas_ref[i].fit(traces_all[:, pi].reshape([traces_all.shape[0], len(pi)]), xi)
+    # Fit the scalib lda
     for t, y in zip(traces, x):
-        # Fit the scalib lda
-        ldaacc.fit_u(t[np.newaxis, :], y[np.newaxis, :])
+        ldaacc.fit_u(t, y)
     # Check the mus matrix
     for mu, mu_ref in zip(ldaacc.get_mus(), [lda.means_ for lda in ldas_ref]):
-        np.allclose(mu, mu_ref)
+        assert np.allclose(mu, mu_ref)
     ## Check the within scatter matrix
     for sw, sw_ref in zip(ldaacc.get_sw(), [lda.covariance_ for lda in ldas_ref]):
-        np.allclose(sw / traces.shape[0], sw_ref, rtol=1e-5)
+        assert np.allclose(sw / traces_all.shape[0], sw_ref, rtol=1e-5)
     ## No point of comparison for the between scatter matrix, but call the accessor to check that the function works
-    sbmat = ldaacc.get_sb()
+    _ = ldaacc.get_sb()
     # We can't do much more since sklearn has no way to reduce dimensionality of LDA.
     # e.g., comparing probas will fail
 

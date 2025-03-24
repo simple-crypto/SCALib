@@ -14,6 +14,9 @@ class LDAClassifier:
     the linear discriminant analysis classifier (LDA) with integrated
     dimensionality reduction.
 
+    .. deprecated:: 0.6.1
+            Use ``LdaAcc`` instead.
+
     Based on the training data, linear discriminant analysis build a linear
     dimentionality reduction to :math:`p` dimensions that maximizes class
     separation.
@@ -91,7 +94,7 @@ class LDAClassifier:
         if p >= nc:
             raise ValueError("p must be at most nc")
         warnings.warn(
-            "LdaClassfier is deprecated. Use LdaAcc instead.", DeprecationWarning
+            "LdaClassifier is deprecated. Use LdaAcc instead.", DeprecationWarning
         )
 
     def fit_u(
@@ -212,6 +215,9 @@ class LDAClassifier:
 class MultiLDA:
     """Perform LDA on `nv` distinct variables for the same leakage traces.
 
+    .. deprecated:: 0.6.1
+            Use ``LdaAcc`` instead.
+
     While functionally similar to a simple for loop, this enables solving the
     LDA problems in parallel in a simple fashion. This also enable easy
     handling of Points Of Interest (POIs) in long traces.
@@ -229,8 +235,6 @@ class MultiLDA:
         datapoints for the LDA.
     gemm_mode:
         See :func:`LDACLassifier.fit_u`.
-    n_threads:
-        If set to a value bigger than 0, specifies the amount of threads to use for parallel processing of the variables.
 
     Examples
     --------
@@ -251,13 +255,10 @@ class MultiLDA:
     >>> predicted_proba = lda.predict_proba(nt)
     """
 
-    def __init__(self, ncs, ps, pois, gemm_mode: int | None = None, n_threads=0):
-        self.pois = [list(sorted(x)) for x in pois]
-        self.n_threads = n_threads
+    def __init__(self, ncs, ps, pois, gemm_mode: int | None = None):
+        self.pois = pois
         self.ldas = [LDAClassifier(nc, p) for nc, p in zip(ncs, ps)]
-        warnings.warn(
-            "LdaClassfier is deprecated. Use LdaAcc instead.", DeprecationWarning
-        )
+        warnings.warn("MultiLDA is deprecated. Use LdaAcc instead.", DeprecationWarning)
 
     def fit_u(self, traces, x):
         """Update the LDA estimates with new training data.
@@ -273,8 +274,6 @@ class MultiLDA:
         """
         # Try to avoid the over-subscription of CPUs.
         num_threads = get_config().threadpool.n_threads
-        if self.n_threads > 0:
-            num_threads = min(self.n_threads, num_threads)
         with scalib.utils.interruptible():
             with scalib.tools.ContextExecutor(max_workers=num_threads) as executor:
                 list(
@@ -413,7 +412,7 @@ class LdaAcc:
 
     def __init__(self, nc: int, pois):
         self._nc = nc
-        self._pois = [list(sorted(x)) for x in pois]
+        self._pois = pois
         self._nv = len(self._pois)
         self._init = False
 
