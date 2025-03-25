@@ -129,45 +129,47 @@ impl ScatterPairs {
 }
 
 /// Compute the dot product of the vectors x and y
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
 fn sum_prod<'a>(x: &'a AA<N>, y: &'a AA<N>) -> i64 {
-    if cfg!(all(target_arch = "x86_64", target_feature = "avx2")) {
-        const {
-            assert!(N % 16 == 0);
-        };
-        use std::arch::x86_64::{
-            __m256i, _mm256_add_epi64, _mm256_cvtepi32_epi64, _mm256_extracti128_si256,
-            _mm256_madd_epi16, _mm256_setzero_si256, _mm_add_epi64, _mm_cvtsi128_si64x,
-            _mm_shuffle_epi32,
-        };
-        unsafe {
-            // Transmute safety: AA is 32-byte aligned, we keep the same lifetime.
-            let x: &'a [__m256i; N / 16] = core::mem::transmute(x);
-            let y: &'a [__m256i; N / 16] = core::mem::transmute(y);
-            let mut res: __m256i = _mm256_setzero_si256();
-            for k in 0..(N / 16) {
-                let tmp = _mm256_madd_epi16(x[k], y[k]);
-                let tmp0 = _mm256_extracti128_si256(tmp, 0);
-                let tmp1 = _mm256_extracti128_si256(tmp, 1);
-                let tmp0 = _mm256_cvtepi32_epi64(tmp0);
-                let tmp1 = _mm256_cvtepi32_epi64(tmp1);
-                let tmp_sum = _mm256_add_epi64(tmp0, tmp1);
-                res = _mm256_add_epi64(res, tmp_sum);
-            }
-            let res0 = _mm256_extracti128_si256(res, 0);
-            let res1 = _mm256_extracti128_si256(res, 1);
-            let res = _mm_add_epi64(res0, res1);
-            let res_t = _mm_shuffle_epi32(res, 0xee);
-            let res = _mm_add_epi64(res, res_t);
-            _mm_cvtsi128_si64x(res)
+    const {
+        assert!(N % 16 == 0);
+    };
+    use std::arch::x86_64::{
+        __m256i, _mm256_add_epi64, _mm256_cvtepi32_epi64, _mm256_extracti128_si256,
+        _mm256_madd_epi16, _mm256_setzero_si256, _mm_add_epi64, _mm_cvtsi128_si64x,
+        _mm_shuffle_epi32,
+    };
+    unsafe {
+        // Transmute safety: AA is 32-byte aligned, we keep the same lifetime.
+        let x: &'a [__m256i; N / 16] = core::mem::transmute(x);
+        let y: &'a [__m256i; N / 16] = core::mem::transmute(y);
+        let mut res: __m256i = _mm256_setzero_si256();
+        for k in 0..(N / 16) {
+            let tmp = _mm256_madd_epi16(x[k], y[k]);
+            let tmp0 = _mm256_extracti128_si256(tmp, 0);
+            let tmp1 = _mm256_extracti128_si256(tmp, 1);
+            let tmp0 = _mm256_cvtepi32_epi64(tmp0);
+            let tmp1 = _mm256_cvtepi32_epi64(tmp1);
+            let tmp_sum = _mm256_add_epi64(tmp0, tmp1);
+            res = _mm256_add_epi64(res, tmp_sum);
         }
-    } else {
-        // Default, non-intrinsics
-        let mut res = 0;
-        for k in 0..N {
-            res += ((x.0[k] as i32) * (y.0[k] as i32)) as i64;
-        }
-        res
+        let res0 = _mm256_extracti128_si256(res, 0);
+        let res1 = _mm256_extracti128_si256(res, 1);
+        let res = _mm_add_epi64(res0, res1);
+        let res_t = _mm_shuffle_epi32(res, 0xee);
+        let res = _mm_add_epi64(res, res_t);
+        _mm_cvtsi128_si64x(res)
     }
+}
+
+/// Compute the dot product of the vectors x and y (default, non-intrinsics)
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+fn sum_prod<'a>(x: &'a AA<N>, y: &'a AA<N>) -> i64 {
+    let mut res = 0;
+    for k in 0..N {
+        res += ((x.0[k] as i32) * (y.0[k] as i32)) as i64;
+    }
+    res
 }
 
 /// Compute the block partitioning of the pairs.
