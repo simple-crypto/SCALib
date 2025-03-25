@@ -78,8 +78,8 @@ class LDAClassifier:
     Parameters
     ----------
     nc :
-        Number of possible classes (e.g., 256 for 8-bit target). `nc` must
-        be smaller than `2**16`.
+        Number of possible classes (e.g., 256 for 8-bit target). ``nc`` must
+        be smaller than :math:`2^{16}`.
     p :
         Number of dimensions in the linear subspace.
     """
@@ -109,9 +109,9 @@ class LDAClassifier:
         ----------
         traces :
             Array that contains the traces. The array must
-            be of dimension `(n,ns)` and its type must be `int16`.
+            be of dimension ``(n,ns)`` and its type must be `int16`.
         x :
-            Labels for each trace. Must be of shape `(n)` and
+            Labels for each trace. Must be of shape ``(n)`` and
             must be `uint16`.
         gemm_mode:
             Depreciated, kept for API compatibility.
@@ -167,12 +167,12 @@ class LDAClassifier:
         Parameters
         ----------
         traces :
-            Array that contains the traces. The array must be of dimension `(n,ns)`.
+            Array that contains the traces. The array must be of dimension ``(n,ns)``.
 
         Returns
         -------
         array_like, f64
-            Probabilities. Shape `(n, nc)`.
+            Probabilities. Shape ``(n, nc)``.
         """
         if not self.solved:
             raise ValueError(
@@ -208,10 +208,10 @@ class MultiLDA:
     Parameters
     ----------
     ncs: array_like, int
-        Number of classes for each variable. Shape `(nv,)`.
+        Number of classes for each variable. Shape ``(nv,)``.
     ps: array_like, int
         Number of dimensions to keep after dimensionality reduction for each variable.
-        Shape `(nv,)`.
+        Shape ``(nv,)``.
     pois: list of array_like, int
         Indices of the POIs in the traces for each variable. That is, for
         variable ``i``, and training trace ``t``, ``t[pois[i]]`` is the input
@@ -250,9 +250,9 @@ class MultiLDA:
         ----------
         traces : array_like, int16
             Array that contains the traces. The array must
-            be of dimension `(n,ns)` and its type must be `int16`.
+            be of dimension ``(n,ns)`` and its type must be `int16`.
         x : array_like, uint16
-            Labels for each trace. Must be of shape `(n, nv)` and
+            Labels for each trace. Must be of shape ``(n, nv)`` and
             must be `uint16`.
         """
         # Try to avoid the over-subscription of CPUs.
@@ -287,12 +287,12 @@ class MultiLDA:
         ----------
         traces : array_like, int16
             Array that contains the traces. The array must
-            be of dimension `(n,ns)`.
+            be of dimension ``(n,ns)``.
 
         Returns
         -------
         list of array_like, f64
-            Probabilities. `nv` arrays of shape `(n, nc)`.
+            Probabilities. ``nv`` arrays of shape ``(n, nc)``.
         """
         # Put as much work as needed to fill rayon threadpool
         with scalib.utils.interruptible():
@@ -386,7 +386,7 @@ class LdaAcc:
     ----------
     nc: int
         Number of possible classes (e.g., 256 for 8-bit target). ``nc`` must
-        be smaller than :math:`2^16`.
+        be smaller than :math:`2^{16}`.
     pois: list of array_like, int
         Indices of the POIs in the traces for each variable. That is, for
         variable ``i``, and training trace ``t``, ``t[pois[i]]`` is the input
@@ -406,9 +406,9 @@ class LdaAcc:
         ----------
         traces : array_like, int16
             Array that contains the traces. The array must
-            be of dimension `(n,ns)` and its type must be `int16`.
+            be of dimension ``(n,ns)`` and its type must be `int16`.
         x : array_like, uint16
-            Labels for each trace. Must be of shape `(n, nv)` and
+            Labels for each trace. Must be of shape ``(n, nv)`` and
             must be `uint16`.
         """
         if not self._init:
@@ -462,12 +462,12 @@ class Lda:
         Parameters
         ----------
         traces : array_like, int16
-            Array that contains the traces. The array must be of dimension `(n,ns)`.
+            Array that contains the traces. The array must be of dimension ``(n,ns)``.
 
         Returns
         -------
         list of array_like, f64
-            Probability distributions. Shape `(nv, n, nc)`.
+            Probability distributions. Shape ``(nv, n, nc)``.
         """
         traces = scalib.utils.clean_traces(traces, self._ns)
         with scalib.utils.interruptible():
@@ -480,15 +480,15 @@ class Lda:
         Parameters
         ----------
         traces : array_like, int16
-            Array that contains the traces. The array must be of dimension `(n,ns)`.
+            Array that contains the traces. The array must be of dimension ``(n,ns)``.
         x : array_like, uint16
-            Labels for each trace. Must be of shape `(n, nv)` and
+            Labels for each trace. Must be of shape ``(n, nv)`` and
             must be `uint16`.
 
         Returns
         -------
         list of array_like, f64
-            Log2 probabilities. Shape `(nv, n)`.
+            Log2 probabilities. Shape ``(nv, n)``.
         """
         traces = scalib.utils.clean_traces(traces, self._ns)
         x = scalib.utils.clean_labels(x, self._nv)
@@ -502,12 +502,12 @@ class Lda:
         Parameters
         ----------
         traces:
-            Array that contains the traces. The array must be of dimension `(n,ns)`.
+            Array that contains the traces. The array must be of dimension ``(n,ns)``.
 
         Returns
         -------
         array_like, f64
-            Projected traces. Shape `(n, self.p)`
+            Projected traces. Shape ``(n, self.p)``
         """
         return self._inner.project(traces, get_config())
 

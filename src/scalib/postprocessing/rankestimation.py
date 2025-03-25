@@ -80,11 +80,11 @@ def rank_nbin(costs, key, nbins, method="hist"):
     Parameters
     ----------
     costs : array_like, f64
-        Cost for each of the sub-keys. Array must be of shape `(ns,nc)` where
-        `ns` is the number of sub-keys, `nc` the possible values of each
+        Cost for each of the sub-keys. Array must be of shape ``(ns,nc)`` where
+        ``ns`` is the number of sub-keys, ``nc`` the possible values of each
         sub-keys.
     key : array_like, int
-        Correct full key split in sub-keys. Array must be of shape `(ns,)`.
+        Correct full key split in sub-keys. Array must be of shape ``(ns,)``.
     nbins : int
         Number of bins for each of the distributions.
     method : string
@@ -115,11 +115,11 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="scaledhist", max_nb_bin=2**26
     Parameters
     ----------
     costs : array_like, f64
-        Cost for each of the sub-keys. Array must be of shape `(ns,nc)` where
-        `ns` is the number of sub-keys, `nc` the possible values of each
+        Cost for each of the sub-keys. Array must be of shape ``(ns,nc)`` where
+        ``ns`` is the number of sub-keys, ``nc`` the possible values of each
         sub-keys.
     key : array_like, int
-        Correct full key split in sub-keys. Array must be of shape `(ns,)`.
+        Correct full key split in sub-keys. Array must be of shape ``(ns,)``.
     acc_bit : f64, default: 1.0
         Expected log2 accuracy for the key rank estimation.
 
@@ -133,7 +133,7 @@ def rank_accuracy(costs, key, acc_bit=1.0, method="scaledhist", max_nb_bin=2**26
         * "scaledhist": using two scaled histograms (default).
         * "hist": using histograms.
         * "ntl": using NTL library, allows better precision.
-    max_nb_bin : int, default: 2**26
+    max_nb_bin : int, default: :math:`2^{26}`
         Maximum number of bins to use.
         This fixes an upper bound on the computational cost of the algorithm
         (if too low, the requested accuracy might not be reached).
@@ -162,6 +162,6 @@ def _choose_merge_value(costs):
     """The merge parameter is the number of sub-keys to merge in a
     brute-force manner before computing histograms. Merging may improve
     accuracy at the expense of running time.
-    Here we limit sub-histograms to 2**16 values.
+    Here we limit sub-histograms to :math:`2^{16}` values.
     """
     return min(len(costs), max(1, int(16 / math.log2(max(len(c) for c in costs)))))
