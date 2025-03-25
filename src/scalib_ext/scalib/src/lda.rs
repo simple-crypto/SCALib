@@ -37,12 +37,15 @@ pub struct MultiLdaAcc {
     ns: u32,
     /// Pois for each var
     cov_pois_offsets: Vec<usize>,
+    // [NOTE]: pub visibility only used for benches here.
     pub poi_map: Arc<PoiMap>,
     /// Number of traces.
     n_traces: u32,
     /// Per-class sums.
+    // [NOTE]: pub visibility only used for benches here.
     pub trace_sums: SparseTraceSums,
     /// Trace global scatter.
+    // [NOTE]: pub visibility only used for benches here.
     pub cov_pois: ScatterPairs,
     // For each variable, the argsort of the vector of POIs.
     // (Used in reshuffling in original order means and scatter when they are genereated for

@@ -12,7 +12,7 @@ use crate::ScalibError;
 
 #[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct MultiLdaAcc {
-    inner: scalib::multi_lda::MultiLdaAcc,
+    inner: scalib::lda::MultiLdaAcc,
 }
 #[pymethods]
 impl MultiLdaAcc {
@@ -20,7 +20,7 @@ impl MultiLdaAcc {
     /// Init an LDA empty LDA accumulator
     fn new(py: Python, ns: u32, nc: u16, pois: Vec<Vec<u32>>) -> PyResult<Self> {
         Ok(Self {
-            inner: scalib::multi_lda::MultiLdaAcc::new(ns, nc, pois)
+            inner: scalib::lda::MultiLdaAcc::new(ns, nc, pois)
                 .map_err(|e| ScalibError::from_scalib(e, py))?,
         })
     }
@@ -100,7 +100,7 @@ impl MultiLdaAcc {
 
 #[pyclass(module = "scalib._scalib_ext")]
 pub(crate) struct MultiLda {
-    inner: scalib::multi_lda::MultiLda,
+    inner: scalib::lda::MultiLda,
 }
 #[pymethods]
 impl MultiLda {
