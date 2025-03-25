@@ -402,8 +402,8 @@ class LdaAcc:
     Parameters
     ----------
     nc: int
-        Number of possible classes (e.g., 256 for 8-bit target). `nc` must
-        be smaller than `2**16`.
+        Number of possible classes (e.g., 256 for 8-bit target). ``nc`` must
+        be smaller than :math:`2^16`.
     pois: list of array_like, int
         Indices of the POIs in the traces for each variable. That is, for
         variable ``i``, and training trace ``t``, ``t[pois[i]]`` is the input
@@ -448,10 +448,6 @@ class LdaAcc:
     def get_mus(self):
         r"""Return means matrix (classes means). Shape: ``(nc, ns)``."""
         return self._inner.get_mus()
-
-    def get_matrices(self):
-        r"""Return (sw, sb, mus)."""
-        return self._inner.get_matrices()
 
 
 class Lda:

@@ -58,8 +58,8 @@ impl MultiLdaAcc {
             Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
     }
-    /// Get the matrix sb
 
+    /// Get the matrix sb
     fn get_sb<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyArray2<f64>>>> {
         match self.inner.get_matrices() {
             Ok(m) => Ok(m
@@ -79,31 +79,6 @@ impl MultiLdaAcc {
                 .collect()),
             Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
-    }
-
-    fn get_matrices<'py>(
-        &self,
-        py: Python<'py>,
-        config: crate::ConfigWrapper,
-    ) -> PyResult<
-        Vec<(
-            Bound<'py, PyArray2<f64>>,
-            Bound<'py, PyArray2<f64>>,
-            Bound<'py, PyArray2<f64>>,
-        )>,
-    > {
-        Ok(config
-            .on_worker(py, |_| self.inner.get_matrices())
-            .map_err(|e| ScalibError::from_scalib(e, py))?
-            .into_iter()
-            .map(|(sw, sb, mus)| {
-                (
-                    sw.into_pyarray(py),
-                    sb.into_pyarray(py),
-                    mus.into_pyarray(py),
-                )
-            })
-            .collect())
     }
 
     fn n_traces(&self) -> u32 {
