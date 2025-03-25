@@ -5,6 +5,9 @@ Changelog
 Not released
 ------------
 
+v0.6.1 (2025/03/25)
+-------------------
+
 * Build with the NTL dependency enabled for the linux CI.
 * Change CI build to require x86-64-v3 instead of just AVX2. This is roughly
   equivalent in terms of supported CPUs, but allows more instructions to be
