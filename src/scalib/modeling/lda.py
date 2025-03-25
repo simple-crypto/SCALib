@@ -194,23 +194,6 @@ class LDAClassifier:
         r"""Return means matrix (classes means). Shape: ``(nc, ns)``."""
         return self.acc.get_mus()[0]
 
-    def project(self, traces: npt.NDArray[np.int16]) -> npt.NDArray[np.float64]:
-        r"""Project the traces in the sub-linear space.
-
-        Parameters
-        ----------
-        traces:
-            Array that contains the traces. The array must be of dimension `(n,ns)`.
-
-        Returns
-        -------
-        array_like, f64
-            Projected traces. Shape `(n, self.p)`
-        """
-        if not (self.solved):
-            raise ValueError("Cannot project the trace since .solve() was never called")
-        return self.mlda.project(traces, get_config())[0]
-
 
 class MultiLDA:
     """Perform LDA on `nv` distinct variables for the same leakage traces.
@@ -512,6 +495,21 @@ class Lda:
 
         with scalib.utils.interruptible():
             return self._inner.predict_log2_proba_class(traces, x, get_config())
+
+    def project(self, traces: npt.NDArray[np.int16]) -> npt.NDArray[np.float64]:
+        r"""Project the traces in the sub-linear space.
+
+        Parameters
+        ----------
+        traces:
+            Array that contains the traces. The array must be of dimension `(n,ns)`.
+
+        Returns
+        -------
+        array_like, f64
+            Projected traces. Shape `(n, self.p)`
+        """
+        return self._inner.project(traces, get_config())
 
     def select_vars(self, vars: list[int]) -> "Lda":
         r"""Make a new :class:`Lda` with only a subset of the variables (in the

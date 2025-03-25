@@ -30,7 +30,7 @@ __all__ = [
     "RLDAClassifier",
 ]
 
-from .ldaclassifier import (
+from .lda import (
     LDAClassifier,
     MultiLDA,
     LdaAcc,

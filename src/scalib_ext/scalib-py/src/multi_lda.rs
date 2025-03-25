@@ -50,33 +50,24 @@ impl MultiLdaAcc {
 
     /// Get the matrix sw
     fn get_sw<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyArray2<f64>>>> {
-        match self.inner.get_matrices() {
-            Ok(m) => Ok(m
-                .into_iter()
-                .map(|(sw, _, _)| sw.into_pyarray(py))
-                .collect()),
+        match self.inner.get_s_w() {
+            Ok(m) => Ok(m.into_iter().map(|e| e.into_pyarray(py)).collect()),
             Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
     }
 
     /// Get the matrix sb
     fn get_sb<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyArray2<f64>>>> {
-        match self.inner.get_matrices() {
-            Ok(m) => Ok(m
-                .into_iter()
-                .map(|(_, sb, _)| sb.into_pyarray(py))
-                .collect()),
+        match self.inner.get_s_b() {
+            Ok(m) => Ok(m.into_iter().map(|e| e.into_pyarray(py)).collect()),
             Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
     }
 
     /// Get the matrix mus
     fn get_mus<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyArray2<f64>>>> {
-        match self.inner.get_matrices() {
-            Ok(m) => Ok(m
-                .into_iter()
-                .map(|(_, _, mus)| mus.into_pyarray(py))
-                .collect()),
+        match self.inner.get_mus() {
+            Ok(m) => Ok(m.into_iter().map(|e| e.into_pyarray(py)).collect()),
             Err(e) => Err(ScalibError::from_scalib(e, py)),
         }
     }

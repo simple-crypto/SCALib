@@ -3,6 +3,8 @@ mod scatter_pairs;
 mod sparse_trace_sums;
 mod utils;
 
+//mod solve;
+
 use std::cmp;
 use std::ops::Range;
 use std::sync::Arc;
@@ -13,10 +15,12 @@ use ndarray::{Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, Axi
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
-use crate::lda::{softmax, LDA};
 use crate::{Result, ScalibError};
 pub use poi_map::{PoiMap, AA};
 pub use scatter_pairs::ScatterPairs;
+//use solve::LDA;
+use geigen::Geigen;
+use nshare::{IntoNalgebra, IntoNdarray2};
 pub use sparse_trace_sums::SparseTraceSums;
 use utils::{log2_softmax_i, ArrayBaseExt, RangeExt};
 
@@ -146,7 +150,47 @@ impl MultiLdaAcc {
         c_sxi_sqrtni.dot(&(c_sxi_sqrtni.t()))
     }
 
-    fn compute_matrices_var(&self, var: Var) -> Result<LdaMatrices> {
+    fn s_w_mat(
+        &self,
+        sums: &Array2<i64>,
+        n_traces: ArrayView1<u32>,
+        s_b: &Array2<f64>,
+        var: Var,
+    ) -> Array2<f64> {
+        ///// Within-class scatter computation.
+        // Compute the total sum of traces with shape (npois, )
+        let s_x = sums.sum_axis(Axis(1));
+        // Total amount of traces used
+        let n = n_traces.sum();
+        let mut s_w = Array2::zeros((sums.shape()[0], sums.shape()[0]));
+        let inv_n = 1.0 / (n as f64);
+        for (i, j) in self.var_pairs(var) {
+            let (i, j) = (i as usize, j as usize);
+            let i2 = self.poi_map.new_pois(var)[i];
+            let j2 = self.poi_map.new_pois(var)[j];
+            // Total scatter offset by mu**2*n_tot.
+            let s_t_u_e = self.cov_pois.get_scatter(i2, j2);
+            // Computation of (s_t_u*n - Sx(x)**2) for the target POI pair.
+            let t = (s_t_u_e as i128) * (n as i128) - (s_x[i] as i128) * (s_x[j] as i128);
+            // Computation of the Within-class element relative to the target POI pair.
+            // in practice, performs the operation s_t - s_b, and populate the s_w matrix
+            // at proper location.
+            let s_w_e = ((t as f64) * inv_n) - s_b[(i, j)];
+            s_w[(i, j)] = s_w_e;
+            s_w[(j, i)] = s_w_e;
+        }
+        s_w
+    }
+
+    fn mu_mat(&self, sums: &Array2<i64>, n_traces: ArrayView1<u32>) -> Array2<f64> {
+        let inv_ni = n_traces.mapv(|x| 1.0 / (x as f64));
+        let mus = Zip::from(sums.t())
+            .and_broadcast(&inv_ni.insert_axis(Axis(1)))
+            .map_collect(|s, inv_ni| (*s as f64) * inv_ni);
+        mus
+    }
+
+    fn compute_lda_var(&self, var: Var, p: u32) -> Result<LDASolved> {
         // LDA matrices computation.
         // x == data, xi == data with class i
         // n == number of traces, ni == number of traces with class i
@@ -176,40 +220,19 @@ impl MultiLdaAcc {
         if n_traces.iter().any(|n| *n == 0) {
             return Err(ScalibError::EmptyClass);
         }
-        // Compute the total sum of traces with shape (npois, )
-        let s_x = sums.sum_axis(Axis(1));
-        // Total amount of traces used
-        let n = n_traces.sum();
         //// Between-class scatter computation.
         let s_b = self.s_b_mat(&sums, n_traces);
         ///// Within-class scatter computation.
-        let mut s_w = Array2::zeros((sums.shape()[0], sums.shape()[0]));
-        let inv_n = 1.0 / (n as f64);
-        for (i, j) in self.var_pairs(var) {
-            let (i, j) = (i as usize, j as usize);
-            let i2 = self.poi_map.new_pois(var)[i];
-            let j2 = self.poi_map.new_pois(var)[j];
-            // Total scatter offset by mu**2*n_tot.
-            let s_t_u_e = self.cov_pois.get_scatter(i2, j2);
-            // Computation of (s_t_u*n - Sx(x)**2) for the target POI pair.
-            let t = (s_t_u_e as i128) * (n as i128) - (s_x[i] as i128) * (s_x[j] as i128);
-            // Computation of the Within-class element relative to the target POI pair.
-            // in practice, performs the operation s_t - s_b, and populate the s_w matrix
-            // at proper location.
-            let s_w_e = ((t as f64) * inv_n) - s_b[(i, j)];
-            s_w[(i, j)] = s_w_e;
-            s_w[(j, i)] = s_w_e;
-        }
-        let inv_ni = n_traces.mapv(|x| 1.0 / (x as f64));
-        let mus = Zip::from(sums.t())
-            .and_broadcast(&inv_ni.insert_axis(Axis(1)))
-            .map_collect(|s, inv_ni| (*s as f64) * inv_ni);
-        Ok(LdaMatrices {
-            s_w,
-            s_b,
-            mus,
-            n_traces: self.n_traces,
-        })
+        let s_w = self.s_w_mat(&sums, n_traces, &s_b, var);
+        ///// Mean computation
+        let mus = self.mu_mat(&sums, n_traces);
+        LDASolved::from_matrices(
+            self.n_traces as usize,
+            p as usize,
+            s_w.view(),
+            s_b.view(),
+            mus.view(),
+        )
     }
 
     // Generate a re-ordered mean matrix associated to a specific variable
@@ -236,20 +259,53 @@ impl MultiLdaAcc {
         o_mat
     }
 
-    // Return the LDA matrices, following the POI indexing provided in input
-    pub fn get_matrices(&self) -> Result<Vec<(Array2<f64>, Array2<f64>, Array2<f64>)>> {
-        let vec_tuples = (0..self.nv)
-            .map(|var| match self.compute_matrices_var(var) {
-                Ok(m) => Ok(LdaMatrices::to_tuple(LdaMatrices {
-                    s_b: self.order_scatter_matrix(&m.s_b, var),
-                    s_w: self.order_scatter_matrix(&m.s_w, var),
-                    mus: self.order_mu_matrix(&m.mus, var),
-                    n_traces: m.n_traces,
-                })),
-                Err(e) => Err(e),
+    pub fn get_s_b(&self) -> Result<Vec<Array2<f64>>> {
+        let sbs = (0..self.nv)
+            .into_iter()
+            .map(|var: Var| {
+                let sums = self.trace_sums.sums_var(var);
+                let n_traces = self.trace_sums.ntraces_var(var);
+                if n_traces.iter().any(|n| *n == 0) {
+                    return Err(ScalibError::EmptyClass);
+                }
+                let s_b = self.s_b_mat(&sums, n_traces);
+                Ok(self.order_scatter_matrix(&s_b, var))
             })
             .collect();
-        vec_tuples
+        sbs
+    }
+
+    pub fn get_s_w(&self) -> Result<Vec<Array2<f64>>> {
+        let sws = (0..self.nv)
+            .into_iter()
+            .map(|var: Var| {
+                let sums = self.trace_sums.sums_var(var);
+                let n_traces = self.trace_sums.ntraces_var(var);
+                if n_traces.iter().any(|n| *n == 0) {
+                    return Err(ScalibError::EmptyClass);
+                }
+                let s_b = self.s_b_mat(&sums, n_traces);
+                let s_w = self.s_w_mat(&sums, n_traces, &s_b, var);
+                Ok(self.order_scatter_matrix(&s_w, var))
+            })
+            .collect();
+        sws
+    }
+
+    pub fn get_mus(&self) -> Result<Vec<Array2<f64>>> {
+        let mus = (0..self.nv)
+            .into_iter()
+            .map(|var: Var| {
+                let sums = self.trace_sums.sums_var(var);
+                let n_traces = self.trace_sums.ntraces_var(var);
+                if n_traces.iter().any(|n| *n == 0) {
+                    return Err(ScalibError::EmptyClass);
+                }
+                let mu = self.mu_mat(&sums, n_traces);
+                Ok(self.order_mu_matrix(&mu, var))
+            })
+            .collect();
+        mus
     }
 
     pub fn lda(&self, p: u32, config: &crate::Config) -> Result<MultiLda> {
@@ -257,8 +313,7 @@ impl MultiLdaAcc {
             (0..self.nv)
                 .into_par_iter()
                 .map(|var| {
-                    let matrices = self.compute_matrices_var(var)?;
-                    let res = matrices.lda(p)?;
+                    let res = self.compute_lda_var(var, p)?;
                     it_cnt.inc(1);
                     Ok(res)
                 })
@@ -276,35 +331,6 @@ impl MultiLdaAcc {
     }
     fn npairs_n(n: usize) -> usize {
         n * (n + 1) / 2
-    }
-}
-
-/// Matrices for solving an LDA
-#[derive(Debug, Clone)]
-pub struct LdaMatrices {
-    /// Between-class scatter
-    pub s_b: Array2<f64>,
-    /// Within-class scatter
-    pub s_w: Array2<f64>,
-    /// Class means
-    pub mus: Array2<f64>,
-    /// Number of traces
-    pub n_traces: u32,
-}
-
-impl LdaMatrices {
-    fn to_tuple(self) -> (Array2<f64>, Array2<f64>, Array2<f64>) {
-        (self.s_w, self.s_b, self.mus)
-    }
-    /// Solve the LDA.
-    fn lda(&self, p: u32) -> Result<LDA> {
-        LDA::from_matrices(
-            self.n_traces as usize,
-            p as usize,
-            self.s_w.view(),
-            self.s_b.view(),
-            self.mus.view(),
-        )
     }
 }
 
@@ -387,7 +413,7 @@ struct LdaState {
 }
 
 impl MultiLda {
-    fn new(poi_map: Arc<PoiMap>, nc: Class, ldas: Vec<LDA>, p: u32) -> Self {
+    fn new(poi_map: Arc<PoiMap>, nc: Class, ldas: Vec<LDASolved>, p: u32) -> Self {
         let poi_blocks = poi_map.poi_blocks();
         let p = p as usize;
         let lda_states = ldas
@@ -653,6 +679,138 @@ impl MultiLda {
                 .iter()
                 .map(|v| self.lda_states[*v as usize].clone())
                 .collect(),
+        })
+    }
+}
+
+pub fn softmax(mut v: ndarray::ArrayViewMut1<f64>) {
+    let max = v.fold(f64::NEG_INFINITY, |x, y| f64::max(x, *y));
+    v.mapv_inplace(|x| f64::exp(x - max));
+    let tot = v.sum();
+    v /= tot;
+}
+
+// Implementation of Linear Discriminant Analysis templates
+//
+// When the LDA is fit, it computes a linear projection from a high dimensional space
+// to a subspace. The mean in the subspace is estimated for each of the possible nc classes.
+// The covariance of the leakage within the subspace is pooled.
+//
+// Probability estimation for each of the classes based on leakage traces
+// can be derived from the LDA by leveraging the previous templates.
+//
+// ## Algorithm
+// Compute S_W and S_B as defined in Section 3.8.3, pp. 121-124 of
+// R. O. Duda, P. E. Hart, D. G. Stork. Pattern Classification (Second Edition). John Wiley & Sons,
+// Inc., New York, 2001. ISBN 0-471-05669-3.
+// Computes S_T and S_B, then computes S_W = S_T - S_B.
+// S_B is computed from class means.
+// S_T is the overall scatter matrix.
+// Algorithms for computation of means and scatter matrix are taken from
+// Pébay, P., Terriberry, T.B., Kolla, H. et al. Numerically stable, scalable formulas for parallel
+// and online computation of higher-order multivariate central moments with arbitrary weights.
+// Comput Stat 31, 1305–1325 (2016). https://doi.org/10.1007/s00180-015-0637-z
+
+/// LDA state where leakage has dimension ns. p in the subspace are used.
+/// Random variable can be only in range [0,nc[.
+///
+/// ## Prediction algorithm
+/// Observe that
+/// `p(y|k) = (2/pi)^(-d/2) * det(S)^(-1/2) * exp[-1/2*(x-mu_k)^t * S^-1 * (x-mu_k)]`.
+/// Let `C = (2/pi)^(-d/2) * det(S)^(-1/2)`, we have
+/// ```notrust
+/// log p(y|k)/C = -1/2*(x-mu_k)^t * S^-1 * (x-mu_k)
+///     = -1/2*(x^t * S^-1 * x - x^t * S^-1 * mu_k - mu_k^t * S^-1 * x + mu_k * S^-1 * mu_k)
+///     = mu_k^t * S^-1 * x -1/2* mu_k^T * S^-1 * mu_k + K
+///     = omega_k^t*x + P_k + K
+/// ```
+/// where `omega_k = S^-1 * mu_k` and `P_k = -1/2 * omega_k^t * mu_k`.
+/// Therefore, `p(k|y) = softmax( (omega_k^t*x + P_k)_k )`.
+///
+/// We find `omega_k` by solving `S * omega_k = mu_k` (using Cholesky decomposition of `S`).
+///
+///  We do not combine multiplication by omega_k and the projection matrix: combined, it would
+///  require O(ns*nc) computation (and storage) for the scores, while it is O(ns*p + p*nc) for the
+///  split one (W then omega), which is interesting as long as p << nc (which is true, otherwise we
+///  could as well take p=nc and not reduce dimensionality).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LDASolved {
+    /// Projection matrix to the subspace. shape of (ns,p)
+    pub projection: Array2<f64>,
+    /// Number of dimensions in leakage traces
+    pub ns: usize,
+    /// Number of dimensions in the subspace
+    pub p: usize,
+    /// Max random variable value.
+    pub nc: usize,
+    /// Probability mapping vectors. shape (p,nc)
+    pub omega: Array2<f64>,
+    /// Probability mapping offsets. shape (nc,)
+    pub pk: Array1<f64>,
+}
+
+impl LDASolved {
+    /// n: total number of traces
+    /// p: number of dimensions in reduced space
+    /// sw: intra-class covariance
+    /// sb: intra-class covariance
+    /// means_ns: means per class
+    pub fn from_matrices(
+        n: usize,
+        p: usize,
+        sw: ArrayView2<f64>,
+        sb: ArrayView2<f64>,
+        means_ns: ArrayView2<f64>,
+    ) -> Result<Self> {
+        let ns = sw.shape()[0];
+        let nc = means_ns.shape()[0];
+        assert_eq!(ns, sw.shape()[1]);
+        assert_eq!(ns, sb.shape()[0]);
+        assert_eq!(ns, sb.shape()[1]);
+        assert_eq!(ns, means_ns.shape()[1]);
+        // LDA here
+        // ---- Step 1
+        let projection = if p == ns {
+            // no LDA, simple pooled gaussian templates
+            // This is suboptimal since we then have to pay multiplication with the identity, but
+            // it should not matter much (we are probably in a cheap case anyway).
+            ndarray::Array2::eye(ns)
+        } else {
+            // compute the projection
+            // Partial generalized eigenvalue decomposition for sb and sw.
+            let solver = geigen::GEigenSolverP::new(&sb.view(), &sw.view(), p)?;
+            let projection = solver.vecs().into_owned();
+            assert_eq!(projection.dim(), (ns, p));
+            projection
+        };
+
+        // ---- Step 2
+        // means per class within the subspace by projecting means_ns
+        let means = projection.t().dot(&means_ns.t());
+        // compute the noise covariance in the linear subspace
+        // cov= X^T * X
+        // proj = (P*X^T)^T = X*P^T
+        // cov_proj = (X*P^T)^T*(X*P^T) = P*X^T*X*P^T = P*cov*P^T
+        let cov = projection.t().dot(&(&sw / (n as f64)).dot(&projection));
+
+        // ---- Step 3
+        // Compute the matrix (p, nc) of vectors \omega_k^T
+        let cov_mat = cov.view().into_nalgebra();
+        let cholesky = cov_mat.cholesky().expect("failed cholesky decomposition");
+        let mut omega = means.view().into_nalgebra().into_owned();
+        for mut x in omega.column_iter_mut() {
+            cholesky.solve_mut(&mut x);
+        }
+        let omega = omega.into_ndarray2();
+        let pk = -0.5 * (&omega * &means).sum_axis(Axis(0));
+
+        Ok(Self {
+            projection,
+            ns,
+            p,
+            nc,
+            omega,
+            pk,
         })
     }
 }

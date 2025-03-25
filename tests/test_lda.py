@@ -62,7 +62,9 @@ def test_lda_pickle():
     lda_ref.fit(traces, labels)
 
     # Project traces with SCALib
-    ptraces = lda.project(traces)
+    from scalib.config import get_config
+
+    ptraces = lda.mlda.project(traces, get_config())[0]
     # Project traces woth sklearn
     ptraces_sklearn = lda_ref.transform(traces)
     projections_similar = all(
@@ -119,7 +121,9 @@ def test_lda():
     lda_ref.fit(traces, labels)
 
     # Project traces with SCALib
-    ptraces = lda.project(traces)
+    from scalib.config import get_config
+
+    ptraces = lda.mlda.project(traces, get_config())[0]
     # Project traces woth sklearn
     ptraces_sklearn = lda_ref.transform(traces)
     projections_similar = all(
