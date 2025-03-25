@@ -136,9 +136,9 @@ class Ttest:
         ----------
         traces :
             Array that contains the traces. The array must be of dimension
-            `(n, ns)`.
+            ``(n, ns)``.
         x :
-            Set in which each trace belongs. Must be of shape `(n,)` and must
+            Set in which each trace belongs. Must be of shape ``(n,)`` and must
             contain only `0` and `1`.
         """
         traces = scalib.utils.clean_traces(traces, self._ns)
@@ -155,7 +155,7 @@ class Ttest:
             self._ttest.update(traces, x, get_config())
 
     def get_ttest(self) -> npt.NDArray[np.float64]:
-        r"""Return the current Ttest estimation with an array of shape `(d,ns)`."""
+        r"""Return the current Ttest estimation with an array of shape ``(d,ns)``."""
         if not self._init:
             raise ValueError("Need to call .fit_u at least once.")
         with scalib.utils.interruptible():
@@ -225,9 +225,9 @@ class MTtest:
         ----------
         traces :
             Array that contains the signal. The array must
-            be of dimension `(n, ns)`.
+            be of dimension ``(n, ns)``.
         x :
-            Set in which each trace belongs. Must be of shape `(n,)`
+            Set in which each trace belongs. Must be of shape ``(n,)``
             and must contain only `0` and `1`.
         """
         traces = scalib.utils.clean_traces(traces)
@@ -241,8 +241,8 @@ class MTtest:
 
     def get_ttest(self) -> npt.NDArray[np.float64]:
         r"""Return the current MTtest estimation with an array of shape
-        `(n_pois,)`. Each element in that array corresponds to a test defined by
-        `pois`.
+        ``(n_pois,)``. Each element in that array corresponds to a test defined by
+        ``pois``.
 
         """
         with scalib.utils.interruptible():

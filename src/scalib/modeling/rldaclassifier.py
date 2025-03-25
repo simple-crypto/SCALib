@@ -88,9 +88,9 @@ class RLDAClassifier:
         Parameters
         ----------
         traces : array_like, int16
-            Array that contains the traces. Shape `(n,ns)`.
+            Array that contains the traces. Shape ``(n,ns)``.
         x : array_like, uint64
-            Labels for each trace. Shape `(n,nv)`.
+            Labels for each trace. Shape ``(n,nv)``.
         """
         traces = scalib.utils.clean_traces(traces, self._ns)
         x = scalib.utils.clean_labels(x, self._nv, exp_type=np.uint64)
@@ -118,7 +118,7 @@ class RLDAClassifier:
         Returns
         -------
         array_like, float64
-            Shape (nv,p,ns)."""
+            Shape ``(nv,p,ns)``."""
         return self._inner.get_norm_proj()
 
     def get_proj_coefs(
@@ -129,7 +129,7 @@ class RLDAClassifier:
         Returns
         -------
         array_like, float64
-            Shape (nv,p,nb+1).
+            Shape ``(nv,p,nb+1)``.
         """
         return self._inner.get_proj_coefs()
 
@@ -149,7 +149,7 @@ class RLDAClassifier:
         Returns
         -------
         array_like, f64
-            Probabilities. Shape `(n, nc)`.
+            Probabilities. Shape ``(n, nc)``.
         """
         assert self._solved, "Model not solved"
         return self._inner.predict_proba(traces, var, get_config())

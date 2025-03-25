@@ -20,12 +20,12 @@ fn bench_get_snr_inner<S: snr::SnrType<Sample = i16>>(
     n: usize,
     group: &mut BenchMarkGroup,
 ) {
-    let x = gen_traces(n, ns);
-    let y = gen_classes(np, n, nc);
-    let mut snr = snr::SNR::<S>::new(nc, ns, np);
-    snr.update(x.view(), y.view(), &Config::no_progress())
-        .unwrap();
     group.bench_with_input(BenchmarkId::new("get_snr", ns), &ns, |b, _| {
+        let x = gen_traces(n, ns);
+        let y = gen_classes(np, n, nc);
+        let mut snr = snr::SNR::<S>::new(nc, ns, np);
+        snr.update(x.view(), y.view(), &Config::no_progress())
+            .unwrap();
         b.iter(|| {
             snr.get_snr();
         })
@@ -39,13 +39,13 @@ fn bench_snr_update_inner<S: snr::SnrType<Sample = i16>>(
     n: usize,
     group: &mut BenchMarkGroup,
 ) {
-    let x = gen_traces(n, ns);
-    let y = gen_classes(np, n, nc);
-    let mut snr = snr::SNR::<S>::new(nc, ns, np);
     group.bench_with_input(
         BenchmarkId::new(format!("chunk_{}", np), ns),
         &ns,
         |b, _| {
+            let x = gen_traces(n, ns);
+            let y = gen_classes(np, n, nc);
+            let mut snr = snr::SNR::<S>::new(nc, ns, np);
             b.iter(|| {
                 snr.update(x.view(), y.view(), &Config::no_progress())
                     .unwrap();

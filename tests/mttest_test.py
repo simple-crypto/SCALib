@@ -8,6 +8,7 @@
         - Number of pois
         - Number of traces
 """
+
 import pytest
 from scalib.metrics import MTtest
 import numpy as np

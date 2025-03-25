@@ -105,7 +105,7 @@ class Quantizer:
         ----------
         traces : array_like, np.floating
             Array that contains the traces to estimate the shift and scale in
-            the quantization. The array must be of dimension `(n, ns)`
+            the quantization. The array must be of dimension ``(n, ns)``
         method : QuantFitMethod
             A member of QuantFitMethod enum class that specifies how the
             minimum and maximum value of the trace to be quantized is
@@ -139,7 +139,7 @@ class Quantizer:
         ----------
         traces : array_like, np.floating
             Array that contains the traces to be quantized into int16. The array must
-            be of dimension `(n, ns)`
+            be of dimension ``(n, ns)``
         clip : bool
             Boolean to bypass the overflow check prior to quantization and clip
             the overflowing values to the boundaries.

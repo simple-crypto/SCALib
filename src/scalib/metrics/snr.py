@@ -24,7 +24,7 @@ class SNR:
     ----------
     nc : int
         Number of possible values for the random variable :math:`X` (e.g., 256 for 8-bit
-        target). `nc` must be between :math:`2` and :math:`2^{16}` (included).
+        target). ``nc`` must be between :math:`2` and :math:`2^{16}` (included).
     use_64bit : bool (default False)
         Use 64 bits for intermediate sums instead of 32 bits.
         When using 64-bit sums, SNR can accumulate up to :math:`2^{32}` traces, while when
@@ -76,9 +76,9 @@ class SNR:
         ----------
         traces :
             Array that contains the leakage traces. The array must be of
-            dimension `(n, ns)`.
+            dimension ``(n, ns)``.
         x :
-            Labels for each trace. Must be of shape `(n, nv)`.
+            Labels for each trace. Must be of shape ``(n, nv)``.
         """
         traces = scalib.utils.clean_traces(traces, self._ns)
         x = scalib.utils.clean_labels(x, self._nv)
@@ -98,7 +98,7 @@ class SNR:
             self._snr.update(traces, x, get_config())
 
     def get_snr(self) -> npt.NDArray[np.float64]:
-        r"""Return the current SNR estimation with an array of shape `(np,ns)`."""
+        r"""Return the current SNR estimation with an array of shape ``(np,ns)``."""
         if not self._init:
             raise ValueError("Need to call .fit_u at least once.")
         with scalib.utils.interruptible():
