@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ndarray::Array2;
 use ndarray_rand::RandomExt;
 use ndarray_rand::{rand::SeedableRng, rand_distr::Uniform};
-use scalib::multi_lda::{Class, MultiLdaAcc};
+use scalib::lda::{Class, MultiLdaAcc};
 
 use ndarray_rand::rand::prelude::SliceRandom;
 use rand_xoshiro::Xoshiro256StarStar as Prng;
@@ -191,7 +191,7 @@ fn bench_mlda_ll_update_all(
 fn bench_mlda_update_top(c: &mut Criterion) {
     let seed = 0;
     let nc = 256;
-    let n = 10000;
+    let n = 1000;
     let mut group = c.benchmark_group("MLDA update low-level");
     bench_mlda_ll_update_all(seed, nc, 10000, 1, 1, 10000, n, &mut group);
     bench_mlda_ll_update_all(seed, nc, 10000, 1, 1000, 10000, n, &mut group);
