@@ -1,6 +1,8 @@
 pub mod belief_propagation;
+pub mod cpa;
 pub mod information;
 pub mod lda;
+mod lvar;
 pub(crate) mod matrixmul;
 pub mod mttest;
 pub mod rlda;
