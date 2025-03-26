@@ -229,6 +229,19 @@ impl<T: AccType> LVar<T> {
         return Ok(());
     }
 
+    pub fn tot_sum(&self) -> Array1<[i64; 8]> {
+        self.sum
+            .index_axis(Axis(1), 0)
+            .axis_iter(Axis(0))
+            .map(|sums| {
+                sums.iter().fold([0; 8], |x, y| {
+                    std::array::from_fn(|i| x[i] + T::acc2i64(y[i]))
+                })
+            })
+            .collect::<Vec<_>>()
+            .into()
+    }
+
     pub fn sum(&self) -> &Array3<[T::SumAcc; 8]> {
         &self.sum
     }
