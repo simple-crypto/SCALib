@@ -21,6 +21,12 @@ pub trait AccType: std::fmt::Debug {
     fn acc2i64(acc: Self::SumAcc) -> i64;
 }
 
+const AVX2_SIZE: usize = 32;
+const SMALL_ACC_BYTES: usize = 4; // i32
+pub const SIMD_SIZE: usize = AVX2_SIZE / SMALL_ACC_BYTES;
+const CACHE_LINE: usize = 64;
+const TRACE_SAMPLE_BYTES: usize = 2; // i16
+const SAMPLES_BLOCK_SIZE: usize = CACHE_LINE / TRACE_SAMPLE_BYTES;
 const TRACES_CHUNK_SIZE: usize = 1024;
 
 #[derive(Debug)]
@@ -54,11 +60,11 @@ impl AccType for AccType32bit {
 /// LVar state. stores the sum and the sum of squares of the leakage for each of the class.
 #[derive(Debug)]
 pub struct LVar<T: AccType> {
-    /// Sum of all the traces corresponding to each of the classes. shape (ceil(ns/8),nv,nc)
-    sum: Array3<[T::SumAcc; 8]>,
-    /// Sum of squares with shape (ceil(ns/8))
+    /// Sum of all the traces corresponding to each of the classes. shape (ceil(ns/SIMD_SIZE),nv,nc)
+    sum: Array3<[T::SumAcc; SIMD_SIZE]>,
+    /// Sum of squares with shape (ceil(ns/SIMD_SIZE))
     /// (never overflows since samples are i16 and tot_n_samples <= u32::MAX)
-    sum_square: Array1<[i64; 8]>,
+    sum_square: Array1<[i64; SIMD_SIZE]>,
     /// number of samples per class (nv,nc)
     n_samples: Array2<u32>,
     /// number of independent variables
@@ -79,11 +85,11 @@ impl<T: AccType> LVar<T> {
     /// ns: traces length
     /// nv: number of independent random variables
     pub fn new(nc: usize, ns: usize, nv: usize) -> Self {
-        let ns8 = if ns % 8 == 0 { ns / 8 } else { ns / 8 + 1 };
+        let ns_b = ns.div_ceil(SIMD_SIZE);
         assert!(nc <= 1 << 16);
         LVar {
-            sum: Array3::from_elem((ns8, nv, nc), [Zero::zero(); 8]),
-            sum_square: Array1::from_elem((ns8,), [0; 8]),
+            sum: Array3::from_elem((ns_b, nv, nc), [Zero::zero(); SIMD_SIZE]),
+            sum_square: Array1::from_elem((ns_b,), [0; SIMD_SIZE]),
             n_samples: Array2::zeros((nv, nc)),
             nv,
             ns,
@@ -150,16 +156,18 @@ impl<T: AccType> LVar<T> {
             },
         )?;
         let sample_bits_used_msk = (
-            self.sum.axis_chunks_iter_mut(Axis(0), 32 / 8),
-            self.sum_square.axis_chunks_iter_mut(Axis(0), 32 / 8),
-            traces.axis_chunks_iter(Axis(1), 32),
+            self.sum
+                .axis_chunks_iter_mut(Axis(0), SAMPLES_BLOCK_SIZE / SIMD_SIZE),
+            self.sum_square
+                .axis_chunks_iter_mut(Axis(0), SAMPLES_BLOCK_SIZE / SIMD_SIZE),
+            traces.axis_chunks_iter(Axis(1), SAMPLES_BLOCK_SIZE),
         )
             .into_par_iter()
             .map_init(
                 || {
                     (
-                        Array2::from_elem((4, TRACES_CHUNK_SIZE), [0i16; 8]),
-                        Array3::from_elem((4, nv, nc as usize), [0i32; 8]),
+                        Array2::from_elem((4, TRACES_CHUNK_SIZE), [0i16; SIMD_SIZE]),
+                        Array3::from_elem((4, nv, nc as usize), [0i32; SIMD_SIZE]),
                     )
                 },
                 |(traces_tr, tmp_sum), (mut sum, mut sum_square, trace_chunk)| {
@@ -169,7 +177,7 @@ impl<T: AccType> LVar<T> {
                         y.axis_chunks_iter(Axis(1), u16::MAX as usize)
                     )
                     .for_each(|(trace_chunk, y)| {
-                        tmp_sum.fill([0; 8]);
+                        tmp_sum.fill([0; SIMD_SIZE]);
                         izip!(
                             trace_chunk.axis_chunks_iter(Axis(0), TRACES_CHUNK_SIZE),
                             y.axis_chunks_iter(Axis(1), TRACES_CHUNK_SIZE)
@@ -189,7 +197,7 @@ impl<T: AccType> LVar<T> {
                                     let traces_chunk = traces_chunk.to_slice().unwrap();
                                     // SAFETY: y has been checked before, and offset/stride is in bound
                                     unsafe {
-                                        inner_snr_update(
+                                        inner_lvar_update(
                                             traces_chunk,
                                             y,
                                             sum,
@@ -229,12 +237,12 @@ impl<T: AccType> LVar<T> {
         return Ok(());
     }
 
-    pub fn tot_sum(&self) -> Array1<[i64; 8]> {
+    pub fn tot_sum(&self) -> Array1<[i64; SIMD_SIZE]> {
         self.sum
             .index_axis(Axis(1), 0)
             .axis_iter(Axis(0))
             .map(|sums| {
-                sums.iter().fold([0; 8], |x, y| {
+                sums.iter().fold([0; SIMD_SIZE], |x, y| {
                     std::array::from_fn(|i| x[i] + T::acc2i64(y[i]))
                 })
             })
@@ -242,10 +250,10 @@ impl<T: AccType> LVar<T> {
             .into()
     }
 
-    pub fn sum(&self) -> &Array3<[T::SumAcc; 8]> {
+    pub fn sum(&self) -> &Array3<[T::SumAcc; SIMD_SIZE]> {
         &self.sum
     }
-    pub fn sum_square(&self) -> &Array1<[i64; 8]> {
+    pub fn sum_square(&self) -> &Array1<[i64; SIMD_SIZE]> {
         &self.sum_square
     }
     pub fn n_samples(&self) -> &Array2<u32> {
@@ -268,14 +276,14 @@ impl<T: AccType> LVar<T> {
 #[inline(never)]
 ///  # Safety
 ///  all values in y must be < sum.shape()[1]
-unsafe fn inner_snr_update(
+unsafe fn inner_lvar_update(
     // len: n
-    trace_chunk: &[[i16; 8]],
+    trace_chunk: &[[i16; SIMD_SIZE]],
     // (nv, n)
     y: ArrayView2<u16>,
     // (nv, nc)
-    mut sum: ArrayViewMut2<[i32; 8]>,
-    sum_square: &mut [i64; 8],
+    mut sum: ArrayViewMut2<[i32; SIMD_SIZE]>,
+    sum_square: &mut [i64; SIMD_SIZE],
 ) {
     assert_eq!(trace_chunk.len(), y.shape()[1]);
     assert_eq!(sum.shape()[0], y.shape()[0]);
@@ -291,7 +299,7 @@ unsafe fn inner_snr_update(
         izip!(y.to_slice().unwrap(), trace_chunk).for_each(|(y, trace_chunk)| {
             // sum.get_unchecked_mut is safe due to assumption,
             let sum = sum.get_unchecked_mut(*y as usize);
-            for j in 0..8 {
+            for j in 0..SIMD_SIZE {
                 // overflow handled with error elsewhere
                 sum[j] = sum[j].wrapping_add(trace_chunk[j] as i32);
             }
@@ -302,16 +310,16 @@ unsafe fn inner_snr_update(
 #[inline(never)]
 fn transpose_traces(
     // shape: (4, n)
-    mut traces_tr: ArrayViewMut2<[i16; 8]>,
-    // shape: (n, ns) with ns <= 32
+    mut traces_tr: ArrayViewMut2<[i16; SIMD_SIZE]>,
+    // shape: (n, ns) with ns <= SAMPLES_BLOCK_SIZE
     trace_chunk: ArrayView2<i16>,
 ) -> u16 {
     assert_eq!(traces_tr.shape()[1], trace_chunk.shape()[0]);
     assert_eq!(traces_tr.shape()[0], 4);
-    assert!(trace_chunk.shape()[1] <= 32);
+    assert!(trace_chunk.shape()[1] <= SAMPLES_BLOCK_SIZE);
     let mut max_width: u16 = 0;
-    if trace_chunk.shape()[1] == 32 {
-        let mut max_width_vec = [0u16; 8];
+    if trace_chunk.shape()[1] == SAMPLES_BLOCK_SIZE {
+        let mut max_width_vec = [0u16; SIMD_SIZE];
         izip!(
             traces_tr.axis_iter_mut(Axis(1)),
             trace_chunk.axis_iter(Axis(0))
@@ -319,10 +327,11 @@ fn transpose_traces(
         .for_each(|(mut traces_tr, trace_chunk)| {
             izip!(
                 traces_tr.iter_mut(),
-                trace_chunk.axis_chunks_iter(Axis(0), 8)
+                trace_chunk.axis_chunks_iter(Axis(0), SIMD_SIZE)
             )
             .for_each(|(traces_tr, trace_chunk)| {
-                let trace_chunk: &[i16; 8] = trace_chunk.to_slice().unwrap().try_into().unwrap();
+                let trace_chunk: &[i16; SIMD_SIZE] =
+                    trace_chunk.to_slice().unwrap().try_into().unwrap();
                 //traces_tr.clone_from_slice(trace_chunk);
                 *traces_tr = *trace_chunk;
                 for (max_width, trace_chunk) in max_width_vec.iter_mut().zip(trace_chunk.iter()) {

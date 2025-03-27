@@ -60,7 +60,7 @@ use itertools::izip;
 use ndarray::{s, Array2, ArrayView2, Axis};
 use rayon::prelude::*;
 
-use crate::lvar::{AccType, LVar};
+use crate::lvar::{self, AccType, LVar};
 
 /// SNR state.
 /// This allows to estimate the mean and the variance for each of the classes which are
@@ -103,22 +103,22 @@ impl<T: AccType> SNR<T> {
         (
             self.acc.sum().axis_iter(Axis(0)),
             self.acc.sum_square().axis_iter(Axis(0)),
-            snr.axis_chunks_iter_mut(Axis(1), 8),
+            snr.axis_chunks_iter_mut(Axis(1), lvar::SIMD_SIZE),
         )
             .into_par_iter()
             .for_each(|(sum, sum_square, mut snr)| {
-                let sum_square: &[i64; 8] = sum_square.into_scalar();
-                let general_sum = sum
-                    .slice(s![0usize, ..])
-                    .iter()
-                    .fold([0i64; 8], |mut acc, s| {
-                        for (acc, s) in izip!(acc.iter_mut(), s.iter()) {
-                            // no overflow: sample on 16 bits, at most 2^32 traces
-                            *acc += T::acc2i64(*s);
-                        }
-                        acc
-                    });
-                let mut general_sum_sq = [0i128; 8];
+                let sum_square: &[i64; lvar::SIMD_SIZE] = sum_square.into_scalar();
+                let general_sum =
+                    sum.slice(s![0usize, ..])
+                        .iter()
+                        .fold([0i64; lvar::SIMD_SIZE], |mut acc, s| {
+                            for (acc, s) in izip!(acc.iter_mut(), s.iter()) {
+                                // no overflow: sample on 16 bits, at most 2^32 traces
+                                *acc += T::acc2i64(*s);
+                            }
+                            acc
+                        });
+                let mut general_sum_sq = [0i128; lvar::SIMD_SIZE];
                 for (sq, s) in izip!(general_sum_sq.iter_mut(), general_sum.iter()) {
                     let s = *s as i128;
                     *sq = s * s;
@@ -146,15 +146,15 @@ impl<T: AccType> SNR<T> {
 
 #[inline(never)]
 fn compute_snr<T: AccType>(
-    sum: &[[T::SumAcc; 8]],
+    sum: &[[T::SumAcc; lvar::SIMD_SIZE]],
     n_samples: &[u32],
-    sum_square: &[i64; 8],
-    general_sum_sq: &[i128; 8],
+    sum_square: &[i64; lvar::SIMD_SIZE],
+    general_sum_sq: &[i128; lvar::SIMD_SIZE],
     n: u32,
     snr: &mut [f64],
 ) {
     let sum_square_class =
-        izip!(sum.iter(), n_samples.iter()).fold([0i128; 8], |mut acc, (s, ns)| {
+        izip!(sum.iter(), n_samples.iter()).fold([0i128; lvar::SIMD_SIZE], |mut acc, (s, ns)| {
             for (acc, s) in izip!(acc.iter_mut(), s.iter()) {
                 if *ns != 0 {
                     let s = T::acc2i64(*s) as i128;

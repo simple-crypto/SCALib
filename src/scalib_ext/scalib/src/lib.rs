@@ -11,6 +11,8 @@ pub mod snr;
 pub mod ttest;
 pub(crate) mod utils;
 
+pub use lvar::{AccType32bit, AccType64bit};
+
 use thiserror::Error;
 
 type Result<T> = std::result::Result<T, ScalibError>;
@@ -47,6 +49,11 @@ pub enum ScalibError {
     PoiOutOfBound,
     #[error("Variable out of bounds.")]
     VarOutOfBound,
+    #[error("Incorrect shape for provided models: expected {expected:?}, got {dim:?}.")]
+    CpaMShape {
+        dim: (usize, usize, usize),
+        expected: (usize, usize, usize),
+    },
 }
 
 #[derive(Clone, Debug)]
