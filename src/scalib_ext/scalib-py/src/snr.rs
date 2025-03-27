@@ -6,8 +6,8 @@ use pyo3::prelude::*;
 use scalib::snr;
 
 enum InnerSnr {
-    Snr32bit(snr::SNR<snr::SnrType32bit>),
-    Snr64bit(snr::SNR<snr::SnrType64bit>),
+    Snr32bit(snr::SNR<scalib::AccType32bit>),
+    Snr64bit(snr::SNR<scalib::AccType64bit>),
 }
 
 #[pyclass(module = "scalib._scalib_ext")]

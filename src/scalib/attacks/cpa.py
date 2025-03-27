@@ -1,3 +1,5 @@
+import enum
+
 import numpy as np
 import numpy.typing as npt
 
@@ -7,7 +9,7 @@ import scalib.utils
 
 
 class CPA:
-    # TODO
+    # TODO update doc
     r"""Computes the Signal-to-Noise Ratio (SNR) between the traces and the
     intermediate values. Informally, SNR allows to quantify the amount of information about a
     random variable :math:`X` contained in the mean of the leakage :math:`L_X`. High SNR
@@ -40,15 +42,17 @@ class CPA:
 
     Examples
     --------
-    >>> from scalib.metrics import SNR
+    >>> from scalib.attacks import CPA
     >>> import numpy as np
     >>> # 500 traces of 200 points, 8-bit samples
     >>> traces = np.random.randint(0,256,(500,200),dtype=np.int16)
-    >>> # 10 variables on 4 bit (16 classes = 2^4)
-    >>> x = np.random.randint(0,16,(500,10),dtype=np.uint16)
-    >>> snr = SNR(nc=16)
-    >>> snr.fit_u(traces,x)
-    >>> snr_val = snr.get_snr()
+    >>> # 10 variables on 8 bit (256 classes = 2^8)
+    >>> x = np.random.randint(0,256,(500,10),dtype=np.uint16)
+    >>> cpa = CPA(nc=256)
+    >>> cpa.fit_u(traces,x)
+    >>> hamming_weights = np.bitwise_count(np.arange(256)).astype(np.float64)
+    >>> models = np.tile(hamming_weights[np.newaxis,:,np.newaxis], (10, 1, 200))
+    >>> cpa_val = cpa.get_correlation(models, CPA.Intermediate.XOR)
 
     Notes
     -----
@@ -56,6 +60,10 @@ class CPA:
        Their Effectiveness", Stefan Mangard, CT-RSA 2004: 222-235
 
     """
+
+    class Intermediate(enum.Enum):
+        XOR = enum.auto()
+        # TODO: support modular addition.
 
     def __init__(self, nc: int, use_64bit: bool = False):
         if nc not in range(2, 2**16 + 1):
@@ -87,7 +95,7 @@ class CPA:
             self._init = True
             self._ns = traces.shape[1]
             self._nv = x.shape[1]
-            self._snr = _scalib_ext.SNR(self._nc, self._ns, self._nv, self._use_64bit)
+            self._cpa = _scalib_ext.CPA(self._nc, self._ns, self._nv, self._use_64bit)
         if x.shape[0] != traces.shape[0]:
             raise ValueError(
                 f"Number of traces {traces.shape[0]} does not match size of classes array {x.shape[0]}."
@@ -96,48 +104,28 @@ class CPA:
         # we can copy when needed, as x should be small, so this should be cheap
         x = np.ascontiguousarray(x.transpose())
         with scalib.utils.interruptible():
-            self._snr.update(traces, x, get_config())
+            self._cpa.update(traces, x, get_config())
 
     def get_correlation(
-        self, models: npt.NDArray[np.float64], addition="xor"
+        self, models: npt.NDArray[np.float64], intermediate: Intermediate
     ) -> npt.NDArray[np.float64]:
-        r"""
+        r"""TODO
 
         Parameters
         ----------
         models :
             Array that contains the leakage models. The array must be of
             shape ``(nv, nc, ns)``.
-        addition :
-            Addition function between key and label among. Possible values:
-                #TODO
+        intermediate:
+            Addition function between key and label among.
 
         Returns
         -------
         Correlations as an array of shape ``(nv, nc, ns)``
         """
-        pass
-
-        # for (nv, ns):
-        #   compute model variance (sum over keys)
-        #   compute trace variance (sum over keys)
-        #   for key:
-        #       for label:
-        #           compute model
-        #           add product of model and trace sum in acc
-        #   divide acc by sqrt(vm*vt)
-        #
-        # REM possible opt: reduce model memory usage
-        # REM possible opt: f32 vs f64
-        #
-        # (key, label) loop:
-        # (I) blocks of 8 keys
-        # (II) labels
-        # (III) (unrolled): accumulate for the 8 keys (8 accumulators in registers, hence 8 loads for models, 8 MACs, 8 XORs).
-        #
-        # data:
-        # - sums: nv*nc*ns*(4 or 8 bytes)
-        # - models: nv*nc*ns*(8 bytes)
-        # - sum squares: ns*(8 bytes)
-        # - n_samples: nv*nc*(4 bytes)
-        # - result: nv*nc*ns*(8 bytes)
+        assert isinstance(intermediate, self.Intermediate)
+        assert intermediate == self.Intermediate.XOR
+        if not self._init:
+            raise ValueError("Need to call .fit_u at least once.")
+        with scalib.utils.interruptible():
+            return self._cpa.compute_cpa(models, get_config())

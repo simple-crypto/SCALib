@@ -1,15 +1,20 @@
-use crate::ScalibError;
+use crate::{lvar::SIMD_SIZE, Result, ScalibError};
+use itertools::izip;
 use ndarray::{Array3, ArrayView1, ArrayView2, ArrayView3, ArrayViewMut1, ArrayViewMut2, Axis};
 use rayon::prelude::*;
 
-use crate::lvar::{AccType, LVar};
+use crate::lvar::{self, AccType, LVar};
+
+type SimdAcc = [f64; lvar::SIMD_SIZE];
+const SIMD_ZERO: SimdAcc = [0.0; SIMD_SIZE];
+
 #[derive(Debug)]
 pub struct CPA<T: AccType> {
     acc: LVar<T>,
 }
 
 impl<T: AccType> CPA<T> {
-    /// Create a new SNR state.
+    /// Create a new CPA state.
     /// nc: random variables between [0,nc[
     /// ns: traces length
     /// nv: number of independent random variable for which CPA must be estimated
@@ -22,14 +27,14 @@ impl<T: AccType> CPA<T> {
     /// Update the CPA state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
     /// y: realization of random variables with shape (np,n)
-    /// If this errors, the SNR object should not be used anymore.
+    /// If this errors, the CPA object should not be used anymore.
     /// traces and y must be in standard C order
     pub fn update(
         &mut self,
         traces: ArrayView2<i16>,
         y: ArrayView2<u16>,
         config: &crate::Config,
-    ) -> Result<(), ScalibError> {
+    ) -> Result<()> {
         self.acc.update(traces, y, config)
     }
 
@@ -37,8 +42,15 @@ impl<T: AccType> CPA<T> {
     /// return array axes (variable, key class, samples in trace)
     /// models: (variable, intermediate variable class, samples in trace)
     /// (assumes intermediate variable = key ^ label)
-    pub fn compute_cpa(&self, models: ArrayView3<f64>) -> Array3<f64> {
+    pub fn compute_cpa(&self, models: ArrayView3<f64>) -> Result<Array3<f64>> {
         const KEY_BLOCK: usize = 8;
+        let expected_mdim = (self.acc.nv(), self.acc.nc(), self.acc.ns());
+        if models.dim() != expected_mdim {
+            return Err(ScalibError::CpaMShape {
+                dim: models.dim(),
+                expected: expected_mdim,
+            });
+        }
         let mut res = Array3::<f64>::zeros((self.acc.nv(), self.acc.nc(), self.acc.ns()));
         let tot_sums = self.acc.tot_sum();
         // Iterate over variables
@@ -46,61 +58,44 @@ impl<T: AccType> CPA<T> {
             res.axis_iter_mut(Axis(0)),
             models.axis_iter(Axis(0)),
             self.acc.sum().axis_iter(Axis(0)),
+            self.acc.n_samples().axis_iter(Axis(0)),
         )
             .into_par_iter()
-            .for_each(|(mut res, models, sums)| {
-                // Iterate blocks of SIMD_SIZE samples in trace.
-                (
-                    res.axis_chunks_iter_mut(Axis(1), SIMD_SIZE),
-                    models.axis_chunks_iter(Axis(1), SIMD_SIZE),
-                    sums.axis_iter(Axis(1)),
-                    tot_sums.axis_iter(Axis(0)),
-                    self.acc.sum_square().axis_iter(Axis(0)),
-                )
-                    .into_par_iter()
-                    .for_each_init(
-                        || CorrelationTmp::new(self.acc.nc()),
-                        |tmp, (res, models, sums, tot_sums, sums_squares)| {
-                            correlation_internal::<KEY_BLOCK, T>(
-                                *tot_sums.into_scalar(),
-                                *sums_squares.into_scalar(),
-                                sums,
-                                models,
-                                self.acc.tot_n_samples(),
-                                self.acc.nc(),
-                                res,
-                                tmp,
-                            );
-                        },
+            .for_each_init(
+                || vec![0.0; self.acc.nc()],
+                |n_samples_f, (mut res, models, sums, n_samples)| {
+                    for (nsf, ns) in n_samples_f.iter_mut().zip(n_samples.iter()) {
+                        *nsf = *ns as f64;
+                    }
+                    // Iterate blocks of SIMD_SIZE samples in trace.
+                    (
+                        res.axis_chunks_iter_mut(Axis(1), lvar::SIMD_SIZE),
+                        models.axis_chunks_iter(Axis(1), lvar::SIMD_SIZE),
+                        sums.axis_iter(Axis(1)),
+                        tot_sums.axis_iter(Axis(0)),
+                        self.acc.sum_square().axis_iter(Axis(0)),
                     )
-            });
-        res
+                        .into_par_iter()
+                        .for_each_init(
+                            || CorrelationTmp::new(self.acc.nc()),
+                            |tmp, (res, models, sums, tot_sums, sums_squares)| {
+                                correlation_internal::<KEY_BLOCK, T>(
+                                    *tot_sums.into_scalar(),
+                                    *sums_squares.into_scalar(),
+                                    sums,
+                                    &n_samples_f,
+                                    models,
+                                    self.acc.tot_n_samples(),
+                                    self.acc.nc(),
+                                    res,
+                                    tmp,
+                                );
+                            },
+                        )
+                },
+            );
+        Ok(res)
     }
-}
-
-const SIMD_SIZE: usize = 8;
-type SimdAcc = [f64; SIMD_SIZE];
-
-// algo:
-// for (var, sample block):
-//          (start inner)
-//      for sample:
-//        compute model variance
-//        compute trace variance
-//      for key block:
-//          initialize accumulators
-//          for label:
-//              load sums for label
-//              for key (unrolled):
-//                  intermediate = key ^ label
-//                  for sample (SIMD):
-//                      acc += sum * model[intermediate]
-
-fn sumarray<const N: usize, T: std::ops::Add<T, Output = T> + Copy>(
-    a: [T; N],
-    b: &[T; N],
-) -> [T; N] {
-    std::array::from_fn(|i| a[i] + b[i])
 }
 
 #[derive(Debug)]
@@ -112,25 +107,26 @@ struct CorrelationTmp {
 impl CorrelationTmp {
     fn new(nc: usize) -> Self {
         Self {
-            cmodels: vec![[0.0; SIMD_SIZE]; nc as usize],
-            csums: vec![[0.0; SIMD_SIZE]; nc as usize],
-            res_tmp: vec![[0.0; SIMD_SIZE]; nc as usize],
+            cmodels: vec![SIMD_ZERO; nc as usize],
+            csums: vec![SIMD_ZERO; nc as usize],
+            res_tmp: vec![SIMD_ZERO; nc as usize],
         }
     }
 }
 
 /// Compute correlation for a given var and a sample block
 fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
-    glob_sums: [i64; SIMD_SIZE],
-    sums_squares: [i64; SIMD_SIZE],
-    sums: ArrayView1<[T::SumAcc; SIMD_SIZE]>,
+    glob_sums: [i64; lvar::SIMD_SIZE],
+    sums_squares: [i64; lvar::SIMD_SIZE],
+    sums: ArrayView1<[T::SumAcc; lvar::SIMD_SIZE]>,
+    n_samples: &[f64],
     models: ArrayView2<f64>,
     n: u32,
     nc: usize,
     mut res: ArrayViewMut2<f64>,
     tmp: &mut CorrelationTmp,
 ) {
-    assert!(models.shape()[1] <= SIMD_SIZE);
+    assert!(models.shape()[1] <= lvar::SIMD_SIZE);
     assert_eq!(models.strides()[1], 1);
     let CorrelationTmp {
         cmodels,
@@ -139,12 +135,10 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
     } = tmp;
     let inv_n = 1.0 / (n as f64);
     let glob_means = glob_sums.map(|x| (x as f64) * inv_n);
-    for (csums, sums) in csums.iter_mut().zip(sums.iter()) {
-        // FIXME: multiply glob_means by number of samples in trace
-        // need to thread through acc.
-        *csums = std::array::from_fn(|i| (T::acc2i64(sums[i]) as f64) - glob_means[i]);
+    for (csums, sums, n_samples) in izip!(csums.iter_mut(), sums.iter(), n_samples.iter()) {
+        *csums = std::array::from_fn(|i| (T::acc2i64(sums[i]) as f64) - n_samples * glob_means[i]);
     }
-    let mut sum_models = [0.0; SIMD_SIZE];
+    let mut sum_models = SIMD_ZERO;
     let mut sum_models_v =
         ArrayViewMut1::from(&mut sum_models.as_mut_slice()[0..models.shape()[1]]);
     for m in models.axis_iter(Axis(0)) {
@@ -201,7 +195,7 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
 fn model_variance(cmodels: &[SimdAcc], nc: f64) -> SimdAcc {
     cmodels
         .iter()
-        .fold([0.0; SIMD_SIZE], |a, x| sumarray(a, &x.map(|y| y * y)))
+        .fold(SIMD_ZERO, |a, x| sumarray(a, &x.map(|y| y * y)))
         .map(|x| x / nc)
 }
 
@@ -229,18 +223,29 @@ fn ip_core<const NKEYS: usize, T: AccType>(
     key_start: usize,
     res: &mut [SimdAcc],
 ) {
+    assert!(key_start + NKEYS <= nc); // Needed for safety, should be optimized out of caller loop by compiler.
+    assert!(nc.is_power_of_two()); // Needed for safety, should be optimized out of caller loop by compiler.
+    assert_eq!(models.len(), nc); // Needed for safety, should be optimized out of caller loop by compiler.
     assert_eq!(res.len(), NKEYS);
-    res.fill([0.0; SIMD_SIZE]);
+    res.fill(SIMD_ZERO);
     for label in 0..nc {
         let sums = sums[label];
         for (res, key) in res.iter_mut().zip(key_start..(key_start + NKEYS)) {
             let intermediate = key ^ label;
-            // TODO SAFETY check before this function (for XOR, need nc to be power of 2 and all
-            // correct sizes).
+            // SAFETY: the asserts at the top of this function ensure that
+            // key < nc and nc is a power of two, therefore, since label < nc, we know that
+            // intermediate < nc, and nc is the length of model, so it's in bounds.
             let model = unsafe { models.get_unchecked(intermediate) };
-            for i in 0..SIMD_SIZE {
+            for i in 0..lvar::SIMD_SIZE {
                 res[i] = sums[i].mul_add(model[i], res[i]);
             }
         }
     }
+}
+
+fn sumarray<const N: usize, T: std::ops::Add<T, Output = T> + Copy>(
+    a: [T; N],
+    b: &[T; N],
+) -> [T; N] {
+    std::array::from_fn(|i| a[i] + b[i])
 }

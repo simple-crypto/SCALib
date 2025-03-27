@@ -17,6 +17,8 @@ pub(crate) mod utils;
 const L2_SIZE: usize = 512 * 1024;
 const L3_CORE: usize = 2 * 1024 * 1024;
 
+pub use lvar::{AccType32bit, AccType64bit};
+
 use thiserror::Error;
 
 type Result<T> = std::result::Result<T, ScalibError>;
@@ -53,6 +55,11 @@ pub enum ScalibError {
     PoiOutOfBound,
     #[error("Variable out of bounds.")]
     VarOutOfBound,
+    #[error("Incorrect shape for provided models: expected {expected:?}, got {dim:?}.")]
+    CpaMShape {
+        dim: (usize, usize, usize),
+        expected: (usize, usize, usize),
+    },
 }
 
 #[derive(Clone, Debug)]

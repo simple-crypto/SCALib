@@ -6,6 +6,7 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use std::error::Error;
 
+mod cpa;
 mod factor_graph;
 mod information;
 mod lda;
@@ -118,6 +119,7 @@ fn _scalib_ext(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("ScalibError", py.get_type::<ScalibError>())?;
     m.add_class::<Config>()?;
     m.add_class::<snr::SNR>()?;
+    m.add_class::<cpa::CPA>()?;
     m.add_class::<ttest::Ttest>()?;
     m.add_class::<ttest::MTtest>()?;
     m.add_class::<lda::MultiLdaAcc>()?;
