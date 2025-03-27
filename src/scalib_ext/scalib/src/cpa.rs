@@ -81,8 +81,9 @@ impl<T: AccType> CPA<T> {
 const SIMD_SIZE: usize = 8;
 type SimdAcc = [f64; SIMD_SIZE];
 
-// Trivial algo:
+// algo:
 // for (var, sample block):
+//          (start inner)
 //      for sample:
 //        compute model variance
 //        compute trace variance
@@ -139,6 +140,8 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
     let inv_n = 1.0 / (n as f64);
     let glob_means = glob_sums.map(|x| (x as f64) * inv_n);
     for (csums, sums) in csums.iter_mut().zip(sums.iter()) {
+        // FIXME: multiply glob_means by number of samples in trace
+        // need to thread through acc.
         *csums = std::array::from_fn(|i| (T::acc2i64(sums[i]) as f64) - glob_means[i]);
     }
     let mut sum_models = [0.0; SIMD_SIZE];
