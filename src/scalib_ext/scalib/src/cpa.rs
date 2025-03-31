@@ -138,20 +138,7 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
     for (csums, sums, n_samples) in izip!(csums.iter_mut(), sums.iter(), n_samples.iter()) {
         *csums = std::array::from_fn(|i| (T::acc2i64(sums[i]) as f64) - n_samples * glob_means[i]);
     }
-    let mut sum_models = SIMD_ZERO;
-    let mut sum_models_v =
-        ArrayViewMut1::from(&mut sum_models.as_mut_slice()[0..models.shape()[1]]);
-    for m in models.axis_iter(Axis(0)) {
-        sum_models_v += &m;
-    }
-    let means_models = sum_models.map(|x| x * inv_n);
-    for (cmodels, models) in cmodels.iter_mut().zip(models.axis_iter(Axis(0))) {
-        let models = models.as_slice().unwrap();
-        for (cm, m) in cmodels.iter_mut().zip(models.iter()) {
-            *cm = *m;
-        }
-        *cmodels = std::array::from_fn(|i| cmodels[i] - means_models[i]);
-    }
+    compute_cmodels::<T>(models, cmodels);
     // Covariance scaled by n:
     // if nc is too low, handle one-by-one.
     if nc < KEY_BLOCK {
@@ -188,6 +175,28 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
         for (res, tmp) in res.iter_mut().zip(tmp.iter()) {
             *res = *tmp;
         }
+    }
+}
+
+fn compute_cmodels<T: AccType>(models: ArrayView2<f64>, cmodels: &mut [SimdAcc]) {
+    assert_eq!(models.shape()[0], cmodels.len());
+    assert!(models.shape()[1] <= lvar::SIMD_SIZE);
+    assert_eq!(models.strides()[1], 1);
+    let nc = models.shape()[0];
+    let inv_nc = 1.0 / (nc as f64);
+    let mut sum_models = SIMD_ZERO;
+    let mut sum_models_v =
+        ArrayViewMut1::from(&mut sum_models.as_mut_slice()[0..models.shape()[1]]);
+    for m in models.axis_iter(Axis(0)) {
+        sum_models_v += &m;
+    }
+    let means_models = sum_models.map(|x| x * inv_nc);
+    for (cmodels, models) in cmodels.iter_mut().zip(models.axis_iter(Axis(0))) {
+        let models = models.as_slice().unwrap();
+        for (cm, m) in cmodels.iter_mut().zip(models.iter()) {
+            *cm = *m;
+        }
+        *cmodels = std::array::from_fn(|i| cmodels[i] - means_models[i]);
     }
 }
 
@@ -248,4 +257,39 @@ fn sumarray<const N: usize, T: std::ops::Add<T, Output = T> + Copy>(
     b: &[T; N],
 ) -> [T; N] {
     std::array::from_fn(|i| a[i] + b[i])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::{Array1, Array2};
+    use ndarray_rand::rand::SeedableRng;
+    use ndarray_rand::rand_distr::Uniform;
+    use ndarray_rand::RandomExt;
+    use rand_xoshiro::Xoshiro256StarStar;
+
+    #[test]
+    fn test_model_variance() {
+        let seed = 0;
+        let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
+        let test_cases = [(2, 1), (256, 1), (256, 8), (2, 8)];
+        for (nc, ns) in test_cases {
+            println!("nc: {nc}, ns: {ns}");
+            assert!(ns <= SIMD_SIZE);
+            let models = Array2::<f64>::random_using((nc, ns), Uniform::new(0.0, 1.0), &mut rng);
+            let mut cmodels = vec![SIMD_ZERO; nc];
+            compute_cmodels::<crate::lvar::AccType64bit>(models.view(), &mut cmodels);
+            let variance = model_variance(&cmodels, nc as f64);
+            let variance = variance.into_iter().take(ns).collect::<Array1<_>>();
+            // FIXME change DDOF parameter ?
+            let variance_test = models
+                .axis_iter(Axis(1))
+                .map(|x| x.var(0.0))
+                .collect::<Array1<_>>();
+            assert!(
+            variance.relative_eq(&variance_test, 1e-8, 1e-5),
+            "Model variance mismatch, \nvariance: {variance:#?}\nvariance_test:{variance_test:#?}\nmodels: {models:#?}\ncmodels: {cmodels:#?}"
+        );
+        }
+    }
 }
