@@ -5,6 +5,8 @@ Changelog
 Not released
 ------------
 
+* Optimize a bit sparse generic factors in SASCA (#195).
+
 v0.6.1 (2025/03/25)
 -------------------
 

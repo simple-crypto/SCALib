@@ -19,10 +19,11 @@ use crate::{Result, ScalibError};
 pub use poi_map::{PoiMap, AA};
 pub use scatter_pairs::ScatterPairs;
 //use solve::LDA;
+use crate::utils::RangeExt;
 use geigen::Geigen;
 use nshare::{IntoNalgebra, IntoNdarray2};
 pub use sparse_trace_sums::SparseTraceSums;
-use utils::{log2_softmax_i, ArrayBaseExt, RangeExt};
+use utils::{log2_softmax_i, ArrayBaseExt};
 
 pub type Class = u16;
 pub type Var = u16;
@@ -381,13 +382,10 @@ impl MultiLdaAcc {
 // var_block_size*p*N*8B < L3/ncores/4 (unlikely to be limiting)
 //
 // Now, let us make some conservative assuptions regarding cache sizes
-// - L2 = 512 kB
 // - L3_CCX = 8 MB
-// - L3/ncores = 2 MB
+use super::{L2_SIZE, L3_CORE};
 const N: usize = 32;
-const L2_SIZE: usize = 512 * 1024;
 const L3_CCX: usize = 8 * 1024 * 1024;
-const L3_CORE: usize = 2 * 1024 * 1024;
 const POI_BLOCK_SIZE: usize = L2_SIZE / 2 / 2 / N;
 
 /// Solved LDA for multiple variables.

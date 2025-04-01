@@ -9,6 +9,12 @@ pub mod snr;
 pub mod ttest;
 pub(crate) mod utils;
 
+// Let us make some conservative assuptions regarding cache sizes
+// - L2 = 512 kB
+// - L3/ncores = 2 MB
+const L2_SIZE: usize = 512 * 1024;
+const L3_CORE: usize = 2 * 1024 * 1024;
+
 use thiserror::Error;
 
 type Result<T> = std::result::Result<T, ScalibError>;

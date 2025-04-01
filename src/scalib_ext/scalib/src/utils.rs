@@ -1,5 +1,6 @@
 use hytra::TrAdder;
 use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
+use std::ops::Range;
 use std::thread;
 use std::time::Duration;
 
@@ -62,4 +63,18 @@ where
         pb_thread_handle.map(|handle| handle.thread().unpark());
         res
     })
+}
+
+pub(crate) trait RangeExt {
+    type Idx;
+    fn range_chunks(self, size: Self::Idx) -> impl Iterator<Item = Self>;
+}
+
+impl RangeExt for Range<usize> {
+    type Idx = usize;
+    fn range_chunks(self, size: Self::Idx) -> impl Iterator<Item = Self> {
+        let l = self.len();
+        let s = self.start;
+        (0..(l.div_ceil(size))).map(move |i| (s + i * size)..(s + std::cmp::min((i + 1) * size, l)))
+    }
 }

@@ -1,22 +1,7 @@
-use std::ops::Range;
-
 pub(crate) fn log2_softmax_i(v: ndarray::ArrayView1<f64>, i: usize) -> f64 {
     let max = v.fold(f64::NEG_INFINITY, |x, y| f64::max(x, *y));
     use std::f64::consts::LOG2_E;
     (v[i] - max) * LOG2_E - f64::log2(v.iter().map(|x| (x - max).exp()).sum())
-}
-
-pub(crate) trait RangeExt {
-    type Idx;
-    fn range_chunks(self, size: Self::Idx) -> impl Iterator<Item = Self>;
-}
-
-impl RangeExt for Range<usize> {
-    type Idx = usize;
-    fn range_chunks(self, size: Self::Idx) -> impl Iterator<Item = Self> {
-        let l = self.len();
-        (0..(l.div_ceil(size))).map(move |i| (i * size)..std::cmp::min((i + 1) * size, l))
-    }
 }
 
 pub(crate) trait ArrayBaseExt<A, D> {
