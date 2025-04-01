@@ -52,26 +52,38 @@ impl<T: AccType> CPA<T> {
             });
         }
         let mut res = Array3::<f64>::zeros((self.acc.nv(), self.acc.nc(), self.acc.ns()));
+        // Sum of all traces, Array1<[i64; SIMD_SIZE]>
         let tot_sums = self.acc.tot_sum();
         // Iterate over variables
         (
             res.axis_iter_mut(Axis(0)),
             models.axis_iter(Axis(0)),
-            self.acc.sum().axis_iter(Axis(0)),
+            self.acc.sum().axis_iter(Axis(1)),
             self.acc.n_samples().axis_iter(Axis(0)),
         )
             .into_par_iter()
             .for_each_init(
                 || vec![0.0; self.acc.nc()],
                 |n_samples_f, (mut res, models, sums, n_samples)| {
+                    // Shapes:
+                    // res (nc, ns)
+                    // models (nc, ns)
+                    // sums (ceil(ns/SIMD_SIZE), nc)
+                    // nsamples (nc)
+                    assert!(res.dim() == models.dim());
+                    assert!(res.shape()[0] == n_samples.len());
+                    assert!(sums.shape()[0] == res.shape()[1].div_ceil(SIMD_SIZE));
                     for (nsf, ns) in n_samples_f.iter_mut().zip(n_samples.iter()) {
                         *nsf = *ns as f64;
                     }
                     // Iterate blocks of SIMD_SIZE samples in trace.
                     (
+                        // (nc, SIMD_SIZE)
                         res.axis_chunks_iter_mut(Axis(1), lvar::SIMD_SIZE),
+                        // (nc, SIMD_SIZE)
                         models.axis_chunks_iter(Axis(1), lvar::SIMD_SIZE),
-                        sums.axis_iter(Axis(1)),
+                        // len = nc
+                        sums.axis_iter(Axis(0)),
                         tot_sums.axis_iter(Axis(0)),
                         self.acc.sum_square().axis_iter(Axis(0)),
                     )
@@ -79,6 +91,13 @@ impl<T: AccType> CPA<T> {
                         .for_each_init(
                             || CorrelationTmp::new(self.acc.nc()),
                             |tmp, (res, models, sums, tot_sums, sums_squares)| {
+                                // Shapes:
+                                // res: (nc, SIMD_SIZE)
+                                // models: (nc, SIMD_SIZE)
+                                // sums: (nc,)
+                                assert!(models.dim() == res.dim());
+                                assert!(sums.len() == res.shape()[0]);
+                                assert!(tot_sums.len() == 1);
                                 correlation_internal::<KEY_BLOCK, T>(
                                     *tot_sums.into_scalar(),
                                     *sums_squares.into_scalar(),
@@ -126,6 +145,16 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
     mut res: ArrayViewMut2<f64>,
     tmp: &mut CorrelationTmp,
 ) {
+    // x == data, xi == data with class i
+    // n == number of traces, ni == number of traces with class i
+    // Sx(.) == sum over all traces
+    // Sxi(.) == sum over traces of class i
+    // mu = Sx(x)/n (average)
+    // mui = Sxi(xi)/ni
+    //
+    // csums = Sum( xi - mu)
+    //       = Sum( xi - Sx / n)
+    //       = Sxi - ni * Sx / n
     assert!(models.shape()[1] <= lvar::SIMD_SIZE);
     assert_eq!(models.strides()[1], 1);
     let CorrelationTmp {
@@ -133,11 +162,13 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
         csums,
         res_tmp,
     } = tmp;
+    // Compute the centered traces, per class
     let inv_n = 1.0 / (n as f64);
     let glob_means = glob_sums.map(|x| (x as f64) * inv_n);
     for (csums, sums, n_samples) in izip!(csums.iter_mut(), sums.iter(), n_samples.iter()) {
         *csums = std::array::from_fn(|i| (T::acc2i64(sums[i]) as f64) - n_samples * glob_means[i]);
     }
+    // Compute the centered models, per class
     compute_cmodels::<T>(models, cmodels);
     // Covariance scaled by n:
     // if nc is too low, handle one-by-one.
@@ -178,6 +209,9 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
     }
 }
 
+// For a single var, compute the centered models
+// models: (nc, SIMD_SIZE)
+// cmodels: vec![(SIMD_SIZE, ) ; nc]
 fn compute_cmodels<T: AccType>(models: ArrayView2<f64>, cmodels: &mut [SimdAcc]) {
     assert_eq!(models.shape()[0], cmodels.len());
     assert!(models.shape()[1] <= lvar::SIMD_SIZE);
@@ -187,15 +221,23 @@ fn compute_cmodels<T: AccType>(models: ArrayView2<f64>, cmodels: &mut [SimdAcc])
     let mut sum_models = SIMD_ZERO;
     let mut sum_models_v =
         ArrayViewMut1::from(&mut sum_models.as_mut_slice()[0..models.shape()[1]]);
+    // Compute the sum of model, point-wise, corresponding to the <=SIMD_SIZE samples.
     for m in models.axis_iter(Axis(0)) {
         sum_models_v += &m;
     }
+    // Mean model, per sample, as the sum of all the model divided by the amount of
+    // classes.
     let means_models = sum_models.map(|x| x * inv_nc);
     for (cmodels, models) in cmodels.iter_mut().zip(models.axis_iter(Axis(0))) {
+        // Shapes
+        // cmodels: (SIMD_SIZE, ), one per class
+        // models: (SIMD_SIZE, ), one per class
         let models = models.as_slice().unwrap();
+        // Copy the models in cmodels
         for (cm, m) in cmodels.iter_mut().zip(models.iter()) {
             *cm = *m;
         }
+        // Compute the centered model as the model minus the mean, for each sample
         *cmodels = std::array::from_fn(|i| cmodels[i] - means_models[i]);
     }
 }
@@ -260,7 +302,7 @@ fn sumarray<const N: usize, T: std::ops::Add<T, Output = T> + Copy>(
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_cpa {
     use super::*;
     use ndarray::{Array1, Array2};
     use ndarray_rand::rand::SeedableRng;

@@ -123,7 +123,9 @@ impl<T: AccType> LVar<T> {
     /// If this errors, the SNR object should not be used anymore.
     fn update_internal(
         &mut self,
+        // shape (n, ns)
         traces: ArrayView2<i16>,
+        // shape (nv, n)
         y: ArrayView2<u16>,
         acc_ref: &TrAdder<u64>,
     ) -> Result<(), ScalibError> {
