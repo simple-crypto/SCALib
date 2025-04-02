@@ -28,6 +28,13 @@ def pearson_corr(x, y):
     return cov / (x_std * y_std)
 
 
+def numpy_corr(x, y):
+    corrmat = np.corrcoef(x, y)
+    ns = x.shape[0]
+    extract = [corrmat[i, j] for i, j in zip(range(ns), range(ns, ns + ns))]
+    return np.array(extract)
+
+
 def hw(v, nbits):
     return sum([(v >> i) & 0b1 for i in range(nbits)])
 
@@ -74,5 +81,8 @@ def test_cpa_univariate_correlation():
 
     print(corr)
     print(corr_ref)
+
+    npcorr = numpy_corr(traces.T, models_ref.T)
+    print(np.allclose(npcorr, corr_ref))
 
     assert np.allclose(corr, corr_ref)

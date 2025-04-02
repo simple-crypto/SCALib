@@ -255,12 +255,12 @@ fn model_variance(cmodels: &[SimdAcc], nc: f64) -> SimdAcc {
 fn data_variance(glob_sums: &[i64; SIMD_SIZE], sums_squares: &[i64; SIMD_SIZE], n: u32) -> SimdAcc {
     let nf = n as f64;
     let inv_n_sq = 1.0 / (nf * nf);
-    // Var(x) = sum(x-mu)**2/n = sum(x**2)/n - mu**2 = (n*sum(x**2) - sum(x)**2)/n**2
+    // Var(x) = sum(x-mu)**2/n = sum(x**2)/n - mu**2 = (n*sum(x**2) - sum(x)**2)/(n**2)
     std::array::from_fn(|i| {
         let ss = sums_squares[i] as i128;
         let gs = glob_sums[i] as i128;
-        let num_i128 = ((n as i128) * ss) - gs * gs;
-        (num_i128 as f64) / inv_n_sq
+        let num_i128 = ((n as i128) * ss) - (gs * gs);
+        (num_i128 as f64) * inv_n_sq
     })
 }
 
