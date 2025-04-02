@@ -35,6 +35,43 @@ def numpy_corr(x, y):
     return np.array(extract)
 
 
+# Var(x) = sum(x-mu)**2/n = sum(x**2)/n - mu**2 = (n*sum(x**2) - sum(x)**2)/(n**2)
+def var_in_int(data):
+    n = data.shape[0]
+    inv_n2 = np.float32(1.0 / (n * n))
+    xsq = data * data
+    s_xsq = np.sum(xsq, axis=0)
+    s_x = np.sum(data, axis=0)
+    s_x_sq = s_x * s_x
+
+    n_s_xsq = n * s_xsq
+    tmp = n_s_xsq - s_x_sq
+    tmpb = tmp.astype(np.float32) * inv_n2
+    return tmpb
+
+
+def pearson_corr_clean(x, y):
+    sx = np.sum(x, axis=0)
+    sy = np.sum(y, axis=0)
+
+    n = x.shape[0]
+    n_sx = n * x
+    n_sy = n * y
+
+    n_sx_c = n_sx - sx
+    n_sy_c = n_sy - sy
+
+    prod = n_sx_c * n_sy_c
+    scaled_cov = np.sum(prod, axis=0)
+
+    # Compute the variance similarly to what is done in rust
+    v_x = var_in_int(x)
+    v_y = var_in_int(y)
+    den = np.float32(1.0 / (n * n * n * np.sqrt(v_x * v_y)))
+    tmp = scaled_cov.astype(np.float32) * den
+    return tmp
+
+
 def hw(v, nbits):
     return sum([(v >> i) & 0b1 for i in range(nbits)])
 
@@ -71,7 +108,7 @@ def test_cpa_univariate_correlation():
 
     ### CPA ref
     models_ref = np.vstack([np.array(ns * [HW[e]]).reshape([1, ns]) for e in labels])
-    corr_ref = pearson_corr(traces, models_ref)
+    corr_ref = pearson_corr(traces.astype(np.float64), models_ref.astype(np.float64))
     print("Ref models")
     print(models_ref)
     print()
@@ -81,8 +118,8 @@ def test_cpa_univariate_correlation():
 
     print(corr)
     print(corr_ref)
-
-    npcorr = numpy_corr(traces.T, models_ref.T)
-    print(np.allclose(npcorr, corr_ref))
+    pcorr_clean = pearson_corr_clean(traces, models_ref)
+    print(pcorr_clean)
+    print(pcorr_clean.dtype)
 
     assert np.allclose(corr, corr_ref)

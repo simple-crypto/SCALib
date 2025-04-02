@@ -26,7 +26,7 @@ impl<T: AccType> CPA<T> {
 
     /// Update the CPA state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
-    /// y: realization of random variables with shape (np,n)
+    /// y: realization of random variables with shape (nv,n)
     /// If this errors, the CPA object should not be used anymore.
     /// traces and y must be in standard C order
     pub fn update(
@@ -304,6 +304,10 @@ fn sumarray<const N: usize, T: std::ops::Add<T, Output = T> + Copy>(
 #[cfg(test)]
 mod tests_cpa {
     use super::*;
+    use crate::AccType32bit;
+    use crate::Config;
+    use nalgebra::zero;
+    use ndarray::s;
     use ndarray::{Array1, Array2};
     use ndarray_rand::rand::SeedableRng;
     use ndarray_rand::rand_distr::Uniform;
@@ -333,5 +337,92 @@ mod tests_cpa {
             "Model variance mismatch, \nvariance: {variance:#?}\nvariance_test:{variance_test:#?}\nmodels: {models:#?}\ncmodels: {cmodels:#?}"
         );
         }
+    }
+
+    // Pearson correlation for a single variable
+    fn pearson_corr(x: ArrayView2<f64>, y: ArrayView2<f64>) -> Array1<f64> {
+        // x: (n, ns)
+        // y: (n, ns)
+        // mean x
+        let ux = x.mean_axis(Axis(0)).unwrap();
+        // mean y
+        let uy = y.mean_axis(Axis(0)).unwrap();
+        // centered x
+        let mut xc = Array2::<f64>::zeros(x.dim());
+        for (i, mut c) in xc.columns_mut().into_iter().enumerate() {
+            for ce in c.iter_mut() {
+                *ce = *ce - ux[i];
+            }
+        }
+        // centered y
+        let mut yc = Array2::<f64>::zeros(y.dim());
+        for (i, mut c) in yc.columns_mut().into_iter().enumerate() {
+            for ce in c.iter_mut() {
+                *ce = *ce - uy[i];
+            }
+        }
+        // covariance
+        let cov = xc
+            .iter()
+            .zip(yc.iter())
+            .map(|(a, b)| *a * *b)
+            .collect::<Array1<f64>>();
+        // Compute the std
+        let xstd = x.std_axis(Axis(0), 0.0);
+        let ystd = y.std_axis(Axis(0), 0.0);
+        // Compute the element wise product of std
+        let res = izip!(cov, xstd, ystd)
+            .map(|(c, sx, sy)| c / (sx * sy))
+            .collect();
+        res
+    }
+
+    fn test_ref_inner(seed: u32, ns: u32, nc: u32, n: u32, nv: u32) {
+        let seed = seed as u64;
+        let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
+
+        // Generate inputs
+        let models = Array3::<f64>::random_using(
+            (nv as usize, nc as usize, ns as usize),
+            Uniform::new(0.0, 1.0),
+            &mut rng,
+        );
+        let traces =
+            Array2::<i16>::random_using((n as usize, ns as usize), Uniform::new(0, 10), &mut rng);
+        let labels = Array2::<u16>::random_using(
+            (n as usize, nv as usize),
+            Uniform::new(0, nc as u16),
+            &mut rng,
+        );
+
+        // Create the CPA
+        let config = Config::no_progress();
+        let mut cpa = CPA::<AccType32bit>::new(nc as usize, ns as usize, nv as usize);
+        let _ = cpa.update(traces.view(), labels.t().view(), &config);
+        let corr = cpa.compute_cpa(models.view()).unwrap();
+
+        // Compute the reference
+        let labels_f64 = labels.mapv(|e| e as f64);
+        let traces_f64 = traces.mapv(|e| e as f64);
+        let mut mtraces = Array2::<f64>::zeros((n as usize, ns as usize));
+        for (i, j) in (0..n).zip(0..ns) {
+            mtraces[(i as usize, j as usize)] =
+                models[(0, labels[(i as usize, 0)] as usize, j as usize)];
+        }
+        let mtraces_f64 = mtraces.mapv(|e| e as f64);
+        let corr_ref = pearson_corr(traces_f64.view(), mtraces_f64.view());
+
+        let corr_u = corr.slice(s![0, 0, ..]);
+        assert!(
+            corr_u.relative_eq(&corr_ref, 1e-8, 1e-5),
+            "corr:{:?}\nref:{:?}",
+            corr_u,
+            corr_ref
+        );
+    }
+
+    #[test]
+    fn test_ref() {
+        test_ref_inner(0, 5, 4, 10, 1);
     }
 }
