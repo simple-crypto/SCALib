@@ -26,7 +26,7 @@ impl<T: AccType> CPA<T> {
 
     /// Update the CPA state with n fresh traces
     /// traces: the leakage traces with shape (n,ns)
-    /// y: realization of random variables with shape (np,n)
+    /// y: realization of random variables with shape (nv,n)
     /// If this errors, the CPA object should not be used anymore.
     /// traces and y must be in standard C order
     pub fn update(
@@ -163,7 +163,7 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
         res_tmp,
     } = tmp;
     // Compute the centered traces, per class
-    let inv_n = 1.0 / (n as f64);
+    let inv_n = 1.0 / n as f64;
     let glob_means = glob_sums.map(|x| (x as f64) * inv_n);
     for (csums, sums, n_samples) in izip!(csums.iter_mut(), sums.iter(), n_samples.iter()) {
         *csums = std::array::from_fn(|i| (T::acc2i64(sums[i]) as f64) - n_samples * glob_means[i]);
@@ -197,15 +197,29 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
     // Variances
     let var_model = model_variance(&cmodels, nc as f64);
     let var_data = data_variance(&glob_sums, &sums_squares, n);
-    // n appears in denominator because tmp is a non-scaled inner product.
+    // n-1 appears in denominator because tmp is a non-scaled inner product.
+    // here we use n-1 to hae an unbiased estimation of the covariance
     let inv_denom: SimdAcc =
-        std::array::from_fn(|i| 1.0 / ((n as f64) * (var_model[i] * var_data[i]).sqrt()));
+        std::array::from_fn(|i| 1.0 / (((n - 1) as f64) * (var_model[i] * var_data[i]).sqrt()));
     // Correlation computation & writeback.
     for (mut res, tmp) in res.axis_iter_mut(Axis(0)).zip(res_tmp.iter()) {
         let tmp: SimdAcc = std::array::from_fn(|i| tmp[i] * inv_denom[i]);
         for (res, tmp) in res.iter_mut().zip(tmp.iter()) {
             *res = *tmp;
         }
+    }
+    // Debug/dev print
+    #[cfg(debug_assertions)]
+    {
+        let inv_nm1 = 1.0 / (n as f64);
+        for tmp in res_tmp.iter() {
+            let tmp: SimdAcc = std::array::from_fn(|i| tmp[i] * inv_nm1);
+            println!("[CORR-cov]--> {:?}", tmp);
+        }
+        let sqrt_var_data = var_data.iter().map(|e| (*e).sqrt()).collect::<Vec<f64>>();
+        let sqrt_var_model = var_model.iter().map(|e| (*e).sqrt()).collect::<Vec<f64>>();
+        println!("[CORR-xstd]: {:?}", sqrt_var_data);
+        println!("[CORR-ystd]: {:?}", sqrt_var_model);
     }
 }
 
@@ -253,9 +267,10 @@ fn model_variance(cmodels: &[SimdAcc], nc: f64) -> SimdAcc {
 /// Variance of the traces (glob_sums: sum of the traces, sums_squares: sum of traces squared, n:
 /// total number of traces).
 fn data_variance(glob_sums: &[i64; SIMD_SIZE], sums_squares: &[i64; SIMD_SIZE], n: u32) -> SimdAcc {
-    let nf = n as f64;
-    let inv_n_sq = 1.0 / (nf * nf);
     // Var(x) = sum(x-mu)**2/n = sum(x**2)/n - mu**2 = (n*sum(x**2) - sum(x)**2)/(n**2)
+    let nf = n as f64;
+    let nfm1 = (n - 1) as f64;
+    let inv_n_sq = 1.0 / (nf * nfm1);
     std::array::from_fn(|i| {
         let ss = sums_squares[i] as i128;
         let gs = glob_sums[i] as i128;
@@ -304,6 +319,9 @@ fn sumarray<const N: usize, T: std::ops::Add<T, Output = T> + Copy>(
 #[cfg(test)]
 mod tests_cpa {
     use super::*;
+    use crate::AccType32bit;
+    use crate::Config;
+    use ndarray::s;
     use ndarray::{Array1, Array2};
     use ndarray_rand::rand::SeedableRng;
     use ndarray_rand::rand_distr::Uniform;
@@ -333,5 +351,135 @@ mod tests_cpa {
             "Model variance mismatch, \nvariance: {variance:#?}\nvariance_test:{variance_test:#?}\nmodels: {models:#?}\ncmodels: {cmodels:#?}"
         );
         }
+    }
+
+    // Reference pearson computation, considering the exact model variance
+    fn pearson_corr_rv1(
+        x: ArrayView2<f64>,
+        labels: ArrayView1<u16>,
+        y: ArrayView2<f64>,
+    ) -> Array1<f64> {
+        // x: (n, ns)
+        // labels: (n,)
+        // y: (nc, ns)
+        let mut xc = x.to_owned();
+        for (mut c, uxi) in xc
+            .columns_mut()
+            .into_iter()
+            .zip(x.mean_axis(Axis(0)).unwrap().iter())
+        {
+            for ce in c.iter_mut() {
+                *ce = *ce - uxi;
+            }
+        }
+        // centered y
+        let mut yc = y.to_owned();
+        for (mut c, uyi) in yc
+            .columns_mut()
+            .into_iter()
+            .zip(y.mean_axis(Axis(0)).unwrap().iter())
+        {
+            for ce in c.iter_mut() {
+                *ce = *ce - uyi;
+            }
+        }
+        // standard deviation
+        let xstd = x.std_axis(Axis(0), 1.0);
+        let ystd = y.std_axis(Axis(0), 0.0);
+        // unbiased estimation of covariance
+        let inv_n = 1.0 / ((x.shape()[0] - 1) as f64);
+        let cov = xc
+            .columns()
+            .into_iter()
+            .zip(yc.columns().into_iter())
+            .map(|(data, model)| {
+                data.iter()
+                    .zip(labels.iter())
+                    .map(|(dc, l)| *dc * model[*l as usize])
+                    .sum::<f64>()
+                    * inv_n
+            })
+            .collect::<Array1<f64>>();
+        #[cfg(debug_assertions)]
+        {
+            println!("[REF-n]: {:?}", x.shape()[0]);
+            println!("[REF-inv_n]: {:?}", inv_n);
+            println!("[REF-cov]: {:?}", cov);
+            println!("[REF-xstd]: {:?}", xstd);
+            println!("[REF-ystd]: {:?}", ystd);
+        }
+        // Compute the element wise product of std
+        let res = izip!(cov, xstd, ystd)
+            .map(|(c, sx, sy)| c / (sx * sy))
+            .collect();
+        res
+    }
+
+    fn test_ref_inner(seed: u32, ns: u32, nc: u32, n: u32, nv: u32, case: &str) {
+        let seed = seed as u64;
+        let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
+
+        // Generate inputs
+        let models = Array3::<f64>::random_using(
+            (nv as usize, nc as usize, ns as usize),
+            Uniform::new(0.0, 1.0),
+            &mut rng,
+        );
+        let traces =
+            Array2::<i16>::random_using((n as usize, ns as usize), Uniform::new(0, 10), &mut rng);
+
+        let labels = Array2::<u16>::random_using(
+            (nv as usize, n as usize),
+            Uniform::new(0, nc as u16),
+            &mut rng,
+        );
+
+        // Create the CPA
+        //
+        let config = Config::no_progress();
+        let mut cpa = CPA::<AccType32bit>::new(nc as usize, ns as usize, nv as usize);
+        let _ = cpa.update(traces.view(), labels.view(), &config);
+        let corr = cpa.compute_cpa(models.view()).unwrap();
+
+        // Compute and verify the reference
+        let traces_f64 = traces.mapv(|e| e as f64);
+        let mut mtraces = Array2::<f64>::zeros((n as usize, ns as usize));
+        for nvi in 0..nv {
+            for i in 0..n {
+                for j in 0..ns {
+                    mtraces[(i as usize, j as usize)] = models[(
+                        nvi as usize,
+                        labels[(nvi as usize, i as usize)] as usize,
+                        j as usize,
+                    )];
+                }
+            }
+            let corr_ref = pearson_corr_rv1(
+                traces_f64.view(),
+                labels.slice(s![nvi as usize, ..]),
+                models.slice(s![nvi as usize, .., ..]),
+            );
+
+            let corr_u = corr.slice(s![nvi as usize, 0, ..]);
+            assert!(
+                corr_u.relative_eq(&corr_ref, 1e-8, 1e-5),
+                "[{}]\nnvi: {}\ncorr:{:?}\nref:{:?}",
+                case,
+                nvi,
+                corr_u,
+                corr_ref
+            );
+        }
+    }
+
+    #[test]
+    fn test_ref() {
+        // seed, ns, nc, n, nv
+        test_ref_inner(0, 1, 2, 10, 1, "MINIMAL");
+        test_ref_inner(0, 1000, 2, 10, 1, "UNIV-multiple_ns");
+        test_ref_inner(0, 1, 256, 1000, 1, "UNIV-multiple_nc");
+        test_ref_inner(0, 1000, 256, 1000, 1, "UNIV-FULL");
+        test_ref_inner(0, 1, 2, 10, 2, "MINIMAL-MULTIV");
+        test_ref_inner(0, 1000, 256, 1000, 5, "MULTIV-FULL");
     }
 }

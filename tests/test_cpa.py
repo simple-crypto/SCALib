@@ -28,61 +28,72 @@ def pearson_corr(x, y):
     return cov / (x_std * y_std)
 
 
-def numpy_corr(x, y):
-    corrmat = np.corrcoef(x, y)
-    ns = x.shape[0]
-    extract = [corrmat[i, j] for i, j in zip(range(ns), range(ns, ns + ns))]
-    return np.array(extract)
+def pearson_corr_refv1(x, labels, model):
+    """
+    x: (n, ns)
+    labels (n, nv)
+    model: (nv, nc, ns)
+
+    Returns:
+    the correlation of shape (nv, ns)
+    """
+    # fetch config
+    n = x.shape[0]
+    nv = model.shape[0]
+    ns = x.shape[1]
+    # Compute the centered data
+    xc = x - np.mean(x, axis=0)
+    # Compute the centered model
+    mus = np.mean(model, axis=1)
+    mc = model.copy()
+    for i in range(nv):
+        mc[i] -= mus[i]
+    # Compute the data std
+    xstd = np.std(x, axis=0, ddof=1)
+    # Compute the model std (exact variance here)
+    v_mstd = np.std(model, axis=1, ddof=0)
+    # Compute the unbiased covariance estimation
+    u_mc = np.zeros([nv, n, ns])
+    for ni in range(nv):
+        # Create centered model corresponding to variable
+        for i, lab in enumerate(labels[:, ni]):
+            u_mc[ni, i, :] = mc[ni, lab, :]
+        # multiply with the centered data
+        u_mc[ni, :, :] *= xc
+    v_cov = np.sum(u_mc, axis=1) / (n - 1)
+    # divide by the data std
+    for vi in range(nv):
+        v_cov[vi, :] /= xstd
+    rcov = v_cov / v_mstd
+    return rcov
 
 
-def hw(v, nbits):
-    return sum([(v >> i) & 0b1 for i in range(nbits)])
-
-
-HW = np.array([hw(e, 8) for e in range(256)], dtype=np.int16)
-
-
-def test_cpa_univariate_correlation():
-    ns = 5
-    nbits = 1
-    nc = 2**nbits
-    n = 10
-
+def cpa_inner_test(seed, ns, nc, n, nv):
     rng = get_rng()
     traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
-    labels = rng.integers(0, nc, (n, 1), dtype=np.uint16)
+    labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
+    models = rng.random((nv, nc, ns), dtype=np.float64)
 
-    print("labels")
-    print(labels)
-    print()
-
-    ### Create the CPA and fit all with scalib
+    ### Create the CPA and fit all with SCAlib
     cpa = CPA(nc)
     cpa.fit_u(traces, labels)
+    corr = cpa.get_correlation(models, CPA.Intermediate.XOR)
 
-    models = np.hstack([HW[np.arange(nc)][:, np.newaxis] for _ in range(ns)]).astype(
-        np.float64
-    )[np.newaxis, :, :]
-    print("SCAlib models")
-    print(models)
+    ### Get the reference now
+    corr_ref = pearson_corr_refv1(traces, labels, models)
 
-    corr_scalib = cpa.get_correlation(models, CPA.Intermediate.XOR)
-    corr = corr_scalib[0, 0, :]
+    for i, (cv, cvr) in enumerate(zip(corr[:, 0, :], corr_ref)):
+        assert np.allclose(
+            cv, cvr
+        ), "[INNER-seed:{}-ns:{}-nc:{}-n:{}-nv:{}]\ncorr\n{}\nref\n{}".format(
+            seed, ns, nc, n, nv, cv, cvr
+        )
 
-    ### CPA ref
-    models_ref = np.vstack([np.array(ns * [HW[e]]).reshape([1, ns]) for e in labels])
-    corr_ref = pearson_corr(traces, models_ref)
-    print("Ref models")
-    print(models_ref)
-    print()
 
-    print(corr.shape)
-    print(corr_ref.shape)
-
-    print(corr)
-    print(corr_ref)
-
-    npcorr = numpy_corr(traces.T, models_ref.T)
-    print(np.allclose(npcorr, corr_ref))
-
-    assert np.allclose(corr, corr_ref)
+def test_cpa_full():
+    cpa_inner_test(0, 1, 2, 10, 1)
+    cpa_inner_test(0, 1000, 2, 10, 1)
+    cpa_inner_test(0, 1, 256, 1000, 1)
+    cpa_inner_test(0, 1000, 256, 1000, 1)
+    cpa_inner_test(0, 1, 2, 10, 2)
+    cpa_inner_test(0, 1000, 256, 1000, 5)
