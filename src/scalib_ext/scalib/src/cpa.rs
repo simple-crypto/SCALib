@@ -253,7 +253,7 @@ fn model_variance(cmodels: &[SimdAcc], nc: f64) -> SimdAcc {
 /// Variance of the traces (glob_sums: sum of the traces, sums_squares: sum of traces squared, n:
 /// total number of traces).
 fn data_variance(glob_sums: &[i64; SIMD_SIZE], sums_squares: &[i64; SIMD_SIZE], n: u32) -> SimdAcc {
-    let nf = n as f64;
+    let nf = (n as f64) - 1.0;
     let inv_n_sq = 1.0 / (nf * nf);
     // Var(x) = sum(x-mu)**2/n = sum(x**2)/n - mu**2 = (n*sum(x**2) - sum(x)**2)/(n**2)
     std::array::from_fn(|i| {
@@ -306,7 +306,6 @@ mod tests_cpa {
     use super::*;
     use crate::AccType32bit;
     use crate::Config;
-    use nalgebra::zero;
     use ndarray::s;
     use ndarray::{Array1, Array2};
     use ndarray_rand::rand::SeedableRng;
@@ -340,30 +339,33 @@ mod tests_cpa {
     }
 
     // Pearson correlation for a single variable
-    fn pearson_corr(x: ArrayView2<f64>, y: ArrayView2<f64>) -> Array1<f64> {
+    fn pearson_corr(x: ArrayView2<f64>, y: ArrayView2<f64>, ddof: f64) -> Array1<f64> {
         // x: (n, ns)
         // y: (n, ns)
-        // mean x
-        let ux = x.mean_axis(Axis(0)).unwrap();
-        // mean y
-        let uy = y.mean_axis(Axis(0)).unwrap();
         // centered x
-        //let mut xc = Array2::<f64>::zeros(x.dim());
         let mut xc = x.to_owned();
-        for (i, mut c) in xc.columns_mut().into_iter().enumerate() {
+        for (mut c, uxi) in xc
+            .columns_mut()
+            .into_iter()
+            .zip(x.mean_axis(Axis(0)).unwrap().iter())
+        {
             for ce in c.iter_mut() {
-                *ce = *ce - ux[i];
+                *ce = *ce - uxi;
             }
         }
         // centered y
         let mut yc = y.to_owned();
-        for (i, mut c) in yc.columns_mut().into_iter().enumerate() {
+        for (mut c, uyi) in yc
+            .columns_mut()
+            .into_iter()
+            .zip(y.mean_axis(Axis(0)).unwrap().iter())
+        {
             for ce in c.iter_mut() {
-                *ce = *ce - uy[i];
+                *ce = *ce - uyi;
             }
         }
         // covariance
-        let inv_n = 1.0 / (x.shape()[0] as f64);
+        let inv_n = 1.0 / ((x.shape()[0] as f64) - ddof);
         let cov = xc
             .t()
             .rows()
@@ -377,11 +379,8 @@ mod tests_cpa {
                     * inv_n
             })
             .collect::<Array1<f64>>();
-        // Compute the std
-        let xstd = x.std_axis(Axis(0), 0.0);
-        let ystd = y.std_axis(Axis(0), 0.0);
         // Compute the element wise product of std
-        let res = izip!(cov, xstd, ystd)
+        let res = izip!(cov, x.std_axis(Axis(0), ddof), y.std_axis(Axis(0), ddof))
             .map(|(c, sx, sy)| c / (sx * sy))
             .collect();
         res
@@ -399,6 +398,7 @@ mod tests_cpa {
         );
         let traces =
             Array2::<i16>::random_using((n as usize, ns as usize), Uniform::new(0, 10), &mut rng);
+
         let labels = Array2::<u16>::random_using(
             (n as usize, nv as usize),
             Uniform::new(0, nc as u16),
@@ -411,30 +411,35 @@ mod tests_cpa {
         let _ = cpa.update(traces.view(), labels.t().view(), &config);
         let corr = cpa.compute_cpa(models.view()).unwrap();
 
-        // Compute the reference
-        let labels_f64 = labels.mapv(|e| e as f64);
+        // Compute and verify the reference
         let traces_f64 = traces.mapv(|e| e as f64);
         let mut mtraces = Array2::<f64>::zeros((n as usize, ns as usize));
-        for i in 0..n {
-            for j in 0..ns {
-                mtraces[(i as usize, j as usize)] =
-                    models[(0, labels[(i as usize, 0)] as usize, j as usize)];
+        for nvi in 0..nv {
+            for i in 0..n {
+                for j in 0..ns {
+                    mtraces[(i as usize, j as usize)] = models[(
+                        nvi as usize,
+                        labels[(i as usize, nvi as usize)] as usize,
+                        j as usize,
+                    )];
+                }
             }
-        }
-        let mtraces_f64 = mtraces.mapv(|e| e as f64);
-        let corr_ref = pearson_corr(traces_f64.view(), mtraces_f64.view());
+            let mtraces_f64 = mtraces.mapv(|e| e as f64);
+            let corr_ref = pearson_corr(traces_f64.view(), mtraces_f64.view(), 0.0);
 
-        let corr_u = corr.slice(s![0, 0, ..]);
-        assert!(
-            corr_u.relative_eq(&corr_ref, 1e-8, 1e-5),
-            "corr:{:?}\nref:{:?}",
-            corr_u,
-            corr_ref
-        );
+            let corr_u = corr.slice(s![0, 0, ..]);
+            assert!(
+                corr_u.relative_eq(&corr_ref, 1e-8, 1e-5),
+                "nvi: {}\ncorr:{:?}\nref:{:?}",
+                nvi,
+                corr_u,
+                corr_ref
+            );
+        }
     }
 
     #[test]
     fn test_ref() {
-        test_ref_inner(4, 2, 2, 3, 1);
+        test_ref_inner(4, 2, 2, 100, 1);
     }
 }
