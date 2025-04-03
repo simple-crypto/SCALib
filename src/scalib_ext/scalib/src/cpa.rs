@@ -348,24 +348,34 @@ mod tests_cpa {
         // mean y
         let uy = y.mean_axis(Axis(0)).unwrap();
         // centered x
-        let mut xc = Array2::<f64>::zeros(x.dim());
+        //let mut xc = Array2::<f64>::zeros(x.dim());
+        let mut xc = x.to_owned();
         for (i, mut c) in xc.columns_mut().into_iter().enumerate() {
             for ce in c.iter_mut() {
                 *ce = *ce - ux[i];
             }
         }
         // centered y
-        let mut yc = Array2::<f64>::zeros(y.dim());
+        let mut yc = y.to_owned();
         for (i, mut c) in yc.columns_mut().into_iter().enumerate() {
             for ce in c.iter_mut() {
                 *ce = *ce - uy[i];
             }
         }
         // covariance
+        let inv_n = 1.0 / (x.shape()[0] as f64);
         let cov = xc
-            .iter()
-            .zip(yc.iter())
-            .map(|(a, b)| *a * *b)
+            .t()
+            .rows()
+            .into_iter()
+            .zip(yc.columns().into_iter())
+            .map(|(xl, yl)| {
+                xl.iter()
+                    .zip(yl.iter())
+                    .map(|(xe, ye)| *xe * *ye)
+                    .sum::<f64>()
+                    * inv_n
+            })
             .collect::<Array1<f64>>();
         // Compute the std
         let xstd = x.std_axis(Axis(0), 0.0);
@@ -405,9 +415,11 @@ mod tests_cpa {
         let labels_f64 = labels.mapv(|e| e as f64);
         let traces_f64 = traces.mapv(|e| e as f64);
         let mut mtraces = Array2::<f64>::zeros((n as usize, ns as usize));
-        for (i, j) in (0..n).zip(0..ns) {
-            mtraces[(i as usize, j as usize)] =
-                models[(0, labels[(i as usize, 0)] as usize, j as usize)];
+        for i in 0..n {
+            for j in 0..ns {
+                mtraces[(i as usize, j as usize)] =
+                    models[(0, labels[(i as usize, 0)] as usize, j as usize)];
+            }
         }
         let mtraces_f64 = mtraces.mapv(|e| e as f64);
         let corr_ref = pearson_corr(traces_f64.view(), mtraces_f64.view());
@@ -423,6 +435,6 @@ mod tests_cpa {
 
     #[test]
     fn test_ref() {
-        test_ref_inner(0, 5, 4, 10, 1);
+        test_ref_inner(4, 2, 2, 3, 1);
     }
 }
