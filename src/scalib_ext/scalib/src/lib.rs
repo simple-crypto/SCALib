@@ -2,7 +2,7 @@ pub mod belief_propagation;
 pub mod cpa;
 pub mod information;
 pub mod lda;
-mod lvar;
+pub mod lvar; // pub required for benches
 pub(crate) mod matrixmul;
 pub mod mttest;
 pub mod rlda;
