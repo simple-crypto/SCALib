@@ -47,8 +47,8 @@ fn bench_ll_cpa_all(seed: u32, nc: u32, n: u32, nv: u32, ns: u32, group: &mut Be
             let config = Config::no_progress();
             // Create the input
             let (traces, labels, models) = gen_cpa_inputs(&seed, nc, n, nv, ns);
-            let mut cpa = CPA::<AccType32bit>::new(nc as usize, ns as usize, nv as usize);
             b.iter(|| {
+                let mut cpa = CPA::<AccType32bit>::new(nc as usize, ns as usize, nv as usize);
                 let _ = cpa.update(traces.view(), labels.view(), &config);
                 let _corr = cpa.compute_cpa(models.view());
             })
@@ -108,16 +108,21 @@ fn bench_ll_cpa(seed: u32, nc: u32, n: u32, nv: u32, ns: u32, group: &mut BenchM
     bench_ll_cpa_all(seed, nc, n, nv, ns, group);
     bench_ll_cpa_update(seed, nc, n, nv, ns, group);
     bench_ll_cpa_correlation(seed, nc, n, nv, ns, group);
-    println!("");
 }
 
 fn bench_cpa(c: &mut Criterion) {
     let mut group = c.benchmark_group("CPA");
     let seed = 1;
     // nc, n, nv, ns
+    bench_ll_cpa(seed, 256, 100, 1, 1024, &mut group);
+    bench_ll_cpa(seed, 256, 1000, 1, 1024, &mut group);
+    bench_ll_cpa(seed, 256, 10000, 1, 1024, &mut group);
     bench_ll_cpa(seed, 256, 100000, 1, 1, &mut group);
     bench_ll_cpa(seed, 256, 100000, 1, 256, &mut group);
     bench_ll_cpa(seed, 256, 100000, 1, 2048, &mut group);
+    bench_ll_cpa(seed, 4096, 100, 1, 2048, &mut group);
+    bench_ll_cpa(seed, 256, 100, 16, 2048, &mut group);
+    bench_ll_cpa(seed, 256, 100, 16, 4096, &mut group);
 }
 
 criterion_group! {

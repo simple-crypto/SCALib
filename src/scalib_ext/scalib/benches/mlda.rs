@@ -185,7 +185,6 @@ fn bench_mlda_ll_update_all(
     bench_mlda_ll_update_sums_inner(seed, nc, ns, nv, npois, max_npois, n, group);
     bench_mlda_ll_update_scatterpairs_inner(seed, nc, ns, nv, npois, max_npois, n, group);
     bench_mlda_ll_update_global_inner(seed, nc, ns, nv, npois, max_npois, n, group);
-    println!("\n");
 }
 
 fn bench_mlda_update_top(c: &mut Criterion) {
@@ -248,7 +247,6 @@ fn bench_univariate_mlda_solve(nc: Class, ns: u32, n: usize, p: u32, group: &mut
 
 fn bench_univariate_solve(nc: Class, ns: u32, n: usize, p: u32, group: &mut BenchMarkGroup) {
     bench_univariate_mlda_solve(nc, ns, n, p, group);
-    println!("\n");
 }
 
 fn bench_univariate_mlda_predict(nc: Class, ns: u32, n: usize, p: u32, group: &mut BenchMarkGroup) {
@@ -277,7 +275,6 @@ fn bench_univariate_mlda_predict(nc: Class, ns: u32, n: usize, p: u32, group: &m
 
 fn bench_univariate_predict(nc: Class, ns: u32, n: usize, p: u32, group: &mut BenchMarkGroup) {
     bench_univariate_mlda_predict(nc, ns, n, p, group);
-    println!("\n");
 }
 
 fn bench_univariate(c: &mut Criterion) {

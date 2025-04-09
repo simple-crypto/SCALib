@@ -187,8 +187,10 @@ impl<T: AccType> LVar<T> {
                         .for_each(|(trace_chunk, y)| {
                             let mut traces_tr =
                                 traces_tr.slice_mut(s![.., ..trace_chunk.shape()[0]]);
-                            sample_bits_used_msk |=
-                                transpose_traces(traces_tr.view_mut(), trace_chunk);
+                            sample_bits_used_msk |= transpose_traces_and_get_bitwidth(
+                                traces_tr.view_mut(),
+                                trace_chunk,
+                            );
                             izip!(
                                 traces_tr.axis_iter(Axis(0)),
                                 tmp_sum.axis_iter_mut(Axis(0)),
@@ -310,7 +312,7 @@ unsafe fn inner_lvar_update(
 }
 
 #[inline(never)]
-fn transpose_traces(
+fn transpose_traces_and_get_bitwidth(
     // shape: (4, n)
     mut traces_tr: ArrayViewMut2<[i16; SIMD_SIZE]>,
     // shape: (n, ns) with ns <= SAMPLES_BLOCK_SIZE
@@ -319,6 +321,8 @@ fn transpose_traces(
     assert_eq!(traces_tr.shape()[1], trace_chunk.shape()[0]);
     assert_eq!(traces_tr.shape()[0], 4);
     assert!(trace_chunk.shape()[1] <= SAMPLES_BLOCK_SIZE);
+    assert_eq!(traces_tr.stride_of(Axis(1)), 1);
+    assert_eq!(trace_chunk.stride_of(Axis(1)), 1);
     let mut max_width: u16 = 0;
     if trace_chunk.shape()[1] == SAMPLES_BLOCK_SIZE {
         let mut max_width_vec = [0u16; SIMD_SIZE];
@@ -327,13 +331,12 @@ fn transpose_traces(
             trace_chunk.axis_iter(Axis(0))
         )
         .for_each(|(mut traces_tr, trace_chunk)| {
+            let trace_chunk = trace_chunk.as_slice().unwrap();
             izip!(
                 traces_tr.iter_mut(),
-                trace_chunk.axis_chunks_iter(Axis(0), SIMD_SIZE)
+                crate::utils::as_chunks::<SIMD_SIZE, _>(trace_chunk)
             )
             .for_each(|(traces_tr, trace_chunk)| {
-                let trace_chunk: &[i16; SIMD_SIZE] =
-                    trace_chunk.to_slice().unwrap().try_into().unwrap();
                 //traces_tr.clone_from_slice(trace_chunk);
                 *traces_tr = *trace_chunk;
                 for (max_width, trace_chunk) in max_width_vec.iter_mut().zip(trace_chunk.iter()) {
