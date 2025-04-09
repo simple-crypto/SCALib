@@ -1,6 +1,7 @@
 //! Python binding of SCALib's CPA implementation.
 
 use crate::ScalibError;
+use numpy::convert::IntoPyArray;
 use numpy::{PyArray3, PyReadonlyArray2, PyReadonlyArray3, ToPyArray};
 use pyo3::prelude::*;
 use scalib::cpa;
@@ -67,6 +68,6 @@ impl CPA {
                 InnerCpa::Cpa64bit(inner) => inner.compute_cpa(models),
             })
             .map_err(|e| ScalibError::from_scalib(e, py))?;
-        Ok(cpa.to_pyarray(py))
+        Ok(cpa.into_pyarray(py))
     }
 }
