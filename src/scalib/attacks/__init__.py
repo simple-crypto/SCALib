@@ -15,7 +15,7 @@ Soft Analytical Side-Channel Attack (SASCA)
    BPState
 """
 
-__all__ = ["FactorGraph", "BPState", "GenFactor", "CPA"]
+__all__ = ["FactorGraph", "BPState", "GenFactor", "Cpa"]
 
 from .factor_graph import FactorGraph, BPState, GenFactor
-from .cpa import CPA
+from .cpa import Cpa

@@ -6,6 +6,22 @@ use numpy::{PyArray3, PyReadonlyArray2, PyReadonlyArray3, ToPyArray};
 use pyo3::prelude::*;
 use scalib::cpa;
 
+#[pyclass(eq, eq_int)]
+#[derive(PartialEq, Debug, Clone)]
+pub enum CpaIntermediateKind {
+    Xor,
+    Add,
+}
+
+impl std::convert::From<&CpaIntermediateKind> for scalib::cpa::IntermediateKind {
+    fn from(value: &CpaIntermediateKind) -> Self {
+        match value {
+            CpaIntermediateKind::Xor => Self::Xor,
+            CpaIntermediateKind::Add => Self::Add,
+        }
+    }
+}
+
 enum InnerCpa {
     Cpa32bit(cpa::CPA<scalib::AccType32bit>),
     Cpa64bit(cpa::CPA<scalib::AccType64bit>),
@@ -59,13 +75,14 @@ impl CPA {
         &mut self,
         py: Python<'py>,
         models: PyReadonlyArray3<f64>,
+        intermediate_kind: &CpaIntermediateKind,
         config: crate::ConfigWrapper,
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         let models = models.as_array();
         let cpa = config
             .on_worker(py, |_| match &self.inner {
-                InnerCpa::Cpa32bit(inner) => inner.compute_cpa(models),
-                InnerCpa::Cpa64bit(inner) => inner.compute_cpa(models),
+                InnerCpa::Cpa32bit(inner) => inner.compute_cpa(intermediate_kind.into(), models),
+                InnerCpa::Cpa64bit(inner) => inner.compute_cpa(intermediate_kind.into(), models),
             })
             .map_err(|e| ScalibError::from_scalib(e, py))?;
         Ok(cpa.into_pyarray(py))
