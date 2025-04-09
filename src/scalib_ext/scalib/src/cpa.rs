@@ -42,8 +42,12 @@ impl<T: AccType> CPA<T> {
     /// return array axes (variable, key class, samples in trace)
     /// models: (variable, intermediate variable class, samples in trace)
     /// (assumes intermediate variable = key ^ label)
-    pub fn compute_cpa(&self, models: ArrayView3<f64>) -> Result<Array3<f64>> {
-        const KEY_BLOCK: usize = 8;
+    pub fn compute_cpa(
+        &self,
+        intermediate_kind: IntermediateKind,
+        models: ArrayView3<f64>,
+    ) -> Result<Array3<f64>> {
+        const KEY_BLOCK: u32 = 8;
         let expected_mdim = (self.acc.nv(), self.acc.nc(), self.acc.ns());
         if models.dim() != expected_mdim {
             return Err(ScalibError::CpaMShape {
@@ -99,13 +103,14 @@ impl<T: AccType> CPA<T> {
                                 assert!(sums.len() == res.shape()[0]);
                                 assert!(tot_sums.len() == 1);
                                 correlation_internal::<KEY_BLOCK, T>(
+                                    intermediate_kind,
                                     *tot_sums.into_scalar(),
                                     *sums_squares.into_scalar(),
                                     sums,
                                     &n_samples_f,
                                     models,
                                     self.acc.tot_n_samples(),
-                                    self.acc.nc(),
+                                    self.acc.nc() as u32,
                                     res,
                                     tmp,
                                 );
@@ -134,14 +139,15 @@ impl CorrelationTmp {
 }
 
 /// Compute correlation for a given var and a sample block
-fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
+fn correlation_internal<const KEY_BLOCK: u32, T: AccType>(
+    intermediate_kind: IntermediateKind,
     glob_sums: [i64; lvar::SIMD_SIZE],
     sums_squares: [i64; lvar::SIMD_SIZE],
     sums: ArrayView1<[T::SumAcc; lvar::SIMD_SIZE]>,
     n_samples: &[f64],
     models: ArrayView2<f64>,
     n: u32,
-    nc: usize,
+    nc: u32,
     mut res: ArrayViewMut2<f64>,
     tmp: &mut CorrelationTmp,
 ) {
@@ -174,7 +180,14 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
     // if nc is too low, handle one-by-one.
     if nc < KEY_BLOCK {
         for (start_key, tmp) in res_tmp.chunks_exact_mut(1).enumerate() {
-            ip_core::<1, T>(&csums, &cmodels, nc, start_key, tmp);
+            ip_core_poly::<1>(
+                intermediate_kind,
+                &csums,
+                &cmodels,
+                nc,
+                start_key as u32,
+                tmp,
+            );
         }
     } else {
         // Split nc in blocks of size KEY_BLOCK.
@@ -184,14 +197,21 @@ fn correlation_internal<const KEY_BLOCK: usize, T: AccType>(
         // issue since the computation of covariance is idempotent.
         let start_blocks = nc % KEY_BLOCK;
         if start_blocks != 0 {
-            ip_core::<KEY_BLOCK, T>(&csums, &cmodels, nc, 0, &mut res_tmp[0..KEY_BLOCK]);
+            ip_core_poly::<KEY_BLOCK>(
+                intermediate_kind,
+                &csums,
+                &cmodels,
+                nc,
+                0,
+                &mut res_tmp[0..(KEY_BLOCK as usize)],
+            );
         }
-        for (i, tmp) in res_tmp[start_blocks..]
-            .chunks_exact_mut(KEY_BLOCK)
+        for (i, tmp) in res_tmp[(start_blocks as usize)..]
+            .chunks_exact_mut(KEY_BLOCK as usize)
             .enumerate()
         {
-            let start_key = start_blocks + KEY_BLOCK * i;
-            ip_core::<KEY_BLOCK, T>(&csums, &cmodels, nc, start_key, tmp);
+            let start_key = start_blocks + KEY_BLOCK * (i as u32);
+            ip_core_poly::<KEY_BLOCK>(intermediate_kind, &csums, &cmodels, nc, start_key, tmp);
         }
     }
     // Variances
@@ -279,29 +299,96 @@ fn data_variance(glob_sums: &[i64; SIMD_SIZE], sums_squares: &[i64; SIMD_SIZE], 
     })
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum IntermediateKind {
+    Xor,
+    Add,
+}
+
+unsafe trait Intermediate {
+    /// SAFETY: the returned value must be smaller than the nc provided at initialization, assuming
+    /// that x < nc and y < nc.
+    fn compute(&self, x: u32, y: u32) -> u32;
+    fn new(nc: u32) -> Self;
+}
+
+#[derive(Debug, Clone)]
+struct XorIntermediate();
+
+/// SAFETY: we ensure that nc is a power of two, hence xor perserves the <nc property.
+unsafe impl Intermediate for XorIntermediate {
+    #[inline(always)]
+    fn compute(&self, x: u32, y: u32) -> u32 {
+        x ^ y
+    }
+    #[inline(always)]
+    fn new(nc: u32) -> Self {
+        assert!(nc.is_power_of_two());
+        Self()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AddIntermediate {
+    nc: u32,
+}
+
+/// SAFETY: if x<nc and y<nc, our partial modular reduction is enough to stay below nc.
+unsafe impl Intermediate for AddIntermediate {
+    #[inline(always)]
+    fn compute(&self, x: u32, y: u32) -> u32 {
+        let tmp = (x as u64) + (y as u64);
+        let nc = self.nc as u64;
+        let res = if tmp >= nc { tmp - nc } else { tmp };
+        res as u32
+    }
+    #[inline(always)]
+    fn new(nc: u32) -> Self {
+        Self { nc }
+    }
+}
+
+fn ip_core_poly<const NKEYS: u32>(
+    intermediate_kind: IntermediateKind,
+    sums: &[SimdAcc],
+    models: &[SimdAcc],
+    nc: u32,
+    key_start: u32,
+    res: &mut [SimdAcc],
+) {
+    match intermediate_kind {
+        IntermediateKind::Xor => {
+            ip_core::<NKEYS, XorIntermediate>(sums, models, nc, key_start, res)
+        }
+        IntermediateKind::Add => {
+            ip_core::<NKEYS, AddIntermediate>(sums, models, nc, key_start, res)
+        }
+    }
+}
+
 /// Compute inner product between sums and models
 /// for 1 SIMD word of samples and one block of keys.
-fn ip_core<const NKEYS: usize, T: AccType>(
+fn ip_core<const NKEYS: u32, I: Intermediate>(
     // sums associated to each label
     sums: &[SimdAcc],
     models: &[SimdAcc],
-    nc: usize,
-    key_start: usize,
+    nc: u32,
+    key_start: u32,
     res: &mut [SimdAcc],
 ) {
+    let intermediate = I::new(nc);
     assert!(key_start + NKEYS <= nc); // Needed for safety, should be optimized out of caller loop by compiler.
-    assert!(nc.is_power_of_two()); // Needed for safety, should be optimized out of caller loop by compiler.
-    assert_eq!(models.len(), nc); // Needed for safety, should be optimized out of caller loop by compiler.
-    assert_eq!(res.len(), NKEYS);
+    assert_eq!(models.len(), nc as usize); // Needed for safety, should be optimized out of caller loop by compiler.
+    assert_eq!(res.len(), NKEYS as usize);
     res.fill(SIMD_ZERO);
     for label in 0..nc {
-        let sums = sums[label];
+        let sums = sums[label as usize];
         for (res, key) in res.iter_mut().zip(key_start..(key_start + NKEYS)) {
-            let intermediate = key ^ label;
+            let class = intermediate.compute(key as u32, label) as usize;
             // SAFETY: the asserts at the top of this function ensure that
-            // key < nc and nc is a power of two, therefore, since label < nc, we know that
-            // intermediate < nc, and nc is the length of model, so it's in bounds.
-            let model = unsafe { models.get_unchecked(intermediate) };
+            // key < nc and label<nc.
+            // Follwoing Intermediate's invariants, class < nc.
+            let model = unsafe { models.get_unchecked(class) };
             for i in 0..lvar::SIMD_SIZE {
                 res[i] = sums[i].mul_add(model[i], res[i]);
             }
@@ -439,7 +526,9 @@ mod tests_cpa {
         let config = Config::no_progress();
         let mut cpa = CPA::<AccType32bit>::new(nc as usize, ns as usize, nv as usize);
         let _ = cpa.update(traces.view(), labels.view(), &config);
-        let corr = cpa.compute_cpa(models.view()).unwrap();
+        let corr = cpa
+            .compute_cpa(IntermediateKind::Xor, models.view())
+            .unwrap();
 
         // Compute and verify the reference
         let traces_f64 = traces.mapv(|e| e as f64);

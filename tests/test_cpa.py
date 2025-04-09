@@ -3,7 +3,7 @@ import numpy as np
 import hashlib
 import inspect
 
-from scalib.attacks import CPA
+from scalib.attacks import Cpa
 
 
 def get_rng(**args):
@@ -75,9 +75,11 @@ def cpa_inner_test(seed, ns, nc, n, nv):
     models = rng.random((nv, nc, ns), dtype=np.float64)
 
     ### Create the CPA and fit all with SCAlib
-    cpa = CPA(nc)
+    cpa = Cpa(nc, Cpa.Xor)
     cpa.fit_u(traces, labels)
-    corr = cpa.get_correlation(models, CPA.Intermediate.XOR)
+    corr = cpa.get_correlation(
+        models,
+    )
 
     ### Get the reference now
     corr_ref = pearson_corr_refv1(traces, labels, models)

@@ -120,6 +120,7 @@ fn _scalib_ext(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<Config>()?;
     m.add_class::<snr::SNR>()?;
     m.add_class::<cpa::CPA>()?;
+    m.add_class::<cpa::CpaIntermediateKind>()?;
     m.add_class::<ttest::Ttest>()?;
     m.add_class::<ttest::MTtest>()?;
     m.add_class::<lda::MultiLdaAcc>()?;

@@ -8,7 +8,7 @@ from scalib.config import get_config
 import scalib.utils
 
 
-class CPA:
+class Cpa:
     # TODO update doc
     r"""Computes the Signal-to-Noise Ratio (SNR) between the traces and the
     intermediate values. Informally, SNR allows to quantify the amount of information about a
@@ -28,6 +28,8 @@ class CPA:
     nc : int
         Number of possible values for the random variable :math:`X` (e.g., 256 for 8-bit
         target). ``nc`` must be between :math:`2` and :math:`2^{16}` (included).
+    kind:
+        Addition function between key and label (``Cpa.Xor``, ``Cpa.Add``).
     use_64bit : bool (default False)
         Use 64 bits for intermediate sums instead of 32 bits.
         When using 64-bit sums, SNR can accumulate up to :math:`2^{32}` traces, while when
@@ -42,17 +44,17 @@ class CPA:
 
     Examples
     --------
-    >>> from scalib.attacks import CPA
+    >>> from scalib.attacks import Cpa
     >>> import numpy as np
     >>> # 500 traces of 200 points, 8-bit samples
     >>> traces = np.random.randint(0,256,(500,200),dtype=np.int16)
     >>> # 10 variables on 8 bit (256 classes = 2^8)
     >>> x = np.random.randint(0,256,(500,10),dtype=np.uint16)
-    >>> cpa = CPA(nc=256)
+    >>> cpa = Cpa(nc=256)
     >>> cpa.fit_u(traces,x)
     >>> hamming_weights = np.bitwise_count(np.arange(256)).astype(np.float64)
     >>> models = np.tile(hamming_weights[np.newaxis,:,np.newaxis], (10, 1, 200))
-    >>> cpa_val = cpa.get_correlation(models, CPA.Intermediate.XOR)
+    >>> cpa_val = cpa.get_correlation(models, Cpa.Xor)
 
     Notes
     -----
@@ -60,18 +62,19 @@ class CPA:
        Their Effectiveness", Stefan Mangard, CT-RSA 2004: 222-235
 
     """
+    IntermediateKind = _scalib_ext.CpaIntermediateKind
+    Xor = IntermediateKind.Xor
+    Add = IntermediateKind.Add
 
-    class Intermediate(enum.Enum):
-        XOR = enum.auto()
-        # TODO: support modular addition.
-
-    def __init__(self, nc: int, use_64bit: bool = False):
+    def __init__(self, nc: int, kind: IntermediateKind, use_64bit: bool = False):
         if nc not in range(2, 2**16 + 1):
             raise ValueError(
                 "CPA can be computed on max 16 bit variable (and at least 2 classes),"
                 f" {nc=} given."
             )
         self._nc = nc
+        assert isinstance(kind, self.IntermediateKind)
+        self._kind = kind
         self._ns = None
         self._nv = None
         self._use_64bit = use_64bit
@@ -107,7 +110,8 @@ class CPA:
             self._cpa.update(traces, x, get_config())
 
     def get_correlation(
-        self, models: npt.NDArray[np.float64], intermediate: Intermediate
+        self,
+        models: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
         r"""TODO
 
@@ -116,16 +120,12 @@ class CPA:
         models :
             Array that contains the leakage models. The array must be of
             shape ``(nv, nc, ns)``.
-        intermediate:
-            Addition function between key and label among.
 
         Returns
         -------
         Correlations as an array of shape ``(nv, nc, ns)``
         """
-        assert isinstance(intermediate, self.Intermediate)
-        assert intermediate == self.Intermediate.XOR
         if not self._init:
             raise ValueError("Need to call .fit_u at least once.")
         with scalib.utils.interruptible():
-            return self._cpa.compute_cpa(models, get_config())
+            return self._cpa.compute_cpa(models, self._kind, get_config())
