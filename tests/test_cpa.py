@@ -92,10 +92,63 @@ def cpa_inner_test(seed, ns, nc, n, nv):
         )
 
 
+def cpa_inner_intermediate(seed, ns, nc, n, nv, perm_internal, intermediate):
+    rng = get_rng()
+    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
+    labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
+    models = rng.random((nv, nc, ns), dtype=np.float64)
+
+    ### Create the CPA and fit all with SCAlib
+    cpa = Cpa(nc, intermediate)
+    cpa.fit_u(traces, labels)
+    corr = cpa.get_correlation(
+        models,
+    )
+
+    ### Get the reference, corresponding to the intermediate with k = 0
+    ### Verify validity for every class
+    for c in range(nc):
+        models_used = models[:, perm_internal[c], :]
+        corr_ref = pearson_corr_refv1(traces, labels, models_used)
+        for i, (cv, cvr) in enumerate(zip(corr[:, c, :], corr_ref)):
+            assert np.allclose(
+                cv, cvr
+            ), "[{}-{}-seed:{}-ns:{}-nc:{}-n:{}-nv:{}]\ncorr\n{}\nref\n{}".format(
+                intermediate, c, seed, ns, nc, n, nv, cv, cvr
+            )
+
+
+def xor_pintern(nc):
+    perm_internal = [[0 for _ in range(nc)] for _ in range(nc)]
+    for i in range(nc):
+        for j in range(nc):
+            perm_internal[i][j] = j ^ i
+    return perm_internal
+
+
+def modadd_pintern(nc):
+    perm_internal = [[0 for _ in range(nc)] for _ in range(nc)]
+    for i in range(nc):
+        for j in range(nc):
+            perm_internal[i][j] = (j + i) % nc
+    return perm_internal
+
+
 def test_cpa_full():
-    cpa_inner_test(0, 1, 2, 10, 1)
-    cpa_inner_test(0, 1000, 2, 10, 1)
-    cpa_inner_test(0, 1, 256, 1000, 1)
-    cpa_inner_test(0, 1000, 256, 1000, 1)
-    cpa_inner_test(0, 1, 2, 10, 2)
-    cpa_inner_test(0, 1000, 256, 1000, 5)
+    # CPA configuration
+    cfgs = [(Cpa.Xor, xor_pintern), (Cpa.Add, modadd_pintern)]
+    # Parameter space to test
+    # (seed, ns, nc, n, nv)
+    cases = [
+        (0, 1, 2, 10, 1),
+        (0, 1000, 2, 10, 1),
+        (0, 1, 256, 1000, 1),
+        (0, 1000, 256, 1000, 1),
+        (0, 1, 2, 10, 2),
+        (0, 1000, 256, 1000, 5),
+    ]
+
+    for cpa_intern, fn_pintern in cfgs:
+        for seed, ns, nc, n, nv in cases:
+            pintern = fn_pintern(nc)
+            cpa_inner_intermediate(seed, ns, nc, n, nv, pintern, cpa_intern)
