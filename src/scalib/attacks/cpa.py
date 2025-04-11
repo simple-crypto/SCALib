@@ -50,11 +50,11 @@ class Cpa:
     >>> traces = np.random.randint(0,256,(500,200),dtype=np.int16)
     >>> # 10 variables on 8 bit (256 classes = 2^8)
     >>> x = np.random.randint(0,256,(500,10),dtype=np.uint16)
-    >>> cpa = Cpa(nc=256)
+    >>> cpa = Cpa(nc=256, kind=Cpa.Xor)
     >>> cpa.fit_u(traces,x)
     >>> hamming_weights = np.bitwise_count(np.arange(256)).astype(np.float64)
     >>> models = np.tile(hamming_weights[np.newaxis,:,np.newaxis], (10, 1, 200))
-    >>> cpa_val = cpa.get_correlation(models, Cpa.Xor)
+    >>> cpa_val = cpa.get_correlation(models)
 
     Notes
     -----

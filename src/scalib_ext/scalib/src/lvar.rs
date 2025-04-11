@@ -114,7 +114,7 @@ impl<T: AccType> LVar<T> {
         crate::utils::with_progress(
             |it_cnt| self.update_internal(traces, y, it_cnt),
             n_it,
-            "Update SNR",
+            "Update accumulator",
             config,
         )
     }
@@ -313,7 +313,7 @@ unsafe fn inner_lvar_update(
 
 #[inline(never)]
 fn transpose_traces_and_get_bitwidth(
-    // shape: (4, n)
+    // shape: (SAMPLES_BLOCK_SIZE/SIMD_SIZE, n)
     mut traces_tr: ArrayViewMut2<[i16; SIMD_SIZE]>,
     // shape: (n, ns) with ns <= SAMPLES_BLOCK_SIZE
     trace_chunk: ArrayView2<i16>,
@@ -321,8 +321,6 @@ fn transpose_traces_and_get_bitwidth(
     assert_eq!(traces_tr.shape()[1], trace_chunk.shape()[0]);
     assert_eq!(traces_tr.shape()[0], 4);
     assert!(trace_chunk.shape()[1] <= SAMPLES_BLOCK_SIZE);
-    assert_eq!(traces_tr.stride_of(Axis(1)), 1);
-    assert_eq!(trace_chunk.stride_of(Axis(1)), 1);
     let mut max_width: u16 = 0;
     if trace_chunk.shape()[1] == SAMPLES_BLOCK_SIZE {
         let mut max_width_vec = [0u16; SIMD_SIZE];
