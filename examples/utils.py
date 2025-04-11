@@ -58,3 +58,12 @@ def gen_traces(ntraces, std, random_key, random_plaintext):
         labels["x%d" % (j)] = x[:, j]
 
     return traces, labels
+
+
+# Compute the HW of the 'nbits' first bits of the value v
+def hw(v, nbits):
+    return sum([(v >> i) & 0b1 for i in range(nbits)])
+
+
+# HW of every bytes values
+HW = np.array([hw(e, 8) for e in range(256)], dtype=np.int16)

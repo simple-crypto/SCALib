@@ -2,7 +2,7 @@
 
 use crate::ScalibError;
 use numpy::convert::IntoPyArray;
-use numpy::{PyArray3, PyReadonlyArray2, PyReadonlyArray3, ToPyArray};
+use numpy::{PyArray3, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::prelude::*;
 use scalib::cpa;
 

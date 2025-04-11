@@ -384,6 +384,8 @@ fn ip_core<const NKEYS: u32, I: Intermediate>(
     for label in 0..nc {
         let sums = sums[label as usize];
         for (res, key) in res.iter_mut().zip(key_start..(key_start + NKEYS)) {
+            // Here: we may try to optimize the inner loop, due to the commutativity of th
+            // operation between label and key across iteration.
             let class = intermediate.compute(key as u32, label) as usize;
             // SAFETY: the asserts at the top of this function ensure that
             // key < nc and label<nc.

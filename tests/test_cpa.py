@@ -68,30 +68,6 @@ def pearson_corr_refv1(x, labels, model):
     return rcov
 
 
-def cpa_inner_test(seed, ns, nc, n, nv):
-    rng = get_rng()
-    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
-    labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
-    models = rng.random((nv, nc, ns), dtype=np.float64)
-
-    ### Create the CPA and fit all with SCAlib
-    cpa = Cpa(nc, Cpa.Xor)
-    cpa.fit_u(traces, labels)
-    corr = cpa.get_correlation(
-        models,
-    )
-
-    ### Get the reference now
-    corr_ref = pearson_corr_refv1(traces, labels, models)
-
-    for i, (cv, cvr) in enumerate(zip(corr[:, 0, :], corr_ref)):
-        assert np.allclose(
-            cv, cvr
-        ), "[INNER-seed:{}-ns:{}-nc:{}-n:{}-nv:{}]\ncorr\n{}\nref\n{}".format(
-            seed, ns, nc, n, nv, cv, cvr
-        )
-
-
 def cpa_inner_intermediate(seed, ns, nc, n, nv, perm_internal, intermediate):
     rng = get_rng()
     traces = rng.integers(0, 10, (n, ns), dtype=np.int16)

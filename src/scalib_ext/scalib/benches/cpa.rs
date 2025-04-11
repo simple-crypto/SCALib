@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use ndarray::{Array2, Array3};
 use ndarray_rand::RandomExt;
 use ndarray_rand::{rand::SeedableRng, rand_distr::Uniform};
-use scalib::cpa::CPA;
+use scalib::cpa::{IntermediateKind, CPA};
 use scalib::{AccType32bit, Config};
 
 use rand_xoshiro::Xoshiro256StarStar as Prng;
@@ -38,9 +38,23 @@ fn gen_cpa_inputs(
     (traces, labels, models)
 }
 
-fn bench_ll_cpa_all(seed: u32, nc: u32, n: u32, nv: u32, ns: u32, group: &mut BenchMarkGroup) {
+fn bench_ll_cpa_all(
+    seed: u32,
+    nc: u32,
+    n: u32,
+    nv: u32,
+    ns: u32,
+    intermediate: IntermediateKind,
+    group: &mut BenchMarkGroup,
+) {
     group.bench_with_input(
-        BenchmarkId::new(format!("[ALL]-nc:{}-n:{}-nv:{}-ns:{}", nc, n, nv, ns), ns),
+        BenchmarkId::new(
+            format!(
+                "[ALL]-nc:{}-n:{}-nv:{}-ns:{}-{:?}",
+                nc, n, nv, ns, intermediate
+            ),
+            ns,
+        ),
         &ns,
         |b, _| {
             // Create the CPA
@@ -50,7 +64,7 @@ fn bench_ll_cpa_all(seed: u32, nc: u32, n: u32, nv: u32, ns: u32, group: &mut Be
             b.iter(|| {
                 let mut cpa = CPA::<AccType32bit>::new(nc as usize, ns as usize, nv as usize);
                 let _ = cpa.update(traces.view(), labels.view(), &config);
-                let _corr = cpa.compute_cpa(models.view());
+                let _corr = cpa.compute_cpa(intermediate, models.view());
             })
         },
     );
@@ -82,11 +96,15 @@ fn bench_ll_cpa_correlation(
     n: u32,
     nv: u32,
     ns: u32,
+    intermediate: IntermediateKind,
     group: &mut BenchMarkGroup,
 ) {
     group.bench_with_input(
         BenchmarkId::new(
-            format!("[CORRELATION]-nc:{}-n:{}-nv:{}-ns:{}", nc, n, nv, ns),
+            format!(
+                "[CORRELATION]-nc:{}-n:{}-nv:{}-ns:{}-{:?}",
+                nc, n, nv, ns, intermediate
+            ),
             ns,
         ),
         &ns,
@@ -98,16 +116,18 @@ fn bench_ll_cpa_correlation(
             let (traces, labels, models) = gen_cpa_inputs(&seed, nc, n, nv, ns);
             let _ = cpa.update(traces.view(), labels.view(), &config);
             b.iter(|| {
-                let _corr = cpa.compute_cpa(models.view());
+                let _corr = cpa.compute_cpa(intermediate, models.view());
             })
         },
     );
 }
 
 fn bench_ll_cpa(seed: u32, nc: u32, n: u32, nv: u32, ns: u32, group: &mut BenchMarkGroup) {
-    bench_ll_cpa_all(seed, nc, n, nv, ns, group);
     bench_ll_cpa_update(seed, nc, n, nv, ns, group);
-    bench_ll_cpa_correlation(seed, nc, n, nv, ns, group);
+    bench_ll_cpa_all(seed, nc, n, nv, ns, IntermediateKind::Xor, group);
+    bench_ll_cpa_correlation(seed, nc, n, nv, ns, IntermediateKind::Xor, group);
+    bench_ll_cpa_all(seed, nc, n, nv, ns, IntermediateKind::Add, group);
+    bench_ll_cpa_correlation(seed, nc, n, nv, ns, IntermediateKind::Add, group);
 }
 
 fn bench_cpa(c: &mut Criterion) {
@@ -122,6 +142,7 @@ fn bench_cpa(c: &mut Criterion) {
     bench_ll_cpa(seed, 256, 100000, 1, 2048, &mut group);
     bench_ll_cpa(seed, 4096, 100, 1, 2048, &mut group);
     bench_ll_cpa(seed, 256, 100, 16, 2048, &mut group);
+    bench_ll_cpa(seed, 256, 10000, 16, 2048, &mut group);
     bench_ll_cpa(seed, 256, 100, 16, 4096, &mut group);
 }
 
