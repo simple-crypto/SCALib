@@ -1,4 +1,4 @@
-import enum
+from typing import TypeAlias
 
 import numpy as np
 import numpy.typing as npt
@@ -9,19 +9,28 @@ import scalib.utils
 
 
 class Cpa:
-    # TODO update doc
-    r"""Computes the Signal-to-Noise Ratio (SNR) between the traces and the
-    intermediate values. Informally, SNR allows to quantify the amount of information about a
-    random variable :math:`X` contained in the mean of the leakage :math:`L_X`. High SNR
-    means more information contained in the mean. The SNR metric is defined
-    with the following equation [1]_:
+    r"""Performs a Correlation Power Attacks (CPA) by computing the pearson
+    correlation between the traces associated to a specific intermediate state
+    and an arbitrary leakage model [BrierCO04]_ . The correlation metric is computed
+    over a range of key guesses, such that the key value maximising the
+    correlation absolute value is considered as the correct key guess.
+
+    The intermediate state :math:`y \in [0; nc[` is modelled as a function of the value :math:`x \in [0; nc[` and the key guess :math:`k_g \in [0; nc[` such that :math:`y=\text{intermediate}(x, k_g)`. Currently, two intermediate functions are supported: the bitwise xor and the addition modulo `nc`.
+
+    The correlation metric between the leakages samples :math:`L_x` and their models :math:`M_y` is computed according to following equation:
 
     .. math::
-        \mathrm{SNR} = \frac{\mathrm{Var}_{x\leftarrow X}(\mathrm{E}[L_x])}
-                {\mathrm{E}_{x\leftarrow X}(\mathrm{Var}[L_x])}
+        \mathrm{\hat{\rho}(L_x;M_y)} = \dfrac{\hat{\text{cov}}\left( L_x;M_y\right)}{\hat{\sigma}_{L_x}\sigma_{M_y}}
 
-    The SNR is estimated from leakage samples :math:`L_x` and the value `x` of
-    the random variable.
+    where
+
+    :math:`\hat{\text{cov}}\left( L_x;M_y\right)` :
+        is the unbiased estimation of the covariance between the leakage and the models,
+    :math:`\hat{\sigma}_{L_x}` :
+        is the unbiased estimation of the leakages samples standard deviation.
+    :math:`\sigma_{M_y}` :
+        is the exact value of the model standard deviation, computed over the exhaustive model distribution provided.
+
 
     Parameters
     ----------
@@ -37,10 +46,8 @@ class Cpa:
         maximum absolute value of a sample rounded to the next power of 2, and
         :math:`n_i` is the maximum number of times a variable can take a given value.
         Concretely, the total number of traces `n` should be at most
-        :math:`(nc \cdot 2^{32}/b) - k `, where :math:`k = O(\sqrt{n})`, typ.
+        :math:`(nc \cdot 2^{32}/b) - k` , where :math:`k = O(\sqrt{n})`, typ.
         :math:`k>=3*\sqrt{n}`  (see https://mathoverflow.net/a/273060).
-
-
 
     Examples
     --------
@@ -58,11 +65,11 @@ class Cpa:
 
     Notes
     -----
-    .. [1] "Hardware Countermeasures against DPA ? A Statistical Analysis of
-       Their Effectiveness", Stefan Mangard, CT-RSA 2004: 222-235
+    .. [BrierCO04] "Correlation Power Analysis with a Leakage Model", Eric Brier, Christophe Clavier, Francis Olivier, CHES 2004: 16-29
 
     """
-    IntermediateKind = _scalib_ext.CpaIntermediateKind
+
+    IntermediateKind: TypeAlias = _scalib_ext.CpaIntermediateKind
     Xor = IntermediateKind.Xor
     Add = IntermediateKind.Add
 
@@ -113,17 +120,17 @@ class Cpa:
         self,
         models: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
-        r"""TODO
+        r"""
+        Compute the correlation metric based on the fitted state, for a given model. More into the details, the later consists in an arbitrarily chosen value per leakage sample, associated to each class of every variable. The correlation is computed for every key guess assumptions.
 
         Parameters
         ----------
         models :
-            Array that contains the leakage models. The array must be of
-            shape ``(nv, nc, ns)``.
+            Array that contains the leakage models. The array must be of shape ``(nv, nc, ns)`` and is formatted such that the element at location ``[i,j,k]`` is the leakage model for ``k``-th leakage sample associated to the ``j``-th class of the intermediate state for the ``i``-th variable.
 
         Returns
         -------
-        Correlations as an array of shape ``(nv, nc, ns)``
+        Correlations as an array of shape ``(nv, nc, ns)``, such that the element at location ``[i,j,k]`` is the correlation computed for the ``k``-th leakage sample of the ``i``-th variable, under the assumption that the key guess ``j`` is used, .
         """
         if not self._init:
             raise ValueError("Need to call .fit_u at least once.")
