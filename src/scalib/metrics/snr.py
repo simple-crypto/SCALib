@@ -11,7 +11,7 @@ class SNR:
     intermediate values. Informally, SNR allows to quantify the amount of information about a
     random variable :math:`X` contained in the mean of the leakage :math:`L_X`. High SNR
     means more information contained in the mean. The SNR metric is defined
-    with the following equation [1]_:
+    with the following equation [Man04]_:
 
     .. math::
         \mathrm{SNR} = \frac{\mathrm{Var}_{x\leftarrow X}(\mathrm{E}[L_x])}
@@ -51,7 +51,7 @@ class SNR:
 
     Notes
     -----
-    .. [1] "Hardware Countermeasures against DPA ? A Statistical Analysis of
+    .. [Man04] "Hardware Countermeasures against DPA ? A Statistical Analysis of
        Their Effectiveness", Stefan Mangard, CT-RSA 2004: 222-235
 
     """

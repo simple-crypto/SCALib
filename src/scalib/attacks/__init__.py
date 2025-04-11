@@ -9,7 +9,7 @@ Soft Analytical Side-Channel Attack (SASCA)
    :recursive:
    :nosignatures:
 
-   CPA
+   Cpa
    FactorGraph
    GenFactor
    BPState

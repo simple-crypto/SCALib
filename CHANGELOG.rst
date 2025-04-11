@@ -5,6 +5,12 @@ Changelog
 Not released
 ------------
 
+v0.6.2 (2025/04/??)
+-------------------
+
+* Add ``scalib.attacks.Cpa`` as Correlation Power Analysis attack tool. 
+* Refactorisaton of SNR inner accumulator as ``lvar.rs``, shared between SNR and Cpa. 
+
 v0.6.1 (2025/03/25)
 -------------------
 
