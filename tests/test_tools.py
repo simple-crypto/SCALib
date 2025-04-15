@@ -1,18 +1,10 @@
 import pytest
 import numpy as np
-import queue
 from scalib.metrics import SNR
 from scalib.tools import ContextExecutor
 
 n_traces = 10
 ns = 5
-
-
-def snr_inputs():
-    snr = SNR(2**8, True)
-    while (x := np_array_queue.get()) is not None:
-        (traces, k) = x
-        snr.fit_u(traces, k)
 
 
 def get_traces():

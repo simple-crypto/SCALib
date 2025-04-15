@@ -78,3 +78,15 @@ impl RangeExt for Range<usize> {
         (0..(l.div_ceil(size))).map(move |i| (s + i * size)..(s + std::cmp::min((i + 1) * size, l)))
     }
 }
+
+// From std. #[unstable(feature = "slice_as_chunks", issue = "74985")]
+#[inline]
+#[must_use]
+pub fn as_chunks<const N: usize, T>(x: &[T]) -> &[[T; N]] {
+    assert_eq!(x.len() % N, 0);
+    assert!(N != 0);
+    let new_len = x.len() / N;
+    // SAFETY: We cast a slice of `new_len * N` elements into
+    // a slice of `new_len` many `N` elements chunks.
+    unsafe { std::slice::from_raw_parts(x.as_ptr().cast(), new_len) }
+}

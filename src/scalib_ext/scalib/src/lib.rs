@@ -1,6 +1,8 @@
 pub mod belief_propagation;
+pub mod cpa;
 pub mod information;
 pub mod lda;
+pub mod lvar; // pub required for benches
 pub(crate) mod matrixmul;
 pub mod mttest;
 pub mod rlda;
@@ -14,6 +16,8 @@ pub(crate) mod utils;
 // - L3/ncores = 2 MB
 const L2_SIZE: usize = 512 * 1024;
 const L3_CORE: usize = 2 * 1024 * 1024;
+
+pub use lvar::{AccType32bit, AccType64bit};
 
 use thiserror::Error;
 
@@ -51,6 +55,11 @@ pub enum ScalibError {
     PoiOutOfBound,
     #[error("Variable out of bounds.")]
     VarOutOfBound,
+    #[error("Incorrect shape for provided models: expected {expected:?}, got {dim:?}.")]
+    CpaMShape {
+        dim: (usize, usize, usize),
+        expected: (usize, usize, usize),
+    },
 }
 
 #[derive(Clone, Debug)]

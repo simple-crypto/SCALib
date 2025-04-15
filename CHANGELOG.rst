@@ -6,6 +6,7 @@ Not released
 ------------
 
 * Optimize a bit sparse generic factors in SASCA (#195).
+* Add ``scalib.attacks.Cpa``: Correlation Power Analysis tool (#196).
 
 v0.6.1 (2025/03/25)
 -------------------

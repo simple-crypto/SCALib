@@ -92,3 +92,7 @@ harness = false
 [[bench]]
 name = "mlda"
 harness = false
+
+[[bench]]
+name = "cpa"
+harness = false
