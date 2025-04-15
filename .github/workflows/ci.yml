@@ -272,12 +272,15 @@ jobs:
           path: dist
           pattern: dist-*
           merge-multiple: true
+      - name: Copy release artifacts
+        run: >-
+          cp -r dist dist_github
       - name: Sign the dists with Sigstore
         uses: sigstore/gh-action-sigstore-python@v3.0.0
         with:
           inputs: >-
-            ./dist/*.tar.gz
-            ./dist/*.whl
+            ./dist_github/*.tar.gz
+            ./dist_github/*.whl
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -294,7 +297,7 @@ jobs:
         # sigstore-produced signatures and certificates.
         run: >-
           gh release upload
-          "$GITHUB_REF_NAME" dist/**
+          "$GITHUB_REF_NAME" dist_github/**
           --repo "$GITHUB_REPOSITORY"
       - name: "PyPI release"
         uses: pypa/gh-action-pypi-publish@release/v1
