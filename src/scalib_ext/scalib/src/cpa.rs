@@ -228,19 +228,6 @@ fn correlation_internal<const KEY_BLOCK: u32, T: AccType>(
             *res = *tmp;
         }
     }
-    // Debug/dev print
-    #[cfg(debug_assertions)]
-    {
-        let inv_nm1 = 1.0 / (n as f64);
-        for tmp in res_tmp.iter() {
-            let tmp: SimdAcc = std::array::from_fn(|i| tmp[i] * inv_nm1);
-            println!("[CORR-cov]--> {:?}", tmp);
-        }
-        let sqrt_var_data = var_data.iter().map(|e| (*e).sqrt()).collect::<Vec<f64>>();
-        let sqrt_var_model = var_model.iter().map(|e| (*e).sqrt()).collect::<Vec<f64>>();
-        println!("[CORR-xstd]: {:?}", sqrt_var_data);
-        println!("[CORR-ystd]: {:?}", sqrt_var_model);
-    }
 }
 
 // For a single var, compute the centered models
@@ -489,14 +476,6 @@ mod tests_cpa {
                     * inv_n
             })
             .collect::<Array1<f64>>();
-        #[cfg(debug_assertions)]
-        {
-            println!("[REF-n]: {:?}", x.shape()[0]);
-            println!("[REF-inv_n]: {:?}", inv_n);
-            println!("[REF-cov]: {:?}", cov);
-            println!("[REF-xstd]: {:?}", xstd);
-            println!("[REF-ystd]: {:?}", ystd);
-        }
         // Compute the element wise product of std
         let res = izip!(cov, xstd, ystd)
             .map(|(c, sx, sy)| c / (sx * sy))

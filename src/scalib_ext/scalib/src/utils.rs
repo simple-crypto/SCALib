@@ -79,6 +79,7 @@ impl RangeExt for Range<usize> {
     }
 }
 
+// From std. #[unstable(feature = "slice_as_chunks", issue = "74985")]
 #[inline]
 #[must_use]
 pub fn as_chunks<const N: usize, T>(x: &[T]) -> &[[T; N]] {

@@ -1,20 +1,9 @@
 import pytest
 import numpy as np
-import hashlib
-import inspect
 
 from scalib.attacks import Cpa
 
-
-def get_rng(**args):
-    """
-    Hash caller name (i.e. test name) to get the rng seed.
-    args are also hashed in the seed.
-    """
-    # Use a deterministic hash (no need for cryptographic robustness, but
-    # python's hash() is randomly salted).
-    seed = hashlib.sha256((repr(args) + inspect.stack()[1][3]).encode()).digest()
-    return np.random.Generator(np.random.PCG64(list(seed)))
+from utils_test import get_rng
 
 
 def pearson_corr(x, y):
@@ -68,7 +57,7 @@ def pearson_corr_refv1(x, labels, model):
     return rcov
 
 
-def cpa_inner_intermediate(seed, ns, nc, n, nv, perm_internal, intermediate):
+def cpa_inner_intermediate(ns, nc, n, nv, perm_internal, intermediate):
     rng = get_rng()
     traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
     labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
@@ -86,11 +75,11 @@ def cpa_inner_intermediate(seed, ns, nc, n, nv, perm_internal, intermediate):
     for c in range(nc):
         models_used = models[:, perm_internal[c], :]
         corr_ref = pearson_corr_refv1(traces, labels, models_used)
-        for i, (cv, cvr) in enumerate(zip(corr[:, c, :], corr_ref)):
+        for cv, cvr in zip(corr[:, c, :], corr_ref):
             assert np.allclose(
                 cv, cvr
-            ), "[{}-{}-seed:{}-ns:{}-nc:{}-n:{}-nv:{}]\ncorr\n{}\nref\n{}".format(
-                intermediate, c, seed, ns, nc, n, nv, cv, cvr
+            ), "[{}-{}-ns:{}-nc:{}-n:{}-nv:{}]\ncorr\n{}\nref\n{}".format(
+                intermediate, c, ns, nc, n, nv, cv, cvr
             )
 
 
@@ -114,17 +103,20 @@ def test_cpa_full():
     # CPA configuration
     cfgs = [(Cpa.Xor, xor_pintern), (Cpa.Add, modadd_pintern)]
     # Parameter space to test
-    # (seed, ns, nc, n, nv)
+    # (ns, nc, n, nv)
+    default_case = dict(ns=1, nc=2, n=1000, nv=1)
     cases = [
-        (0, 1, 2, 10, 1),
-        (0, 1000, 2, 10, 1),
-        (0, 1, 256, 1000, 1),
-        (0, 1000, 256, 1000, 1),
-        (0, 1, 2, 10, 2),
-        (0, 1000, 256, 1000, 5),
+        default_case | dict(n=10),
+        default_case | dict(ns=1000, n=10),
+        default_case | dict(nc=256),
+        default_case | dict(ns=1000, nc=256),
+        default_case | dict(n=10, nv=2),
+        default_case | dict(ns=1000, nc=256, nv=5),
     ]
 
     for cpa_intern, fn_pintern in cfgs:
-        for seed, ns, nc, n, nv in cases:
-            pintern = fn_pintern(nc)
-            cpa_inner_intermediate(seed, ns, nc, n, nv, pintern, cpa_intern)
+        for case in cases:
+            pintern = fn_pintern(case["nc"])
+            cpa_inner_intermediate(
+                **case, perm_internal=pintern, intermediate=cpa_intern
+            )

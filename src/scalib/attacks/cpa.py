@@ -15,9 +15,14 @@ class Cpa:
     over a range of key guesses, such that the key value maximising the
     correlation absolute value is considered as the correct key guess.
 
-    The intermediate state :math:`y \in [0; nc[` is modelled as a function of the value :math:`x \in [0; nc[` and the key guess :math:`k_g \in [0; nc[` such that :math:`y=\text{intermediate}(x, k_g)`. Currently, two intermediate functions are supported: the bitwise xor and the addition modulo `nc`.
+    The intermediate state :math:`y \in [0; nc[` is modeled as a function of
+    the value :math:`x \in [0; nc[` and the key guess :math:`k_g \in [0; nc[`
+    such that :math:`y=\text{intermediate}(x, k_g)`. Currently, two
+    intermediate functions are supported: the bitwise xor and the addition
+    modulo `nc`.
 
-    The correlation metric between the leakages samples :math:`L_x` and their models :math:`M_y` is computed according to following equation:
+    The correlation metric between the leakages samples :math:`L_x` and their
+    models :math:`M_y` is computed according to following equation:
 
     .. math::
         \mathrm{\hat{\rho}(L_x;M_y)} = \dfrac{\hat{\text{cov}}\left( L_x;M_y\right)}{\hat{\sigma}_{L_x}\sigma_{M_y}}
@@ -25,11 +30,13 @@ class Cpa:
     where
 
     :math:`\hat{\text{cov}}\left( L_x;M_y\right)` :
-        is the unbiased estimation of the covariance between the leakage and the models,
+        is the unbiased estimation of the covariance between the leakage and
+        the models,
     :math:`\hat{\sigma}_{L_x}` :
         is the unbiased estimation of the leakages samples standard deviation.
     :math:`\sigma_{M_y}` :
-        is the exact value of the model standard deviation, computed over the exhaustive model distribution provided.
+        is the exact value of the model standard deviation, computed over the
+        exhaustive model distribution provided.
 
 
     Parameters
@@ -59,7 +66,7 @@ class Cpa:
     >>> x = np.random.randint(0,256,(500,10),dtype=np.uint16)
     >>> cpa = Cpa(nc=256, kind=Cpa.Xor)
     >>> cpa.fit_u(traces,x)
-    >>> hamming_weights = np.bitwise_count(np.arange(256)).astype(np.float64)
+    >>> hamming_weights = np.array([x.bit_count() for x in range(256)], dtype=np.float64)
     >>> models = np.tile(hamming_weights[np.newaxis,:,np.newaxis], (10, 1, 200))
     >>> cpa_val = cpa.get_correlation(models)
 
@@ -112,6 +119,8 @@ class Cpa:
             )
         # _scalib_ext uses inverted axes for x.
         # we can copy when needed, as x should be small, so this should be cheap
+        # TODO: this can be non-negligible when ns is small, we can probably
+        # optimize a bit.
         x = np.ascontiguousarray(x.transpose())
         with scalib.utils.interruptible():
             self._cpa.update(traces, x, get_config())
@@ -121,16 +130,26 @@ class Cpa:
         models: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
         r"""
-        Compute the correlation metric based on the fitted state, for a given model. More into the details, the later consists in an arbitrarily chosen value per leakage sample, associated to each class of every variable. The correlation is computed for every key guess assumptions.
+        Compute the correlation metric for a given model,
+        which gives the leakage value for each of the ``ns`` samples, for each
+        value of the intermediate variable.
+        The correlation is computed for possible key values.
 
         Parameters
         ----------
         models :
-            Array that contains the leakage models. The array must be of shape ``(nv, nc, ns)`` and is formatted such that the element at location ``[i,j,k]`` is the leakage model for ``k``-th leakage sample associated to the ``j``-th class of the intermediate state for the ``i``-th variable.
+            Array that contains the leakage models. The array must be of shape
+            ``(nv, nc, ns)`` and is formatted such that the element at location
+            ``[i,j,k]`` is the leakage model for ``k``-th leakage sample
+            associated to the ``j``-th class of the intermediate state for the
+            ``i``-th variable.
 
         Returns
         -------
-        Correlations as an array of shape ``(nv, nc, ns)``, such that the element at location ``[i,j,k]`` is the correlation computed for the ``k``-th leakage sample of the ``i``-th variable, under the assumption that the key guess ``j`` is used, .
+        Correlations as an array of shape ``(nv, nc, ns)``, such that the
+        element at location ``[i,j,k]`` is the correlation computed for the
+        ``k``-th leakage sample of the ``i``-th variable, under the assumption
+        that the key guess ``j`` is used.
         """
         if not self._init:
             raise ValueError("Need to call .fit_u at least once.")

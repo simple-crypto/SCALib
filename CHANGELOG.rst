@@ -6,12 +6,7 @@ Not released
 ------------
 
 * Optimize a bit sparse generic factors in SASCA (#195).
-
-v0.6.2 (2025/04/??)
--------------------
-
-* Add ``scalib.attacks.Cpa`` as Correlation Power Analysis attack tool. 
-* Refactorisaton of SNR inner accumulator as ``lvar.rs``, shared between SNR and Cpa. 
+* Add ``scalib.attacks.Cpa``: Correlation Power Analysis tool (#196).
 
 v0.6.1 (2025/03/25)
 -------------------
