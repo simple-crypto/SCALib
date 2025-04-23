@@ -11,6 +11,8 @@ from scalib.modeling import LDAClassifier, MultiLDA, Lda, LdaAcc
 
 from utils_test import get_rng
 
+import signal
+
 
 def is_parallel(x, y):
     z = np.abs(x.dot(y))
@@ -214,9 +216,14 @@ def multi_lda_gen_pois_consec(nv, npois, gap=0):
     )
 
 
-def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_):
+def multi_lda_gen_indep_overlap(
+    rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, shuffle=False, **_
+):
     pois = np.tile(np.arange(ns), (nv, 1))
-    pois = rng.permuted(pois, axis=1)
+    if shuffle:
+        rng.shuffle(pois, axis=1)
+    else:
+        pois = rng.permuted(pois, axis=1)
     pois = pois[:, :npois]
     y = [rng.integers(0, nc, (n, nv), dtype=np.uint16) for _ in range(n_batches)]
     traces = [
@@ -306,7 +313,27 @@ def test_multi_lda_compare():
         base_case | dict(ns=20, nc=4, nv=4, npois=5, n_batches=3, p=2),
         base_case | dict(ns=100, nc=256, nv=2, npois=20, n=500, n_batches=5, p=4),
         base_case | dict(ns=1000, nc=4, nv=10, n_batches=5),
-        base_case | dict(ns=100, nc=2, nv=20, npois=20, n=50, n_batches=1, p=1),
+    ]
+    for case in cases:
+        rng = get_rng(**case)
+        print(80 * "#" + "\ncase:", case)
+        pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
+        multi_lda_compare(pois=pois, traces=traces, x=x, **case)
+
+
+def test_mvar_with_overlap():
+    pois = [[1, 2], [1, 0]]
+    rng = get_rng()
+    case = dict(ns=5, nc=2, p=1, n=10, npois=2, n_batches=1, nv=len(pois))
+    _, traces, x = multi_lda_gen_indep_overlap(rng, **case)
+    multi_lda_compare(pois=pois, traces=traces, x=x, **case)
+
+
+def test_mvar_with_same_randomized_pois():
+    base_case = dict(ns=100, nc=2, nv=5, npois=10, n=50, n_batches=1, p=1, shuffle=True)
+    cases = [
+        base_case | dict(test_lp=False),
+        base_case | dict(test_lp=True),
     ]
     for case in cases:
         rng = get_rng(**case)
@@ -392,15 +419,29 @@ def multi_lda_select_simple(rng, nv, ns, npois, nv_sel, n_sel, permute=True):
         assert np.allclose(prs_all[selection, ...], prt)
 
 
-def test_multi_lda_select():
+def test_multi_lda_select_single_poi():
     cases: list[dict[str, typing.Any]] = [
         dict(nv=5, ns=25, npois=1, nv_sel=5, n_sel=2),
         dict(nv=5, ns=25, npois=1, nv_sel=1, n_sel=2),
         dict(nv=5, ns=25, npois=1, nv_sel=2, n_sel=2),
+    ]
+    for case in cases:
+        rng = get_rng(**case)
+        multi_lda_select_simple(rng, **case)
+
+
+def timeout_handler(signum, frame):
+    raise Exception("Timeout")
+
+
+# TODO: FIXME
+def test_multi_lda_select_mul_poi():
+    cases: list[dict[str, typing.Any]] = [
         dict(nv=5, ns=25, npois=5, nv_sel=2, n_sel=2),
         dict(nv=5, ns=25, npois=15, nv_sel=2, n_sel=1),
         dict(nv=5, ns=25, npois=10, nv_sel=8, n_sel=1, permute=False),
     ]
+    assert False, "Stuck test: FIXME"
     for case in cases:
         rng = get_rng(**case)
         multi_lda_select_simple(rng, **case)
