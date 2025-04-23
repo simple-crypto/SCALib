@@ -48,7 +48,7 @@ fmt:
 	tox run -e fmt
 
 wheel_x86_64_v3:
-	SCALIB_X86_64_V3=1 CARGO_TARGET_DIR=.cargo_build_x86_64_v3 pyproject-build -w -o dist/avx2
+	SCALIB_X86_64_V3=1 CARGO_TARGET_DIR=.cargo_build_x86_64_v3 pyproject-build -w -o dist/x86_64_v3
 
 wheel_local:
 	CARGO_TARGET_DIR=.cargo_build pyproject-build -w -o dist/local

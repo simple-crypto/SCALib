@@ -188,6 +188,7 @@ fn blocks_of_pairs(
         pairs_matrix[(i as usize, j as usize)] = true;
     }
     let n_pairs = pairs_matrix.iter().filter(|x| **x).count();
+    assert!(n_pairs <= i32::MAX as usize);
     let _: i32 = n_pairs.try_into().map_err(|_| ScalibError::TooManyPois)?;
     let cw = MAX_POIS_BLOCK / 2;
     let mut pairs_to_new_idx = Array2::from_elem((ns, ns), u32::MAX);

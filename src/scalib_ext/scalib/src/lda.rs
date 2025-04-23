@@ -169,9 +169,11 @@ impl MultiLdaAcc {
         let mut s_w = Array2::zeros((sums.shape()[0], sums.shape()[0]));
         let inv_n = 1.0 / (n as f64);
         for (i, j) in self.var_pairs(var) {
+            assert!(i <= j);
             let (i, j) = (i as usize, j as usize);
             let i2 = self.poi_map.new_pois(var)[i];
             let j2 = self.poi_map.new_pois(var)[j];
+            assert!(i2 <= j2);
             // Total scatter offset by mu**2*n_tot.
             let s_t_u_e = self.cov_pois.get_scatter(i2, j2);
             // Computation of (s_t_u*n - Sx(x)**2) for the target POI pair.

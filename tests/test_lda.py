@@ -216,7 +216,7 @@ def multi_lda_gen_pois_consec(nv, npois, gap=0):
 
 def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_):
     pois = np.tile(np.arange(ns), (nv, 1))
-    rng.shuffle(pois, axis=1)
+    pois = rng.permuted(pois, axis=1)
     pois = pois[:, :npois]
     y = [rng.integers(0, nc, (n, nv), dtype=np.uint16) for _ in range(n_batches)]
     traces = [
@@ -306,6 +306,7 @@ def test_multi_lda_compare():
         base_case | dict(ns=20, nc=4, nv=4, npois=5, n_batches=3, p=2),
         base_case | dict(ns=100, nc=256, nv=2, npois=20, n=500, n_batches=5, p=4),
         base_case | dict(ns=1000, nc=4, nv=10, n_batches=5),
+        base_case | dict(ns=100, nc=2, nv=20, npois=20, n=50, n_batches=1, p=1),
     ]
     for case in cases:
         rng = get_rng(**case)
