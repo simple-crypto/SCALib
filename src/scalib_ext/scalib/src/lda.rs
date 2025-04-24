@@ -199,12 +199,18 @@ impl MultiLdaAcc {
         if n_traces.iter().any(|n| *n == 0) {
             return Err(ScalibError::EmptyClass);
         }
-        //// Between-class scatter computation.
-        let s_b = self.s_b_mat(&sums, n_traces);
-        ///// Within-class scatter computation.
-        let s_w = self.s_w_mat(&sums, n_traces, &s_b, var);
-        ///// Mean computation
-        let mus = self.mu_mat(&sums, n_traces);
+        // Between-class scatter computation.
+        let s_b_raw = self.s_b_mat(&sums, n_traces);
+        // Within-class scatter computation.
+        let s_w_raw = self.s_w_mat(&sums, n_traces, &s_b_raw, var);
+        // Mean computation
+        let mus_raw = &self.mu_mat(&sums, n_traces);
+        // It is theoretically not necessary to order matrices, however this impacts the result of
+        // the eigenvalues problem. For consistency, we therefore prefer a natural order for the
+        // matrices, which is the one given by the original POIs.
+        let s_b = self.order_scatter_matrix(&s_b_raw, var);
+        let s_w = self.order_scatter_matrix(&s_w_raw, var);
+        let mus = self.order_mu_matrix(&mus_raw, var);
         LDASolved::from_matrices(
             self.n_traces as usize,
             p as usize,
@@ -446,7 +452,8 @@ impl MultiLda {
     /// return the probability of each of the possible value for leakage samples
     /// traces with shape (n,ns)
     /// return prs with shape (nv,n,nc). Every row corresponds to one probability distribution
-    pub fn predict_proba(&self, traces: ArrayView2<i16>) -> Array3<f64> {
+    /// if raw_scores is set to true, return the scores without applying the softmax
+    pub fn predict_proba(&self, traces: ArrayView2<i16>, raw_scores: bool) -> Array3<f64> {
         let mut res = Array3::zeros((self.nv(), traces.shape()[0], self.nc as usize));
         let traces_batched = self.poi_map.select_batches::<N>(traces);
         for var_block in (0..(self.nv())).range_chunks(self.var_block_size()) {
@@ -462,9 +469,11 @@ impl MultiLda {
                             res.view_mut(),
                             p_traces.as_slice().unwrap(),
                         );
-                        // TODO: improve the softmax.
-                        for res in res.outer_iter_mut() {
-                            softmax(res);
+                        if !raw_scores {
+                            // TODO: improve the softmax.
+                            for res in res.outer_iter_mut() {
+                                softmax(res);
+                            }
                         }
                     });
             }
@@ -717,19 +726,19 @@ pub fn softmax(mut v: ndarray::ArrayViewMut1<f64>) {
 ///  split one (W then omega), which is interesting as long as p << nc (which is true, otherwise we
 ///  could as well take p=nc and not reduce dimensionality).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LDASolved {
+struct LDASolved {
     /// Projection matrix to the subspace. shape of (ns,p)
-    pub projection: Array2<f64>,
+    projection: Array2<f64>,
     /// Number of dimensions in leakage traces
-    pub ns: usize,
+    ns: usize,
     /// Number of dimensions in the subspace
-    pub p: usize,
+    p: usize,
     /// Max random variable value.
-    pub nc: usize,
+    nc: usize,
     /// Probability mapping vectors. shape (p,nc)
-    pub omega: Array2<f64>,
+    omega: Array2<f64>,
     /// Probability mapping offsets. shape (nc,)
-    pub pk: Array1<f64>,
+    pk: Array1<f64>,
 }
 
 impl LDASolved {

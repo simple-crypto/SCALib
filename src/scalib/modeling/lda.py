@@ -179,7 +179,16 @@ class LDAClassifier:
                 "Call LDA.solve() before LDA.predict_proba() to compute the model."
             )
         with scalib.utils.interruptible():
-            prs = self.mlda.predict_proba(traces, get_config())[0]
+            prs = self.mlda.predict_proba(traces, False, get_config())[0]
+        return prs
+
+    def _raw_scores(self, traces: npt.NDArray[np.int16]) -> npt.NDArray[np.float64]:
+        if not self.solved:
+            raise ValueError(
+                "Call LDA.solve() before LDA.predict_proba() to compute the model."
+            )
+        with scalib.utils.interruptible():
+            prs = self.mlda.predict_proba(traces, True, get_config())[0]
         return prs
 
     def get_sw(self):
@@ -305,6 +314,12 @@ class MultiLDA:
                         range(len(self.ldas)),
                     )
                 )
+
+    def _raw_scores(self, traces):
+        return [
+            self.ldas[i]._raw_scores(traces[:, self.pois[i]])
+            for i in range(len(self.ldas))
+        ]
 
     def get_sw(self):
         return [lda.get_sw() for lda in self.ldas]
@@ -471,7 +486,13 @@ class Lda:
         """
         traces = scalib.utils.clean_traces(traces, self._ns)
         with scalib.utils.interruptible():
-            return self._inner.predict_proba(traces, get_config())
+            return self._inner.predict_proba(traces, False, get_config())
+
+    def _raw_scores(self, traces):
+        r"""Raw scores, i.e., predict_proba w/o softmax (for tests)."""
+        traces = scalib.utils.clean_traces(traces, self._ns)
+        with scalib.utils.interruptible():
+            return self._inner.predict_proba(traces, True, get_config())
 
     def predict_log2_proba_class(self, traces, x):
         r"""Computes the log2 probability for the given class for the traces,

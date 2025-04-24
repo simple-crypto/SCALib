@@ -111,10 +111,11 @@ impl MultiLda {
         &self,
         py: Python<'py>,
         x: PyReadonlyArray2<i16>,
+        raw_scores: bool,
         config: crate::ConfigWrapper,
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         let x = x.as_array();
-        let prs = config.on_worker(py, |_| self.inner.predict_proba(x));
+        let prs = config.on_worker(py, |_| self.inner.predict_proba(x, raw_scores));
         Ok(prs.into_pyarray(py))
     }
     fn predict_log2_proba_class<'py>(

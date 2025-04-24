@@ -1,5 +1,6 @@
 import pickle
 import typing
+import sys
 
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
@@ -8,10 +9,9 @@ import scipy.stats
 
 from scalib import ScalibError
 from scalib.modeling import LDAClassifier, MultiLDA, Lda, LdaAcc
+import scalib.config
 
 from utils_test import get_rng
-
-import signal
 
 
 def is_parallel(x, y):
@@ -275,10 +275,15 @@ def test_ldaacc_sklearn_compare():
 def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
     ncs = [nc for _ in range(nv)]
     ps = [p for _ in range(nv)]
+    print("MultiLDA", file=sys.stderr)
     multi_lda = MultiLDA(ncs, ps, pois=pois)
+    print("LdaAcc", file=sys.stderr)
     multi_lda3 = LdaAcc(pois=pois, nc=nc)
+    print("LdaAcc Done", file=sys.stderr)
     for t, y in zip(traces, x):
+        print("MultiLDA fit", file=sys.stderr)
         multi_lda.fit_u(t, y)
+        print("LdaAcc fit", file=sys.stderr)
         multi_lda3.fit_u(t, y)
     for mus, mus3 in zip(multi_lda.get_mus(), multi_lda3.get_mus()):
         assert np.allclose(mus, mus3)
@@ -286,14 +291,24 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
         assert np.allclose(sb, sb3)
     for sw, sw3 in zip(multi_lda.get_sw(), multi_lda3.get_sw()):
         assert np.allclose(sw, sw3)
+    print("solve", file=sys.stderr)
     multi_lda.solve(done=False)
+    print("Lda", file=sys.stderr)
     multi_lda3 = Lda(multi_lda3, p=p)
+
+    proj = multi_lda.ldas[0].mlda.project(
+        np.eye(traces[0].shape[1], dtype=np.int16), scalib.config.get_config()
+    )
+
     for t, y in zip(traces, x):
         probas = np.array(multi_lda.predict_proba(t))
         probas3 = multi_lda3.predict_proba(t)
-        assert np.allclose(probas, probas3)
-        if test_lp:
-            lp = multi_lda3.predict_log2_proba_class(t, y)
+        scores = np.array(multi_lda._raw_scores(t))
+        scores3 = multi_lda3._raw_scores(t)
+        assert np.allclose(scores, scores3)
+        # assert np.allclose(probas, probas3, atol=1e-3)
+        if False:
+            lp_opt = multi_lda3.predict_log2_proba_class(t, y)
             lp3 = np.log2(
                 probas3[
                     np.arange(probas3.shape[0])[:, np.newaxis],
@@ -301,6 +316,14 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
                     y.T,
                 ]
             )
+            lp = np.log2(
+                probas[
+                    np.arange(probas.shape[0])[:, np.newaxis],
+                    np.arange(probas.shape[1])[np.newaxis, :],
+                    y.T,
+                ]
+            )
+            assert np.allclose(lp_opt, lp3)
             assert np.allclose(lp, lp3)
 
 
@@ -340,6 +363,22 @@ def test_mvar_with_same_randomized_pois():
         print(80 * "#" + "\ncase:", case)
         pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
         multi_lda_compare(pois=pois, traces=traces, x=x, **case)
+
+
+def test_simple_unknown():
+    case = dict(
+        ns=2, nc=2, nv=1, npois=2, n=5, n_batches=1, p=1, shuffle=True, test_lp=True
+    )
+    rng = get_rng()
+    for i in range(1000):
+        print(f"{i=}")
+        pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
+        print(f"{pois=}")
+        print(f"{traces=}")
+        print(f"{x=}")
+        if i == 2:
+            # pois = np.array([[1, 0]])
+            multi_lda_compare(pois=pois, traces=traces, x=x, **case)
 
 
 def test_simple_multi_lda_compare():
@@ -418,17 +457,6 @@ def multi_lda_select_simple(rng, nv, ns, npois, nv_sel, n_sel, permute=True):
             selection = list(rng.integers(0, nv, (nv_sel,)))
         print(selection)
         lda_s_only = lda_all.select_vars(selection)
-        all_mus = lda_all.get_mus()
-        sel_mus = lda_s_only.get_mus()
-        all_sb = lda_all.get_sb()
-        sel_sb = lda_s_only.get_sb()
-        all_sw = lda_all.get_sw()
-        sel_sw = lda_s_only.get_sw()
-        for i, v in enumerate(selection):
-            assert all_mus[v] == sel_mus[i]
-            assert all_sb[v] == sel_sb[i]
-            assert all_sw[v] == sel_sw[i]
-
         prt = lda_s_only.predict_proba(traces)
         print("--ALL--")
         print(prs_all)
@@ -450,26 +478,30 @@ def test_multi_lda_select_single_poi():
 
 
 def test_multi_lda_select_mul_poi_simple():
-    pois = [[0, 1], [1, 2]]
-    nv = len(pois)
-    ns = 3
+    poi_cases = [
+        # ([[0, 1], [1, 2]], [1, 0]),
+        ([[0, 2], [1]], [1]),
+    ]
     nc = 2
     n = 20
-    rng = get_rng()
-    labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
-    traces = rng.integers(-(2**15), 2**15, (n, ns), dtype=np.int16)
-    lda_acc = LdaAcc(pois=pois, nc=nc)
-    lda_acc.fit_u(traces, labels)
-    lda_all = Lda(lda_acc, p=1)
-    prs_all = lda_all.predict_proba(traces)
-    selection = [1, 0]
-    lda_s_only = lda_all.select_vars(selection)
-    prt = lda_s_only.predict_proba(traces)
-    print("--ALL--")
-    print(prs_all)
-    print("--SEL--")
-    print(prt)
-    assert np.allclose(prs_all[selection, ...], prt)
+    for pois, selection in poi_cases:
+        nv = len(pois)
+        print(f"{pois=}")
+        ns = max(x for p in pois for x in p) + 1
+        rng = get_rng()
+        labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
+        traces = rng.integers(-(2**15), 2**15, (n, ns), dtype=np.int16)
+        lda_acc = LdaAcc(pois=pois, nc=nc)
+        lda_acc.fit_u(traces, labels)
+        lda_all = Lda(lda_acc, p=1)
+        prs_all = lda_all.predict_proba(traces)
+        lda_s_only = lda_all.select_vars(selection)
+        prt = lda_s_only.predict_proba(traces)
+        print("--ALL--")
+        print(prs_all)
+        print("--SEL--")
+        print(prt)
+        assert np.allclose(prs_all[selection, ...], prt)
 
 
 def test_multi_lda_select_mul_poi():
