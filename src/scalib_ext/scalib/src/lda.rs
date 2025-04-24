@@ -36,8 +36,6 @@ pub struct MultiLdaAcc {
     nc: Class,
     /// Trace length
     ns: u32,
-    /// Pois for each var
-    cov_pois_offsets: Vec<usize>,
     // [NOTE]: pub visibility only used for benches here.
     pub poi_map: Arc<PoiMap>,
     /// Number of traces.
@@ -48,26 +46,10 @@ pub struct MultiLdaAcc {
     /// Trace global scatter.
     // [NOTE]: pub visibility only used for benches here.
     pub cov_pois: ScatterPairs,
-    // For each variable, the argsort of the vector of POIs.
-    // (Used in reshuffling in original order means and scatter when they are genereated for
-    // external inspection.)
-    map_input_pois: Vec<Vec<usize>>,
-}
-
-pub fn argsort<T: Ord>(data: &[T]) -> Vec<usize> {
-    let mut indices = (0..data.len()).collect::<Vec<usize>>();
-    indices.sort_by_key(|&i| &data[i]);
-    indices
 }
 
 impl MultiLdaAcc {
-    pub fn new(ns: u32, nc: Class, mut pois: Vec<Vec<u32>>) -> Result<Self> {
-        // Generate the inverse map for poi sorting, per variable
-        let map_input_pois = pois.clone().into_iter().map(|v| argsort(&v)).collect();
-        // Sort POIs: required for SparseTraceSums and has not impact on the LDA result.
-        for pois in pois.iter_mut() {
-            pois.sort_unstable();
-        }
+    pub fn new(ns: u32, nc: Class, pois: Vec<Vec<u32>>) -> Result<Self> {
         let nv: Var = pois
             .len()
             .try_into()
@@ -75,26 +57,16 @@ impl MultiLdaAcc {
         let poi_map = Arc::new(PoiMap::new(ns as usize, &pois)?);
         let trace_sums = SparseTraceSums::new(ns, nv, nc, poi_map.clone());
         let mapped_pairs = (0..nv).flat_map(|v| poi_map.mapped_pairs(v));
-        let cov_pois_offsets = pois
-            .iter()
-            .scan(0, |acc, x| {
-                let res = *acc;
-                *acc += Self::npairs_n(x.len());
-                Some(res)
-            })
-            .collect_vec();
 
         let cov_pois = ScatterPairs::new(poi_map.len(), mapped_pairs)?;
         Ok(Self {
             nv,
             nc,
             ns,
-            cov_pois_offsets,
             poi_map,
             n_traces: 0,
             trace_sums,
             cov_pois,
-            map_input_pois,
         })
     }
 
@@ -173,6 +145,7 @@ impl MultiLdaAcc {
             let (i, j) = (i as usize, j as usize);
             let i2 = self.poi_map.new_pois(var)[i];
             let j2 = self.poi_map.new_pois(var)[j];
+            //println!("{:#?}", self.cov_pois);
             assert!(i2 <= j2);
             // Total scatter offset by mu**2*n_tot.
             let s_t_u_e = self.cov_pois.get_scatter(i2, j2);
@@ -246,8 +219,11 @@ impl MultiLdaAcc {
     // v: a variable index
     fn order_mu_matrix(&self, mat: &Array2<f64>, v: Var) -> Array2<f64> {
         let mut o_mat = Array2::<f64>::zeros(mat.dim());
-        for (ni, c) in self.map_input_pois[v as usize].iter().zip(mat.columns()) {
-            o_mat.column_mut(*ni).assign(&c);
+        for (ni, c) in self.poi_map.new_poi_var_shuffles[v as usize]
+            .iter()
+            .zip(mat.columns())
+        {
+            o_mat.column_mut(*ni as usize).assign(&c);
         }
         o_mat
     }
@@ -257,9 +233,12 @@ impl MultiLdaAcc {
     // v: a variable index
     fn order_scatter_matrix(&self, mat: &Array2<f64>, v: Var) -> Array2<f64> {
         let mut o_mat = Array2::<f64>::zeros(mat.dim());
-        for (i, ie) in self.map_input_pois[v as usize].iter().enumerate() {
-            for (j, je) in self.map_input_pois[v as usize].iter().enumerate() {
-                o_mat[[*ie, *je]] = mat[[i, j]];
+        let it = self.poi_map.new_poi_var_shuffles[v as usize]
+            .iter()
+            .enumerate();
+        for (i, ie) in it.clone() {
+            for (j, je) in it.clone() {
+                o_mat[[*ie as usize, *je as usize]] = mat[[i, j]];
             }
         }
         o_mat
@@ -400,6 +379,7 @@ pub struct MultiLda {
     poi_map: Arc<PoiMap>,
     /// poi_blocks[var][poi_block].0: indices of the block's POIs within all POIs of that var.
     /// poi_blocks[var][poi_block].1: indices of POIs relative to the block offset (i*POI_BLOCK_SIZE)
+    /// ASSUMPTION: POIs for each var are sorted w.r.t. Poimap.
     poi_blocks: Vec<Vec<(Range<usize>, Vec<u16>)>>,
     /// Solved LDA for each var.
     lda_states: Vec<Arc<LdaState>>,

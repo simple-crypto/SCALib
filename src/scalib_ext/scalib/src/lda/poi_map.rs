@@ -8,33 +8,43 @@ use std::borrow::Borrow;
 
 /// Selection of a subset of points in a trace: allows to map source traces to reduced traces that
 /// are subsets of the original traces, keeping only th POIs.
+/// Sorting constraints:
+/// 1. For efficient scatter_pairs: pois of the same var tend to be consecutive in new2old.
+/// 2. For predict_proba: values in new_poi_vars must be sorted.
+/// 3. Can make a new POI map with subset of variables preserving 2. but not necessarily 1., and
+///    without changing the order of POIs of each var. We can implement this by keeping new2old in
+///    order, but dropping elements that are not needed anymore, and adapting values of new_poi_vars.
+/// TODO:
+/// - check construction of new2old + sort POIs before putting them in new2old (for
+/// efficiency - need to compose shuffling of POIs)
+/// - completely rewrite the algorithm for select_var.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoiMap {
-    /// List of POIs kept from the original traces (guaranteed to be sorted).
+    /// List of POIs kept from the original traces.
     new2old: Vec<u32>,
     /// For each variable of interest, list of its POIs in the reduced traces.
     // TODO: have indices be i16 when possible.
     pub new_poi_vars: Vec<Vec<u32>>,
+    // For each variable, the argsort of the vector of POIs.
+    // (Used in reshuffling in original order means and scatter when they are genereated for
+    // external inspection.)
+    pub new_poi_var_shuffles: Vec<Vec<u32>>,
 }
 
 impl PoiMap {
     /// Crate a new PoiMap
     /// - `ns`: Source trace length
-    /// - `poi_vars`: For each variable, the sorted list of its POIs.
+    /// - `poi_vars`: For each variable, the list of its POIs.
     pub fn new<I: IntoIterator<Item = impl Borrow<u32>>>(
         ns: usize,
         poi_vars: impl IntoIterator<Item = I> + Clone,
     ) -> Result<Self> {
-        assert!(poi_vars
-            .clone()
-            .into_iter()
-            .all(|p| p.into_iter().map(|x| *x.borrow()).is_sorted()));
-
         let mut new2old = Vec::new();
         let mut old2new: Vec<Option<u32>> = vec![None; ns as usize];
         let mut new_poi_vars = Vec::new();
+        let mut new_poi_var_shuffles = Vec::new();
         for pois in poi_vars {
-            let new_poi_var = pois
+            let mut new_poi_var = pois
                 .into_iter()
                 .map(|poi| -> Result<u32> {
                     let poi = *poi.borrow();
@@ -50,12 +60,19 @@ impl PoiMap {
                         n_pois
                     })
                 })
-                .collect::<Result<_>>()?;
+                .collect::<Result<Vec<_>>>()?;
+            let new_poi_var_shuffle = crate::utils::argsort(&new_poi_var)
+                .into_iter()
+                .map(|x| x.try_into().unwrap())
+                .collect::<Vec<u32>>();
+            new_poi_var.sort_unstable();
             new_poi_vars.push(new_poi_var);
+            new_poi_var_shuffles.push(new_poi_var_shuffle);
         }
         Ok(Self {
             new2old,
             new_poi_vars,
+            new_poi_var_shuffles,
         })
     }
     /// Length of the reduced traces.
@@ -106,6 +123,18 @@ impl PoiMap {
     /// Create a new PoiMap with only a subset of the variables.
     pub fn select_vars(&self, vars: &[super::Var]) -> Result<Self> {
         let sub_map = Self::new(self.len(), vars.iter().map(|v| self.new_pois(*v)))?;
+        dbg!(self);
+        dbg!(&sub_map);
+        let new_poi_var_shuffles = vars
+            .iter()
+            .enumerate()
+            .map(|(new_var, old_var)| {
+                sub_map.new_poi_var_shuffles[new_var]
+                    .iter()
+                    .map(|x| self.new_poi_var_shuffles[*old_var as usize][*x as usize])
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
         let full_map = Self {
             new2old: sub_map
                 .new2old
@@ -113,7 +142,9 @@ impl PoiMap {
                 .map(|x| self.new2old[*x as usize])
                 .collect(),
             new_poi_vars: sub_map.new_poi_vars.clone(),
+            new_poi_var_shuffles,
         };
+        dbg!(&full_map);
         debug_assert!(vars.iter().enumerate().all(|(i, v)| itertools::equal(
             self.new_pois(*v).iter().map(|p| self.new2old[*p as usize]),
             full_map

@@ -324,7 +324,7 @@ def test_multi_lda_compare():
 def test_mvar_with_overlap():
     pois = [[1, 2], [1, 0]]
     rng = get_rng()
-    case = dict(ns=5, nc=2, p=1, n=10, npois=2, n_batches=1, nv=len(pois))
+    case = dict(ns=3, nc=2, p=1, n=10, npois=2, n_batches=1, nv=len(pois))
     _, traces, x = multi_lda_gen_indep_overlap(rng, **case)
     multi_lda_compare(pois=pois, traces=traces, x=x, **case)
 
@@ -404,6 +404,8 @@ def multi_lda_select_simple(rng, nv, ns, npois, nv_sel, n_sel, permute=True):
     pois, (traces,), (labels,) = multi_lda_gen_indep_overlap(
         rng, ns, nc, nv, npois, n, n_batches=1
     )
+    print("POI")
+    print(pois)
     lda_acc = LdaAcc(pois=pois, nc=nc)
     lda_acc.fit_u(traces, labels)
     lda_all = Lda(lda_acc, p=1)
@@ -414,8 +416,25 @@ def multi_lda_select_simple(rng, nv, ns, npois, nv_sel, n_sel, permute=True):
             selection = list(rng.permutation(range(nv))[:nv_sel])
         else:
             selection = list(rng.integers(0, nv, (nv_sel,)))
+        print(selection)
         lda_s_only = lda_all.select_vars(selection)
+        all_mus = lda_all.get_mus()
+        sel_mus = lda_s_only.get_mus()
+        all_sb = lda_all.get_sb()
+        sel_sb = lda_s_only.get_sb()
+        all_sw = lda_all.get_sw()
+        sel_sw = lda_s_only.get_sw()
+        for i, v in enumerate(selection):
+            assert all_mus[v] == sel_mus[i]
+            assert all_sb[v] == sel_sb[i]
+            assert all_sw[v] == sel_sw[i]
+
         prt = lda_s_only.predict_proba(traces)
+        print("--ALL--")
+        print(prs_all)
+        print()
+        print("--SEL--")
+        print(prt)
         assert np.allclose(prs_all[selection, ...], prt)
 
 
@@ -430,18 +449,36 @@ def test_multi_lda_select_single_poi():
         multi_lda_select_simple(rng, **case)
 
 
-def timeout_handler(signum, frame):
-    raise Exception("Timeout")
+def test_multi_lda_select_mul_poi_simple():
+    pois = [[0, 1], [1, 2]]
+    nv = len(pois)
+    ns = 3
+    nc = 2
+    n = 20
+    rng = get_rng()
+    labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
+    traces = rng.integers(-(2**15), 2**15, (n, ns), dtype=np.int16)
+    lda_acc = LdaAcc(pois=pois, nc=nc)
+    lda_acc.fit_u(traces, labels)
+    lda_all = Lda(lda_acc, p=1)
+    prs_all = lda_all.predict_proba(traces)
+    selection = [1, 0]
+    lda_s_only = lda_all.select_vars(selection)
+    prt = lda_s_only.predict_proba(traces)
+    print("--ALL--")
+    print(prs_all)
+    print("--SEL--")
+    print(prt)
+    assert np.allclose(prs_all[selection, ...], prt)
 
 
-# TODO: FIXME
 def test_multi_lda_select_mul_poi():
     cases: list[dict[str, typing.Any]] = [
         dict(nv=5, ns=25, npois=5, nv_sel=2, n_sel=2),
-        dict(nv=5, ns=25, npois=15, nv_sel=2, n_sel=1),
+        dict(nv=5, ns=25, npois=15, nv_sel=3, n_sel=1),
+        dict(nv=5, ns=25, npois=15, nv_sel=5, n_sel=1),
         dict(nv=5, ns=25, npois=10, nv_sel=8, n_sel=1, permute=False),
     ]
-    assert False, "Stuck test: FIXME"
     for case in cases:
         rng = get_rng(**case)
         multi_lda_select_simple(rng, **case)
