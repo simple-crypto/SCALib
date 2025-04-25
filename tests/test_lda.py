@@ -1,6 +1,5 @@
 import pickle
 import typing
-import sys
 
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
@@ -9,9 +8,101 @@ import scipy.stats
 
 from scalib import ScalibError
 from scalib.modeling import LDAClassifier, MultiLDA, Lda, LdaAcc
-import scalib.config
 
 from utils_test import get_rng
+
+import copy
+
+# To test
+# 1. pickle: can pickle objects, loading pickled data results in **strictly** identical behavior.
+# 2. test projection, means, scatter against SKLearn (test_lda) - in single var case.
+# 3. check errors in invalid cases
+# 4. single var vs multi-var comparison
+#
+# functions to test: fit, predict_proba, predict_log2_proba_class, select
+#
+# Test cases with non auto-generated data.
+#
+# LDAClassifier, MultiLDA
+
+
+def pois_uniform_indep(rng, ns, nv, npois, **_):
+    pois = np.tile(np.arange(ns), (nv, 1))
+    return rng.permuted(pois, axis=1)[:, :npois]
+
+
+def data_gaussian_default(
+    rng, ns, nv, nc, n, n_batches, signal_std=50.0, noise_std=20.0, **_
+):
+    all_x = []
+    all_traces = []
+    class_means = rng.normal(0.0, signal_std, (nc, ns))
+    for _ in range(n_batches):
+        x = [rng.integers(0, nc, (n, nv), dtype=np.uint16) for _ in range(n_batches)]
+        noise = rng.normal(0.0, noise_std, (n, ns))
+        traces = class_means[x, :].sum(axis=1) + noise
+        all_x.append(x)
+        all_traces.append(traces)
+    return all_traces, all_x
+
+
+class LdaTestCase:
+    def __init__(
+        self, *, ns, nc, nv, npois, n, n_batches, p, test_lp, maxl, shuffle=False
+    ):
+        self.pois = None
+        self.traces = None
+        self.x = None
+        self.params = dict(
+            ns=ns,
+            nc=nc,
+            nv=nv,
+            npois=npois,
+            n=n,
+            n_batches=n_batches,
+            p=p,
+            test_lp=test_lp,
+            maxl=maxl,
+            shuffle=shuffle,
+        )
+
+    def __str__(self):
+        return str(self.params)
+
+    def with_params(self, **kwargs):
+        cls = type(self)
+        return cls(**(self.params | kwargs))
+
+    def with_data(self, x=None, traces=None):
+        res = copy.deepcopy(self)
+        if x is not None:
+            res.x = x
+        if traces is not None:
+            res.traces = traces
+        return res
+
+    def with_pois(self, pois=None):
+        res = copy.deepcopy(self)
+        if pois is not None:
+            res.pois = pois
+        return res
+
+    def get_data(self, fpois=pois_uniform_indep, fdata=data_gaussian_default):
+        rng = get_rng(**self.params)
+        pois = fpois(rng, **self.params) if self.pois is None else self.pois
+        if self.traces is None or self.x is None:
+            traces, x = fdata(rng, **self.params)
+            x = x if self.x is None else self.x
+            traces = traces if self.traces is None else self.traces
+        else:
+            traces, x = self.traces, self.x
+        return pois, traces, x
+
+    def __getitem__(self, key):
+        return self.params[key]
+
+
+######################## OLD
 
 
 def is_parallel(x, y):
@@ -105,8 +196,7 @@ def test_lda():
     lda.fit_u(traces, labels, 1)
     lda.solve()
 
-    pr = lda.predict_proba(traces)
-    print(pr.shape)
+    _ = lda.predict_proba(traces)
 
     lda_ref = LDA_sklearn(solver="eigen", n_components=n_components)
     lda_ref.fit(traces, labels)
@@ -232,11 +322,38 @@ def multi_lda_gen_indep_overlap(
     return pois, traces, y
 
 
-def ldaacc_sklearn_compare(nc, nv, p, pois, traces, x, **_):
+ldaac_sklearn_bc = LdaTestCase(
+    ns=2,
+    nc=2,
+    nv=1,
+    npois=1,
+    n=10,
+    n_batches=1,
+    p=1,
+    test_lp=True,
+    maxl=2**15,
+)
+ldaac_sklearn_cases = [
+    ldaac_sklearn_bc,
+    ldaac_sklearn_bc.with_params(n=5, n_batches=2),
+    ldaac_sklearn_bc.with_params(ns=3, n=20, maxl=100),
+    ldaac_sklearn_bc.with_params(ns=20, nc=4, nv=4, n=20, npois=5, n_batches=3, p=2),
+    ldaac_sklearn_bc.with_params(
+        ns=100, nc=256, nv=2, npois=20, n=5000, n_batches=5, p=4
+    ),
+    ldaac_sklearn_bc.with_params(ns=1000, nc=4, nv=10, n=500, n_batches=5),
+]
+
+
+@pytest.mark.parametrize("case", ldaac_sklearn_cases)
+def test_ldaacc_sklearn_compare(case):
+    pois, traces, x = case.get_data()
     traces_all = np.vstack(traces)
     x_all = np.vstack(x)
-    ldas_ref = [LDA_sklearn(solver="eigen", n_components=p) for _ in range(nv)]
-    ldaacc = LdaAcc(nc=nc, pois=pois)
+    ldas_ref = [
+        LDA_sklearn(solver="eigen", n_components=case["p"]) for _ in range(case["nv"])
+    ]
+    ldaacc = LdaAcc(nc=case["nc"], pois=pois)
     # Fit SKlean
     for i, (pi, xi) in enumerate(zip(pois, x_all.T)):
         ldas_ref[i].fit(traces_all[:, pi].reshape([traces_all.shape[0], len(pi)]), xi)
@@ -255,35 +372,14 @@ def ldaacc_sklearn_compare(nc, nv, p, pois, traces, x, **_):
     # e.g., comparing probas will fail
 
 
-def test_ldaacc_sklearn_compare():
-    base_case = dict(ns=2, nc=2, nv=1, npois=1, n=10, n_batches=1, p=1, test_lp=True)
-    cases = [
-        base_case,
-        base_case | dict(n=5, n_batches=2),
-        base_case | dict(ns=3, n=20, maxl=100),
-        base_case | dict(ns=20, nc=4, nv=4, n=20, npois=5, n_batches=3, p=2),
-        base_case | dict(ns=100, nc=256, nv=2, npois=20, n=5000, n_batches=5, p=4),
-        base_case | dict(ns=1000, nc=4, nv=10, n=500, n_batches=5),
-    ]
-    for case in cases:
-        rng = get_rng(**case)
-        print(80 * "#" + "\ncase:", case)
-        pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
-        ldaacc_sklearn_compare(pois=pois, traces=traces, x=x, **case)
-
-
-def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
-    ncs = [nc for _ in range(nv)]
-    ps = [p for _ in range(nv)]
-    print("MultiLDA", file=sys.stderr)
+def multi_lda_compare(case, pois, traces, x):
+    print(80 * "#" + "\ncase:", case)
+    ncs = [case["nc"] for _ in range(case["nv"])]
+    ps = [case["p"] for _ in range(case["nv"])]
     multi_lda = MultiLDA(ncs, ps, pois=pois)
-    print("LdaAcc", file=sys.stderr)
-    multi_lda3 = LdaAcc(pois=pois, nc=nc)
-    print("LdaAcc Done", file=sys.stderr)
+    multi_lda3 = LdaAcc(pois=pois, nc=case["nc"])
     for t, y in zip(traces, x):
-        print("MultiLDA fit", file=sys.stderr)
         multi_lda.fit_u(t, y)
-        print("LdaAcc fit", file=sys.stderr)
         multi_lda3.fit_u(t, y)
     for mus, mus3 in zip(multi_lda.get_mus(), multi_lda3.get_mus()):
         assert np.allclose(mus, mus3)
@@ -291,24 +387,14 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
         assert np.allclose(sb, sb3)
     for sw, sw3 in zip(multi_lda.get_sw(), multi_lda3.get_sw()):
         assert np.allclose(sw, sw3)
-    print("solve", file=sys.stderr)
     multi_lda.solve(done=False)
-    print("Lda", file=sys.stderr)
-    multi_lda3 = Lda(multi_lda3, p=p)
-
-    proj = multi_lda.ldas[0].mlda.project(
-        np.eye(traces[0].shape[1], dtype=np.int16), scalib.config.get_config()
-    )
-
+    multi_lda3 = Lda(multi_lda3, p=case["p"])
     for t, y in zip(traces, x):
         probas = np.array(multi_lda.predict_proba(t))
         probas3 = multi_lda3.predict_proba(t)
-        scores = np.array(multi_lda._raw_scores(t))
-        scores3 = multi_lda3._raw_scores(t)
-        assert np.allclose(scores, scores3)
-        # assert np.allclose(probas, probas3, atol=1e-3)
-        if False:
-            lp_opt = multi_lda3.predict_log2_proba_class(t, y)
+        assert np.allclose(probas, probas3)
+        if case["test_lp"]:
+            lp = multi_lda3.predict_log2_proba_class(t, y)
             lp3 = np.log2(
                 probas3[
                     np.arange(probas3.shape[0])[:, np.newaxis],
@@ -316,102 +402,77 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
                     y.T,
                 ]
             )
-            lp = np.log2(
-                probas[
-                    np.arange(probas.shape[0])[:, np.newaxis],
-                    np.arange(probas.shape[1])[np.newaxis, :],
-                    y.T,
-                ]
-            )
-            assert np.allclose(lp_opt, lp3)
             assert np.allclose(lp, lp3)
 
 
-def test_multi_lda_compare():
-    base_case = dict(ns=2, nc=2, nv=1, npois=1, n=10, n_batches=1, p=1, test_lp=True)
-    cases = [
-        base_case,
-        base_case | dict(n=5, n_batches=2),
-        base_case | dict(ns=3, n=20, maxl=100),
-        base_case | dict(ns=20, nc=4, nv=4, npois=5, n_batches=3, p=2),
-        base_case | dict(ns=100, nc=256, nv=2, npois=20, n=500, n_batches=5, p=4),
-        base_case | dict(ns=1000, nc=4, nv=10, n_batches=5),
-    ]
-    for case in cases:
-        rng = get_rng(**case)
-        print(80 * "#" + "\ncase:", case)
-        pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
-        multi_lda_compare(pois=pois, traces=traces, x=x, **case)
+@pytest.mark.parametrize("case", ldaac_sklearn_cases)
+def test_multi_lda_compare(case):
+    pois, traces, x = case.get_data()
+    multi_lda_compare(case, pois, traces, x)
 
 
 def test_mvar_with_overlap():
     pois = [[1, 2], [1, 0]]
-    rng = get_rng()
-    case = dict(ns=3, nc=2, p=1, n=10, npois=2, n_batches=1, nv=len(pois))
-    _, traces, x = multi_lda_gen_indep_overlap(rng, **case)
-    multi_lda_compare(pois=pois, traces=traces, x=x, **case)
+    case = LdaTestCase(
+        ns=3,
+        nc=2,
+        p=1,
+        n=10,
+        npois=2,
+        n_batches=1,
+        nv=len(pois),
+        test_lp=True,
+        maxl=2**15,
+    )
+    _, traces, x = case.get_data()
+    multi_lda_compare(case, pois, traces, x)
 
 
 def test_mvar_with_same_randomized_pois():
-    base_case = dict(ns=100, nc=2, nv=5, npois=10, n=50, n_batches=1, p=1, shuffle=True)
-    cases = [
-        base_case | dict(test_lp=False),
-        base_case | dict(test_lp=True),
-    ]
-    for case in cases:
-        rng = get_rng(**case)
-        print(80 * "#" + "\ncase:", case)
-        pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
-        multi_lda_compare(pois=pois, traces=traces, x=x, **case)
-
-
-def test_simple_unknown():
-    case = dict(
-        ns=2, nc=2, nv=1, npois=2, n=5, n_batches=1, p=1, shuffle=True, test_lp=True
+    case = LdaTestCase(
+        ns=100,
+        nc=2,
+        nv=5,
+        npois=10,
+        n=50,
+        n_batches=1,
+        p=1,
+        shuffle=True,
+        test_lp=True,
+        maxl=2**15,
     )
-    rng = get_rng()
-    for i in range(1000):
-        print(f"{i=}")
-        pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
-        print(f"{pois=}")
-        print(f"{traces=}")
-        print(f"{x=}")
-        if i == 2:
-            # pois = np.array([[1, 0]])
-            multi_lda_compare(pois=pois, traces=traces, x=x, **case)
+    pois, traces, x = case.get_data()
+    multi_lda_compare(case, pois, traces, x)
 
 
 def test_simple_multi_lda_compare():
-    nc = 2
-    nv = 1
+    case = LdaTestCase(
+        ns=5, nc=2, nv=1, npois=2, n=4, n_batches=1, p=1, test_lp=True, maxl=2**15
+    )
     pois = [np.array([0, 1])]
-    p = 1
     traces = [np.array([[1, 0], [0, 1], [0, 0], [4, 4]], dtype=np.int16)]
     x = [np.array([[0], [0], [1], [1]]).astype(np.uint16)]
-    lda = LDAClassifier(nc, p)
+    lda = LDAClassifier(case["nc"], case["p"])
     lda.fit_u(traces[0], x[0][:, 0])
     lda.solve()
-    multi_lda_compare(nc=nc, nv=nv, p=p, pois=pois, traces=traces, x=x)
+    multi_lda_compare(case, pois, traces, x)
 
 
 def test_seq_multi_lda_compare():
     cases = [
-        dict(nv=100, npois=5, nc=4, n=1000, p=2),
-        dict(nv=2000, npois=5, nc=2, n=30, p=1),
+        ldaac_sklearn_bc.with_params(ns=50, nv=10, npois=5, nc=4, n=1000, p=2),
+        ldaac_sklearn_bc.with_params(ns=1000, nv=200, npois=5, nc=2, n=30, p=1),
     ]
     for case in cases:
-        print(80 * "#" + "\ncase:", case)
-        nv = case["nv"]
-        npois = case["npois"]
-        nc = case["nc"]
-        n = case["n"]
-        p = case["p"]
-        rng = get_rng(**case)
-        _, traces, x = multi_lda_gen_indep_overlap(
-            rng, ns=nv * npois, nc=nc, nv=nv, npois=0, n=n, n_batches=1
-        )
-        pois = [list(range(i * npois, (i + 1) * npois)) for i in range(nv)]
-        multi_lda_compare(nc=nc, nv=nv, p=p, pois=pois, traces=traces, x=x)
+        pois = [
+            list(range(i * case["npois"], (i + 1) * case["npois"]))
+            for i in range(case["nv"])
+        ]
+        _, traces, x = case.get_data()
+        print(pois)
+        print(traces)
+        print(x)
+        multi_lda_compare(case, pois, traces, x)
 
 
 def test_multi_lda_pickle():
@@ -466,6 +527,7 @@ def multi_lda_select_simple(rng, nv, ns, npois, nv_sel, n_sel, permute=True):
         assert np.allclose(prs_all[selection, ...], prt)
 
 
+# TODO
 def test_multi_lda_select_single_poi():
     cases: list[dict[str, typing.Any]] = [
         dict(nv=5, ns=25, npois=1, nv_sel=5, n_sel=2),
@@ -478,30 +540,26 @@ def test_multi_lda_select_single_poi():
 
 
 def test_multi_lda_select_mul_poi_simple():
-    poi_cases = [
-        # ([[0, 1], [1, 2]], [1, 0]),
-        ([[0, 2], [1]], [1]),
-    ]
+    pois = [[0, 1], [1, 2]]
+    nv = len(pois)
+    ns = 3
     nc = 2
     n = 20
-    for pois, selection in poi_cases:
-        nv = len(pois)
-        print(f"{pois=}")
-        ns = max(x for p in pois for x in p) + 1
-        rng = get_rng()
-        labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
-        traces = rng.integers(-(2**15), 2**15, (n, ns), dtype=np.int16)
-        lda_acc = LdaAcc(pois=pois, nc=nc)
-        lda_acc.fit_u(traces, labels)
-        lda_all = Lda(lda_acc, p=1)
-        prs_all = lda_all.predict_proba(traces)
-        lda_s_only = lda_all.select_vars(selection)
-        prt = lda_s_only.predict_proba(traces)
-        print("--ALL--")
-        print(prs_all)
-        print("--SEL--")
-        print(prt)
-        assert np.allclose(prs_all[selection, ...], prt)
+    rng = get_rng()
+    labels = rng.integers(0, nc, (n, nv), dtype=np.uint16)
+    traces = rng.integers(-(2**15), 2**15, (n, ns), dtype=np.int16)
+    lda_acc = LdaAcc(pois=pois, nc=nc)
+    lda_acc.fit_u(traces, labels)
+    lda_all = Lda(lda_acc, p=1)
+    prs_all = lda_all.predict_proba(traces)
+    selection = [1, 0]
+    lda_s_only = lda_all.select_vars(selection)
+    prt = lda_s_only.predict_proba(traces)
+    print("--ALL--")
+    print(prs_all)
+    print("--SEL--")
+    print(prt)
+    assert np.allclose(prs_all[selection, ...], prt)
 
 
 def test_multi_lda_select_mul_poi():
