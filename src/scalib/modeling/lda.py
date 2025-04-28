@@ -528,7 +528,7 @@ class Lda:
         Returns
         -------
         array_like, f64
-            Projected traces. Shape ``(n, self.p)``
+            Projected traces. List of ``nv`` array of shape ``(n, self.p)``
         """
         return self._inner.project(traces, get_config())
 
