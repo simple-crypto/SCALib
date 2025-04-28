@@ -129,7 +129,7 @@ lda_sklearn_uni_bc = LdaTestCase(
     nc=4,
     nv=1,
     npois=2,
-    n=500,
+    n=20,
     n_batches=1,
     p=1,
     test_lp=True,
@@ -137,6 +137,7 @@ lda_sklearn_uni_bc = LdaTestCase(
 )
 lda_sklearn_uni_cases = [
     lda_sklearn_uni_bc,
+    lda_sklearn_uni_bc.with_params(n=200),
     lda_sklearn_uni_bc.with_params(ns=3, npois=3),
     lda_sklearn_uni_bc.with_params(ns=10, npois=3),
     lda_sklearn_uni_bc.with_params(ns=10, npois=3, p=2),
