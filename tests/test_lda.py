@@ -125,10 +125,10 @@ def is_parallel(x, y):
 
 # 1. Test that univariate LDA results in similar results that the one from sklearn.
 lda_sklearn_uni_bc = LdaTestCase(
-    ns=10,
-    nc=2,
+    ns=2,
+    nc=4,
     nv=1,
-    npois=4,
+    npois=2,
     n=500,
     n_batches=1,
     p=1,
@@ -137,8 +137,9 @@ lda_sklearn_uni_bc = LdaTestCase(
 )
 lda_sklearn_uni_cases = [
     lda_sklearn_uni_bc,
-    lda_sklearn_uni_bc.with_params(nc=4),
-    lda_sklearn_uni_bc.with_params(nc=4, p=2),
+    lda_sklearn_uni_bc.with_params(ns=3, npois=3),
+    lda_sklearn_uni_bc.with_params(ns=10, npois=3),
+    lda_sklearn_uni_bc.with_params(ns=10, npois=3, p=2),
 ]
 
 
@@ -150,17 +151,17 @@ def test_univariate_lda_sklearn(case):
     lda.fit_u(traces[0], x[0])
     # LDARef
     lda_ref = LDA_sklearn(solver="eigen", n_components=case["p"])
-    lda_ref.fit(traces[0][:, pois[0]], x[0])
+    lda_ref.fit(traces[0][:, pois[0]], x[0][:, 0])
 
     # Verify value of means by accessor
     ref_means = lda_ref.means_
     lda_means = lda.get_mus()[0]
-    assert np.allclose(ref_means, lda_means, rtol=1e-10)
+    assert np.allclose(ref_means, lda_means, rtol=1e-10), "Mean mismatch"
 
     # Verify scatter matrix by accessor
     lda_scat = lda.get_sw()[0] / case["n"]
     cov_ref = lda_ref.covariance_
-    assert np.allclose(lda_scat, cov_ref, rtol=1e-5)
+    assert np.allclose(lda_scat, cov_ref, rtol=1e-5), "Scatter mismatch"
 
     # Not point of comparison with sklearn, but we here call
     # the accessor for the inter-class scatter matrix just to verify
@@ -170,13 +171,15 @@ def test_univariate_lda_sklearn(case):
     # Solve the LdaAcc
     lda = Lda(lda, p=case["p"])
 
+    print(pois)
+
     # Verify the projection
-    ptraces = lda.project(traces[0])[0]
+    ptraces = lda.project(traces[0])
     ptraces_sklearn = lda_ref.transform(traces[0][:, pois[0]])
     projections_similar = all(
-        [is_parallel(a, b) for a, b in zip(ptraces, ptraces_sklearn)]
+        [is_parallel(a, b) for a, b in zip(ptraces[0].T, ptraces_sklearn.T)]
     )
-    assert projections_similar, (ptraces, ptraces_sklearn)
+    assert projections_similar, "Projection mismatch"
 
     # We can't do much more since sklearn has no way to reduce dimensionality of LDA.
     # e.g., comparing probas will fail -> TODO
