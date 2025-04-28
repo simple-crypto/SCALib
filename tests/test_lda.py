@@ -147,12 +147,15 @@ lda_sklearn_uni_cases = [
 @pytest.mark.parametrize("case", lda_sklearn_uni_cases)
 def test_univariate_lda_sklearn(case):
     pois, traces, x = case.get_data()
+    # Fetch the first batch only
+    traces = traces[0]
+    x = x[0]
     # LdaAc
     lda = LdaAcc(pois=pois, nc=case["nc"])
-    lda.fit_u(traces[0], x[0])
+    lda.fit_u(traces, x)
     # LDARef
     lda_ref = LDA_sklearn(solver="eigen", n_components=case["p"])
-    lda_ref.fit(traces[0][:, pois[0]], x[0][:, 0])
+    lda_ref.fit(traces[:, pois[0]], x[:, 0])
 
     # Verify value of means by accessor
     ref_means = lda_ref.means_
@@ -175,8 +178,8 @@ def test_univariate_lda_sklearn(case):
     print(pois)
 
     # Verify the projection
-    ptraces = lda.project(traces[0])
-    ptraces_sklearn = lda_ref.transform(traces[0][:, pois[0]])
+    ptraces = lda.project(traces)
+    ptraces_sklearn = lda_ref.transform(traces[:, pois[0]])
     projections_similar = all(
         [is_parallel(a, b) for a, b in zip(ptraces[0].T, ptraces_sklearn.T)]
     )
@@ -209,12 +212,15 @@ lda_pickle_unibatch_cases = [
 @pytest.mark.parametrize("case", lda_pickle_unibatch_cases)
 def test_lda_pickle_unibatch(case):
     pois, traces, x = case.get_data()
+    # Fetch the first batch only
+    traces = traces[0]
+    x = x[0]
     # LdaAc
     lda = LdaAcc(pois=pois, nc=case["nc"])
-    lda.fit_u(traces[0], x[0])
+    lda.fit_u(traces, x)
     # Reference, check that the pickle is not modifiying the results
     lda_ref = LdaAcc(pois=pois, nc=case["nc"])
-    lda_ref.fit_u(traces[0], x[0])
+    lda_ref.fit_u(traces, x)
 
     dumped_lda = pickle.dumps(lda)
     lda = pickle.loads(dumped_lda)
@@ -235,15 +241,15 @@ def test_lda_pickle_unibatch(case):
     lda_solved = pickle.loads(dumped_lda_s)
 
     # Verify the projection
-    ptraces = lda_solved.project(traces[0])
-    ptraces_ref = lda_ref_solved.project(traces[0])
+    ptraces = lda_solved.project(traces)
+    ptraces_ref = lda_ref_solved.project(traces)
     for p, pref in zip(ptraces, ptraces_ref):
         projections_similar = all([is_parallel(a.T, b.T) for a, b in zip(p, pref)])
         assert projections_similar, (ptraces, ptraces_ref)
 
     # Verify the proba
-    lda_prs = lda_solved.predict_proba(traces[0])
-    lda_prs_ref = lda_ref_solved.predict_proba(traces[0])
+    lda_prs = lda_solved.predict_proba(traces)
+    lda_prs_ref = lda_ref_solved.predict_proba(traces)
     assert np.allclose(lda_prs, lda_prs_ref)
 
 
@@ -406,13 +412,16 @@ def test_handmade_simplified_mvars():
 @pytest.mark.parametrize("case", lda_sklearn_uni_cases)
 def test_deprecated_ldaclassifier_sklearn(case):
     pois, traces, x = case.get_data()
+    # Fetch the first batch only
+    traces = traces[0]
+    x = x[0]
     # LdaAc
     lda = LDAClassifier(case["nc"], case["p"])
-    lda.fit_u(traces[0][:, pois[0]], x[0][:, 0], 0)
+    lda.fit_u(traces[:, pois[0]], x[:, 0], 0)
     lda.solve(False)
     # LDARef
     lda_ref = LDA_sklearn(solver="eigen", n_components=case["p"])
-    lda_ref.fit(traces[0][:, pois[0]], x[0][:, 0])
+    lda_ref.fit(traces[:, pois[0]], x[:, 0])
 
     # Verify value of means by accessor
     ref_means = lda_ref.means_
@@ -433,9 +442,9 @@ def test_deprecated_ldaclassifier_sklearn(case):
     # Project traces with SCALib
     from scalib.config import get_config
 
-    ptraces = lda.mlda.project(traces[0][:, pois[0]], get_config())
+    ptraces = lda.mlda.project(traces[:, pois[0]], get_config())
     # Project traces woth sklearn
-    ptraces_sklearn = lda_ref.transform(traces[0][:, pois[0]])
+    ptraces_sklearn = lda_ref.transform(traces[:, pois[0]])
     projections_similar = all(
         [is_parallel(a, b) for a, b in zip(ptraces[0].T, ptraces_sklearn.T)]
     )
