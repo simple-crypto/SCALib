@@ -200,17 +200,11 @@ impl MultiLdaAcc {
             return Err(ScalibError::EmptyClass);
         }
         // Between-class scatter computation.
-        let s_b_raw = self.s_b_mat(&sums, n_traces);
+        let s_b = self.s_b_mat(&sums, n_traces);
         // Within-class scatter computation.
-        let s_w_raw = self.s_w_mat(&sums, n_traces, &s_b_raw, var);
+        let s_w = self.s_w_mat(&sums, n_traces, &s_b, var);
         // Mean computation
-        let mus_raw = &self.mu_mat(&sums, n_traces);
-        // It is theoretically not necessary to order matrices, however this impacts the result of
-        // the eigenvalues problem. For consistency, we therefore prefer a natural order for the
-        // matrices, which is the one given by the original POIs.
-        let s_b = self.order_scatter_matrix(&s_b_raw, var);
-        let s_w = self.order_scatter_matrix(&s_w_raw, var);
-        let mus = self.order_mu_matrix(&mus_raw, var);
+        let mus = &self.mu_mat(&sums, n_traces);
         LDASolved::from_matrices(
             self.n_traces as usize,
             p as usize,

@@ -64,7 +64,7 @@ use thiserror::Error;
 pub enum GeigenError {
     #[error("Computation has not been performed. Missing call to compute() at low-level.")]
     CholeskyNotComputed,
-    #[error("The eigenvalues computation did not converged during the Cholesky decomposition.")]
+    #[error("The eigenvalues computation did not converge during the Cholesky decomposition.")]
     CholeskyNotConverging,
     #[error("The matrix used in the Cholesky decomposition is not positive definite.")]
     CholeskyNumericalIssue,
