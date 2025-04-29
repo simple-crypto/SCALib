@@ -6,6 +6,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_skle
 import numpy as np
 import scipy.linalg
 import scipy.stats
+import scipy.special
 
 from scalib import ScalibError
 from scalib.modeling import LDAClassifier, MultiLDA, Lda, LdaAcc
@@ -13,6 +14,37 @@ from scalib.modeling import LDAClassifier, MultiLDA, Lda, LdaAcc
 from utils_test import get_rng
 
 import copy
+
+
+class RefLda:
+    def __init__(self, traces, x, nc, p):
+        self.nc = nc
+        self.p = p
+        n = traces.shape[0]
+        self.ns = traces.shape[1]
+        tr_x = [traces[x == i, :] for i in range(nc)]
+        self.nis = [(x == i).sum() for i in range(nc)]
+        self.mus = np.array([tr.mean(axis=0) for tr in tr_x])
+        # between-class scatter: s_b = Si(ni*cmui**2)
+        self.s_b = n * np.cov(self.mus.T, ddof=0, fweights=self.nis)
+        # within-class scatter: s_w = Si(Sxi((xi-mui)**2))
+        self.s_w = np.sum(
+            [ni * np.cov(tr.T, ddof=0) for ni, tr in zip(self.nis, tr_x)], axis=0
+        )
+        # Factor n on s_w important to get properly scaled projection for finalize.
+        # (such that evec*(s_w/n)*evec^T=1).
+        self.evals, self.evecs = scipy.linalg.eigh(self.s_b, self.s_w / n)
+        self.finalize(projection=self.evecs[:, np.argsort(self.evals)[::-1][: self.p]])
+
+    def finalize(self, projection):
+        self.projection = projection
+        self.coef = np.dot(self.mus, self.projection).dot(self.projection.T)
+        self.intercept = -0.5 * np.diag(np.dot(self.mus, self.coef.T))
+
+    def predict_proba(self, traces):
+        scores = traces @ self.coef.T + self.intercept[np.newaxis, :]
+        return scipy.special.softmax(scores, axis=1)
+
 
 # To test
 # 1. pickle: can pickle objects, loading pickled data results in **strictly** identical behavior.
@@ -128,8 +160,8 @@ def is_parallel(x, y):
     return np.allclose(z, z2)
 
 
-# 1. Test that univariate LDA results in similar results that the one from sklearn.
-lda_sklearn_uni_bc = LdaTestCase(
+# 1. Test that univariate LDA results in similar results that the one from ref.
+lda_ref_uni_bc = LdaTestCase(
     ns=2,
     nc=2,
     nv=1,
@@ -140,18 +172,18 @@ lda_sklearn_uni_bc = LdaTestCase(
     test_lp=True,
     maxl=2**15,
 )
-lda_sklearn_uni_cases = [
-    lda_sklearn_uni_bc,
-    lda_sklearn_uni_bc.with_params(n=200),
-    lda_sklearn_uni_bc.with_params(ns=3, npois=3).with_pois(pois=[[0, 1, 2]]),
-    lda_sklearn_uni_bc.with_params(ns=3, npois=3),
-    lda_sklearn_uni_bc.with_params(ns=10, npois=3),
-    lda_sklearn_uni_bc.with_params(ns=10, npois=3, p=2, nc=4, n=100),
+lda_ref_uni_cases = [
+    lda_ref_uni_bc,
+    lda_ref_uni_bc.with_params(n=200),
+    lda_ref_uni_bc.with_params(ns=3, npois=3).with_pois(pois=[[0, 1, 2]]),
+    lda_ref_uni_bc.with_params(ns=3, npois=3),
+    lda_ref_uni_bc.with_params(ns=10, npois=3),
+    lda_ref_uni_bc.with_params(ns=10, npois=3, p=2, nc=4, n=100),
 ]
 
 
-@pytest.mark.parametrize("case", lda_sklearn_uni_cases)
-def test_univariate_lda_sklearn(case):
+@pytest.mark.parametrize("case", lda_ref_uni_cases)
+def test_univariate_lda_ref(case):
     pois, traces, x = case.get_data()
     # Fetch the first batch only
     traces = traces[0]
@@ -160,25 +192,16 @@ def test_univariate_lda_sklearn(case):
     lda_acc = LdaAcc(pois=pois, nc=case["nc"])
     lda_acc.fit_u(traces, x)
     # LDARef
-    lda_ref = LDA_sklearn(solver="eigen", n_components=case["p"])
-    lda_ref.fit(traces[:, pois[0]], x[:, 0])
+    lda_ref = RefLda(traces[:, pois[0]], x[:, 0], nc=case["nc"], p=case["p"])
 
     # Verify value of means by accessor
-    ref_means = lda_ref.means_
     lda_means = lda_acc.get_mus()[0]
-    assert np.allclose(ref_means, lda_means, rtol=1e-10), "Mean mismatch"
+    assert np.allclose(lda_ref.mus, lda_means), "Mean mismatch"
 
-    s_w_sklearn = lda_ref.covariance_  # within scatter
-    s_t_sklearn = np.cov(traces[:, pois[0]].T, bias=1)
-    s_b_sklearn = s_t_sklearn - s_w_sklearn
     s_b = lda_acc.get_sb()[0]
     s_w = lda_acc.get_sw()[0]
-    assert np.allclose(
-        s_b / case["n"], s_b_sklearn, rtol=1e-10
-    ), f"SB mismatch\n{s_b=}\n{s_b_sklearn=}"
-    assert np.allclose(
-        s_w / case["n"], s_w_sklearn, rtol=1e-10
-    ), f"SW mismatch\n{s_w=}\n{s_w_sklearn=}"
+    assert np.allclose(s_b, lda_ref.s_b), f"SB mismatch\n{s_b=}\n{lda_ref.s_b=}"
+    assert np.allclose(s_w, lda_ref.s_w), f"SB mismatch\n{s_w=}\n{lda_ref.s_w=}"
 
     # Solve the LdaAcc
     lda = Lda(lda_acc, p=case["p"])
@@ -190,16 +213,14 @@ def test_univariate_lda_sklearn(case):
     for i in range(case["npois"]):
         id_pois[i, pois[0][i]] = 1
     assert (id_pois[:, pois[0]] == np.eye(case["npois"])).all()
-    ptraces = lda.project(id_pois)
-    ptraces_sklearn = lda_ref.transform(np.eye(case["npois"]))
-    projections_similar = all(
-        [is_parallel(a, b) for a, b in zip(ptraces[0].T, ptraces_sklearn.T)]
-    )
+    proj_matrix = lda.project(id_pois)[0]
+    assert all(
+        [is_parallel(a, b) for a, b in zip(proj_matrix.T, lda_ref.projection.T)]
+    ), "Projection mismatch"
 
-    assert projections_similar, "Projection mismatch"
-
-    # We can't do much more since sklearn has no way to reduce dimensionality of LDA.
-    # e.g., comparing probas will fail -> TODO
+    probas = lda.predict_proba(traces)
+    ref_probas = lda_ref.predict_proba(traces[:, pois[0]])
+    assert np.allclose(probas, ref_probas), f"{probas=}\n{ref_probas=}"
 
 
 #### Pickle test
@@ -216,9 +237,9 @@ lda_pickle_unibatch_bc = LdaTestCase(
     maxl=2**15,
 )
 lda_pickle_unibatch_cases = [
-    lda_sklearn_uni_bc,
-    lda_sklearn_uni_bc.with_params(nc=4, p=2),
-    lda_sklearn_uni_bc.with_params(nc=4, p=2, nv=4),
+    lda_ref_uni_bc,
+    lda_ref_uni_bc.with_params(nc=4, p=2),
+    lda_ref_uni_bc.with_params(nc=4, p=2, nv=4),
 ]
 
 
@@ -422,7 +443,7 @@ def test_handmade_simplified_mvars():
 
 
 ####### Deprecated tests
-@pytest.mark.parametrize("case", lda_sklearn_uni_cases)
+@pytest.mark.parametrize("case", lda_ref_uni_cases)
 def test_deprecated_ldaclassifier_sklearn(case):
     pois, traces, x = case.get_data()
     # Fetch the first batch only
