@@ -4,6 +4,7 @@ import typing
 import pytest
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
 import numpy as np
+import scipy.linalg
 import scipy.stats
 
 from scalib import ScalibError
@@ -117,16 +118,20 @@ class LdaTestCase:
         return self.params[key]
 
 
+def normalize(x):
+    return x / np.linalg.norm(x, axis=0, keepdims=True)
+
+
 def is_parallel(x, y):
     z = np.abs(x.dot(y))
     z2 = np.linalg.norm(x) * np.linalg.norm(y)
-    return np.allclose(z, z2, rtol=1e-3)
+    return np.allclose(z, z2)
 
 
 # 1. Test that univariate LDA results in similar results that the one from sklearn.
 lda_sklearn_uni_bc = LdaTestCase(
     ns=2,
-    nc=4,
+    nc=2,
     nv=1,
     npois=2,
     n=20,
@@ -138,9 +143,10 @@ lda_sklearn_uni_bc = LdaTestCase(
 lda_sklearn_uni_cases = [
     lda_sklearn_uni_bc,
     lda_sklearn_uni_bc.with_params(n=200),
+    lda_sklearn_uni_bc.with_params(ns=3, npois=3).with_pois(pois=[[0, 1, 2]]),
     lda_sklearn_uni_bc.with_params(ns=3, npois=3),
     lda_sklearn_uni_bc.with_params(ns=10, npois=3),
-    lda_sklearn_uni_bc.with_params(ns=10, npois=3, p=2),
+    lda_sklearn_uni_bc.with_params(ns=10, npois=3, p=2, nc=4, n=100),
 ]
 
 
@@ -151,38 +157,45 @@ def test_univariate_lda_sklearn(case):
     traces = traces[0]
     x = x[0]
     # LdaAc
-    lda = LdaAcc(pois=pois, nc=case["nc"])
-    lda.fit_u(traces, x)
+    lda_acc = LdaAcc(pois=pois, nc=case["nc"])
+    lda_acc.fit_u(traces, x)
     # LDARef
     lda_ref = LDA_sklearn(solver="eigen", n_components=case["p"])
     lda_ref.fit(traces[:, pois[0]], x[:, 0])
 
     # Verify value of means by accessor
     ref_means = lda_ref.means_
-    lda_means = lda.get_mus()[0]
+    lda_means = lda_acc.get_mus()[0]
     assert np.allclose(ref_means, lda_means, rtol=1e-10), "Mean mismatch"
 
-    # Verify scatter matrix by accessor
-    lda_scat = lda.get_sw()[0] / case["n"]
-    cov_ref = lda_ref.covariance_
-    assert np.allclose(lda_scat, cov_ref, rtol=1e-5), "Scatter mismatch"
-
-    # Not point of comparison with sklearn, but we here call
-    # the accessor for the inter-class scatter matrix just to verify
-    # that its working.
-    smat = lda.get_sb()
+    s_w_sklearn = lda_ref.covariance_  # within scatter
+    s_t_sklearn = np.cov(traces[:, pois[0]].T, bias=1)
+    s_b_sklearn = s_t_sklearn - s_w_sklearn
+    s_b = lda_acc.get_sb()[0]
+    s_w = lda_acc.get_sw()[0]
+    assert np.allclose(
+        s_b / case["n"], s_b_sklearn, rtol=1e-10
+    ), f"SB mismatch\n{s_b=}\n{s_b_sklearn=}"
+    assert np.allclose(
+        s_w / case["n"], s_w_sklearn, rtol=1e-10
+    ), f"SW mismatch\n{s_w=}\n{s_w_sklearn=}"
 
     # Solve the LdaAcc
-    lda = Lda(lda, p=case["p"])
+    lda = Lda(lda_acc, p=case["p"])
 
-    print(pois)
+    print(f"{pois=}")
 
     # Verify the projection
-    ptraces = lda.project(traces)
-    ptraces_sklearn = lda_ref.transform(traces[:, pois[0]])
+    id_pois = np.zeros((case["npois"], case["ns"]), dtype=np.int16)
+    for i in range(case["npois"]):
+        id_pois[i, pois[0][i]] = 1
+    assert (id_pois[:, pois[0]] == np.eye(case["npois"])).all()
+    ptraces = lda.project(id_pois)
+    ptraces_sklearn = lda_ref.transform(np.eye(case["npois"]))
     projections_similar = all(
         [is_parallel(a, b) for a, b in zip(ptraces[0].T, ptraces_sklearn.T)]
     )
+
     assert projections_similar, "Projection mismatch"
 
     # We can't do much more since sklearn has no way to reduce dimensionality of LDA.
