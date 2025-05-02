@@ -777,7 +777,9 @@ impl LDASolved {
         // cov= X^T * X
         // proj = (P*X^T)^T = X*P^T
         // cov_proj = (X*P^T)^T*(X*P^T) = P*X^T*X*P^T = P*cov*P^T
-        let cov = projection.t().dot(&(&sw / (n as f64)).dot(&projection));
+        let cov = projection
+            .t()
+            .dot(&(&sw / ((n - nc) as f64)).dot(&projection));
 
         // ---- Step 3
         // Compute the matrix (p, nc) of vectors \omega_k^T

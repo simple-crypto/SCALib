@@ -31,7 +31,7 @@ class RefLda:
         )
         # Factor n on s_w important to get properly scaled projection for finalize.
         # (such that evec*(s_w/n)*evec^T=1).
-        self.evals, self.evecs = scipy.linalg.eigh(self.s_b, self.s_w / n)
+        self.evals, self.evecs = scipy.linalg.eigh(self.s_b, self.s_w / (n - nc))
         self.finalize(projection=self.evecs[:, np.argsort(self.evals)[::-1][: self.p]])
 
     def finalize(self, projection):
