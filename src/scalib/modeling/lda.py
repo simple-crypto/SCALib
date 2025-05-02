@@ -444,7 +444,7 @@ class LdaAcc:
         return self._inner.get_sb()
 
     def get_mus(self):
-        r"""Return means matrix (classes means). Shape: ``(nc, ns)``."""
+        r"""Return means matrix (classes means) as a list of length ``nv``, where the ``i``-th element is the matrix of shape: ``(nc, len(pois[i]))`` associated to the ``i``-th variable."""
         return self._inner.get_mus()
 
 

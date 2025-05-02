@@ -1,8 +1,6 @@
 import pickle
-import typing
 
 import pytest
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
 import numpy as np
 import scipy.linalg
 import scipy.stats
@@ -40,6 +38,9 @@ class RefLda:
         self.projection = projection
         self.coef = np.dot(self.mus, self.projection).dot(self.projection.T)
         self.intercept = -0.5 * np.diag(np.dot(self.mus, self.coef.T))
+
+    def project(self, traces):
+        return np.dot(traces, self.projection)
 
     def predict_proba(self, traces):
         scores = traces @ self.coef.T + self.intercept[np.newaxis, :]
@@ -179,24 +180,28 @@ lda_ref_uni_cases = [
     lda_ref_uni_bc.with_params(ns=3, npois=3),
     lda_ref_uni_bc.with_params(ns=10, npois=3),
     lda_ref_uni_bc.with_params(ns=10, npois=3, p=2, nc=4, n=100),
+    lda_ref_uni_bc.with_params(ns=3, npois=3, p=1, nc=2, n=5, n_batches=3),
+    lda_ref_uni_bc.with_params(ns=10, npois=3, p=2, nc=4, n=100, n_batches=5),
 ]
 
 
 @pytest.mark.parametrize("case", lda_ref_uni_cases)
 def test_univariate_lda_ref(case):
-    pois, traces, x = case.get_data()
-    # Fetch the first batch only
-    traces = traces[0]
-    x = x[0]
+    pois, btraces, bx = case.get_data()
     # LdaAc
     lda_acc = LdaAcc(pois=pois, nc=case["nc"])
-    lda_acc.fit_u(traces, x)
+    for bi, (traces, x) in enumerate(zip(btraces, bx)):
+        lda_acc.fit_u(traces, x)
     # LDARef
+    traces = np.vstack(btraces)
+    x = np.vstack(bx)
     lda_ref = RefLda(traces[:, pois[0]], x[:, 0], nc=case["nc"], p=case["p"])
 
     # Verify value of means by accessor
     lda_means = lda_acc.get_mus()[0]
-    assert np.allclose(lda_ref.mus, lda_means), "Mean mismatch"
+    assert np.allclose(
+        lda_ref.mus, lda_means
+    ), "Mean mismatch\nmu_ref:=\n{}\nmu_mean:=\n{}".format(lda_ref.mus, lda_means)
 
     s_b = lda_acc.get_sb()[0]
     s_w = lda_acc.get_sw()[0]
@@ -356,8 +361,6 @@ def test_mvars_lda_compare(case):
 
 
 ### Multivar with select
-
-######################## OLD
 mvars_select_bc = LdaTestCase(
     ns=2,
     nc=2,
@@ -374,10 +377,13 @@ mvars_select_bc = LdaTestCase(
 mvars_select_cases = [
     mvars_select_bc,
     mvars_select_bc.with_params(n_batches=2, nv=10, nv_sel=3),
-    mvars_select_bc.with_params(ns=5, n=20, maxl=100, n_batches=1, nv=5, nv_sel=2),
+    mvars_select_bc.with_params(ns=5, n=20, maxl=100, nv=5, nv_sel=2),
     mvars_select_bc.with_params(n=100, nv=5, ns=25, npois=5, nv_sel=2, n_sel=2),
     mvars_select_bc.with_params(n=100, nv=5, ns=25, npois=15, nv_sel=3, n_sel=1),
     mvars_select_bc.with_params(n=100, nv=5, ns=25, npois=15, nv_sel=5, n_sel=1),
+    mvars_select_bc.with_params(
+        n=100, nv=5, ns=25, npois=15, nv_sel=5, n_sel=1, n_batches=3, p=3
+    ),
 ]
 
 
@@ -442,35 +448,119 @@ def test_handmade_simplified_mvars():
     test_mvars_lda_compare(case_wparams)
 
 
-####### Deprecated tests
+####### API related test (e.g., check errors, ...)
+def try_with_expected_error(f, err_type, exp_err_msg):
+    try:
+        f()
+    except err_type as e:
+        assert f"{e}" == exp_err_msg, "MSG:\n{}\nINSTEAD OF\n{}\n".format(
+            e, exp_err_msg
+        )
+    else:
+        assert False, "Incorrect behavior not handled by scalib..."
+
+
+def test_simple_format_check():
+    maxt = 4092
+    n = 1000
+    nv = 2
+    nc = 16
+    npois = 5
+    p = 3
+    pois = [[i * npois + e for e in range(npois)] for i in range(nv)]
+    ns = npois * nv
+
+    # Wrong traces shape
+    traces = np.random.randint(0, maxt, (n, npois - 1), dtype=np.int16)
+    x = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
+    lda_acc = LdaAcc(nc=nc, pois=pois)
+    try_with_expected_error(
+        lambda: lda_acc.fit_u(traces, x), ScalibError, "POI out of bounds."
+    )
+
+    # Wrong labels shape [too much variables]
+    traces = np.random.randint(0, maxt, (n, ns), dtype=np.int16)
+    x = np.random.randint(0, nc, (n, nv + 1), dtype=np.uint16)
+    lda_acc = LdaAcc(nc=nc, pois=pois)
+    expected_error_msg = (
+        "Number of variables {} does not match  previously-fitted classes ({}).".format(
+            nv + 1, nv
+        )
+    )
+    try_with_expected_error(
+        lambda: lda_acc.fit_u(traces, x), ValueError, expected_error_msg
+    )
+
+    # Wrong labels values.
+    # Not tested, would imply significant impact on performances
+
+    # Validate matrices shape
+    traces = np.random.randint(0, maxt, (n, ns), dtype=np.int16)
+    x = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
+    lda_acc = LdaAcc(nc=nc, pois=pois)
+    lda_acc.fit_u(traces, x)
+    mus = lda_acc.get_mus()
+    assert len(mus) == nv
+    for mus_e, pois_e in zip(mus, pois):
+        assert mus_e.shape == (nc, len(pois_e))
+
+    sw = lda_acc.get_sw()
+    assert len(sw) == nv
+    for sw_e, pois_e in zip(sw, pois):
+        assert sw_e.shape == (len(pois_e), len(pois_e))
+
+    sb = lda_acc.get_sb()
+    assert len(sb) == nv
+    for sb_e, pois_e in zip(sb, pois):
+        assert sb_e.shape == (len(pois_e), len(pois_e))
+
+    # Solve the lda
+    lda = Lda(lda_acc, p=p)
+
+    # Wrong new traces for predictions
+    new_traces = np.random.randint(0, 256, (20, ns + 1), dtype=np.int16)
+    e_err_msg = "Traces length {} does not match previously-fitted traces ({}).".format(
+        ns + 1, ns
+    )
+    try_with_expected_error(
+        lambda: lda.predict_proba(new_traces), ValueError, e_err_msg
+    )
+
+    # Validate probas shape
+    n_new = 20
+    new_traces = np.random.randint(0, 256, (n_new, ns), dtype=np.int16)
+    pr = lda.predict_proba(new_traces)
+    assert len(pr) == nv
+    for prs in pr:
+        assert prs.shape == (n_new, nc)
+
+
+################### Deprecated tests
 @pytest.mark.parametrize("case", lda_ref_uni_cases)
 def test_deprecated_ldaclassifier_sklearn(case):
-    pois, traces, x = case.get_data()
-    # Fetch the first batch only
-    traces = traces[0]
-    x = x[0]
+    pois, btraces, bx = case.get_data()
     # LdaAc
     lda = LDAClassifier(case["nc"], case["p"])
-    lda.fit_u(traces[:, pois[0]], x[:, 0], 0)
-    lda.solve(False)
+    for bi, (traces, x) in enumerate(zip(btraces, bx)):
+        lda.fit_u(traces[:, pois[0]], x[:, 0], 0)
     # LDARef
-    lda_ref = LDA_sklearn(solver="eigen", n_components=case["p"])
-    lda_ref.fit(traces[:, pois[0]], x[:, 0])
+    traces = np.vstack(btraces)
+    x = np.vstack(bx)
+    lda_ref = RefLda(traces[:, pois[0]], x[:, 0], nc=case["nc"], p=case["p"])
 
     # Verify value of means by accessor
-    ref_means = lda_ref.means_
     lda_means = lda.get_mus()
-    assert np.allclose(ref_means, lda_means, rtol=1e-10), "Mean mismatch"
+    assert np.allclose(
+        lda_ref.mus, lda_means
+    ), "Mean mismatch\nmu_ref:=\n{}\nmu_mean:=\n{}".format(lda_ref.mus, lda_means)
 
-    # Verify scatter matrix by accessor
-    lda_scat = lda.get_sw() / case["n"]
-    cov_ref = lda_ref.covariance_
-    assert np.allclose(lda_scat, cov_ref, rtol=1e-5), "Scatter mismatch"
+    s_b = lda.get_sb()
+    s_w = lda.get_sw()
+    assert np.allclose(s_b, lda_ref.s_b), f"SB mismatch\n{s_b=}\n{lda_ref.s_b=}"
+    assert np.allclose(s_w, lda_ref.s_w), f"SB mismatch\n{s_w=}\n{lda_ref.s_w=}"
 
-    # Not point of comparison with sklearn, but we here call
-    # the accessor for the inter-class scatter matrix just to verify
-    # that its working.
-    smat = lda.get_sb()
+    # Solve
+    lda.solve(False)
 
     # Verify projection
     # Project traces with SCALib
@@ -478,14 +568,16 @@ def test_deprecated_ldaclassifier_sklearn(case):
 
     ptraces = lda.mlda.project(traces[:, pois[0]], get_config())
     # Project traces woth sklearn
-    ptraces_sklearn = lda_ref.transform(traces[:, pois[0]])
+    ptraces_sklearn = lda_ref.project(traces[:, pois[0]])
     projections_similar = all(
         [is_parallel(a, b) for a, b in zip(ptraces[0].T, ptraces_sklearn.T)]
     )
-    assert projections_similar, (ptraces, ptraces_sklearn)
+    assert projections_similar, "Projection mismatch"
 
-    # We can't do much more since sklearn has no way to reduce dimensionality of LDA.
-    # e.g., comparing probas will fail -> TODO
+    # Validate the probabilities
+    probas = lda.predict_proba(traces[:, pois[0]])
+    ref_probas = lda_ref.predict_proba(traces[:, pois[0]])
+    assert np.allclose(probas, ref_probas), f"{probas=}\n{ref_probas=}"
 
 
 @pytest.mark.parametrize("case", mvars_vs_indepvars_cases)
