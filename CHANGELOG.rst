@@ -5,6 +5,8 @@ Changelog
 Not released
 ------------
 
+* Fix LDA backend and improve numerical stability. 
+
 v0.6.2 (2025/04/15)
 -------------------
 
