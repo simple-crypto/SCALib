@@ -449,17 +449,6 @@ def test_handmade_simplified_mvars():
 
 
 ####### API related test (e.g., check errors, ...)
-def try_with_expected_error(f, err_type, exp_err_msg):
-    try:
-        f()
-    except err_type as e:
-        assert f"{e}" == exp_err_msg, "MSG:\n{}\nINSTEAD OF\n{}\n".format(
-            e, exp_err_msg
-        )
-    else:
-        assert False, "Incorrect behavior not handled by scalib..."
-
-
 def test_simple_format_check():
     maxt = 4092
     n = 1000
@@ -474,22 +463,20 @@ def test_simple_format_check():
     traces = np.random.randint(0, maxt, (n, npois - 1), dtype=np.int16)
     x = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
     lda_acc = LdaAcc(nc=nc, pois=pois)
-    try_with_expected_error(
-        lambda: lda_acc.fit_u(traces, x), ScalibError, "POI out of bounds."
-    )
+    with pytest.raises(ScalibError, match="POI out of bounds."):
+        lda_acc.fit_u(traces, x)
 
     # Wrong labels shape [too much variables]
     traces = np.random.randint(0, maxt, (n, ns), dtype=np.int16)
     x = np.random.randint(0, nc, (n, nv + 1), dtype=np.uint16)
     lda_acc = LdaAcc(nc=nc, pois=pois)
     expected_error_msg = (
-        "Number of variables {} does not match  previously-fitted classes ({}).".format(
-            nv + 1, nv
+        "Number of variables {} does not match  previously-fitted classes*".format(
+            nv + 1
         )
     )
-    try_with_expected_error(
-        lambda: lda_acc.fit_u(traces, x), ValueError, expected_error_msg
-    )
+    with pytest.raises(ValueError, match=expected_error_msg):
+        lda_acc.fit_u(traces, x)
 
     # Wrong labels values.
     # Not tested, would imply significant impact on performances
@@ -519,12 +506,11 @@ def test_simple_format_check():
 
     # Wrong new traces for predictions
     new_traces = np.random.randint(0, 256, (20, ns + 1), dtype=np.int16)
-    e_err_msg = "Traces length {} does not match previously-fitted traces ({}).".format(
-        ns + 1, ns
+    e_err_msg = "Traces length {} does not match previously-fitted traces*".format(
+        ns + 1
     )
-    try_with_expected_error(
-        lambda: lda.predict_proba(new_traces), ValueError, e_err_msg
-    )
+    with pytest.raises(ValueError, match=e_err_msg):
+        lda.predict_proba(new_traces)
 
     # Validate probas shape
     n_new = 20
