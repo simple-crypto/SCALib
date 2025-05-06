@@ -1,4 +1,4 @@
-// Copyright (C) 2016-2021 Yixuan Qiu <yixuan.qiu@cos.name>
+// Copyright (C) 2016-2025 Yixuan Qiu <yixuan.qiu@cos.name>
 //
 // This Source Code Form is subject to the terms of the Mozilla
 // Public License v. 2.0. If a copy of the MPL was not distributed
@@ -9,7 +9,7 @@
 
 #include <Eigen/Core>
 
-#include "SymEigsBase.h"
+#include "HermEigsBase.h"
 #include "Util/SelectionRule.h"
 #include "MatOp/DenseSymMatProd.h"
 
@@ -101,8 +101,8 @@ namespace Spectra {
 /// {
 /// public:
 ///     using Scalar = double;  // A typedef named "Scalar" is required
-///     int rows() { return 10; }
-///     int cols() { return 10; }
+///     int rows() const { return 10; }
+///     int cols() const { return 10; }
 ///     // y_out = M * x_in
 ///     void perform_op(double *x_in, double *y_out) const
 ///     {
@@ -131,7 +131,7 @@ namespace Spectra {
 /// \endcode
 ///
 template <typename OpType = DenseSymMatProd<double>>
-class SymEigsSolver : public SymEigsBase<OpType, IdentityBOp>
+class SymEigsSolver : public HermEigsBase<OpType, IdentityBOp>
 {
 private:
     using Index = Eigen::Index;
@@ -155,7 +155,7 @@ public:
     ///             and is advised to take \f$ncv \ge 2\cdot nev\f$.
     ///
     SymEigsSolver(OpType& op, Index nev, Index ncv) :
-        SymEigsBase<OpType, IdentityBOp>(op, IdentityBOp(), nev, ncv)
+        HermEigsBase<OpType, IdentityBOp>(op, IdentityBOp(), nev, ncv)
     {}
 };
 

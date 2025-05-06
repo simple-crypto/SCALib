@@ -90,3 +90,9 @@ pub fn as_chunks<const N: usize, T>(x: &[T]) -> &[[T; N]] {
     // a slice of `new_len` many `N` elements chunks.
     unsafe { std::slice::from_raw_parts(x.as_ptr().cast(), new_len) }
 }
+
+pub(crate) fn argsort<T: Ord>(data: &[T]) -> Vec<usize> {
+    let mut indices = (0..data.len()).collect::<Vec<usize>>();
+    indices.sort_by_key(|&i| &data[i]);
+    indices
+}

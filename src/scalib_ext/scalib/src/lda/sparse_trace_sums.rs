@@ -45,23 +45,15 @@ pub struct SparseTraceSums {
 impl SparseTraceSums {
     /// pois: for each var, list of pois
     pub fn new(ns: u32, nv: u16, nc: u16, poi_map: Arc<PoiMap>) -> Self {
-        // So here, we are in fact interested in dealing with poi_map.new_poi_vars
         let pois = &poi_map.new_poi_vars;
-        //pub fn new(ns: u32, nv: u16, nc: u16, pois: &[Vec<u32>]) -> Self {
-        // For each variable, recover the amount of pois used
         let n_pois = pois.iter().map(Vec::len).collect();
-        // For each pois, recover the list of variables that relies on it.
-        // Conceptually the inverse of poi_map.new_poi_vars
         let mut vars_per_poi = vec![vec![]; ns as usize];
         for (var, pois_v) in pois.iter().enumerate() {
             for poi in pois_v {
                 vars_per_poi[*poi as usize].push(var as Var);
             }
         }
-        // After the poi_var_id loop, var_poi_count = n_pois?
-        // var_poi_count seems to be useful only for building poi_var_id.
         let mut var_poi_count = vec![0u16; nv as usize];
-        // For each POI, compute the index of each poi associated, relative to each var.
         let poi_var_id = vars_per_poi
             .iter()
             .map(|vars| {

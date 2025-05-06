@@ -1,275 +1,571 @@
 import pickle
-import typing
 
 import pytest
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA_sklearn
 import numpy as np
-import scipy.stats
+import scipy.linalg
+import scipy.special
 
 from scalib import ScalibError
 from scalib.modeling import LDAClassifier, MultiLDA, Lda, LdaAcc
 
 from utils_test import get_rng
 
+import copy
+
+
+class RefLda:
+    def __init__(self, traces, x, nc, p):
+        self.nc = nc
+        self.p = p
+        n = traces.shape[0]
+        self.ns = traces.shape[1]
+        tr_x = [traces[x == i, :] for i in range(nc)]
+        self.nis = [(x == i).sum() for i in range(nc)]
+        self.mus = np.array([tr.mean(axis=0) for tr in tr_x])
+        # between-class scatter: s_b = Si(ni*cmui**2)
+        self.s_b = n * np.cov(self.mus.T, ddof=0, fweights=self.nis)
+        # within-class scatter: s_w = Si(Sxi((xi-mui)**2))
+        self.s_w = np.sum(
+            [ni * np.cov(tr.T, ddof=0) for ni, tr in zip(self.nis, tr_x)], axis=0
+        )
+        # Factor n on s_w important to get properly scaled projection for finalize.
+        # (such that evec*(s_w/n)*evec^T=1).
+        self.evals, self.evecs = scipy.linalg.eigh(self.s_b, self.s_w / (n - nc))
+        self.finalize(projection=self.evecs[:, np.argsort(self.evals)[::-1][: self.p]])
+
+    def finalize(self, projection):
+        self.projection = projection
+        self.coef = np.dot(self.mus, self.projection).dot(self.projection.T)
+        self.intercept = -0.5 * np.diag(np.dot(self.mus, self.coef.T))
+
+    def project(self, traces):
+        return np.dot(traces, self.projection)
+
+    def predict_proba(self, traces):
+        scores = traces @ self.coef.T + self.intercept[np.newaxis, :]
+        return scipy.special.softmax(scores, axis=1)
+
+
+def pois_uniform_indep(rng, ns, nv, npois, **params):
+    assert ns <= params["maxl"]
+    pois = np.tile(np.arange(ns), (nv, 1))
+    return rng.permuted(pois, axis=1)[:, :npois].tolist()
+
+
+def data_gaussian_default(
+    rng, ns, nv, nc, n, n_batches, signal_std=50.0, noise_std=20.0, **_
+):
+    all_x = []
+    all_traces = []
+    class_means = rng.normal(0.0, signal_std, (nc, ns))
+    for _ in range(n_batches):
+        x = rng.integers(0, nc, (n, nv), dtype=np.uint16)
+        noise = rng.normal(0.0, noise_std, (n, ns))
+        traces = class_means[x, :].sum(axis=1) + noise
+        rtraces = np.round(traces).astype(np.int16)
+        all_x.append(x)
+        all_traces.append(rtraces)
+    return all_traces, all_x
+
+
+class LdaTestCase:
+    def __init__(
+        self,
+        *,
+        ns,
+        nc,
+        nv,
+        npois,
+        n,
+        n_batches,
+        p,
+        test_lp,
+        maxl,
+        n_sel=None,
+        nv_sel=None,
+    ):
+        self.pois = None
+        self.traces = None
+        self.x = None
+        self.params = dict(
+            ns=ns,
+            nc=nc,
+            nv=nv,
+            npois=npois,
+            n=n,
+            n_batches=n_batches,
+            p=p,
+            test_lp=test_lp,
+            maxl=maxl,
+            n_sel=n_sel,
+            nv_sel=nv_sel,
+        )
+
+    def __str__(self):
+        return str(self.params)
+
+    def with_params(self, **kwargs):
+        cls = type(self)
+        return cls(**(self.params | kwargs))
+
+    def with_data(self, x=None, traces=None):
+        res = copy.deepcopy(self)
+        if x is not None:
+            res.x = x
+        if traces is not None:
+            res.traces = traces
+        return res
+
+    def with_pois(self, pois=None):
+        res = copy.deepcopy(self)
+        if pois is not None:
+            res.pois = pois
+        return res
+
+    def get_data(self, fpois=pois_uniform_indep, fdata=data_gaussian_default):
+        rng = get_rng(**self.params)
+        pois = fpois(rng, **self.params) if self.pois is None else self.pois
+        if self.traces is None or self.x is None:
+            traces, x = fdata(rng, **self.params)
+            x = x if self.x is None else self.x
+            traces = traces if self.traces is None else self.traces
+        else:
+            traces, x = self.traces, self.x
+        return pois, traces, x
+
+    def __getitem__(self, key):
+        return self.params[key]
+
+
+def normalize(x):
+    return x / np.linalg.norm(x, axis=0, keepdims=True)
+
 
 def is_parallel(x, y):
     z = np.abs(x.dot(y))
     z2 = np.linalg.norm(x) * np.linalg.norm(y)
-    return np.allclose(z, z2, rtol=1e-3)
+    return np.allclose(z, z2)
 
 
-def parallel_factor(x, y):
-    """Return 1 if x and y are parallel and in the same direction, and -1 is
-    they are in opposite directions.
-    """
-    x = x / np.linalg.norm(x)
-    y = y / np.linalg.norm(y)
-    return np.dot(x, y)
+# Test that univariate LDA results in similar results that the one from ref.
+lda_ref_uni_bc = LdaTestCase(
+    ns=2,
+    nc=2,
+    nv=1,
+    npois=2,
+    n=20,
+    n_batches=1,
+    p=1,
+    test_lp=True,
+    maxl=2**15,
+)
+lda_ref_uni_cases = [
+    lda_ref_uni_bc,
+    lda_ref_uni_bc.with_params(n=200),
+    lda_ref_uni_bc.with_params(ns=3, npois=3).with_pois(pois=[[0, 1, 2]]),
+    lda_ref_uni_bc.with_params(ns=3, npois=3),
+    lda_ref_uni_bc.with_params(nc=4, p=2),
+    lda_ref_uni_bc.with_params(ns=3, nc=4, p=3, npois=3),
+    lda_ref_uni_bc.with_params(ns=10, npois=3),
+    lda_ref_uni_bc.with_params(ns=10, npois=3, p=2, nc=4, n=100),
+    lda_ref_uni_bc.with_params(ns=3, npois=3, p=1, nc=2, n=5, n_batches=3),
+    lda_ref_uni_bc.with_params(ns=10, npois=3, p=2, nc=4, n=100, n_batches=5),
+]
 
 
-def test_lda_pickle():
-    # np.set_printoptions(threshold=np.inf)
-    ns = 10
-    n_components = 2
-    nc = 4
-    n = 5000
+@pytest.mark.parametrize("case", lda_ref_uni_cases)
+def test_univariate_lda_ref(case):
+    print(f"{case.__dict__=}")
+    pois, btraces, bx = case.get_data()
+    # LdaAc
+    lda_acc = LdaAcc(pois=pois, nc=case["nc"])
+    for bi, (traces, x) in enumerate(zip(btraces, bx)):
+        lda_acc.fit_u(traces, x)
+    # LDARef
+    traces = np.vstack(btraces)
+    x = np.vstack(bx)
+    lda_ref = RefLda(traces[:, pois[0]], x[:, 0], nc=case["nc"], p=case["p"])
 
-    rng = get_rng()
-    m = rng.integers(0, 100, (nc, ns))
-    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
-    labels = rng.integers(0, nc, n, dtype=np.uint16)
-    traces += m[labels]
+    # Verify value of means by accessor
+    lda_means = lda_acc.get_mus()[0]
+    assert np.allclose(
+        lda_ref.mus, lda_means
+    ), "Mean mismatch\nmu_ref:=\n{}\nmu_mean:=\n{}".format(lda_ref.mus, lda_means)
 
-    lda = LDAClassifier(nc, n_components)
-    lda.fit_u(traces, labels, 1)
-    lda.solve()
+    s_b = lda_acc.get_sb()[0]
+    s_w = lda_acc.get_sw()[0]
+    assert np.allclose(s_b, lda_ref.s_b), f"SB mismatch\n{s_b=}\n{lda_ref.s_b=}"
+    assert np.allclose(s_w, lda_ref.s_w), f"SB mismatch\n{s_w=}\n{lda_ref.s_w=}"
+
+    # Solve the LdaAcc
+    lda = Lda(lda_acc, p=case["p"])
+
+    print(f"{pois=}")
+
+    # Verify the projection
+    id_pois = np.zeros((case["npois"], case["ns"]), dtype=np.int16)
+    for i in range(case["npois"]):
+        id_pois[i, pois[0][i]] = 1
+    assert (id_pois[:, pois[0]] == np.eye(case["npois"])).all()
+    proj_matrix = lda.project(id_pois)[0]
+    # In the case p == npois, the order of eigenvalues might differ.
+    if case["p"] < case["npois"]:
+        assert all(
+            [is_parallel(a, b) for a, b in zip(proj_matrix.T, lda_ref.projection.T)]
+        ), "Projection mismatch"
+
+    probas = lda.predict_proba(traces)
+    ref_probas = lda_ref.predict_proba(traces[:, pois[0]])
+    assert np.allclose(probas, ref_probas), f"{probas=}\n{ref_probas=}"
+
+
+#### Pickle test
+
+lda_pickle_unibatch_bc = LdaTestCase(
+    ns=10,
+    nc=2,
+    nv=1,
+    npois=4,
+    n=500,
+    n_batches=1,
+    p=1,
+    test_lp=True,
+    maxl=2**15,
+)
+lda_pickle_unibatch_cases = [
+    lda_ref_uni_bc,
+    lda_ref_uni_bc.with_params(nc=4, p=2),
+    lda_ref_uni_bc.with_params(nc=4, p=2, nv=4),
+]
+
+
+@pytest.mark.parametrize("case", lda_pickle_unibatch_cases)
+def test_lda_pickle_unibatch(case):
+    pois, traces, x = case.get_data()
+    # Fetch the first batch only
+    traces = traces[0]
+    x = x[0]
+    # LdaAc
+    lda = LdaAcc(pois=pois, nc=case["nc"])
+    lda.fit_u(traces, x)
+    # Reference, check that the pickle is not modifiying the results
+    lda_ref = LdaAcc(pois=pois, nc=case["nc"])
+    lda_ref.fit_u(traces, x)
 
     dumped_lda = pickle.dumps(lda)
     lda = pickle.loads(dumped_lda)
 
-    lda_ref = LDA_sklearn(solver="eigen", n_components=n_components)
-    lda_ref.fit(traces, labels)
+    # Validate the matrices, MUST be strictly similar before solve
+    for mus, mus_ref in zip(lda.get_mus(), lda_ref.get_mus()):
+        assert (mus == mus_ref).all()
+    for sb, sb_ref in zip(lda.get_sb(), lda_ref.get_sb()):
+        assert (sb == sb_ref).all()
+    for sw, sw_ref in zip(lda.get_sw(), lda_ref.get_sw()):
+        assert np.allclose(sw, sw_ref)
 
-    # Project traces with SCALib
-    from scalib.config import get_config
+    # Then, verify pickle writing with the Lda (solved Lda).
+    lda_solved = Lda(lda, p=case["p"])
+    lda_ref_solved = Lda(lda_ref, p=case["p"])
 
-    ptraces = lda.mlda.project(traces, get_config())[0]
-    # Project traces woth sklearn
-    ptraces_sklearn = lda_ref.transform(traces)
-    projections_similar = all(
-        [is_parallel(a, b) for a, b in zip(ptraces.T, ptraces_sklearn.T)]
-    )
-    assert projections_similar, (ptraces, ptraces_sklearn)
+    dumped_lda_s = pickle.dumps(lda_solved)
+    lda_solved = pickle.loads(dumped_lda_s)
 
-    # generate means and cov in subspace
-    traces_t = (lda_ref.scalings_[:, :n_components].T @ traces.T).T
-    means_check = np.zeros((nc, n_components))
-    for i in range(nc):
-        I = np.where(labels == i)[0]
-        means_check[i, :] = np.mean(traces_t[I, :], axis=0)
-    traces_t = traces_t - means_check[labels, :]
-    cov_check = np.cov(traces_t.T)
+    # Verify the projection
+    ptraces = lda_solved.project(traces)
+    ptraces_ref = lda_ref_solved.project(traces)
+    for p, pref in zip(ptraces, ptraces_ref):
+        projections_similar = all([is_parallel(a.T, b.T) for a, b in zip(p, pref)])
+        assert projections_similar, (ptraces, ptraces_ref)
 
-    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
-    labels = rng.integers(0, nc, n, dtype=np.uint16)
-    traces += m[labels]
-
-    prs = lda.predict_proba(traces)
-    traces_t = (lda_ref.scalings_[:, :n_components].T @ traces.T).T
-    prs_ref = np.zeros((len(traces), nc))
-    for x in range(nc):
-        prs_ref[:, x] = scipy.stats.multivariate_normal.pdf(
-            traces_t, means_check[x], cov_check
-        )
-    prs_ref = (prs_ref.T / np.sum(prs_ref, axis=1)).T
-
-    assert np.allclose(prs, prs_ref, rtol=1e-2)
+    # Verify the proba
+    lda_prs = lda_solved.predict_proba(traces)
+    lda_prs_ref = lda_ref_solved.predict_proba(traces)
+    assert np.allclose(lda_prs, lda_prs_ref)
 
 
-def test_lda():
-    # np.set_printoptions(threshold=np.inf)
-    ns = 10
-    n_components = 2
-    nc = 4
-    n = 500
+#### Multi vars vs indep single vars
+mvars_vs_indepvars_bc = LdaTestCase(
+    ns=2,
+    nc=2,
+    nv=1,
+    npois=1,
+    n=10,
+    n_batches=1,
+    p=1,
+    test_lp=True,
+    maxl=2**15,
+)
+mvars_vs_indepvars_cases = [
+    mvars_vs_indepvars_bc,
+    mvars_vs_indepvars_bc.with_params(n=5, n_batches=2),
+    mvars_vs_indepvars_bc.with_params(ns=1000, nc=4, nv=10, n=500, n_batches=1),
+    mvars_vs_indepvars_bc.with_params(ns=1000, nc=4, nv=10, n=500, n_batches=5),
+    mvars_vs_indepvars_bc.with_params(
+        ns=20, nc=4, nv=4, n=20, npois=5, n_batches=1, p=2
+    ),
+    mvars_vs_indepvars_bc.with_params(
+        ns=20, nc=4, nv=4, n=20, npois=5, n_batches=3, p=2
+    ),
+    mvars_vs_indepvars_bc.with_params(
+        ns=100, nc=256, nv=2, npois=20, n=5000, n_batches=1, p=4
+    ),
+    mvars_vs_indepvars_bc.with_params(
+        ns=100, nc=256, nv=2, npois=20, n=5000, n_batches=5, p=4
+    ),
+]
 
+
+@pytest.mark.parametrize("case", mvars_vs_indepvars_cases)
+def test_mvars_lda_compare(case):
+    pois, traces, x = case.get_data()
+    print(80 * "#" + "\ncase:", case)
+    mlda = [LdaAcc(pois=[pois[i]], nc=case["nc"]) for i in range(case["nv"])]
+    mlda_acc = LdaAcc(pois=pois, nc=case["nc"])
+    # Fit with batches
+    for t, y in zip(traces, x):
+        for i in range(case["nv"]):
+            mlda[i].fit_u(t, y[:, i][:, np.newaxis])
+        mlda_acc.fit_u(t, y)
+    for mus, mus_acc in zip([lda.get_mus() for lda in mlda], mlda_acc.get_mus()):
+        assert np.allclose(mus, mus_acc)
+    for sb, sb_acc in zip([lda.get_sb() for lda in mlda], mlda_acc.get_sb()):
+        assert np.allclose(sb, sb_acc)
+    for sw, sw_acc in zip([lda.get_sw() for lda in mlda], mlda_acc.get_sw()):
+        assert np.allclose(sw, sw_acc)
+    mlda = [Lda(lda, p=case["p"]) for lda in mlda]
+    mlda_acc = Lda(mlda_acc, p=case["p"])
+    for t, y in zip(traces, x):
+        mlda_acc_prs = mlda_acc.predict_proba(t)
+        mlda_prs = [lda.predict_proba(t) for lda in mlda]
+        for prs_acc, prs in zip(mlda_acc_prs, mlda_prs):
+            assert np.allclose(prs_acc, prs)
+        if case["test_lp"]:
+            acc_lp = mlda_acc.predict_log2_proba_class(t, y)
+            lp = np.log2(
+                mlda_acc_prs[
+                    np.arange(mlda_acc_prs.shape[0])[:, np.newaxis],
+                    np.arange(mlda_acc_prs.shape[1])[np.newaxis, :],
+                    y.T,
+                ]
+            )
+            assert np.allclose(acc_lp, lp)
+
+
+### Multivar with select
+mvars_select_bc = LdaTestCase(
+    ns=2,
+    nc=2,
+    nv=1,
+    npois=1,
+    n=10,
+    n_batches=1,
+    p=1,
+    test_lp=True,
+    maxl=2**15,
+    n_sel=5,
+    nv_sel=1,
+)
+mvars_select_cases = [
+    mvars_select_bc,
+    mvars_select_bc.with_params(n_batches=2, nv=10, nv_sel=3),
+    mvars_select_bc.with_params(ns=5, n=20, maxl=100, nv=5, nv_sel=2),
+    mvars_select_bc.with_params(n=100, nv=5, ns=25, npois=5, nv_sel=2, n_sel=2),
+    mvars_select_bc.with_params(n=100, nv=5, ns=25, npois=15, nv_sel=3, n_sel=1),
+    mvars_select_bc.with_params(n=100, nv=5, ns=25, npois=15, nv_sel=5, n_sel=1),
+    mvars_select_bc.with_params(
+        n=100, nv=5, ns=25, npois=15, nv_sel=5, n_sel=1, n_batches=3, p=3
+    ),
+]
+
+
+@pytest.mark.parametrize("case", mvars_select_cases)
+def test_mvars_select(case, select=None):
+    pois, traces, x = case.get_data()
+    ref = LdaAcc(pois=pois, nc=case["nc"])
+    # Fit with batches
+    for t, y in zip(traces, x):
+        ref.fit_u(t, y)
+    ref = Lda(ref, p=case["p"])
+    # Compute the selection
     rng = get_rng()
-    m = rng.integers(0, 100, (nc, ns))
-    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
-    labels = rng.integers(0, nc, n, dtype=np.uint16)
-    traces += m[labels]
+    for _ in range(case["n_sel"]):
+        if select is None:
+            selection = list(rng.integers(0, case["nv"], (case["nv_sel"],)))
+        else:
+            selection = select
+        smlda = ref.select_vars(selection)
+        for t, y in zip(traces, x):
+            # Reference probas
+            ref_prs = ref.predict_proba(t)
+            # Select probas
+            s_prs = smlda.predict_proba(t)
+            # Check
+            for ref_prs, s_prs in zip(ref_prs[selection], s_prs):
+                assert np.allclose(ref_prs, s_prs)
+            if case["test_lp"]:
+                ref_lp = ref.predict_log2_proba_class(t, y)
+                acc_lp = smlda.predict_log2_proba_class(t, y[:, selection])
+                assert np.allclose(acc_lp, ref_lp[selection])
 
-    lda = LDAClassifier(nc, n_components)
-    lda.fit_u(traces, labels, 1)
-    lda.solve()
 
-    pr = lda.predict_proba(traces)
-    print(pr.shape)
+### Hardcoded simplified case
+def test_handmade_simplified_select():
+    pois = [[0, 1], [1, 2]]
+    selection = [1, 0]
+    case = LdaTestCase(
+        ns=3,
+        nv=len(pois),
+        n=20,
+        nc=2,
+        n_batches=1,
+        npois=len(pois[0]),
+        p=1,
+        test_lp=True,
+        maxl=2**15,
+        n_sel=5,
+        nv_sel=len(selection),
+    ).with_pois(pois)
+    test_mvars_select(case, select=selection)
 
-    lda_ref = LDA_sklearn(solver="eigen", n_components=n_components)
-    lda_ref.fit(traces, labels)
 
-    # Project traces with SCALib
-    from scalib.config import get_config
-
-    ptraces = lda.mlda.project(traces, get_config())[0]
-    # Project traces woth sklearn
-    ptraces_sklearn = lda_ref.transform(traces)
-    projections_similar = all(
-        [is_parallel(a, b) for a, b in zip(ptraces.T, ptraces_sklearn.T)]
+def test_handmade_simplified_mvars():
+    case = LdaTestCase(
+        ns=5, nc=2, nv=1, npois=2, n=4, n_batches=1, p=1, test_lp=True, maxl=2**15
     )
-    assert projections_similar, (ptraces, ptraces_sklearn)
+    pois = [np.array([0, 1])]
+    traces = [np.array([[1, 0], [0, 1], [0, 0], [4, 4]], dtype=np.int16)]
+    x = [np.array([[0], [0], [1], [1]]).astype(np.uint16)]
+    case_wparams = case.with_data(x=x, traces=traces).with_pois(pois=pois)
+    test_mvars_lda_compare(case_wparams)
+
+
+####### API related test (e.g., check errors, ...)
+def test_simple_format_check():
+    maxt = 4092
+    n = 1000
+    nv = 2
+    nc = 16
+    npois = 5
+    p = 3
+    pois = [[i * npois + e for e in range(npois)] for i in range(nv)]
+    ns = npois * nv
+
+    # Wrong traces shape
+    traces = np.random.randint(0, maxt, (n, npois - 1), dtype=np.int16)
+    x = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
+    lda_acc = LdaAcc(nc=nc, pois=pois)
+    with pytest.raises(ScalibError, match="POI out of bounds."):
+        lda_acc.fit_u(traces, x)
+
+    # Wrong labels shape [too much variables]
+    traces = np.random.randint(0, maxt, (n, ns), dtype=np.int16)
+    x = np.random.randint(0, nc, (n, nv + 1), dtype=np.uint16)
+    lda_acc = LdaAcc(nc=nc, pois=pois)
+    expected_error_msg = (
+        "Number of variables {} does not match  previously-fitted classes*".format(
+            nv + 1
+        )
+    )
+    with pytest.raises(ValueError, match=expected_error_msg):
+        lda_acc.fit_u(traces, x)
+
+    # Wrong labels values.
+    # Not tested, would imply significant impact on performances
+
+    # Validate matrices shape
+    traces = np.random.randint(0, maxt, (n, ns), dtype=np.int16)
+    x = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
+    lda_acc = LdaAcc(nc=nc, pois=pois)
+    lda_acc.fit_u(traces, x)
+    mus = lda_acc.get_mus()
+    assert len(mus) == nv
+    for mus_e, pois_e in zip(mus, pois):
+        assert mus_e.shape == (nc, len(pois_e))
+
+    sw = lda_acc.get_sw()
+    assert len(sw) == nv
+    for sw_e, pois_e in zip(sw, pois):
+        assert sw_e.shape == (len(pois_e), len(pois_e))
+
+    sb = lda_acc.get_sb()
+    assert len(sb) == nv
+    for sb_e, pois_e in zip(sb, pois):
+        assert sb_e.shape == (len(pois_e), len(pois_e))
+
+    # Solve the lda
+    lda = Lda(lda_acc, p=p)
+
+    # Wrong new traces for predictions
+    new_traces = np.random.randint(0, 256, (20, ns + 1), dtype=np.int16)
+    e_err_msg = "Traces length {} does not match previously-fitted traces*".format(
+        ns + 1
+    )
+    with pytest.raises(ValueError, match=e_err_msg):
+        lda.predict_proba(new_traces)
+
+    # Validate probas shape
+    n_new = 20
+    new_traces = np.random.randint(0, 256, (n_new, ns), dtype=np.int16)
+    pr = lda.predict_proba(new_traces)
+    assert len(pr) == nv
+    for prs in pr:
+        assert prs.shape == (n_new, nc)
+
+
+################### Deprecated tests
+@pytest.mark.parametrize("case", lda_ref_uni_cases)
+def test_deprecated_ldaclassifier_sklearn(case):
+    pois, btraces, bx = case.get_data()
+    # LdaAc
+    lda = LDAClassifier(case["nc"], case["p"])
+    for bi, (traces, x) in enumerate(zip(btraces, bx)):
+        lda.fit_u(traces[:, pois[0]], x[:, 0], 0)
+    # LDARef
+    traces = np.vstack(btraces)
+    x = np.vstack(bx)
+    lda_ref = RefLda(traces[:, pois[0]], x[:, 0], nc=case["nc"], p=case["p"])
 
     # Verify value of means by accessor
-    ref_means = lda_ref.means_
     lda_means = lda.get_mus()
-    assert np.allclose(ref_means, lda_means, rtol=1e-10)
+    assert np.allclose(
+        lda_ref.mus, lda_means
+    ), "Mean mismatch\nmu_ref:=\n{}\nmu_mean:=\n{}".format(lda_ref.mus, lda_means)
 
-    # Verify scatter matrix by accessor
-    lda_scat = lda.get_sw() / n
-    cov_ref = lda_ref.covariance_
-    assert np.allclose(lda_scat, cov_ref, rtol=1e-5)
+    s_b = lda.get_sb()
+    s_w = lda.get_sw()
+    assert np.allclose(s_b, lda_ref.s_b), f"SB mismatch\n{s_b=}\n{lda_ref.s_b=}"
+    assert np.allclose(s_w, lda_ref.s_w), f"SB mismatch\n{s_w=}\n{lda_ref.s_w=}"
 
-    # Not point of comparison with sklearn, but we here call
-    # the accessor for the inter-class scatter matrix just to verify
-    # that its worling.
-    smat = lda.get_sb()
+    # Solve
+    lda.solve(False)
 
-    # We can't do much more since sklearn has no way to reduce dimensionality of LDA.
-    # e.g., comparing probas will fail
+    # Verify projection
+    # Project traces with SCALib
+    from scalib.config import get_config
 
+    ptraces = lda.mlda.project(traces[:, pois[0]], get_config())
+    # Project traces woth sklearn
+    ptraces_sklearn = lda_ref.project(traces[:, pois[0]])
+    # In the case p == npois, the order of eigenvalues might differ.
+    if case["p"] < case["npois"]:
+        projections_similar = all(
+            [is_parallel(a, b) for a, b in zip(ptraces[0].T, ptraces_sklearn.T)]
+        )
+        assert projections_similar, "Projection mismatch"
 
-def test_lda_noproj():
-    ns = 10
-    n_components = 3
-    nc = 4
-    n = 500
-
-    rng = get_rng()
-    m = rng.integers(0, 100, (nc, ns))
-    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
-    labels = rng.integers(0, nc, n, dtype=np.uint16)
-    traces += m[labels]
-
-    lda = LDAClassifier(nc, n_components)
-    lda.fit_u(traces, labels, 1)
-    lda.solve()
-
-    lda_ref = LDA_sklearn(solver="eigen", n_components=n_components)
-    lda_ref.fit(traces, labels)
-
-    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
-    labels = rng.integers(0, nc, n, dtype=np.uint16)
-    traces += m[labels]
-
-    prs = lda.predict_proba(traces)
-    prs_ref = lda_ref.predict_proba(traces)
-
-    assert np.allclose(prs, prs_ref, rtol=1e-2, atol=1e-3)
+    # Validate the probabilities
+    probas = lda.predict_proba(traces[:, pois[0]])
+    ref_probas = lda_ref.predict_proba(traces[:, pois[0]])
+    assert np.allclose(probas, ref_probas), f"{probas=}\n{ref_probas=}"
 
 
-def test_lda_fail_bad_traces():
-    # Issue #56
-    n = 100
-    ns = 6
-    nc = 4
-    lda = LDAClassifier(nc, 3)
-    rng = get_rng()
-    traces_bad = rng.integers(0, 1, (n, ns), dtype=np.int16)
-    y = rng.integers(0, nc, n, dtype=np.uint16)
-    lda.fit_u(traces_bad, y, 0)
-    with pytest.raises(ScalibError):
-        lda.solve()
-
-
-def test_multilda():
-    rng = get_rng()
-    x = rng.integers(0, 256, (5000, 50), dtype=np.int16)
-    y = rng.integers(0, 256, (5000, 5), dtype=np.uint16)
-    pois = [list(range(7 * i, 7 * i + 10)) for i in range(5)]
-    lda = MultiLDA(5 * [256], 5 * [3], pois)
-    lda.fit_u(x, y)
-    lda.solve()
-    x = rng.integers(0, 256, (20, 50), dtype=np.int16)
-    _ = lda.predict_proba(x)
-
-
-def multi_lda_data_indep(ns, nc, nv, n, n_batches, rng):
-    y = [rng.integers(0, nc, (n, nv), dtype=np.uint16) for _ in n_batches]
-    traces = [
-        rng.integers(-(2**15), 2**15, (n, ns), dtype=np.uint16) for _ in n_batches
-    ]
-    return traces, y
-
-
-def multi_lda_gen_pois_overlap(rng, ns, nv, npois):
-    pois = np.tile(np.arange(ns), (nv, 1))
-    rng.shuffle(pois, axis=1)
-    return pois[:, :npois]
-
-
-def multi_lda_gen_pois_consec(nv, npois, gap=0):
-    return np.array(
-        [np.arange(i * (npois + gap), i * (npois + gap) + npois) for i in range(nv)]
-    )
-
-
-def multi_lda_gen_indep_overlap(rng, ns, nc, nv, npois, n, n_batches, maxl=2**15, **_):
-    pois = np.tile(np.arange(ns), (nv, 1))
-    rng.shuffle(pois, axis=1)
-    pois = pois[:, :npois]
-    y = [rng.integers(0, nc, (n, nv), dtype=np.uint16) for _ in range(n_batches)]
-    traces = [
-        rng.integers(-maxl, maxl, (n, ns), dtype=np.int16) for _ in range(n_batches)
-    ]
-    return pois, traces, y
-
-
-def ldaacc_sklearn_compare(nc, nv, p, pois, traces, x, **_):
-    traces_all = np.vstack(traces)
-    x_all = np.vstack(x)
-    ldas_ref = [LDA_sklearn(solver="eigen", n_components=p) for _ in range(nv)]
-    ldaacc = LdaAcc(nc=nc, pois=pois)
-    # Fit SKlean
-    for i, (pi, xi) in enumerate(zip(pois, x_all.T)):
-        ldas_ref[i].fit(traces_all[:, pi].reshape([traces_all.shape[0], len(pi)]), xi)
-    # Fit the scalib lda
-    for t, y in zip(traces, x):
-        ldaacc.fit_u(t, y)
-    # Check the mus matrix
-    for mu, mu_ref in zip(ldaacc.get_mus(), [lda.means_ for lda in ldas_ref]):
-        assert np.allclose(mu, mu_ref)
-    ## Check the within scatter matrix
-    for sw, sw_ref in zip(ldaacc.get_sw(), [lda.covariance_ for lda in ldas_ref]):
-        assert np.allclose(sw / traces_all.shape[0], sw_ref, rtol=1e-5)
-    ## No point of comparison for the between scatter matrix, but call the accessor to check that the function works
-    _ = ldaacc.get_sb()
-    # We can't do much more since sklearn has no way to reduce dimensionality of LDA.
-    # e.g., comparing probas will fail
-
-
-def test_ldaacc_sklearn_compare():
-    base_case = dict(ns=2, nc=2, nv=1, npois=1, n=10, n_batches=1, p=1, test_lp=True)
-    cases = [
-        base_case,
-        base_case | dict(n=5, n_batches=2),
-        base_case | dict(ns=3, n=20, maxl=100),
-        base_case | dict(ns=20, nc=4, nv=4, n=20, npois=5, n_batches=3, p=2),
-        base_case | dict(ns=100, nc=256, nv=2, npois=20, n=5000, n_batches=5, p=4),
-        base_case | dict(ns=1000, nc=4, nv=10, n=500, n_batches=5),
-    ]
-    for case in cases:
-        rng = get_rng(**case)
-        print(80 * "#" + "\ncase:", case)
-        pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
-        ldaacc_sklearn_compare(pois=pois, traces=traces, x=x, **case)
-
-
-def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
-    ncs = [nc for _ in range(nv)]
-    ps = [p for _ in range(nv)]
+@pytest.mark.parametrize("case", mvars_vs_indepvars_cases)
+def test_deprecated_multi_lda_compare(case):
+    pois, traces, x = case.get_data()
+    ncs = [case["nc"] for _ in range(case["nv"])]
+    ps = [case["p"] for _ in range(case["nv"])]
     multi_lda = MultiLDA(ncs, ps, pois=pois)
-    multi_lda3 = LdaAcc(pois=pois, nc=nc)
+    multi_lda3 = LdaAcc(pois=pois, nc=case["nc"])
     for t, y in zip(traces, x):
         multi_lda.fit_u(t, y)
         multi_lda3.fit_u(t, y)
@@ -280,12 +576,12 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
     for sw, sw3 in zip(multi_lda.get_sw(), multi_lda3.get_sw()):
         assert np.allclose(sw, sw3)
     multi_lda.solve(done=False)
-    multi_lda3 = Lda(multi_lda3, p=p)
+    multi_lda3 = Lda(multi_lda3, p=case["p"])
     for t, y in zip(traces, x):
         probas = np.array(multi_lda.predict_proba(t))
         probas3 = multi_lda3.predict_proba(t)
         assert np.allclose(probas, probas3)
-        if test_lp:
+        if case["test_lp"]:
             lp = multi_lda3.predict_log2_proba_class(t, y)
             lp3 = np.log2(
                 probas3[
@@ -295,111 +591,3 @@ def multi_lda_compare(nc, nv, p, pois, traces, x, test_lp=False, **_):
                 ]
             )
             assert np.allclose(lp, lp3)
-
-
-def test_multi_lda_compare():
-    base_case = dict(ns=2, nc=2, nv=1, npois=1, n=10, n_batches=1, p=1, test_lp=True)
-    cases = [
-        base_case,
-        base_case | dict(n=5, n_batches=2),
-        base_case | dict(ns=3, n=20, maxl=100),
-        base_case | dict(ns=20, nc=4, nv=4, npois=5, n_batches=3, p=2),
-        base_case | dict(ns=100, nc=256, nv=2, npois=20, n=500, n_batches=5, p=4),
-        base_case | dict(ns=1000, nc=4, nv=10, n_batches=5),
-    ]
-    for case in cases:
-        rng = get_rng(**case)
-        print(80 * "#" + "\ncase:", case)
-        pois, traces, x = multi_lda_gen_indep_overlap(rng, **case)
-        multi_lda_compare(pois=pois, traces=traces, x=x, **case)
-
-
-def test_simple_multi_lda_compare():
-    nc = 2
-    nv = 1
-    pois = [np.array([0, 1])]
-    p = 1
-    traces = [np.array([[1, 0], [0, 1], [0, 0], [4, 4]], dtype=np.int16)]
-    x = [np.array([[0], [0], [1], [1]]).astype(np.uint16)]
-    lda = LDAClassifier(nc, p)
-    lda.fit_u(traces[0], x[0][:, 0])
-    lda.solve()
-    multi_lda_compare(nc=nc, nv=nv, p=p, pois=pois, traces=traces, x=x)
-
-
-def test_seq_multi_lda_compare():
-    cases = [
-        dict(nv=100, npois=5, nc=4, n=1000, p=2),
-        dict(nv=2000, npois=5, nc=2, n=30, p=1),
-    ]
-    for case in cases:
-        print(80 * "#" + "\ncase:", case)
-        nv = case["nv"]
-        npois = case["npois"]
-        nc = case["nc"]
-        n = case["n"]
-        p = case["p"]
-        rng = get_rng(**case)
-        _, traces, x = multi_lda_gen_indep_overlap(
-            rng, ns=nv * npois, nc=nc, nv=nv, npois=0, n=n, n_batches=1
-        )
-        pois = [list(range(i * npois, (i + 1) * npois)) for i in range(nv)]
-        multi_lda_compare(nc=nc, nv=nv, p=p, pois=pois, traces=traces, x=x)
-
-
-def test_multi_lda_pickle():
-    ns = 10
-    nc = 4
-    n = 5000
-    rng = get_rng()
-    traces = rng.integers(0, 10, (n, ns), dtype=np.int16)
-    labels = rng.integers(0, nc, (n, 1), dtype=np.uint16)
-    lda_acc = LdaAcc(pois=[list(range(ns))], nc=nc)
-    lda_acc.fit_u(traces, labels)
-    dumped_lda_acc = pickle.dumps(lda_acc)
-    lda_acc2 = pickle.loads(dumped_lda_acc)
-    lda = Lda(lda_acc, p=2)
-    lda2 = Lda(lda_acc2, p=2)
-
-    dumped_lda = pickle.dumps(lda2)
-    lda2 = pickle.loads(dumped_lda)
-
-    prs = lda.predict_proba(traces)
-    prs2 = lda2.predict_proba(traces)
-
-    assert np.allclose(prs, prs2)
-
-
-def multi_lda_select_simple(rng, nv, ns, npois, nv_sel, n_sel, permute=True):
-    nc = 4
-    n = 100
-    pois, (traces,), (labels,) = multi_lda_gen_indep_overlap(
-        rng, ns, nc, nv, npois, n, n_batches=1
-    )
-    lda_acc = LdaAcc(pois=pois, nc=nc)
-    lda_acc.fit_u(traces, labels)
-    lda_all = Lda(lda_acc, p=1)
-    prs_all = lda_all.predict_proba(traces)
-    # Validate for a random selection
-    for _ in range(n_sel):
-        if permute:
-            selection = list(rng.permutation(range(nv))[:nv_sel])
-        else:
-            selection = list(rng.integers(0, nv, (nv_sel,)))
-        lda_s_only = lda_all.select_vars(selection)
-        prt = lda_s_only.predict_proba(traces)
-        assert np.allclose(prs_all[selection, ...], prt)
-
-
-def test_multi_lda_select():
-    cases: list[dict[str, typing.Any]] = [
-        dict(nv=5, ns=25, npois=1, nv_sel=5, n_sel=2),
-        dict(nv=5, ns=25, npois=1, nv_sel=1, n_sel=2),
-        dict(nv=5, ns=25, npois=1, nv_sel=2, n_sel=2),
-        dict(nv=5, ns=25, npois=5, nv_sel=2, n_sel=2),
-        dict(nv=5, ns=25, npois=15, nv_sel=2, n_sel=1),
-        dict(nv=5, ns=25, npois=10, nv_sel=8, n_sel=1, permute=False),
-    ]
-    for case in cases:
-        rng = get_rng(**case)
-        multi_lda_select_simple(rng, **case)

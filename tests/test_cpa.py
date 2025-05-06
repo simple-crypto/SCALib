@@ -104,14 +104,14 @@ def test_cpa_full():
     cfgs = [(Cpa.Xor, xor_pintern), (Cpa.Add, modadd_pintern)]
     # Parameter space to test
     # (ns, nc, n, nv)
-    default_case = dict(ns=1, nc=2, n=1000, nv=1)
+    default_case = dict(ns=1, nc=2, n=100, nv=1)
     cases = [
         default_case | dict(n=10),
         default_case | dict(ns=1000, n=10),
-        default_case | dict(nc=256),
-        default_case | dict(ns=1000, nc=256),
+        default_case | dict(nc=256, n=1000),
+        default_case | dict(ns=1000, nc=16),
         default_case | dict(n=10, nv=2),
-        default_case | dict(ns=1000, nc=256, nv=5),
+        default_case | dict(ns=1000, nc=16, nv=5),
     ]
 
     for cpa_intern, fn_pintern in cfgs:

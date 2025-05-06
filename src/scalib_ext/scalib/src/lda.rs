@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use hytra::TrAdder;
 use itertools::{izip, Itertools};
+use nalgebra::linalg::SymmetricEigen;
 use ndarray::{Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, Axis, Zip};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -21,7 +22,7 @@ pub use scatter_pairs::ScatterPairs;
 //use solve::LDA;
 use crate::utils::RangeExt;
 use geigen::Geigen;
-use nshare::{IntoNalgebra, IntoNdarray2};
+use nshare::{IntoNalgebra, IntoNdarray1, IntoNdarray2};
 pub use sparse_trace_sums::SparseTraceSums;
 use utils::{log2_softmax_i, ArrayBaseExt};
 
@@ -36,8 +37,6 @@ pub struct MultiLdaAcc {
     nc: Class,
     /// Trace length
     ns: u32,
-    /// Pois for each var
-    cov_pois_offsets: Vec<usize>,
     // [NOTE]: pub visibility only used for benches here.
     pub poi_map: Arc<PoiMap>,
     /// Number of traces.
@@ -48,26 +47,10 @@ pub struct MultiLdaAcc {
     /// Trace global scatter.
     // [NOTE]: pub visibility only used for benches here.
     pub cov_pois: ScatterPairs,
-    // For each variable, the argsort of the vector of POIs.
-    // (Used in reshuffling in original order means and scatter when they are genereated for
-    // external inspection.)
-    map_input_pois: Vec<Vec<usize>>,
-}
-
-pub fn argsort<T: Ord>(data: &[T]) -> Vec<usize> {
-    let mut indices = (0..data.len()).collect::<Vec<usize>>();
-    indices.sort_by_key(|&i| &data[i]);
-    indices
 }
 
 impl MultiLdaAcc {
-    pub fn new(ns: u32, nc: Class, mut pois: Vec<Vec<u32>>) -> Result<Self> {
-        // Generate the inverse map for poi sorting, per variable
-        let map_input_pois = pois.clone().into_iter().map(|v| argsort(&v)).collect();
-        // Sort POIs: required for SparseTraceSums and has not impact on the LDA result.
-        for pois in pois.iter_mut() {
-            pois.sort_unstable();
-        }
+    pub fn new(ns: u32, nc: Class, pois: Vec<Vec<u32>>) -> Result<Self> {
         let nv: Var = pois
             .len()
             .try_into()
@@ -75,26 +58,16 @@ impl MultiLdaAcc {
         let poi_map = Arc::new(PoiMap::new(ns as usize, &pois)?);
         let trace_sums = SparseTraceSums::new(ns, nv, nc, poi_map.clone());
         let mapped_pairs = (0..nv).flat_map(|v| poi_map.mapped_pairs(v));
-        let cov_pois_offsets = pois
-            .iter()
-            .scan(0, |acc, x| {
-                let res = *acc;
-                *acc += Self::npairs_n(x.len());
-                Some(res)
-            })
-            .collect_vec();
 
         let cov_pois = ScatterPairs::new(poi_map.len(), mapped_pairs)?;
         Ok(Self {
             nv,
             nc,
             ns,
-            cov_pois_offsets,
             poi_map,
             n_traces: 0,
             trace_sums,
             cov_pois,
-            map_input_pois,
         })
     }
 
@@ -154,7 +127,7 @@ impl MultiLdaAcc {
         c_sxi_sqrtni.dot(&(c_sxi_sqrtni.t()))
     }
 
-    fn s_w_mat(
+    fn cov_w_mat(
         &self,
         sums: &Array2<i64>,
         n_traces: ArrayView1<u32>,
@@ -166,12 +139,17 @@ impl MultiLdaAcc {
         let s_x = sums.sum_axis(Axis(1));
         // Total amount of traces used
         let n = n_traces.sum();
-        let mut s_w = Array2::zeros((sums.shape()[0], sums.shape()[0]));
+        let mut cov_w = Array2::zeros((sums.shape()[0], sums.shape()[0]));
         let inv_n = 1.0 / (n as f64);
+        // pooled variance normalization factor
+        let cov_div_inv = 1.0 / ((n - (self.nc as u32)) as f64);
         for (i, j) in self.var_pairs(var) {
+            assert!(i <= j);
             let (i, j) = (i as usize, j as usize);
             let i2 = self.poi_map.new_pois(var)[i];
             let j2 = self.poi_map.new_pois(var)[j];
+            //println!("{:#?}", self.cov_pois);
+            assert!(i2 <= j2);
             // Total scatter offset by mu**2*n_tot.
             let s_t_u_e = self.cov_pois.get_scatter(i2, j2);
             // Computation of (s_t_u*n - Sx(x)**2) for the target POI pair.
@@ -180,10 +158,11 @@ impl MultiLdaAcc {
             // in practice, performs the operation s_t - s_b, and populate the s_w matrix
             // at proper location.
             let s_w_e = ((t as f64) * inv_n) - s_b[(i, j)];
-            s_w[(i, j)] = s_w_e;
-            s_w[(j, i)] = s_w_e;
+            let cov_w_e = s_w_e * cov_div_inv;
+            cov_w[(i, j)] = cov_w_e;
+            cov_w[(j, i)] = cov_w_e;
         }
-        s_w
+        cov_w
     }
 
     fn mu_mat(&self, sums: &Array2<i64>, n_traces: ArrayView1<u32>) -> Array2<f64> {
@@ -224,19 +203,13 @@ impl MultiLdaAcc {
         if n_traces.iter().any(|n| *n == 0) {
             return Err(ScalibError::EmptyClass);
         }
-        //// Between-class scatter computation.
+        // Between-class scatter computation.
         let s_b = self.s_b_mat(&sums, n_traces);
-        ///// Within-class scatter computation.
-        let s_w = self.s_w_mat(&sums, n_traces, &s_b, var);
-        ///// Mean computation
-        let mus = self.mu_mat(&sums, n_traces);
-        LDASolved::from_matrices(
-            self.n_traces as usize,
-            p as usize,
-            s_w.view(),
-            s_b.view(),
-            mus.view(),
-        )
+        // Within-class scatter computation.
+        let cov_w = self.cov_w_mat(&sums, n_traces, &s_b, var);
+        // Mean computation
+        let mus = &self.mu_mat(&sums, n_traces);
+        LDASolved::from_matrices(p as usize, cov_w.view(), s_b.view(), mus.view())
     }
 
     // Generate a re-ordered mean matrix associated to a specific variable
@@ -244,8 +217,11 @@ impl MultiLdaAcc {
     // v: a variable index
     fn order_mu_matrix(&self, mat: &Array2<f64>, v: Var) -> Array2<f64> {
         let mut o_mat = Array2::<f64>::zeros(mat.dim());
-        for (ni, c) in self.map_input_pois[v as usize].iter().zip(mat.columns()) {
-            o_mat.column_mut(*ni).assign(&c);
+        for (ni, c) in self.poi_map.new_poi_var_shuffles[v as usize]
+            .iter()
+            .zip(mat.columns())
+        {
+            o_mat.column_mut(*ni as usize).assign(&c);
         }
         o_mat
     }
@@ -255,9 +231,12 @@ impl MultiLdaAcc {
     // v: a variable index
     fn order_scatter_matrix(&self, mat: &Array2<f64>, v: Var) -> Array2<f64> {
         let mut o_mat = Array2::<f64>::zeros(mat.dim());
-        for (i, ie) in self.map_input_pois[v as usize].iter().enumerate() {
-            for (j, je) in self.map_input_pois[v as usize].iter().enumerate() {
-                o_mat[[*ie, *je]] = mat[[i, j]];
+        let it = self.poi_map.new_poi_var_shuffles[v as usize]
+            .iter()
+            .enumerate();
+        for (i, ie) in it.clone() {
+            for (j, je) in it.clone() {
+                o_mat[[*ie as usize, *je as usize]] = mat[[i, j]];
             }
         }
         o_mat
@@ -289,7 +268,8 @@ impl MultiLdaAcc {
                     return Err(ScalibError::EmptyClass);
                 }
                 let s_b = self.s_b_mat(&sums, n_traces);
-                let s_w = self.s_w_mat(&sums, n_traces, &s_b, var);
+                let s_w = self.cov_w_mat(&sums, n_traces, &s_b, var)
+                    * ((n_traces.sum() - (self.nc as u32)) as f64);
                 Ok(self.order_scatter_matrix(&s_w, var))
             })
             .collect();
@@ -398,6 +378,7 @@ pub struct MultiLda {
     poi_map: Arc<PoiMap>,
     /// poi_blocks[var][poi_block].0: indices of the block's POIs within all POIs of that var.
     /// poi_blocks[var][poi_block].1: indices of POIs relative to the block offset (i*POI_BLOCK_SIZE)
+    /// ASSUMPTION: POIs for each var are sorted w.r.t. Poimap.
     poi_blocks: Vec<Vec<(Range<usize>, Vec<u16>)>>,
     /// Solved LDA for each var.
     lda_states: Vec<Arc<LdaState>>,
@@ -464,7 +445,8 @@ impl MultiLda {
     /// return the probability of each of the possible value for leakage samples
     /// traces with shape (n,ns)
     /// return prs with shape (nv,n,nc). Every row corresponds to one probability distribution
-    pub fn predict_proba(&self, traces: ArrayView2<i16>) -> Array3<f64> {
+    /// if raw_scores is set to true, return the scores without applying the softmax
+    pub fn predict_proba(&self, traces: ArrayView2<i16>, raw_scores: bool) -> Array3<f64> {
         let mut res = Array3::zeros((self.nv(), traces.shape()[0], self.nc as usize));
         let traces_batched = self.poi_map.select_batches::<N>(traces);
         for var_block in (0..(self.nv())).range_chunks(self.var_block_size()) {
@@ -480,9 +462,11 @@ impl MultiLda {
                             res.view_mut(),
                             p_traces.as_slice().unwrap(),
                         );
-                        // TODO: improve the softmax.
-                        for res in res.outer_iter_mut() {
-                            softmax(res);
+                        if !raw_scores {
+                            // TODO: improve the softmax.
+                            for res in res.outer_iter_mut() {
+                                softmax(res);
+                            }
                         }
                     });
             }
@@ -735,75 +719,69 @@ pub fn softmax(mut v: ndarray::ArrayViewMut1<f64>) {
 ///  split one (W then omega), which is interesting as long as p << nc (which is true, otherwise we
 ///  could as well take p=nc and not reduce dimensionality).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LDASolved {
+struct LDASolved {
     /// Projection matrix to the subspace. shape of (ns,p)
-    pub projection: Array2<f64>,
+    projection: Array2<f64>,
     /// Number of dimensions in leakage traces
-    pub ns: usize,
+    ns: usize,
     /// Number of dimensions in the subspace
-    pub p: usize,
+    p: usize,
     /// Max random variable value.
-    pub nc: usize,
+    nc: usize,
     /// Probability mapping vectors. shape (p,nc)
-    pub omega: Array2<f64>,
+    omega: Array2<f64>,
     /// Probability mapping offsets. shape (nc,)
-    pub pk: Array1<f64>,
+    pk: Array1<f64>,
 }
 
 impl LDASolved {
     /// n: total number of traces
     /// p: number of dimensions in reduced space
-    /// sw: intra-class covariance
-    /// sb: intra-class covariance
+    /// cov_w: intra-class covariance
+    /// sb: intra-class scatter
     /// means_ns: means per class
     pub fn from_matrices(
-        n: usize,
         p: usize,
-        sw: ArrayView2<f64>,
+        cov_w: ArrayView2<f64>,
         sb: ArrayView2<f64>,
         means_ns: ArrayView2<f64>,
     ) -> Result<Self> {
-        let ns = sw.shape()[0];
+        let ns = cov_w.shape()[0];
         let nc = means_ns.shape()[0];
-        assert_eq!(ns, sw.shape()[1]);
+        assert_eq!(ns, cov_w.shape()[1]);
         assert_eq!(ns, sb.shape()[0]);
         assert_eq!(ns, sb.shape()[1]);
         assert_eq!(ns, means_ns.shape()[1]);
-        // LDA here
-        // ---- Step 1
-        let projection = if p == ns {
-            // no LDA, simple pooled gaussian templates
-            // This is suboptimal since we then have to pay multiplication with the identity, but
-            // it should not matter much (we are probably in a cheap case anyway).
-            ndarray::Array2::eye(ns)
+        let projection = if p > ns {
+            return Err(ScalibError::TooLargeProj { p, ns });
+        } else if p == ns {
+            // No LDA, simple pooled gaussian templates.
+            // In this case, the projection is keeping the same dimensionality but
+            // turns cov_w into the identity.
+            // cov_w = Q L Q^T => proj = Q L^{-1/2}
+            let cov_mat = cov_w.view().into_nalgebra().into_owned();
+            let SymmetricEigen {
+                eigenvectors,
+                eigenvalues,
+            } = SymmetricEigen::new(cov_mat);
+            let mut evecs = eigenvectors.into_ndarray2();
+            let evals = eigenvalues.into_ndarray1();
+            for (mut evec, eval) in evecs.columns_mut().into_iter().zip(evals.iter()) {
+                let f = 1.0 / eval.sqrt();
+                evec *= f;
+            }
+            evecs
         } else {
-            // compute the projection
-            // Partial generalized eigenvalue decomposition for sb and sw.
-            let solver = geigen::GEigenSolverP::new(&sb.view(), &sw.view(), p)?;
+            // Partial generalized eigenvalue decomposition for sb and cov_w.
+            // Result is normalized w.r.t. cov_w: projection * cov_w * projection^T = I.
+            let solver = geigen::GEigenSolverP::new(&sb.view(), &cov_w.view(), p)?;
             let projection = solver.vecs().into_owned();
             assert_eq!(projection.dim(), (ns, p));
             projection
         };
-
-        // ---- Step 2
         // means per class within the subspace by projecting means_ns
-        let means = projection.t().dot(&means_ns.t());
-        // compute the noise covariance in the linear subspace
-        // cov= X^T * X
-        // proj = (P*X^T)^T = X*P^T
-        // cov_proj = (X*P^T)^T*(X*P^T) = P*X^T*X*P^T = P*cov*P^T
-        let cov = projection.t().dot(&(&sw / (n as f64)).dot(&projection));
-
-        // ---- Step 3
-        // Compute the matrix (p, nc) of vectors \omega_k^T
-        let cov_mat = cov.view().into_nalgebra();
-        let cholesky = cov_mat.cholesky().expect("failed cholesky decomposition");
-        let mut omega = means.view().into_nalgebra().into_owned();
-        for mut x in omega.column_iter_mut() {
-            cholesky.solve_mut(&mut x);
-        }
-        let omega = omega.into_ndarray2();
-        let pk = -0.5 * (&omega * &means).sum_axis(Axis(0));
+        let omega = projection.t().dot(&means_ns.t());
+        let pk = -0.5 * (&omega * &omega).sum_axis(Axis(0));
 
         Ok(Self {
             projection,

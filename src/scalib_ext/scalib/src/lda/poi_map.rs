@@ -1,43 +1,50 @@
+use itertools::Itertools;
 use ndarray::{Array2, ArrayView2, Axis};
 use serde::{Deserialize, Serialize};
 
 use super::Var;
 use crate::{Result, ScalibError};
 
-use std::borrow::Borrow;
-
 /// Selection of a subset of points in a trace: allows to map source traces to reduced traces that
 /// are subsets of the original traces, keeping only th POIs.
+/// Sorting constraints:
+/// 1. For efficient scatter_pairs: pois of the same var tend to be consecutive in new2old.
+/// 2. For predict_proba: values in new_poi_vars must be sorted.
+/// 3. Can make a new POI map with subset of variables preserving 2. but not necessarily 1., and
+///    without changing the order of POIs of each var. We can implement this by keeping new2old in
+///    order, but dropping elements that are not needed anymore, and adapting values of new_poi_vars.
+/// TODO:
+/// - check construction of new2old + sort POIs before putting them in new2old (for
+/// efficiency - need to compose shuffling of POIs)
+/// - completely rewrite the algorithm for select_var.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoiMap {
-    /// List of POIs kept from the original traces (guaranteed to be sorted).
+    /// List of POIs kept from the original traces.
     new2old: Vec<u32>,
     /// For each variable of interest, list of its POIs in the reduced traces.
     // TODO: have indices be i16 when possible.
     pub new_poi_vars: Vec<Vec<u32>>,
+    // For each variable, the argsort of the vector of POIs.
+    // (Used in reshuffling in original order means and scatter when they are genereated for
+    // external inspection.)
+    pub new_poi_var_shuffles: Vec<Vec<u32>>,
 }
 
 impl PoiMap {
     /// Crate a new PoiMap
     /// - `ns`: Source trace length
-    /// - `poi_vars`: For each variable, the sorted list of its POIs.
-    pub fn new<I: IntoIterator<Item = impl Borrow<u32>>>(
-        ns: usize,
-        poi_vars: impl IntoIterator<Item = I> + Clone,
-    ) -> Result<Self> {
-        assert!(poi_vars
-            .clone()
-            .into_iter()
-            .all(|p| p.into_iter().map(|x| *x.borrow()).is_sorted()));
-
+    /// - `poi_vars`: For each variable, the list of its POIs.
+    pub fn new(ns: usize, poi_vars: &[Vec<u32>]) -> Result<Self> {
         let mut new2old = Vec::new();
         let mut old2new: Vec<Option<u32>> = vec![None; ns as usize];
         let mut new_poi_vars = Vec::new();
+        let mut new_poi_var_shuffles = Vec::new();
         for pois in poi_vars {
-            let new_poi_var = pois
-                .into_iter()
-                .map(|poi| -> Result<u32> {
-                    let poi = *poi.borrow();
+            let shuffle = crate::utils::argsort(pois);
+            let mut new_poi_var = shuffle
+                .iter()
+                .map(|poi_idx| -> Result<u32> {
+                    let poi = pois[*poi_idx];
                     let new_poi = old2new
                         .get_mut(poi as usize)
                         .ok_or(ScalibError::PoiOutOfBound)?;
@@ -50,12 +57,20 @@ impl PoiMap {
                         n_pois
                     })
                 })
-                .collect::<Result<_>>()?;
+                .collect::<Result<Vec<_>>>()?;
+            let shuffle2 = crate::utils::argsort(&new_poi_var);
+            let new_poi_var_shuffle = shuffle2
+                .iter()
+                .map(|x| shuffle[*x].try_into().unwrap())
+                .collect::<Vec<_>>();
+            new_poi_var.sort_unstable();
             new_poi_vars.push(new_poi_var);
+            new_poi_var_shuffles.push(new_poi_var_shuffle);
         }
         Ok(Self {
             new2old,
             new_poi_vars,
+            new_poi_var_shuffles,
         })
     }
     /// Length of the reduced traces.
@@ -105,23 +120,51 @@ impl PoiMap {
     }
     /// Create a new PoiMap with only a subset of the variables.
     pub fn select_vars(&self, vars: &[super::Var]) -> Result<Self> {
-        let sub_map = Self::new(self.len(), vars.iter().map(|v| self.new_pois(*v)))?;
-        let full_map = Self {
-            new2old: sub_map
-                .new2old
-                .iter()
-                .map(|x| self.new2old[*x as usize])
-                .collect(),
-            new_poi_vars: sub_map.new_poi_vars.clone(),
+        let mut kept_vars = vec![false; self.new2old.len()];
+        for var in vars {
+            for poi in &self.new_poi_vars[*var as usize] {
+                kept_vars[*poi as usize] = true;
+            }
+        }
+        let mut count_kept = 0;
+        let oldnew2new = (0..self.new2old.len())
+            .map(|i| {
+                kept_vars[i].then(|| {
+                    count_kept += 1;
+                    count_kept - 1
+                })
+            })
+            .collect::<Vec<_>>();
+        let new2old = kept_vars
+            .iter()
+            .positions(|x| *x)
+            .map(|x| self.new2old[x])
+            .collect_vec();
+        let new_poi_vars = vars
+            .iter()
+            .map(|var| {
+                let pois = &self.new_poi_vars[*var as usize];
+                pois.iter()
+                    .map(|poi| oldnew2new[*poi as usize].unwrap())
+                    .collect_vec()
+            })
+            .collect_vec();
+        let new_poi_var_shuffles = vars
+            .iter()
+            .map(|var| self.new_poi_var_shuffles[*var as usize].clone())
+            .collect_vec();
+        let res = Self {
+            new2old,
+            new_poi_vars,
+            new_poi_var_shuffles,
         };
         debug_assert!(vars.iter().enumerate().all(|(i, v)| itertools::equal(
             self.new_pois(*v).iter().map(|p| self.new2old[*p as usize]),
-            full_map
-                .new_pois(i as Var)
+            res.new_pois(i as Var)
                 .iter()
-                .map(|p| full_map.new2old[*p as usize])
+                .map(|p| res.new2old[*p as usize])
         )));
-        Ok(full_map)
+        Ok(res)
     }
     /// All pairs `(i, j)` such that `i` and `j` are POIs of the same var in the reduced traces,
     /// and `i <= j`.

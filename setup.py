@@ -42,10 +42,16 @@ if env_true(os.environ.get("SCALIB_BLIS")):
 if env_true(os.environ.get("SCALIB_NTL")):
     scalib_features.append("ntl")
 
+debug = False
+if env_true(os.environ.get("SCALIB_DEBUG")):
+    debug = True
+
+
 extension_args = dict(
     binding=Binding.PyO3,
     py_limited_api=True,
     rust_version=">=1.83",
+    debug=debug,
 )
 
 setup(

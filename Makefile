@@ -1,4 +1,4 @@
-.PHONY: dev test devtest coverage docs docs-ci codestyle fmt wheel help
+.PHONY: dev test fasttest coverage docs docs-ci codestyle fmt wheel help
 
 help:
 	@echo "Commands for SCALib development:"
@@ -6,7 +6,11 @@ help:
 	@echo "         The associated virtualenv in as .tox/dev, and the SCALib install"
 	@echo "         is editable: changes in the python source code are automatically used."
 	@echo "         (You'll still need to re-run if you update rust code.)"
-	@echo "    test: Build in release mode and run tests, also checks formatting."
+	@echo "    test: Build in release mode and run tests (rust & python), checks formatting."
+	@echo "         The associated virtualenv in as .tox/test, and the SCALib install"
+	@echo "         is editable: changes in the python source code are automatically used."
+	@echo "         (You'll still need to re-run if you update rust code.)"
+	@echo "    fasttest: Runs python tests using the .tox/test environment, does not re-build."
 	@echo "    test_mindeps: Build in release mode and run tests using minimum version of python dependencies."
 	@echo "    coverage: Like test, but also generates detailed coverage report."
 	@echo "    docs: Generate docs."
@@ -24,6 +28,9 @@ test:
 	tox run -e fmt -- --check
 	RUST_BACKTRACE=1 CARGO_TARGET_DIR=.cargo_build cargo test --workspace --manifest-path src/scalib_ext/Cargo.toml
 	tox run -e test
+
+fasttest:
+	.tox/test/bin/pytest
 
 test_mindeps:
 	tox run -e min_deps
@@ -48,7 +55,7 @@ fmt:
 	tox run -e fmt
 
 wheel_x86_64_v3:
-	SCALIB_X86_64_V3=1 CARGO_TARGET_DIR=.cargo_build_x86_64_v3 pyproject-build -w -o dist/avx2
+	SCALIB_X86_64_V3=1 CARGO_TARGET_DIR=.cargo_build_x86_64_v3 pyproject-build -w -o dist/x86_64_v3
 
 wheel_local:
 	CARGO_TARGET_DIR=.cargo_build pyproject-build -w -o dist/local
