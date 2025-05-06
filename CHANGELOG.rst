@@ -5,7 +5,10 @@ Changelog
 Not released
 ------------
 
-* Fix LDA backend and improve numerical stability. 
+v0.6.3 (2025/05/06)
+-------------------
+
+* Fix LDA backend (``select_vars``) and improve numerical stability (#200).
 
 v0.6.2 (2025/04/15)
 -------------------
