@@ -3,7 +3,6 @@ import pickle
 import pytest
 import numpy as np
 import scipy.linalg
-import scipy.stats
 import scipy.special
 
 from scalib import ScalibError
@@ -45,19 +44,6 @@ class RefLda:
     def predict_proba(self, traces):
         scores = traces @ self.coef.T + self.intercept[np.newaxis, :]
         return scipy.special.softmax(scores, axis=1)
-
-
-# To test
-# 1. pickle: can pickle objects, loading pickled data results in **strictly** identical behavior.
-# 2. test projection, means, scatter against SKLearn (test_lda) - in single var case.
-# 3. check errors in invalid cases
-# 4. single var vs multi-var comparison
-#
-# functions to test: fit, predict_proba, predict_log2_proba_class, select
-#
-# Test cases with non auto-generated data.
-#
-# LDAClassifier, MultiLDA
 
 
 def pois_uniform_indep(rng, ns, nv, npois, **params):
@@ -161,7 +147,7 @@ def is_parallel(x, y):
     return np.allclose(z, z2)
 
 
-# 1. Test that univariate LDA results in similar results that the one from ref.
+# Test that univariate LDA results in similar results that the one from ref.
 lda_ref_uni_bc = LdaTestCase(
     ns=2,
     nc=2,
@@ -178,6 +164,8 @@ lda_ref_uni_cases = [
     lda_ref_uni_bc.with_params(n=200),
     lda_ref_uni_bc.with_params(ns=3, npois=3).with_pois(pois=[[0, 1, 2]]),
     lda_ref_uni_bc.with_params(ns=3, npois=3),
+    lda_ref_uni_bc.with_params(nc=4, p=2),
+    lda_ref_uni_bc.with_params(ns=3, nc=4, p=3, npois=3),
     lda_ref_uni_bc.with_params(ns=10, npois=3),
     lda_ref_uni_bc.with_params(ns=10, npois=3, p=2, nc=4, n=100),
     lda_ref_uni_bc.with_params(ns=3, npois=3, p=1, nc=2, n=5, n_batches=3),
@@ -187,6 +175,7 @@ lda_ref_uni_cases = [
 
 @pytest.mark.parametrize("case", lda_ref_uni_cases)
 def test_univariate_lda_ref(case):
+    print(f"{case.__dict__=}")
     pois, btraces, bx = case.get_data()
     # LdaAc
     lda_acc = LdaAcc(pois=pois, nc=case["nc"])
@@ -219,9 +208,11 @@ def test_univariate_lda_ref(case):
         id_pois[i, pois[0][i]] = 1
     assert (id_pois[:, pois[0]] == np.eye(case["npois"])).all()
     proj_matrix = lda.project(id_pois)[0]
-    assert all(
-        [is_parallel(a, b) for a, b in zip(proj_matrix.T, lda_ref.projection.T)]
-    ), "Projection mismatch"
+    # In the case p == npois, the order of eigenvalues might differ.
+    if case["p"] < case["npois"]:
+        assert all(
+            [is_parallel(a, b) for a, b in zip(proj_matrix.T, lda_ref.projection.T)]
+        ), "Projection mismatch"
 
     probas = lda.predict_proba(traces)
     ref_probas = lda_ref.predict_proba(traces[:, pois[0]])
@@ -555,10 +546,12 @@ def test_deprecated_ldaclassifier_sklearn(case):
     ptraces = lda.mlda.project(traces[:, pois[0]], get_config())
     # Project traces woth sklearn
     ptraces_sklearn = lda_ref.project(traces[:, pois[0]])
-    projections_similar = all(
-        [is_parallel(a, b) for a, b in zip(ptraces[0].T, ptraces_sklearn.T)]
-    )
-    assert projections_similar, "Projection mismatch"
+    # In the case p == npois, the order of eigenvalues might differ.
+    if case["p"] < case["npois"]:
+        projections_similar = all(
+            [is_parallel(a, b) for a, b in zip(ptraces[0].T, ptraces_sklearn.T)]
+        )
+        assert projections_similar, "Projection mismatch"
 
     # Validate the probabilities
     probas = lda.predict_proba(traces[:, pois[0]])

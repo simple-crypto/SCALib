@@ -60,6 +60,8 @@ pub enum ScalibError {
         dim: (usize, usize, usize),
         expected: (usize, usize, usize),
     },
+    #[error("Too large projection dimensionality ({p}) compared to number of POIS ({ns}).")]
+    TooLargeProj { p: usize, ns: usize },
 }
 
 #[derive(Clone, Debug)]

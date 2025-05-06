@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use hytra::TrAdder;
 use itertools::{izip, Itertools};
+use nalgebra::linalg::SymmetricEigen;
 use ndarray::{Array1, Array2, Array3, ArrayView1, ArrayView2, ArrayViewMut2, Axis, Zip};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -21,7 +22,7 @@ pub use scatter_pairs::ScatterPairs;
 //use solve::LDA;
 use crate::utils::RangeExt;
 use geigen::Geigen;
-use nshare::{IntoNalgebra, IntoNdarray2};
+use nshare::{IntoNalgebra, IntoNdarray1, IntoNdarray2};
 pub use sparse_trace_sums::SparseTraceSums;
 use utils::{log2_softmax_i, ArrayBaseExt};
 
@@ -126,7 +127,7 @@ impl MultiLdaAcc {
         c_sxi_sqrtni.dot(&(c_sxi_sqrtni.t()))
     }
 
-    fn s_w_mat(
+    fn cov_w_mat(
         &self,
         sums: &Array2<i64>,
         n_traces: ArrayView1<u32>,
@@ -138,8 +139,10 @@ impl MultiLdaAcc {
         let s_x = sums.sum_axis(Axis(1));
         // Total amount of traces used
         let n = n_traces.sum();
-        let mut s_w = Array2::zeros((sums.shape()[0], sums.shape()[0]));
+        let mut cov_w = Array2::zeros((sums.shape()[0], sums.shape()[0]));
         let inv_n = 1.0 / (n as f64);
+        // pooled variance normalization factor
+        let cov_div_inv = 1.0 / ((n - (self.nc as u32)) as f64);
         for (i, j) in self.var_pairs(var) {
             assert!(i <= j);
             let (i, j) = (i as usize, j as usize);
@@ -155,10 +158,11 @@ impl MultiLdaAcc {
             // in practice, performs the operation s_t - s_b, and populate the s_w matrix
             // at proper location.
             let s_w_e = ((t as f64) * inv_n) - s_b[(i, j)];
-            s_w[(i, j)] = s_w_e;
-            s_w[(j, i)] = s_w_e;
+            let cov_w_e = s_w_e * cov_div_inv;
+            cov_w[(i, j)] = cov_w_e;
+            cov_w[(j, i)] = cov_w_e;
         }
-        s_w
+        cov_w
     }
 
     fn mu_mat(&self, sums: &Array2<i64>, n_traces: ArrayView1<u32>) -> Array2<f64> {
@@ -202,16 +206,10 @@ impl MultiLdaAcc {
         // Between-class scatter computation.
         let s_b = self.s_b_mat(&sums, n_traces);
         // Within-class scatter computation.
-        let s_w = self.s_w_mat(&sums, n_traces, &s_b, var);
+        let cov_w = self.cov_w_mat(&sums, n_traces, &s_b, var);
         // Mean computation
         let mus = &self.mu_mat(&sums, n_traces);
-        LDASolved::from_matrices(
-            self.n_traces as usize,
-            p as usize,
-            s_w.view(),
-            s_b.view(),
-            mus.view(),
-        )
+        LDASolved::from_matrices(p as usize, cov_w.view(), s_b.view(), mus.view())
     }
 
     // Generate a re-ordered mean matrix associated to a specific variable
@@ -270,7 +268,8 @@ impl MultiLdaAcc {
                     return Err(ScalibError::EmptyClass);
                 }
                 let s_b = self.s_b_mat(&sums, n_traces);
-                let s_w = self.s_w_mat(&sums, n_traces, &s_b, var);
+                let s_w = self.cov_w_mat(&sums, n_traces, &s_b, var)
+                    * ((n_traces.sum() - (self.nc as u32)) as f64);
                 Ok(self.order_scatter_matrix(&s_w, var))
             })
             .collect();
@@ -738,59 +737,51 @@ struct LDASolved {
 impl LDASolved {
     /// n: total number of traces
     /// p: number of dimensions in reduced space
-    /// sw: intra-class covariance
-    /// sb: intra-class covariance
+    /// cov_w: intra-class covariance
+    /// sb: intra-class scatter
     /// means_ns: means per class
     pub fn from_matrices(
-        n: usize,
         p: usize,
-        sw: ArrayView2<f64>,
+        cov_w: ArrayView2<f64>,
         sb: ArrayView2<f64>,
         means_ns: ArrayView2<f64>,
     ) -> Result<Self> {
-        let ns = sw.shape()[0];
+        let ns = cov_w.shape()[0];
         let nc = means_ns.shape()[0];
-        assert_eq!(ns, sw.shape()[1]);
+        assert_eq!(ns, cov_w.shape()[1]);
         assert_eq!(ns, sb.shape()[0]);
         assert_eq!(ns, sb.shape()[1]);
         assert_eq!(ns, means_ns.shape()[1]);
-        // LDA here
-        // ---- Step 1
-        let projection = if p == ns {
-            // no LDA, simple pooled gaussian templates
-            // This is suboptimal since we then have to pay multiplication with the identity, but
-            // it should not matter much (we are probably in a cheap case anyway).
-            ndarray::Array2::eye(ns)
+        let projection = if p > ns {
+            return Err(ScalibError::TooLargeProj { p, ns });
+        } else if p == ns {
+            // No LDA, simple pooled gaussian templates.
+            // In this case, the projection is keeping the same dimensionality but
+            // turns cov_w into the identity.
+            // cov_w = Q L Q^T => proj = Q L^{-1/2}
+            let cov_mat = cov_w.view().into_nalgebra().into_owned();
+            let SymmetricEigen {
+                eigenvectors,
+                eigenvalues,
+            } = SymmetricEigen::new(cov_mat);
+            let mut evecs = eigenvectors.into_ndarray2();
+            let evals = eigenvalues.into_ndarray1();
+            for (mut evec, eval) in evecs.columns_mut().into_iter().zip(evals.iter()) {
+                let f = 1.0 / eval.sqrt();
+                evec *= f;
+            }
+            evecs
         } else {
-            // compute the projection
-            // Partial generalized eigenvalue decomposition for sb and sw.
-            let solver = geigen::GEigenSolverP::new(&sb.view(), &sw.view(), p)?;
+            // Partial generalized eigenvalue decomposition for sb and cov_w.
+            // Result is normalized w.r.t. cov_w: projection * cov_w * projection^T = I.
+            let solver = geigen::GEigenSolverP::new(&sb.view(), &cov_w.view(), p)?;
             let projection = solver.vecs().into_owned();
             assert_eq!(projection.dim(), (ns, p));
             projection
         };
-
-        // ---- Step 2
         // means per class within the subspace by projecting means_ns
-        let means = projection.t().dot(&means_ns.t());
-        // compute the noise covariance in the linear subspace
-        // cov= X^T * X
-        // proj = (P*X^T)^T = X*P^T
-        // cov_proj = (X*P^T)^T*(X*P^T) = P*X^T*X*P^T = P*cov*P^T
-        let cov = projection
-            .t()
-            .dot(&(&sw / ((n - nc) as f64)).dot(&projection));
-
-        // ---- Step 3
-        // Compute the matrix (p, nc) of vectors \omega_k^T
-        let cov_mat = cov.view().into_nalgebra();
-        let cholesky = cov_mat.cholesky().expect("failed cholesky decomposition");
-        let mut omega = means.view().into_nalgebra().into_owned();
-        for mut x in omega.column_iter_mut() {
-            cholesky.solve_mut(&mut x);
-        }
-        let omega = omega.into_ndarray2();
-        let pk = -0.5 * (&omega * &means).sum_axis(Axis(0));
+        let omega = projection.t().dot(&means_ns.t());
+        let pk = -0.5 * (&omega * &omega).sum_axis(Axis(0));
 
         Ok(Self {
             projection,
