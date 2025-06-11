@@ -1,5 +1,6 @@
 pub mod belief_propagation;
 pub mod cpa;
+pub mod hw_lda;
 pub mod information;
 pub mod lda;
 pub mod lvar; // pub required for benches
