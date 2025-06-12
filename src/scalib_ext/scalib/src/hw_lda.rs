@@ -266,6 +266,7 @@ impl HwLda {
 
         // score will contain the squared distance between the trace and the mean of each class
         // it has shape (nt,1<<nb) where nt is the number of traces we need to predict
+        // -0.5* || l - A * (Hw(x), 1) || ^ 2
         let mut scores: Array2<f64> = Array2::zeros((traces.len_of(Axis(0)), 1 << self.nb));
 
         // We force the kernel to allocate pages for scores.
@@ -286,7 +287,7 @@ impl HwLda {
                     *sq_dist = dist * dist;
                 }
                 for (class, score) in scores.iter_mut().enumerate() {
-                    *score = sq_dists[class.count_ones() as usize];
+                    *score = -0.5 * sq_dists[class.count_ones() as usize];
                 }
             });
 
@@ -301,16 +302,6 @@ impl HwLda {
     /// y with shape (n, nv)
     /// return prs with shape (nv,n), proba of the corresponding y
     pub fn predict_log2p1(&self, traces: ArrayView2<i16>, y: ArrayView2<u64>) -> Array2<f64> {
-        fn softmax(mut v: ndarray::ArrayViewMut1<f64>) {
-            v.par_mapv_inplace(|x| f64::exp(x));
-            let tot: f64 = Zip::from(v.view()).par_fold(
-                || 0.0,
-                |acc, s| acc + *s,
-                |sum, other_sum| sum + other_sum,
-            );
-            v.into_par_iter().for_each(|s| *s /= tot);
-        }
-
         let mut proj_traces = Array3::zeros((self.nv as usize, traces.len_of(Axis(0)), 1));
         for (var, mut proj_traces) in proj_traces.outer_iter_mut().enumerate() {
             proj_traces.assign(&self.project(traces, var as u32));
@@ -318,13 +309,13 @@ impl HwLda {
 
         // score will contain the squared distance between the trace and the mean of each class
         // it has shape (nt,1<<nb) where nt is the number of traces we need to predict
-        let mut sq_dists: Array3<f64> = Array3::zeros((
+        let mut scores: Array3<f64> = Array3::zeros((
             traces.len_of(Axis(0)),
             self.nv as usize,
             self.nb as usize + 1,
         ));
 
-        Zip::from(sq_dists.outer_iter_mut())
+        Zip::from(scores.outer_iter_mut())
             .and(proj_traces.axis_iter(Axis(1)))
             .for_each(|mut sq_dists, proj_traces| {
                 azip!(
@@ -342,24 +333,26 @@ impl HwLda {
                 });
             });
 
+        let scores = scores.mapv(|x| -0.5 * x);
+
         let bin = binomials(self.nb as u64)
             .into_iter()
             .map(|x| x as f64)
             .collect::<Vec<_>>();
         let mut res = Array2::zeros(y.dim());
-        azip!(res.outer_iter_mut(), sq_dists.outer_iter(), y.outer_iter()).for_each(
-            |mut res, sq_dists, y| {
-                azip!(res.outer_iter_mut(), sq_dists.outer_iter(), y.outer_iter()).for_each(
-                    |mut res, sq_dists, y| {
-                        let max = sq_dists
+        azip!(res.outer_iter_mut(), scores.outer_iter(), y.outer_iter()).for_each(
+            |mut res, scores, y| {
+                azip!(res.outer_iter_mut(), scores.outer_iter(), y.outer_iter()).for_each(
+                    |res, scores, y| {
+                        let max = scores
                             .iter()
                             .fold(f64::NEG_INFINITY, |x, y| f64::max(x, *y));
-                        let sum = sq_dists
+                        let sum = scores
                             .iter()
                             .zip(bin.iter())
                             .map(|(d, b)| d * f64::exp(b - max))
                             .sum();
-                        *res.into_scalar() = (sq_dists[y.into_scalar().count_ones() as usize] - max)
+                        *res.into_scalar() = (scores[y.into_scalar().count_ones() as usize] - max)
                             * f64::consts::LOG2_E
                             - f64::log2(sum)
                     },
