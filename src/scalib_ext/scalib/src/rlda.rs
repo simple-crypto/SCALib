@@ -831,9 +831,12 @@ mod tests_rlda {
         // Cherry pick the values from lprobs
         let cpick_lprobs = (0..n).zip(vlabels).map(|(i,c)| lprobs[(i as usize,*c as usize)]).collect::<Array1<f64>>();
 
+        for i in 0..n{
+            println!("({i}) {} vs {}", l2p1[i as usize], cpick_lprobs[i as usize]);
+        }
         assert!(cpick_lprobs.relative_eq(&l2p1, 1e-8, 1e-5), 
-
-            );
+            "[{case}] log2p1 failure.\nl2p1: {l2p1:#?}\ncpick: {cpick_lprobs:#?}"
+        );
         
     }
 
@@ -841,5 +844,8 @@ mod tests_rlda {
     fn test_ref() {
         // seed, ns, nb, n, nv, v, p
         test_predict_log2p1(0, 1, 2, 10, 1, 0, 1, "MINIMAL");
+        test_predict_log2p1(0, 4, 4, 10, 1, 0, 1, "MIDDLE");
+        test_predict_log2p1(0, 4, 4, 10, 3, 1, 1, "MIDDLE-MVARS");
+        test_predict_log2p1(0, 4, 4, 10, 3, 1, 2, "MIDDLE-MVARS-NDIM");
     }
 }
