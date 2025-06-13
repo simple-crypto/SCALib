@@ -787,3 +787,59 @@ impl RLDAClusteredModel {
         return (clustered_prs_lower, clustered_prs_upper);
     }
 }
+
+
+#[cfg(test)]
+mod tests_rlda {
+    use super::*;
+    use ndarray::{Array1, Array2};
+    use ndarray_rand::rand::SeedableRng;
+    use ndarray_rand::rand_distr::Uniform;
+    use ndarray_rand::RandomExt;
+    use rand_xoshiro::Xoshiro256StarStar;
+
+    fn test_predict_log2p1(seed: u32, ns: u32, nb: u32, n: u32, nv: u32, v: u32, p: u32, case: &str) {
+        let seed = seed as u64;
+        let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
+
+        // Generate inputs
+        let traces =
+            Array2::<i16>::random_using((n as usize, ns as usize), Uniform::new(0, 10), &mut rng);
+
+        let labels = Array2::<u64>::random_using(
+            (nv as usize, n as usize),
+            Uniform::new(0, (1 << nb) as u64),
+            &mut rng,
+        );
+
+        // Create the CPA
+        let mut rlda = RLDA::new(nb as usize, ns as usize, nv as usize, p as usize);
+
+        // Fit traces
+        rlda.update(traces.view(), labels.view(), 1);
+
+        // Solve
+        let _ = rlda.solve();
+
+        // Predict the probas for all classes
+        let lprobs = rlda.predict_proba(traces.view(), v as usize).mapv(|x| f64::log2(x));
+
+        // Predict the proba for the proper classes, directly as log
+        let vlabels = labels.index_axis(Axis(0), v as usize);
+        let l2p1 = rlda.predict_log2p1(traces.view(), v as usize, vlabels);
+
+        // Cherry pick the values from lprobs
+        let cpick_lprobs = (0..n).zip(vlabels).map(|(i,c)| lprobs[(i as usize,*c as usize)]).collect::<Array1<f64>>();
+
+        assert!(cpick_lprobs.relative_eq(&l2p1, 1e-8, 1e-5), 
+
+            );
+        
+    }
+
+    #[test]
+    fn test_ref() {
+        // seed, ns, nb, n, nv, v, p
+        test_predict_log2p1(0, 1, 2, 10, 1, 0, 1, "MINIMAL");
+    }
+}
