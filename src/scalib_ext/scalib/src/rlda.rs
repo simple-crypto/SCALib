@@ -422,6 +422,101 @@ impl RLDA {
         }
         return scores;
     }
+
+    /// return the probability of each of the possible value for leakage samples
+    /// x : traces with shape (n,ns)
+    /// v : index of variable that we want to get the probabilities
+    /// return prs with shape (n,2**nb). Every row corresponds to one probability distribution
+    pub fn predict_log2p1(&self, x: ArrayView2<i16>, v: usize, y: ArrayView1<u64>) -> Array1<f64> {
+
+        let proba_leak = |y: u64,
+                                tmp_mu: &mut Array1<f64>,
+                                trace: ArrayView1<f64>,
+                                v: usize| {
+            let chunk_index = y >> NBITS_CHUNK;
+            self.fun_name(chunk_index, tmp_mu, trace, v);
+            let mut res = 0.0;
+            let i_lsb = y & (SIZE_CHUNK - 1);
+            let mut sq_dist: f64 = 0.0;
+            for j in 0..self.p {
+                let tmp = tmp_mu[j] - self.mu_chunks[[v, 0, i_lsb, j]];
+                sq_dist += tmp * tmp;
+            }
+            f64::exp(-0.5 * sq_dist)
+        };
+
+        // Calculates the exponent of the gaussian templates, in this case, with unit covariance matrix,
+        // the squared distance between the mean of the classes and the projected leakage.
+        //
+        // This method is called in predict_proba, per chunks of SIZE_CHUNK scores to calculate.
+        // It calculates and stores the sqdist of classes chunk_index*SIZE_CHUNK to (chunk_index+1)*SIZE_CHUNK-1
+        let sum_probas = |chunk_index: usize,
+                                tmp_mu: &mut Array1<f64>,
+                                trace: ArrayView1<f64>,
+                                v: usize| {
+            // First calculate the most significant chunks (containing MSBs) then process the least signifcant one efficently
+            self.fun_name(chunk_index, tmp_mu, trace, v);
+            // tmp_mu now holds the trace - mu(x) up to the last chunk which differs for each class.
+            // if nb<NBITS_CHUNK, iterate over 1<<nb only.
+            let mut res = 0.0;
+            for i_lsb in 0..min(SIZE_CHUNK, 1 << self.nb) {
+                let mut sq_dist: f64 = 0.0;
+                for j in 0..self.p {
+                    let tmp = tmp_mu[j] - self.mu_chunks[[v, 0, i_lsb as usize, j]];
+                    sq_dist += tmp * tmp;
+                }
+                res += f64::exp(-0.5 * sq_dist);
+            }
+            res
+        };
+
+        // Project the traces.
+        let x = x
+            .mapv(|x| x as f64)
+            .dot(&self.norm_proj.slice(s![v, .., ..]).t());
+
+        let mut probas = Array1::zeros((x.len_of(Axis(0)),));
+        Zip::from(probas.outer_iter_mut())
+            .and(x.outer_iter())
+            .and(y.outer_iter())
+            .for_each(|mut proba, trace, y| {
+                // Need to split in 2 cases : if nb<NBITS_CHUNK, then exact_chuns_mut would give an empty iterator
+                // # Revise here
+                if self.nb < NBITS_CHUNK {
+                    let mut tmp_mu = Array1::<f64>::zeros(self.p);
+                    calculate_sqdist(0, scores_trace, &mut tmp_mu, trace, v)
+                } else {
+                    //Iterate over the chunks
+                    let denom = (0..(1 << (nb - SIZE_CHUNK)))
+                        .into_par_iter()
+                        .with_min_len(1 << 24) // TODO lower this
+                        .map_init(
+                            || return Array1::zeros(self.p),
+                            |tmp_mu, i| {
+                                sum_probas(i, tmp_mu, trace, v)
+                            },
+                        )
+                            .reduce(0.0, std::ops::Add::add);
+
+                    let mut tmp_mu = Array1::<f64>::zeros(self.p);
+                    let numerator = proba_leak(*y.into_scalar(), &mut tmp_mu, trace, v); 
+                    *proba.into_scalar() = f64::log2(numerator / denom); // TODO: revise here 
+                }
+            });
+
+        return probas;
+    }
+
+    fn fun_name(&self, chunk_index: usize, tmp_mu: &mut Array1<f64>, trace: ArrayView1<f64>, v: usize) {
+        for j in 0..self.p {
+            tmp_mu[j] = trace[[j]];
+            for chunk in 0..((self.nb + NBITS_CHUNK - 1) / NBITS_CHUNK - 1) as usize {
+                //iterate over chunks except smallest
+                let i_chunk = (chunk_index >> (chunk * NBITS_CHUNK)) & (SIZE_CHUNK - 1);
+                tmp_mu[j] -= self.mu_chunks[[v, chunk + 1, i_chunk, j]];
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
