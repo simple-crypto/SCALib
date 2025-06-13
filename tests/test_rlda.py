@@ -141,3 +141,28 @@ def test_rlda_fail_empty_classes():
 
     with pytest.raises(ScalibError):
         rlda.solve()
+
+def generate_rlda_inputs(seed, ns, n, nv, nb):
+    rng = np.random.default_rng(seed=seed)
+    traces = rng.integers(0, 100, size=(n, ns),dtype=np.int16)
+    labels = rng.integers(0, 2**nb, size=(n, nv), dtype=np.uint64)
+    return dict(
+            traces=traces,
+            labels=labels
+            )
+
+def test_rlda_pred_log2p1():
+    seed = 0
+    ns = 2
+    n = 10
+    nv = 1
+    nb = 2
+    p = 1
+    # Generate the inputs
+    data = generate_rlda_inputs(seed, ns, n, nv, nb)
+    # RLDA 
+    rlda = RLDAClassifier(nb, 1)
+    rlda.fit_u(traces, labels, 1)
+    rlda.solve()
+
+

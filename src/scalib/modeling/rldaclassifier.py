@@ -154,6 +154,29 @@ class RLDAClassifier:
         assert self._solved, "Model not solved"
         return self._inner.predict_proba(traces, var, get_config())
 
+    def predict_log2p1(
+            self, traces: npt.NDArray[np.int16], var: int, labels: npt.NDArray[np.uint64]
+    ) -> npt.NDArray[np.float64]:
+        r"""Computes the log2 probability for each of the corresponding classes for the requested variable.
+
+        Parameters
+        ----------
+        traces:
+            Array that contains the traces. Shape ``(n,ns)``.
+        var:
+            Id (position in the ``x`` array) of the variable for which the
+            probabilities are computed.
+        labels:
+            labels associated to each element taken by the requested variable. 
+
+        Returns
+        -------
+        array_like, f64
+            Probabilities. Shape ``(n,)``.
+        """
+        assert self._solved, "Model not solved"
+        return self._inner.predict_log2p1(traces, var, labels.T, get_config())
+
     class ClusteredModel:
         """Clustered RLDA model, see :func:`RLDAClassifier.get_clustered_model`."""
 

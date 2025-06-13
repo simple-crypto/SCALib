@@ -71,6 +71,20 @@ impl RLDA {
         Ok(prs.into_pyarray(py))
     }
 
+    fn predict_log2p1<'py>(
+        &self,
+        py: Python<'py>,
+        x: PyReadonlyArray2<i16>,
+        v: usize,
+        y: PyReadonlyArray1<u64>,
+        config: crate::ConfigWrapper,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let x = x.as_array();
+        let y = y.as_array();
+        let prs = config.on_worker(py, |_| self.inner.as_ref().unwrap().predict_log2p1(x, v, y));
+        Ok(prs.into_pyarray(py))
+    }
+
     fn get_proj_coefs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray3<f64>>> {
         Ok(self.inner.as_ref().unwrap().proj_coefs.to_pyarray(py))
     }
