@@ -142,27 +142,36 @@ def test_rlda_fail_empty_classes():
     with pytest.raises(ScalibError):
         rlda.solve()
 
+
 def generate_rlda_inputs(seed, ns, n, nv, nb):
     rng = np.random.default_rng(seed=seed)
-    traces = rng.integers(0, 100, size=(n, ns),dtype=np.int16)
+    traces = rng.integers(0, 100, size=(n, ns), dtype=np.int16)
     labels = rng.integers(0, 2**nb, size=(n, nv), dtype=np.uint64)
-    return dict(
-            traces=traces,
-            labels=labels
-            )
+    return rng, dict(traces=traces, labels=labels)
+
 
 def test_rlda_pred_log2p1():
     seed = 0
     ns = 2
-    n = 10
-    nv = 1
     nb = 2
+    n = 4*(1<<nb) 
+    nv = 1
     p = 1
     # Generate the inputs
-    data = generate_rlda_inputs(seed, ns, n, nv, nb)
-    # RLDA 
+    rng, data = generate_rlda_inputs(seed, ns, n, nv, nb)
+    # RLDA
     rlda = RLDAClassifier(nb, 1)
-    rlda.fit_u(traces, labels, 1)
+    rlda.fit_u(data['traces'], data['labels'], 1)
     rlda.solve()
 
+    # new traces
+    nntrs = 10
+    nvi = 0
+    ntrs = rng.integers(0, 100, size=(nntrs, ns), dtype=np.int16)
+
+    # get all probas 
+    lprs = np.log2(rlda.predict_proba(ntrs, nvi))
+    l2p1 = rlda.predict_log2p1(ntrs, nvi, data['labels'][:, nvi])
+    cpick = lprs[np.arange(nntrs), data['labels'][:, nvi]]
+    assert np.allclose(l2p1, cpick)
 

@@ -155,7 +155,7 @@ class RLDAClassifier:
         return self._inner.predict_proba(traces, var, get_config())
 
     def predict_log2p1(
-            self, traces: npt.NDArray[np.int16], var: int, labels: npt.NDArray[np.uint64]
+        self, traces: npt.NDArray[np.int16], var: int, labels: npt.NDArray[np.uint64]
     ) -> npt.NDArray[np.float64]:
         r"""Computes the log2 probability for each of the corresponding classes for the requested variable.
 
@@ -167,7 +167,7 @@ class RLDAClassifier:
             Id (position in the ``x`` array) of the variable for which the
             probabilities are computed.
         labels:
-            labels associated to each element taken by the requested variable. 
+            labels associated to each element taken by the requested variable.
 
         Returns
         -------
