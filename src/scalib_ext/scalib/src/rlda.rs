@@ -352,14 +352,15 @@ impl RLDA {
                                 trace: ArrayView1<f64>,
                                 v: usize| {
             // First calculate the most significant chunks (containing MSBs) then process the least signifcant one efficently
-            for j in 0..self.p {
-                tmp_mu[j] = trace[[j]];
-                for chunk in 0..((self.nb + NBITS_CHUNK - 1) / NBITS_CHUNK - 1) as usize {
-                    //iterate over chunks except smallest
-                    let i_chunk = (chunk_index >> (chunk * NBITS_CHUNK)) & (SIZE_CHUNK - 1);
-                    tmp_mu[j] -= self.mu_chunks[[v, chunk + 1, i_chunk, j]];
-                }
-            }
+            //for j in 0..self.p {
+            //    tmp_mu[j] = trace[[j]];
+            //    for chunk in 0..((self.nb + NBITS_CHUNK - 1) / NBITS_CHUNK - 1) as usize {
+            //        //iterate over chunks except smallest
+            //        let i_chunk = (chunk_index >> (chunk * NBITS_CHUNK)) & (SIZE_CHUNK - 1);
+            //        tmp_mu[j] -= self.mu_chunks[[v, chunk + 1, i_chunk, j]];
+            //    }
+            //}
+            self.process_higher_chunks(chunk_index, tmp_mu, trace, v);
             // tmp_mu now holds the trace - mu(x) up to the last chunk which differs for each class.
             // if nb<NBITS_CHUNK, iterate over 1<<nb only.
             for i_lsb in 0..min(SIZE_CHUNK, 1 << self.nb) {
@@ -423,18 +424,31 @@ impl RLDA {
         return scores;
     }
 
+    fn process_higher_chunks(
+        &self,
+        chunk_index: usize,
+        tmp_mu: &mut Array1<f64>,
+        trace: ArrayView1<f64>,
+        v: usize,
+    ) {
+        for j in 0..self.p {
+            tmp_mu[j] = trace[[j]];
+            for chunk in 0..((self.nb + NBITS_CHUNK - 1) / NBITS_CHUNK - 1) as usize {
+                //iterate over chunks except smallest
+                let i_chunk = (chunk_index >> (chunk * NBITS_CHUNK)) & (SIZE_CHUNK - 1);
+                tmp_mu[j] -= self.mu_chunks[[v, chunk + 1, i_chunk, j]];
+            }
+        }
+    }
+
     /// return the probability of each of the possible value for leakage samples
     /// x : traces with shape (n,ns)
     /// v : index of variable that we want to get the probabilities
     /// return prs with shape (n,2**nb). Every row corresponds to one probability distribution
     pub fn predict_log2p1(&self, x: ArrayView2<i16>, v: usize, y: ArrayView1<u64>) -> Array1<f64> {
-
-        let proba_leak = |y: u64,
-                                tmp_mu: &mut Array1<f64>,
-                                trace: ArrayView1<f64>,
-                                v: usize| {
+        let proba_leak = |y: u64, tmp_mu: &mut Array1<f64>, trace: ArrayView1<f64>, v: usize| {
             let chunk_index = y >> NBITS_CHUNK;
-            self.fun_name(chunk_index as usize, tmp_mu, trace, v);
+            self.process_higher_chunks(chunk_index as usize, tmp_mu, trace, v);
             let i_lsb = y & ((SIZE_CHUNK - 1) as u64);
             let mut sq_dist: f64 = 0.0;
             for j in 0..self.p {
@@ -449,25 +463,23 @@ impl RLDA {
         //
         // This method is called in predict_proba, per chunks of SIZE_CHUNK scores to calculate.
         // It calculates and stores the sqdist of classes chunk_index*SIZE_CHUNK to (chunk_index+1)*SIZE_CHUNK-1
-        let sum_probas = |chunk_index: usize,
-                                tmp_mu: &mut Array1<f64>,
-                                trace: ArrayView1<f64>,
-                                v: usize| {
-            // First calculate the most significant chunks (containing MSBs) then process the least signifcant one efficently
-            self.fun_name(chunk_index, tmp_mu, trace, v);
-            // tmp_mu now holds the trace - mu(x) up to the last chunk which differs for each class.
-            // if nb<NBITS_CHUNK, iterate over 1<<nb only.
-            let mut res = 0.0;
-            for i_lsb in 0..min(SIZE_CHUNK, 1 << self.nb) {
-                let mut sq_dist: f64 = 0.0;
-                for j in 0..self.p {
-                    let tmp = tmp_mu[j] - self.mu_chunks[[v, 0, i_lsb as usize, j]];
-                    sq_dist += tmp * tmp;
+        let sum_probas =
+            |chunk_index: usize, tmp_mu: &mut Array1<f64>, trace: ArrayView1<f64>, v: usize| {
+                // First calculate the most significant chunks (containing MSBs) then process the least signifcant one efficently
+                self.process_higher_chunks(chunk_index, tmp_mu, trace, v);
+                // tmp_mu now holds the trace - mu(x) up to the last chunk which differs for each class.
+                // if nb<NBITS_CHUNK, iterate over 1<<nb only.
+                let mut res = 0.0;
+                for i_lsb in 0..min(SIZE_CHUNK, 1 << self.nb) {
+                    let mut sq_dist: f64 = 0.0;
+                    for j in 0..self.p {
+                        let tmp = tmp_mu[j] - self.mu_chunks[[v, 0, i_lsb as usize, j]];
+                        sq_dist += tmp * tmp;
+                    }
+                    res += f64::exp(-0.5 * sq_dist);
                 }
-                res += f64::exp(-0.5 * sq_dist);
-            }
-            res
-        };
+                res
+            };
 
         // Project the traces.
         let x = x
@@ -485,8 +497,8 @@ impl RLDA {
                     let mut tmp_mu = Array1::<f64>::zeros(self.p);
                     // deprecated calculate_sqdist(0, scores_trace, &mut tmp_mu, trace, v)
                     let denom = sum_probas(0, &mut tmp_mu, trace, v);
-                    let numerator = proba_leak(*y.into_scalar(), &mut tmp_mu, trace, v); 
-                    *proba.into_scalar() = f64::log2(numerator / denom); // TODO: revise here: better soft max directly on log2 
+                    let numerator = proba_leak(*y.into_scalar(), &mut tmp_mu, trace, v);
+                    *proba.into_scalar() = f64::log2(numerator / denom); // TODO: revise here: better soft max directly on log2
                 } else {
                     //Iterate over the chunks
                     let denom = (0..(1 << (self.nb - SIZE_CHUNK)))
@@ -494,30 +506,17 @@ impl RLDA {
                         .with_min_len(1 << 24) // TODO lower this
                         .map_init(
                             || return Array1::zeros(self.p),
-                            |tmp_mu, i| {
-                                sum_probas(i, tmp_mu, trace, v)
-                            },
+                            |tmp_mu, i| sum_probas(i, tmp_mu, trace, v),
                         )
-                            .reduce(|| 0.0, std::ops::Add::add);
+                        .reduce(|| 0.0, std::ops::Add::add);
 
                     let mut tmp_mu = Array1::<f64>::zeros(self.p);
-                    let numerator = proba_leak(*y.into_scalar(), &mut tmp_mu, trace, v); 
-                    *proba.into_scalar() = f64::log2(numerator / denom); // TODO: revise here 
+                    let numerator = proba_leak(*y.into_scalar(), &mut tmp_mu, trace, v);
+                    *proba.into_scalar() = f64::log2(numerator / denom); // TODO: revise here
                 }
             });
 
         return probas;
-    }
-
-    fn fun_name(&self, chunk_index: usize, tmp_mu: &mut Array1<f64>, trace: ArrayView1<f64>, v: usize) {
-        for j in 0..self.p {
-            tmp_mu[j] = trace[[j]];
-            for chunk in 0..((self.nb + NBITS_CHUNK - 1) / NBITS_CHUNK - 1) as usize {
-                //iterate over chunks except smallest
-                let i_chunk = (chunk_index >> (chunk * NBITS_CHUNK)) & (SIZE_CHUNK - 1);
-                tmp_mu[j] -= self.mu_chunks[[v, chunk + 1, i_chunk, j]];
-            }
-        }
     }
 }
 
@@ -788,7 +787,6 @@ impl RLDAClusteredModel {
     }
 }
 
-
 #[cfg(test)]
 mod tests_rlda {
     use super::*;
@@ -798,7 +796,16 @@ mod tests_rlda {
     use ndarray_rand::RandomExt;
     use rand_xoshiro::Xoshiro256StarStar;
 
-    fn test_predict_log2p1(seed: u32, ns: u32, nb: u32, n: u32, nv: u32, v: u32, p: u32, case: &str) {
+    fn test_predict_log2p1(
+        seed: u32,
+        ns: u32,
+        nb: u32,
+        n: u32,
+        nv: u32,
+        v: u32,
+        p: u32,
+        case: &str,
+    ) {
         let seed = seed as u64;
         let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
 
@@ -822,22 +829,27 @@ mod tests_rlda {
         let _ = rlda.solve();
 
         // Predict the probas for all classes
-        let lprobs = rlda.predict_proba(traces.view(), v as usize).mapv(|x| f64::log2(x));
+        let lprobs = rlda
+            .predict_proba(traces.view(), v as usize)
+            .mapv(|x| f64::log2(x));
 
         // Predict the proba for the proper classes, directly as log
         let vlabels = labels.index_axis(Axis(0), v as usize);
         let l2p1 = rlda.predict_log2p1(traces.view(), v as usize, vlabels);
 
         // Cherry pick the values from lprobs
-        let cpick_lprobs = (0..n).zip(vlabels).map(|(i,c)| lprobs[(i as usize,*c as usize)]).collect::<Array1<f64>>();
+        let cpick_lprobs = (0..n)
+            .zip(vlabels)
+            .map(|(i, c)| lprobs[(i as usize, *c as usize)])
+            .collect::<Array1<f64>>();
 
-        for i in 0..n{
+        for i in 0..n {
             println!("({i}) {} vs {}", l2p1[i as usize], cpick_lprobs[i as usize]);
         }
-        assert!(cpick_lprobs.relative_eq(&l2p1, 1e-8, 1e-5), 
+        assert!(
+            cpick_lprobs.relative_eq(&l2p1, 1e-8, 1e-5),
             "[{case}] log2p1 failure.\nl2p1: {l2p1:#?}\ncpick: {cpick_lprobs:#?}"
         );
-        
     }
 
     #[test]
