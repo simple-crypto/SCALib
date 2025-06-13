@@ -434,12 +434,11 @@ impl RLDA {
                                 trace: ArrayView1<f64>,
                                 v: usize| {
             let chunk_index = y >> NBITS_CHUNK;
-            self.fun_name(chunk_index, tmp_mu, trace, v);
-            let mut res = 0.0;
-            let i_lsb = y & (SIZE_CHUNK - 1);
+            self.fun_name(chunk_index as usize, tmp_mu, trace, v);
+            let i_lsb = y & ((SIZE_CHUNK - 1) as u64);
             let mut sq_dist: f64 = 0.0;
             for j in 0..self.p {
-                let tmp = tmp_mu[j] - self.mu_chunks[[v, 0, i_lsb, j]];
+                let tmp = tmp_mu[j] - self.mu_chunks[[v, 0, i_lsb as usize, j]];
                 sq_dist += tmp * tmp;
             }
             f64::exp(-0.5 * sq_dist)
@@ -479,15 +478,18 @@ impl RLDA {
         Zip::from(probas.outer_iter_mut())
             .and(x.outer_iter())
             .and(y.outer_iter())
-            .for_each(|mut proba, trace, y| {
+            .for_each(|proba, trace, y| {
                 // Need to split in 2 cases : if nb<NBITS_CHUNK, then exact_chuns_mut would give an empty iterator
                 // # Revise here
                 if self.nb < NBITS_CHUNK {
                     let mut tmp_mu = Array1::<f64>::zeros(self.p);
-                    calculate_sqdist(0, scores_trace, &mut tmp_mu, trace, v)
+                    // deprecated calculate_sqdist(0, scores_trace, &mut tmp_mu, trace, v)
+                    let denom = sum_probas(0, &mut tmp_mu, trace, v);
+                    let numerator = proba_leak(*y.into_scalar(), &mut tmp_mu, trace, v); 
+                    *proba.into_scalar() = f64::log2(numerator / denom); // TODO: revise here: better soft max directly on log2 
                 } else {
                     //Iterate over the chunks
-                    let denom = (0..(1 << (nb - SIZE_CHUNK)))
+                    let denom = (0..(1 << (self.nb - SIZE_CHUNK)))
                         .into_par_iter()
                         .with_min_len(1 << 24) // TODO lower this
                         .map_init(
@@ -496,7 +498,7 @@ impl RLDA {
                                 sum_probas(i, tmp_mu, trace, v)
                             },
                         )
-                            .reduce(0.0, std::ops::Add::add);
+                            .reduce(|| 0.0, std::ops::Add::add);
 
                     let mut tmp_mu = Array1::<f64>::zeros(self.p);
                     let numerator = proba_leak(*y.into_scalar(), &mut tmp_mu, trace, v); 
