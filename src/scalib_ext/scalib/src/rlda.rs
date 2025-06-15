@@ -856,6 +856,7 @@ mod tests_rlda {
     fn test_ref() {
         // seed, ns, nb, n, nv, v, p
         test_predict_log2p1(0, 1, 2, 10, 1, 0, 1, "MINIMAL");
+        test_predict_log2p1(0, 2, 2, 16, 1, 0, 1, "MINIMAL");
         test_predict_log2p1(0, 4, 4, 10, 1, 0, 1, "MIDDLE");
         test_predict_log2p1(0, 4, 4, 10, 3, 1, 1, "MIDDLE-MVARS");
         test_predict_log2p1(0, 4, 4, 10, 3, 1, 2, "MIDDLE-MVARS-NDIM");
