@@ -181,3 +181,4 @@ def test_rlda_pred_log2p1():
     subtest_rlda_pred_log2p1(0, 3, 4, 64, 2, 1)
     subtest_rlda_pred_log2p1(0, 3, 4, 64, 5, 1)
     subtest_rlda_pred_log2p1(0, 3, 4, 64, 5, 2)
+    subtest_rlda_pred_log2p1(0, 3, 9, 1000, 5, 2)

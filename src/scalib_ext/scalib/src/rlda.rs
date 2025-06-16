@@ -492,14 +492,13 @@ impl RLDA {
             .mapv(|x| x as f64)
             .dot(&self.norm_proj.slice(s![v, .., ..]).t());
 
-        //let mut probas = Array1::zeros((x.len_of(Axis(0)),));
         Zip::from(probas.outer_iter_mut())
             .and(x.outer_iter())
             .and(y.outer_iter())
             .for_each(|proba, trace, y| {
                 // Need to split in 2 cases : if nb<NBITS_CHUNK, then exact_chuns_mut would give an empty iterator
                 // # Revise here
-                if self.nb < NBITS_CHUNK {
+                if self.nb <= NBITS_CHUNK {
                     let mut tmp_mu = Array1::<f64>::zeros(self.p);
                     // deprecated calculate_sqdist(0, scores_trace, &mut tmp_mu, trace, v)
                     let denom = sum_probas(0, &mut tmp_mu, trace, v);
@@ -507,7 +506,7 @@ impl RLDA {
                     *proba.into_scalar() = f64::log2(numerator / denom); // TODO: revise here: better soft max directly on log2
                 } else {
                     //Iterate over the chunks
-                    let denom = (0..(1 << (self.nb - SIZE_CHUNK)))
+                    let denom = (0..(1 << (self.nb - NBITS_CHUNK)))
                         .into_par_iter()
                         .with_min_len(1 << 24) // TODO lower this
                         .map_init(
@@ -521,8 +520,6 @@ impl RLDA {
                     *proba.into_scalar() = f64::log2(numerator / denom); // TODO: revise here
                 }
             });
-
-        //return probas;
     }
 
     /// return the probability of each of the possible value for leakage samples
@@ -838,28 +835,41 @@ mod tests_rlda {
         // Solve
         let _ = rlda.solve();
 
+        // Test data
+        let ntest = 10;
+        let test_traces = Array2::<i16>::random_using(
+            (ntest as usize, ns as usize),
+            Uniform::new(0, 10),
+            &mut rng,
+        );
+
+        let test_labels = Array2::<u64>::random_using(
+            (nv as usize, ntest as usize),
+            Uniform::new(0, (1 << nb) as u64),
+            &mut rng,
+        );
+
         // Predict the log2 pr for all variable
-        let vs = Array1::<u64>::from_iter((0..u64::from(nv)).into_iter());
-        let l2p1s = rlda.predict_log2p1(traces.view(), labels.view());
+        let l2p1s = rlda.predict_log2p1(test_traces.view(), test_labels.view());
 
         // Predict the probas for all classes
         for v in 0..nv {
             let lprobs = rlda
-                .predict_proba(traces.view(), v as usize)
+                .predict_proba(test_traces.view(), v as usize)
                 .mapv(|x| f64::log2(x));
 
             // Predict the proba for the proper classes, directly as log
             let l2p1 = l2p1s.index_axis(Axis(0), v as usize);
 
             // Cherry pick the values from lprobs
-            let cpick_lprobs = (0..n)
-                .zip(labels.index_axis(Axis(0), v as usize))
+            let cpick_lprobs = (0..ntest)
+                .zip(test_labels.index_axis(Axis(0), v as usize))
                 .map(|(i, c)| lprobs[(i as usize, *c as usize)])
                 .collect::<Array1<f64>>();
 
-            for i in 0..n {
-                println!("({i}) {} vs {}", l2p1[i as usize], cpick_lprobs[i as usize]);
-            }
+            //for i in 0..ntest {
+            //    println!("({i}) {} vs {}", l2p1[i as usize], cpick_lprobs[i as usize]);
+            //}
             assert!(
                 cpick_lprobs.relative_eq(&l2p1, 1e-8, 1e-5),
                 "[{case}] log2p1 failure.\nl2p1: {l2p1:#?}\ncpick: {cpick_lprobs:#?}"
@@ -871,9 +881,12 @@ mod tests_rlda {
     fn test_ref() {
         // seed, ns, nb, n, nv, p
         test_predict_log2p1(0, 1, 2, 10, 1, 1, "MINIMAL");
-        test_predict_log2p1(0, 2, 2, 16, 1, 1, "MINIMAL");
+        test_predict_log2p1(0, 2, 2, 16, 1, 1, "MINIMAL-NS-NB");
         test_predict_log2p1(0, 4, 4, 10, 1, 1, "MIDDLE");
         test_predict_log2p1(0, 4, 4, 10, 3, 1, "MIDDLE-MVARS");
         test_predict_log2p1(0, 4, 4, 10, 3, 2, "MIDDLE-MVARS-NDIM");
+        test_predict_log2p1(0, 1, 9, 10000, 1, 1, "2-CHUNKS");
+        test_predict_log2p1(0, 2, 9, 10000, 3, 1, "2-CHUNKS-MVARS");
+        test_predict_log2p1(0, 2, 9, 10000, 3, 2, "2-CHUNKS-MVARS-NDIM");
     }
 }

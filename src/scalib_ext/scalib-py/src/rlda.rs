@@ -80,9 +80,7 @@ impl RLDA {
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let x = x.as_array();
         let ys = ys.as_array();
-        let prs = config.on_worker(py, |_| {
-            self.inner.as_ref().unwrap().predict_log2p1(x, ys)
-        });
+        let prs = config.on_worker(py, |_| self.inner.as_ref().unwrap().predict_log2p1(x, ys));
         Ok(prs.into_pyarray(py))
     }
 
