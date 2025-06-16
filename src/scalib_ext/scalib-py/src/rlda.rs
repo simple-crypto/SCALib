@@ -75,13 +75,14 @@ impl RLDA {
         &self,
         py: Python<'py>,
         x: PyReadonlyArray2<i16>,
-        v: usize,
-        y: PyReadonlyArray1<u64>,
+        ys: PyReadonlyArray2<u64>,
         config: crate::ConfigWrapper,
-    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let x = x.as_array();
-        let y = y.as_array();
-        let prs = config.on_worker(py, |_| self.inner.as_ref().unwrap().predict_log2p1(x, v, y));
+        let ys = ys.as_array();
+        let prs = config.on_worker(py, |_| {
+            self.inner.as_ref().unwrap().predict_log2p1(x, ys)
+        });
         Ok(prs.into_pyarray(py))
     }
 

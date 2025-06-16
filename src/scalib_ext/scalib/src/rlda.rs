@@ -445,7 +445,13 @@ impl RLDA {
     /// x : traces with shape (n,ns)
     /// v : index of variable that we want to get the probabilities
     /// return prs with shape (n,2**nb). Every row corresponds to one probability distribution
-    pub fn predict_log2p1(&self, x: ArrayView2<i16>, v: usize, y: ArrayView1<u64>) -> Array1<f64> {
+    pub fn predict_log2p1_inplace(
+        &self,
+        x: ArrayView2<i16>,
+        v: usize,
+        y: ArrayView1<u64>,
+        mut probas: ArrayViewMut1<f64>,
+    ) {
         let proba_leak = |y: u64, tmp_mu: &mut Array1<f64>, trace: ArrayView1<f64>, v: usize| {
             let chunk_index = y >> NBITS_CHUNK;
             self.process_higher_chunks(chunk_index as usize, tmp_mu, trace, v);
@@ -486,7 +492,7 @@ impl RLDA {
             .mapv(|x| x as f64)
             .dot(&self.norm_proj.slice(s![v, .., ..]).t());
 
-        let mut probas = Array1::zeros((x.len_of(Axis(0)),));
+        //let mut probas = Array1::zeros((x.len_of(Axis(0)),));
         Zip::from(probas.outer_iter_mut())
             .and(x.outer_iter())
             .and(y.outer_iter())
@@ -516,6 +522,19 @@ impl RLDA {
                 }
             });
 
+        //return probas;
+    }
+
+    /// return the probability of each of the possible value for leakage samples
+    /// x : traces with shape (n,ns)
+    /// v : indexes of variable that we want to get the probabilities for
+    /// ys: classes associated to each variable of shape (nv, n)
+    /// return the probas associated to each variable for the classes provided, of shape (nv, n)
+    pub fn predict_log2p1(&self, x: ArrayView2<i16>, ys: ArrayView2<u64>) -> Array2<f64> {
+        let mut probas = Array2::<f64>::zeros((ys.len_of(Axis(0)), ys.len_of(Axis(1))));
+        for (i, (r, y)) in probas.outer_iter_mut().zip(ys.outer_iter()).enumerate() {
+            self.predict_log2p1_inplace(x, i, y, r);
+        }
         return probas;
     }
 }
@@ -796,16 +815,7 @@ mod tests_rlda {
     use ndarray_rand::RandomExt;
     use rand_xoshiro::Xoshiro256StarStar;
 
-    fn test_predict_log2p1(
-        seed: u32,
-        ns: u32,
-        nb: u32,
-        n: u32,
-        nv: u32,
-        v: u32,
-        p: u32,
-        case: &str,
-    ) {
+    fn test_predict_log2p1(seed: u32, ns: u32, nb: u32, n: u32, nv: u32, p: u32, case: &str) {
         let seed = seed as u64;
         let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
 
@@ -828,37 +838,42 @@ mod tests_rlda {
         // Solve
         let _ = rlda.solve();
 
+        // Predict the log2 pr for all variable
+        let vs = Array1::<u64>::from_iter((0..u64::from(nv)).into_iter());
+        let l2p1s = rlda.predict_log2p1(traces.view(), labels.view());
+
         // Predict the probas for all classes
-        let lprobs = rlda
-            .predict_proba(traces.view(), v as usize)
-            .mapv(|x| f64::log2(x));
+        for v in 0..nv {
+            let lprobs = rlda
+                .predict_proba(traces.view(), v as usize)
+                .mapv(|x| f64::log2(x));
 
-        // Predict the proba for the proper classes, directly as log
-        let vlabels = labels.index_axis(Axis(0), v as usize);
-        let l2p1 = rlda.predict_log2p1(traces.view(), v as usize, vlabels);
+            // Predict the proba for the proper classes, directly as log
+            let l2p1 = l2p1s.index_axis(Axis(0), v as usize);
 
-        // Cherry pick the values from lprobs
-        let cpick_lprobs = (0..n)
-            .zip(vlabels)
-            .map(|(i, c)| lprobs[(i as usize, *c as usize)])
-            .collect::<Array1<f64>>();
+            // Cherry pick the values from lprobs
+            let cpick_lprobs = (0..n)
+                .zip(labels.index_axis(Axis(0), v as usize))
+                .map(|(i, c)| lprobs[(i as usize, *c as usize)])
+                .collect::<Array1<f64>>();
 
-        for i in 0..n {
-            println!("({i}) {} vs {}", l2p1[i as usize], cpick_lprobs[i as usize]);
+            for i in 0..n {
+                println!("({i}) {} vs {}", l2p1[i as usize], cpick_lprobs[i as usize]);
+            }
+            assert!(
+                cpick_lprobs.relative_eq(&l2p1, 1e-8, 1e-5),
+                "[{case}] log2p1 failure.\nl2p1: {l2p1:#?}\ncpick: {cpick_lprobs:#?}"
+            );
         }
-        assert!(
-            cpick_lprobs.relative_eq(&l2p1, 1e-8, 1e-5),
-            "[{case}] log2p1 failure.\nl2p1: {l2p1:#?}\ncpick: {cpick_lprobs:#?}"
-        );
     }
 
     #[test]
     fn test_ref() {
-        // seed, ns, nb, n, nv, v, p
-        test_predict_log2p1(0, 1, 2, 10, 1, 0, 1, "MINIMAL");
-        test_predict_log2p1(0, 2, 2, 16, 1, 0, 1, "MINIMAL");
-        test_predict_log2p1(0, 4, 4, 10, 1, 0, 1, "MIDDLE");
-        test_predict_log2p1(0, 4, 4, 10, 3, 1, 1, "MIDDLE-MVARS");
-        test_predict_log2p1(0, 4, 4, 10, 3, 1, 2, "MIDDLE-MVARS-NDIM");
+        // seed, ns, nb, n, nv, p
+        test_predict_log2p1(0, 1, 2, 10, 1, 1, "MINIMAL");
+        test_predict_log2p1(0, 2, 2, 16, 1, 1, "MINIMAL");
+        test_predict_log2p1(0, 4, 4, 10, 1, 1, "MIDDLE");
+        test_predict_log2p1(0, 4, 4, 10, 3, 1, "MIDDLE-MVARS");
+        test_predict_log2p1(0, 4, 4, 10, 3, 2, "MIDDLE-MVARS-NDIM");
     }
 }

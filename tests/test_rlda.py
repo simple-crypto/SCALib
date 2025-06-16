@@ -153,13 +153,7 @@ def generate_rlda_inputs(seed, ns, n, nv, nb, rng=None):
     return rng, dict(traces=traces, labels=labels)
 
 
-def test_rlda_pred_log2p1():
-    seed = 0
-    ns = 2
-    nb = 2
-    n = 4 * (1 << nb)
-    nv = 1
-    p = 1
+def subtest_rlda_pred_log2p1(seed, ns, nb, n, nv, p):
     # Generate the inputs
     rng, data = generate_rlda_inputs(seed, ns, n, nv, nb)
     # RLDA
@@ -169,11 +163,21 @@ def test_rlda_pred_log2p1():
 
     # new traces
     nntrs = 10
-    nvi = 0
-    rng, ndata = generate_rlda_inputs(seed+1, ns, nntrs, nv, nb, rng=rng)
+    rng, ndata = generate_rlda_inputs(seed + 1, ns, nntrs, nv, nb, rng=rng)
 
-    # get all probas
-    lprs = np.log2(rlda.predict_proba(ndata["traces"], nvi))
-    l2p1 = rlda.predict_log2p1(ndata["traces"], nvi, ndata["labels"][:, nvi])
-    cpick = lprs[np.arange(nntrs), ndata["labels"][:, nvi]]
-    assert np.allclose(l2p1, cpick)
+    l2p1s = rlda.predict_log2p1(ndata["traces"], ndata["labels"])
+
+    # Verify all probas
+    for nvi in range(nv):
+        lprs = np.log2(rlda.predict_proba(ndata["traces"], nvi))
+        cpick = lprs[np.arange(nntrs), ndata["labels"][:, nvi]]
+        assert np.allclose(l2p1s[:, nvi], cpick), f"{seed};{ns};{nb};{n};{nv};{p};{nvi}"
+
+
+def test_rlda_pred_log2p1():
+    # seed, ns, nb, n, nv, p
+    subtest_rlda_pred_log2p1(0, 2, 2, 16, 1, 1)
+    subtest_rlda_pred_log2p1(0, 2, 2, 16, 5, 1)
+    subtest_rlda_pred_log2p1(0, 3, 4, 64, 2, 1)
+    subtest_rlda_pred_log2p1(0, 3, 4, 64, 5, 1)
+    subtest_rlda_pred_log2p1(0, 3, 4, 64, 5, 2)
