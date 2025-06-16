@@ -267,7 +267,7 @@ fn bench_univariate_mlda_predict(nc: Class, ns: u32, n: usize, p: u32, group: &m
             let config = scalib::Config::no_progress();
             let ldares = mlda.lda(p, &config).unwrap();
             b.iter(|| {
-                let _prs = ldares.predict_proba(t.view());
+                let _prs = ldares.predict_proba(t.view(), false);
             })
         },
     );

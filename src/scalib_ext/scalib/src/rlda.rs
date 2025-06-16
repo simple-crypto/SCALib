@@ -508,7 +508,7 @@ impl RLDA {
                     //Iterate over the chunks
                     let denom = (0..(1 << (self.nb - NBITS_CHUNK)))
                         .into_par_iter()
-                        .with_min_len(1 << 24) // TODO lower this
+                        .with_min_len(1 << 16) // TODO lower this
                         .map_init(
                             || return Array1::zeros(self.p),
                             |tmp_mu, i| sum_probas(i, tmp_mu, trace, v),
