@@ -169,10 +169,10 @@ class RLDAClassifier:
         Returns
         -------
         array_like, f64
-            Probabilities. Shape ``(n,nv)``.
+            Probabilities. Shape ``(nv,n)``.
         """
         assert self._solved, "Model not solved"
-        return self._inner.predict_log2p1(traces, labels.T, get_config()).T
+        return self._inner.predict_log2p1(traces, labels.T, get_config())
 
     class ClusteredModel:
         """Clustered RLDA model, see :func:`RLDAClassifier.get_clustered_model`."""

@@ -171,7 +171,7 @@ def subtest_rlda_pred_log2p1(seed, ns, nb, n, nv, p):
     for nvi in range(nv):
         lprs = np.log2(rlda.predict_proba(ndata["traces"], nvi))
         cpick = lprs[np.arange(nntrs), ndata["labels"][:, nvi]]
-        assert np.allclose(l2p1s[:, nvi], cpick), f"{seed};{ns};{nb};{n};{nv};{p};{nvi}"
+        assert np.allclose(l2p1s[nvi, :], cpick), f"{seed};{ns};{nb};{n};{nv};{p};{nvi}"
 
 
 def test_rlda_pred_log2p1():
