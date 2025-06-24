@@ -1,8 +1,9 @@
 import pytest
 import numpy as np
-import random
 from scalib.postprocessing import rank_accuracy
 import os
+
+from utils_test import get_rng
 
 static_probs = [
     [0.5, 0.25, 0.25, 0.125],
@@ -28,9 +29,10 @@ def test_rank_accuracy_hist():
     nc = 256
     nsubkeys = 4
     acc = 0.2
+    rng = get_rng()
 
     costs = np.zeros((nsubkeys, nc)) + 0.1
-    secret_key = np.random.randint(0, nc, nsubkeys)
+    secret_key = rng.integers(0, nc, (nsubkeys,))
     costs[np.arange(nsubkeys), secret_key] = 1.0
 
     rmin, r, rmax = rank_accuracy(
@@ -47,12 +49,13 @@ def test_rank_accuracy_scaled_vs_hist():
     nsubkeys = 16
     max_error = 0.5
     k_probs = np.zeros((nsubkeys, nc))
+    rng = get_rng()
 
     secret_key = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
     for j in range(nsubkeys):
         for i in range(nc):
-            k_probs[j][i] = 1 / random.randint(2, 20)
+            k_probs[j][i] = 1 / rng.integers(2, 20, (1,))[0]
 
     rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key, method="hist")
     lrmin, lr, lrmax = (np.log2(rmin), np.log2(r), np.log2(rmax))
@@ -69,8 +72,10 @@ def test_rank_accuracy():
     nsubkeys = 4
     acc = 0.2
 
+    rng = get_rng()
+
     costs = np.zeros((nsubkeys, nc)) + 0.1
-    secret_key = np.random.randint(0, nc, nsubkeys)
+    secret_key = rng.integers(0, nc, nsubkeys)
     costs[np.arange(nsubkeys), secret_key] = 1.0
 
     rmin, r, rmax = rank_accuracy(-np.log10(costs), secret_key, acc_bit=acc)
@@ -87,11 +92,13 @@ def test_rank_accuracy_scaled_vs_ntl():
     max_error = 0.5
     k_probs = np.zeros((nsubkeys, nc))
 
+    rng = get_rng()
+
     secret_key = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
     for j in range(nsubkeys):
         for i in range(nc):
-            k_probs[j][i] = 1 / random.randint(2, 20)
+            k_probs[j][i] = 1 / rng.integers(2, 20, 1)[0]
 
     rmin, r, rmax = rank_accuracy(-np.log10(k_probs), secret_key, method="histbignum")
     lrmin, lr, lrmax = (np.log2(rmin), np.log2(r), np.log2(rmax))
@@ -113,10 +120,12 @@ def test_rank_accuracy_scaled_edge_cases():
     k_probs = np.zeros((nsubkeys, nc))
     secret_key = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
+    rng = get_rng()
+
     for j in range(nsubkeys):
         for i in range(nc):
             if i < 6:
-                k_probs[j][i] = 1 / random.randint(2, 5)
+                k_probs[j][i] = 1 / rng.integers(2, 5, 1)[0]
             else:
                 k_probs[j][i] = 1 / 16
 
