@@ -5,6 +5,8 @@ Changelog
 Not released
 ------------
 
+* Make more tests deterministic (#204).
+
 v0.6.4 (2025/06/24)
 -------------------
 

@@ -69,8 +69,7 @@ To install from source:
 
 .. code-block::
 
-    git clone https://github.com/simple-crypto/SCALib
-    pip install ./SCALib
+    pip install scalib --no-binary scalib
 
 See `CONTRIBUTING.rst <CONTRIBUTING.rst>`__ for advanced build configuration.
 

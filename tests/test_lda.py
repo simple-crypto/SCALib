@@ -450,16 +450,18 @@ def test_simple_format_check():
     pois = [[i * npois + e for e in range(npois)] for i in range(nv)]
     ns = npois * nv
 
+    rng = get_rng()
+
     # Wrong traces shape
-    traces = np.random.randint(0, maxt, (n, npois - 1), dtype=np.int16)
-    x = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
+    traces = rng.integers(0, maxt, (n, npois - 1), dtype=np.int16)
+    x = rng.integers(0, nc, (n, nv), dtype=np.uint16)
     lda_acc = LdaAcc(nc=nc, pois=pois)
     with pytest.raises(ScalibError, match="POI out of bounds."):
         lda_acc.fit_u(traces, x)
 
     # Wrong labels shape [too much variables]
-    traces = np.random.randint(0, maxt, (n, ns), dtype=np.int16)
-    x = np.random.randint(0, nc, (n, nv + 1), dtype=np.uint16)
+    traces = rng.integers(0, maxt, (n, ns), dtype=np.int16)
+    x = rng.integers(0, nc, (n, nv + 1), dtype=np.uint16)
     lda_acc = LdaAcc(nc=nc, pois=pois)
     expected_error_msg = (
         "Number of variables {} does not match  previously-fitted classes*".format(
@@ -473,8 +475,8 @@ def test_simple_format_check():
     # Not tested, would imply significant impact on performances
 
     # Validate matrices shape
-    traces = np.random.randint(0, maxt, (n, ns), dtype=np.int16)
-    x = np.random.randint(0, nc, (n, nv), dtype=np.uint16)
+    traces = rng.integers(0, maxt, (n, ns), dtype=np.int16)
+    x = rng.integers(0, nc, (n, nv), dtype=np.uint16)
     lda_acc = LdaAcc(nc=nc, pois=pois)
     lda_acc.fit_u(traces, x)
     mus = lda_acc.get_mus()
@@ -496,7 +498,7 @@ def test_simple_format_check():
     lda = Lda(lda_acc, p=p)
 
     # Wrong new traces for predictions
-    new_traces = np.random.randint(0, 256, (20, ns + 1), dtype=np.int16)
+    new_traces = rng.integers(0, 256, (20, ns + 1), dtype=np.int16)
     e_err_msg = "Traces length {} does not match previously-fitted traces*".format(
         ns + 1
     )
@@ -505,7 +507,7 @@ def test_simple_format_check():
 
     # Validate probas shape
     n_new = 20
-    new_traces = np.random.randint(0, 256, (n_new, ns), dtype=np.int16)
+    new_traces = rng.integers(0, 256, (n_new, ns), dtype=np.int16)
     pr = lda.predict_proba(new_traces)
     assert len(pr) == nv
     for prs in pr:
