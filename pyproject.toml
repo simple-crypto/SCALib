@@ -31,6 +31,11 @@ Repository = "https://github.com/simple-crypto/SCALib.git"
 Issues = "https://github.com/simple-crypto/SCALib/issues"
 Changelog = "https://github.com/simple-crypto/SCALib/blob/main/CHANGELOG.rst"
 
+[tool.setuptools.packages.find]
+exclude = ["scalib_ext*"]
+where = ["src"]
+namespaces = false
+
 
 [tool.setuptools_scm]
 version_file = "src/scalib/version.py"
@@ -46,6 +51,3 @@ build = ["cp310-*"]
 skip = ["*musllinux*"]
 archs = "auto64"
 environment-pass = ["CARGO_TARGET_DIR", "CARGO_HOME"]
-[tool.cibuildwheel.environment]
-RUST_BACKTRACE = "full"
-SCALIB_X86_64_V3 = "1"

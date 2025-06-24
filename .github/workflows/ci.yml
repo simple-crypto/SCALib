@@ -38,7 +38,7 @@ jobs:
           CARGO_TARGET_DIR: "/host${{ runner.temp }}/cargo_build"
           CARGO_HOME: "/host${{ runner.temp }}/cargo_home"
           CIBW_PLATFORM: "linux"
-          CIBW_ENVIRONMENT_LINUX: "SCALIB_NTL=1"
+          CIBW_ENVIRONMENT_LINUX: "SCALIB_NTL=1 RUST_BACKTRACE=1 SCALIB_X86_64_V3=1"
       - uses: actions/upload-artifact@v4
         with:
           name: dist-wheel_linux-${{ matrix.arch }}
@@ -157,7 +157,7 @@ jobs:
 
   build_wheel_windows:
     name: Build wheel on Windows
-    runs-on: windows-2019
+    runs-on: windows-2025
     strategy:
       fail-fast: false
       matrix:
@@ -182,6 +182,7 @@ jobs:
           CIBW_PLATFORM: "windows"
           CIBW_TEST_COMMAND: pytest {project}/tests
           CIBW_TEST_REQUIRES: "-r tests/requirements.txt"
+          CIBW_ENVIRONMENT: "RUST_BACKTRACE=1 SCALIB_X86_64_V3=1"
       - uses: actions/upload-artifact@v4
         with:
           name: dist-wheel_windows-${{ matrix.arch }}
