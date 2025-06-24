@@ -5,6 +5,11 @@ Changelog
 Not released
 ------------
 
+v0.6.4 (2025/06/24)
+-------------------
+
+* Fix build system (no more unwanted packages) and fix CI configuration (#203).
+
 v0.6.3 (2025/05/06)
 -------------------
 
