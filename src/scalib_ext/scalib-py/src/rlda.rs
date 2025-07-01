@@ -92,6 +92,10 @@ impl RLDA {
         Ok(self.inner.as_ref().unwrap().norm_proj.to_pyarray(py))
     }
 
+    fn get_reg_coefs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        Ok(self.inner.as_ref().unwrap().reg_coefs.to_pyarray(py))
+    }
+
     fn get_clustered_model<'py>(
         &self,
         py: Python<'py>,

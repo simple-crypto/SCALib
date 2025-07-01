@@ -133,6 +133,18 @@ class RLDAClassifier:
         """
         return self._inner.get_proj_coefs()
 
+    def get_reg_coefs(
+        self,
+    ) -> npt.NDArray[np.float64]:
+        """The non-projected regression coefficients.
+
+        Returns
+        -------
+        array_like, float64
+            Shape ``(nv, nb+1, ns)``
+        """
+        return self._inner.get_reg_coefs()
+
     def predict_proba(
         self, traces: npt.NDArray[np.int16], var: int
     ) -> npt.NDArray[np.float64]:

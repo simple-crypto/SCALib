@@ -15,7 +15,7 @@ fn gen_traces(n: usize, ns: usize) -> Array2<i16> {
     Array2::<i16>::random((n, ns), Uniform::new(0, 100))
 }
 fn gen_classes(nv: usize, n: usize, nb: u64) -> Array2<u64> {
-    Array2::<u64>::random((n, nv), Uniform::new(0, (1<<nb) as u64))
+    Array2::<u64>::random((n, nv), Uniform::new(0, (1 << nb) as u64))
 }
 
 fn generate_case_data(nv: usize, nb: u64, ns: u32, n: usize) -> (Array2<i16>, Array2<u64>) {
@@ -25,21 +25,36 @@ fn generate_case_data(nv: usize, nb: u64, ns: u32, n: usize) -> (Array2<i16>, Ar
     (t, x)
 }
 
-fn bench_rlda(seed: u32, ns: u32, nb: u32, n: u32, nv: u32, p: u32, ntest: u32, group: &mut BenchMarkGroup) {
+fn bench_rlda(
+    seed: u32,
+    ns: u32,
+    nb: u32,
+    n: u32,
+    nv: u32,
+    p: u32,
+    ntest: u32,
+    group: &mut BenchMarkGroup,
+) {
     group.bench_with_input(
         BenchmarkId::new(
-            format!("RLDA-UNI-TEST ns:{} ; nb:{} ; n:{} ; nv:{} ; p:{} ; ntest:{}", ns, nb, n, nv, p, ntest),
+            format!(
+                "RLDA-UNI-TEST ns:{} ; nb:{} ; n:{} ; nv:{} ; p:{} ; ntest:{}",
+                ns, nb, n, nv, p, ntest
+            ),
             nv,
         ),
         &nv,
         |b, _| {
-            // RNG 
+            // RNG
             let seed = seed as u64;
             let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
 
             // Generate inputs
-            let traces =
-                Array2::<i16>::random_using((n as usize, ns as usize), Uniform::new(0, 10), &mut rng);
+            let traces = Array2::<i16>::random_using(
+                (n as usize, ns as usize),
+                Uniform::new(0, 10),
+                &mut rng,
+            );
 
             let labels = Array2::<u64>::random_using(
                 (nv as usize, n as usize),

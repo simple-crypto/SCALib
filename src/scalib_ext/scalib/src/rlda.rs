@@ -77,6 +77,8 @@ pub struct RLDA {
     pub proj_coefs: Array3<f64>,
     /// Precomputed partial mus. Shape of (nv,n_chunks,size_chunk,p)
     pub mu_chunks: Array4<f64>,
+    // Regression coeficient at each time sample
+    pub reg_coefs: Array3<f64>,
 }
 
 /// Coefficient bit from a class. 0th bit is always 1, ith bit is i-1 th bit of c
@@ -119,6 +121,7 @@ impl RLDA {
             norm_proj: Array3::zeros((nv, p, ns)),
             proj_coefs: Array3::zeros((nv, p, nb + 1)),
             mu_chunks: Array4::zeros((nv, n_chunks, SIZE_CHUNK, p)),
+            reg_coefs: Array3::zeros((nv, nb + 1, ns)),
         }
     }
 
@@ -173,7 +176,8 @@ impl RLDA {
     }
 
     fn solve_variable(
-        reg_coefs: &mut Array2<f64>,
+        //reg_coefs: &mut Array2<f64>,
+        mut reg_coefs: ArrayViewMut2<f64>,
         mut norm_proj: ArrayViewMut2<f64>,
         mut proj_coefs: ArrayViewMut2<f64>,
         mut mu_chunks: ArrayViewMut3<f64>,
@@ -213,9 +217,9 @@ impl RLDA {
         //     s_m = sum_{b} (coef^T*b)*(coef^T*b)^T
         //         = coef^T * [sum_{b} b*b^T] * coef
         //         = coef^T * (self.xtx) * coef
-        let nt_mu: Array1<f64> = xtx.slice(s![0usize, ..]).dot(reg_coefs);
+        let nt_mu: Array1<f64> = xtx.slice(s![0usize, ..]).dot(&reg_coefs);
         let mu = nt_mu / n as f64;
-        let s_m = reg_coefs.t().dot(&xtx).dot(reg_coefs);
+        let s_m = reg_coefs.t().dot(&xtx).dot(&reg_coefs);
         let s_b = &s_m - (n as f64) * mu.slice(s![.., NewAxis,]).dot(&mu.slice(s![NewAxis, ..]));
         // Dimentionality reduction (LDA part)
         // The idea is to solve the generalized eigenproblem (l,w)
@@ -228,7 +232,7 @@ impl RLDA {
         //     = sum_{trace} trace*trace^T - trace*(coefs^T*b)^T - (coefs^T*b)*trace^T  + (coefs^T*b)*(coefs^T*b)^T
         //     = s_t - xty^T*coef - coef.T*xty + s_m
         //     (s_t is self.scatter)
-        let s_w = &scatter + s_m - &xty.t().dot(reg_coefs) - &reg_coefs.t().dot(&xty);
+        let s_w = &scatter + s_m - &xty.t().dot(&reg_coefs) - &reg_coefs.t().dot(&xty);
         let ns = norm_proj.shape()[1];
 
         let projection = if p == ns {
@@ -287,24 +291,22 @@ impl RLDA {
         let res = Zip::indexed(self.norm_proj.outer_iter_mut())
             .and(self.proj_coefs.outer_iter_mut())
             .and(self.mu_chunks.outer_iter_mut())
+            .and(self.reg_coefs.outer_iter_mut())
             .into_par_iter()
-            .try_for_each_init(
-                || return Array2::zeros((self.nb + 1, self.ns)),
-                |reg_coefs, (k, norm_proj, proj_coefs, mu_chunks)| {
-                    RLDA::solve_variable(
-                        reg_coefs,
-                        norm_proj,
-                        proj_coefs,
-                        mu_chunks,
-                        self.xtx.slice(s![k, .., ..]),
-                        self.xty.slice(s![k, .., ..]),
-                        self.scatter.view(),
-                        self.nb,
-                        self.p,
-                        self.n,
-                    )
-                },
-            );
+            .try_for_each(|(k, norm_proj, proj_coefs, mu_chunks, reg_coefs)| {
+                RLDA::solve_variable(
+                    reg_coefs,
+                    norm_proj,
+                    proj_coefs,
+                    mu_chunks,
+                    self.xtx.slice(s![k, .., ..]),
+                    self.xty.slice(s![k, .., ..]),
+                    self.scatter.view(),
+                    self.nb,
+                    self.p,
+                    self.n,
+                )
+            });
         match res {
             Ok(_) => Ok(()),
             Err(err) => Err(err),
