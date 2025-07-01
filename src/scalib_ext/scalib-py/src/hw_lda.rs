@@ -25,7 +25,7 @@ impl HwLdaAcc {
     }
     /// Add measurements to the accumulator
     /// x: traces with shape (n,ns)
-    /// y: random value realization (n,)
+    /// y: random value realization (n,nv)
     fn fit(
         &mut self,
         py: Python,

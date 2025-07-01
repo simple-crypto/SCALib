@@ -111,9 +111,11 @@ impl HwLdaAcc {
             .and(self.xty.outer_iter_mut())
             .into_par_iter()
             .for_each(|(k, mut xtx, mut xty)| {
-                let classes = classes.slice(s![k, ..]);
+                // len nv
+                let classes = classes.slice(s![k, ..]); // len nt
                 let mut s_hw = 0.0;
                 let mut s_hw_sq = 0.0;
+                // weird, traces_buf.outer_ier will produces ns vector of len nt
                 for (c, t) in classes.iter().zip(traces_buf.outer_iter()) {
                     let hw = centered_hw(*c, self.nb);
                     s_hw += hw;

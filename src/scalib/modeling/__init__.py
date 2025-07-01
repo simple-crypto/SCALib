@@ -28,12 +28,10 @@ __all__ = [
     "LdaAcc",
     "Lda",
     "RLDAClassifier",
+    "HwLda",
+    "HwLdaAcc",
 ]
 
-from .lda import (
-    LDAClassifier,
-    MultiLDA,
-    LdaAcc,
-    Lda,
-)
+from .lda import LDAClassifier, MultiLDA, LdaAcc, Lda
 from .rldaclassifier import RLDAClassifier
+from .hwlda import HwLda, HwLdaAcc
