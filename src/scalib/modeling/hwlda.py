@@ -79,7 +79,7 @@ class HwLdaAcc:
         self._init = False
 
     def fit_u(
-        self, traces: npt.NDArray[np.int16], x: npt.NDArray[np.uint64], gemm_mode=1
+        self, traces: npt.NDArray[np.int16], x: npt.NDArray[np.uint64]
     ):
         """Update statistical model estimates with additional data.
 
@@ -99,7 +99,7 @@ class HwLdaAcc:
             self._ns = traces.shape[1]
             self._nv = x.shape[1]
             self._inner = _scalib_ext.HwLdaAcc(self._nb, self._ns, self._nv)
-        self._inner.update(traces, x.T, gemm_mode, get_config())
+        self._inner.fit(traces, x.T, get_config())
 
 
 class HwLda:
