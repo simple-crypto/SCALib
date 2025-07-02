@@ -69,6 +69,16 @@ fn binomials(n: u64) -> Vec<u64> {
     }
 }
 
+// Return a vector of length n+1 containing the value containing 0 to n bit set.
+fn one_hot_values(n: u64) -> Vec<u64> {
+    assert!(n > 0);
+    let mut v = vec![0];
+    for bi in 1..(n+1) {
+        v.push((v[(bi-1) as usize] << 1) | 1);
+    }
+    return v;
+}
+
 impl HwLdaAcc {
     pub fn new(nb: u32, ns: u32, nv: u32) -> Self {
         Self {
@@ -362,5 +372,123 @@ impl HwLda {
             },
         );
         return res;
+    }
+
+    // Predict the probabilities associated to the HW 
+    /*
+    pub fn predict_hw_probas(&self, traces: ArrayView2<i16>) {
+        let binoms = binomials((self.nb + 1).into()); 
+        let ohot = one_hot_values(self.nb as u64);
+        let (n, _) = traces.dim();
+        let mut hw_prs = Array3::<f64>::zeros((self.nv as usize, n as usize, (self.nb + 1) as usize));
+    }
+    */
+}
+
+
+#[cfg(test)]
+mod tests_hwlda {
+    use super::*;
+    use ndarray::{Array1, Array2, Array3, ArrayView3};
+    use ndarray_rand::rand::SeedableRng;
+    use ndarray_rand::rand_distr::{Normal, Uniform};
+    use ndarray_rand::RandomExt;
+    use rand_xoshiro::Xoshiro256StarStar;
+
+    fn generate_data_bits(rng: &mut Xoshiro256StarStar, n: u32, nv: u32, nb: u32) -> Array3<u32>{
+        Array3::<u32>::random_using((n as usize, nv as usize, nb as usize), Uniform::new(0,2), rng)
+    }
+    
+    fn data_u32_from_bits(data_bits: ArrayView3<u32>) -> Array2<u32> {
+        let (n, nv, nb) = data_bits.dim();
+        let mut arr = Array2::<u32>::zeros((n, nv));
+        for ni in 0..n {
+            for vi in 0..nv {
+                for bi in 0..nb {
+                    arr[(ni, vi)] |= data_bits[(ni, vi, bi)] << vi;
+                }
+            }
+        }
+        arr
+    }
+
+    fn hw_from_bits(data_bits: ArrayView3<u32>) -> Array2<u32> {
+        data_bits.sum_axis(Axis(2))
+    }
+
+    fn hw_leakage_from_bits(data_bits: ArrayView3<u32>, nstd: f64, rng: &mut Xoshiro256StarStar) -> (Array2<i16>, Array2<u32>) {
+        // Compute the hamming weight 
+        let hwraw = hw_from_bits(data_bits);
+        let hw = hwraw.mapv(|v| f64::from(v));
+        let (n, nv) = hw.dim();
+        // Simulate the noise 
+        let noise = Array2::<f64>::random_using((n, nv), Normal::new(f64::from(0.0), nstd).unwrap(), rng);
+        let ret = noise + hw;
+        (ret.mapv(|v| v.round() as i16), hwraw)
+    }
+
+    fn test_simple_run() {
+        let seed = 0 as u64;
+        let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
+
+        // Generate data
+        let n = 100;
+        let nv = 1;
+        let ns = nv;
+        let nb = 2;
+
+        // Noise std for traces simulation
+        let nstd = 0.0;
+
+        // Training data
+        let data_bits = generate_data_bits(&mut rng, n, nv, nb);
+        let classes = data_u32_from_bits(data_bits.view()).mapv(|v| v as u64);
+        let (traces, hwraw) = hw_leakage_from_bits(data_bits.view(), nstd, &mut rng);
+
+        // Create the HwLdaAcc
+        let mut hwldaacc = HwLdaAcc::new(nb, nv, nv);
+        hwldaacc.update(traces.view(), classes.t().view(), 0);
+
+        // Solve to test 
+        let hwlda = hwldaacc.solve().unwrap();
+
+        // Validation data
+        let n_validation  = 10;
+        let vdata_bits = generate_data_bits(&mut rng, n_validation, nv, nb);
+        let vclasses = data_u32_from_bits(vdata_bits.view()).mapv(|v| v as u64);
+        let (vtraces, vhwraw) = hw_leakage_from_bits(vdata_bits.view(), nstd, &mut rng);
+
+        // Predict
+        let probs = hwlda.predict_proba(vtraces.view(), 0);
+        let mprs = probs.fold_axis(Axis(1), -1000000.0, |m, e| {
+            if e>m {
+                return *e;
+            } else {
+                return *m;
+            }
+        }); 
+
+        println!("{}",mprs);
+
+        for ni in 0..n_validation {
+            // max values found for the entry
+            let mv = mprs[ni as usize];
+            // Correct class uses 
+            let cl = vclasses[(ni as usize,0)] as u32;
+            // Probability associated to the correct class 
+            let pr = probs[(ni as usize,cl as usize)];
+            println!("==> {}", ni);
+            println!("{}", probs.slice(s![ni as usize, ..]));
+            println!("{}", vdata_bits.slice(s![ni as usize, 0, ..]));
+            println!("L(x) {:#?} (raw: {:#?})", vtraces[(ni as usize,0)],  vhwraw[(ni as usize,0)]);
+            println!("{} {} {}\n", cl, mv, pr);
+            // assert that the proba is in fact the maximum
+            assert!((mv-pr).abs() < 0.00001, "FAILURE");
+        }
+    }
+
+    #[test]
+    fn test_ref() {
+        test_simple_run();
     }
 }
