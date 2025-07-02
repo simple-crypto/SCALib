@@ -73,8 +73,8 @@ fn binomials(n: u64) -> Vec<u64> {
 fn one_hot_values(n: u64) -> Vec<u64> {
     assert!(n > 0);
     let mut v = vec![0];
-    for bi in 1..(n+1) {
-        v.push((v[(bi-1) as usize] << 1) | 1);
+    for bi in 1..(n + 1) {
+        v.push((v[(bi - 1) as usize] << 1) | 1);
     }
     return v;
 }
@@ -312,7 +312,7 @@ impl HwLda {
     /// return the log2 probability of one possible value for leakage samples
     /// traces with shape (n,ns)
     /// y with shape (n, nv)
-    /// return prs with shape (nv,n), proba of the corresponding y
+    /// return prs with shape (n,nv), proba of the corresponding y
     pub fn predict_log2p1(&self, traces: ArrayView2<i16>, y: ArrayView2<u64>) -> Array2<f64> {
         let mut proj_traces = Array3::zeros((self.nv as usize, traces.len_of(Axis(0)), 1));
         for (var, mut proj_traces) in proj_traces.outer_iter_mut().enumerate() {
@@ -374,17 +374,32 @@ impl HwLda {
         return res;
     }
 
-    // Predict the probabilities associated to the HW 
-    /*
-    pub fn predict_hw_probas(&self, traces: ArrayView2<i16>) {
-        let binoms = binomials((self.nb + 1).into()); 
+    // Predict the probabilities associated to the HW
+    pub fn predict_hw_probas(&self, traces: ArrayView2<i16>) -> Array3<f64> {
+        let binoms = binomials((self.nb + 1).into());
         let ohot = one_hot_values(self.nb as u64);
         let (n, _) = traces.dim();
-        let mut hw_prs = Array3::<f64>::zeros((self.nv as usize, n as usize, (self.nb + 1) as usize));
+        let mut hw_prs =
+            Array3::<f64>::zeros((self.nv as usize, n as usize, (self.nb + 1) as usize));
+        for hwi in 0..(self.nb + 1) {
+            // Generate the y matrix for log2 computation
+            let y = Array2::<u64>::from_elem((n as usize, self.nv as usize), ohot[hwi as usize]);
+            // log probas associated to the hw (nv, n)
+            let lprs = self.predict_log2p1(traces.view(), y.view());
+            println!("{:#?}",lprs);
+            // scaled with binomial
+            let prs = lprs.exp2() * f64::from(binoms[hwi as usize] as u32);
+            // assign
+            for ni in 0..n {
+                for nvi in 0..self.nv {
+                    hw_prs[(nvi as usize, ni as usize, hwi as usize)] =
+                        prs[(ni as usize, nvi as usize)];
+                }
+            }
+        }
+        hw_prs
     }
-    */
 }
-
 
 #[cfg(test)]
 mod tests_hwlda {
@@ -395,10 +410,14 @@ mod tests_hwlda {
     use ndarray_rand::RandomExt;
     use rand_xoshiro::Xoshiro256StarStar;
 
-    fn generate_data_bits(rng: &mut Xoshiro256StarStar, n: u32, nv: u32, nb: u32) -> Array3<u32>{
-        Array3::<u32>::random_using((n as usize, nv as usize, nb as usize), Uniform::new(0,2), rng)
+    fn generate_data_bits(rng: &mut Xoshiro256StarStar, n: u32, nv: u32, nb: u32) -> Array3<u32> {
+        Array3::<u32>::random_using(
+            (n as usize, nv as usize, nb as usize),
+            Uniform::new(0, 2),
+            rng,
+        )
     }
-    
+
     fn data_u32_from_bits(data_bits: ArrayView3<u32>) -> Array2<u32> {
         let (n, nv, nb) = data_bits.dim();
         let mut arr = Array2::<u32>::zeros((n, nv));
@@ -416,13 +435,18 @@ mod tests_hwlda {
         data_bits.sum_axis(Axis(2))
     }
 
-    fn hw_leakage_from_bits(data_bits: ArrayView3<u32>, nstd: f64, rng: &mut Xoshiro256StarStar) -> (Array2<i16>, Array2<u32>) {
-        // Compute the hamming weight 
+    fn hw_leakage_from_bits(
+        data_bits: ArrayView3<u32>,
+        nstd: f64,
+        rng: &mut Xoshiro256StarStar,
+    ) -> (Array2<i16>, Array2<u32>) {
+        // Compute the hamming weight
         let hwraw = hw_from_bits(data_bits);
         let hw = hwraw.mapv(|v| f64::from(v));
         let (n, nv) = hw.dim();
-        // Simulate the noise 
-        let noise = Array2::<f64>::random_using((n, nv), Normal::new(f64::from(0.0), nstd).unwrap(), rng);
+        // Simulate the noise
+        let noise =
+            Array2::<f64>::random_using((n, nv), Normal::new(f64::from(0.0), nstd).unwrap(), rng);
         let ret = noise + hw;
         (ret.mapv(|v| v.round() as i16), hwraw)
     }
@@ -449,11 +473,11 @@ mod tests_hwlda {
         let mut hwldaacc = HwLdaAcc::new(nb, nv, nv);
         hwldaacc.update(traces.view(), classes.t().view(), 0);
 
-        // Solve to test 
+        // Solve to test
         let hwlda = hwldaacc.solve().unwrap();
 
         // Validation data
-        let n_validation  = 10;
+        let n_validation = 10;
         let vdata_bits = generate_data_bits(&mut rng, n_validation, nv, nb);
         let vclasses = data_u32_from_bits(vdata_bits.view()).mapv(|v| v as u64);
         let (vtraces, vhwraw) = hw_leakage_from_bits(vdata_bits.view(), nstd, &mut rng);
@@ -461,29 +485,34 @@ mod tests_hwlda {
         // Predict
         let probs = hwlda.predict_proba(vtraces.view(), 0);
         let mprs = probs.fold_axis(Axis(1), -1000000.0, |m, e| {
-            if e>m {
+            if e > m {
                 return *e;
             } else {
                 return *m;
             }
-        }); 
+        });
 
-        println!("{}",mprs);
+        let hwprobs = hwlda.predict_hw_probas(vtraces.view());
 
         for ni in 0..n_validation {
             // max values found for the entry
             let mv = mprs[ni as usize];
-            // Correct class uses 
-            let cl = vclasses[(ni as usize,0)] as u32;
-            // Probability associated to the correct class 
-            let pr = probs[(ni as usize,cl as usize)];
+            // Correct class uses
+            let cl = vclasses[(ni as usize, 0)] as u32;
+            // Probability associated to the correct class
+            let pr = probs[(ni as usize, cl as usize)];
             println!("==> {}", ni);
             println!("{}", probs.slice(s![ni as usize, ..]));
             println!("{}", vdata_bits.slice(s![ni as usize, 0, ..]));
-            println!("L(x) {:#?} (raw: {:#?})", vtraces[(ni as usize,0)],  vhwraw[(ni as usize,0)]);
+            println!("{}", hwprobs.slice(s![0, ni as usize, ..]));
+            println!(
+                "L(x) {:#?} (raw: {:#?})",
+                vtraces[(ni as usize, 0)],
+                vhwraw[(ni as usize, 0)]
+            );
             println!("{} {} {}\n", cl, mv, pr);
             // assert that the proba is in fact the maximum
-            assert!((mv-pr).abs() < 0.00001, "FAILURE");
+            assert!((mv - pr).abs() < 0.00001, "FAILURE");
         }
     }
 

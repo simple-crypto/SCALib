@@ -101,6 +101,16 @@ impl HwLda {
         let prs = config.on_worker(py, |_| self.inner.predict_log2p1(x, y));
         Ok(prs.into_pyarray(py))
     }
+    fn predict_hw_probas<'py>(
+        &self,
+        py: Python<'py>,
+        x: PyReadonlyArray2<i16>,
+        config: crate::ConfigWrapper,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let x = x.as_array();
+        let prs = config.on_worker(py, |_| self.inner.predict_hw_probas(x));
+        Ok(prs.into_pyarray(py))
+    }
     fn project<'py>(
         &self,
         py: Python<'py>,

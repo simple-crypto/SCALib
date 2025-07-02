@@ -78,9 +78,7 @@ class HwLdaAcc:
         self._nb = nb
         self._init = False
 
-    def fit_u(
-        self, traces: npt.NDArray[np.int16], x: npt.NDArray[np.uint64]
-    ):
+    def fit_u(self, traces: npt.NDArray[np.int16], x: npt.NDArray[np.uint64]):
         """Update statistical model estimates with additional data.
 
         This can be called multiple times, the state is accumulated.
@@ -149,6 +147,23 @@ class HwLda:
             Probabilities. Shape ``(nv,n)``.
         """
         return self._inner.predict_log2_proba_class(traces, labels.T, get_config())
+
+    def predict_hw_probas(
+        self, traces: npt.NDArray[np.int16]
+    ) -> npt.NDArray[np.float64]:
+        r"""Computes the probability for each of the corresponding HWs.
+
+        Parameters
+        ----------
+        traces:
+            Array that contains the traces. Shape ``(n,ns)``.
+
+        Returns
+        -------
+        array_like, f64
+            Probabilities. Shape ``(nv,n, 2**nb + 1)``.
+        """
+        return self._inner.predict_hw_probas(traces, get_config())
 
     def project(
         self, traces: npt.NDArray[np.int16], var: int

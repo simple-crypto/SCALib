@@ -34,12 +34,13 @@ def u64_data_from_bits(data_bits):
             u64d[:, nv] |= data_bits[:, nv, bi] << bi
     return u64d
 
+
 def generate_noiseless_HW_traces_mvars(data_bits):
     return np.sum(data_bits, axis=2).astype(np.int16)
 
 
 def test_run_hwlda():
-    nb = 4
+    nb = 6
     nv = 1
     n = 100
 
@@ -52,9 +53,18 @@ def test_run_hwlda():
 
     hwlda = HwLda(hwldaacc)
     proba = hwlda.predict_proba(hw_nfree, 0)
+    mproba = np.max(proba, axis=1)
+
+    hwprobaas = hwlda.predict_hw_probas(hw_nfree)
 
     for i in range(n):
-        print(f'{i} ; {hw_nfree[i,0]} -  {proba[i, hw_nfree[i,0]]}')
+        mv = mproba[i]
+        ci = data_u64[i, 0]
+        pci = proba[i, ci]
+        print(f"{i} ; {hw_nfree[i,0]} -  {proba[i, hw_nfree[i,0]]}")
+        print(hwprobaas[0, i])
+        print(mv, ci, pci)
+        print(proba[i])
+        print()
 
     print(proba.shape)
-
