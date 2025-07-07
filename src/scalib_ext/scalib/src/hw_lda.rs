@@ -325,7 +325,7 @@ impl HwLda {
         let mut scores: Array3<f64> = Array3::zeros((
             traces.len_of(Axis(0)),
             self.nv as usize,
-            self.nb as usize + 1,
+            (1 << self.nb) as usize , // Here, was self.nb
         ));
 
         Zip::from(scores.outer_iter_mut())
@@ -348,11 +348,13 @@ impl HwLda {
 
         let scores = scores.mapv(|x| -0.5 * x);
 
-        let bin = binomials(self.nb as u64)
+        let bin = binomials((self.nb +1 )as u64) // Here, was self.nb
             .into_iter()
             .map(|x| x as f64)
             .collect::<Vec<_>>();
         let mut res = Array2::zeros(y.dim());
+
+
         azip!(res.outer_iter_mut(), scores.outer_iter(), y.outer_iter()).for_each(
             |mut res, scores, y| {
                 azip!(res.outer_iter_mut(), scores.outer_iter(), y.outer_iter()).for_each(
@@ -360,10 +362,13 @@ impl HwLda {
                         let max = scores
                             .iter()
                             .fold(f64::NEG_INFINITY, |x, y| f64::max(x, *y));
+                        println!("DEBUG scores {:#?}",scores);
+                        println!("DEBUG bin {:#?}",bin);
+                        println!("DEBUG max {:#?}\n",max);
                         let sum = scores
                             .iter()
                             .zip(bin.iter())
-                            .map(|(d, b)| d * f64::exp(b - max))
+                            .map(|(d, b)| b * f64::exp(d - max))
                             .sum();
                         *res.into_scalar() = (scores[y.into_scalar().count_ones() as usize] - max)
                             * f64::consts::LOG2_E
