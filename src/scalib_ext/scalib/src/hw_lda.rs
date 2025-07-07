@@ -56,8 +56,8 @@ fn centered_hw(class: u64, nb: u32) -> f64 {
 }
 
 fn binomials(n: u64) -> Vec<u64> {
-    assert!(n > 0);
-    if n == 1 {
+    assert!(n >= 0);
+    if n == 0 {
         return vec![1];
     } else {
         let x = binomials(n - 1);
@@ -325,7 +325,7 @@ impl HwLda {
         let mut scores: Array3<f64> = Array3::zeros((
             traces.len_of(Axis(0)),
             self.nv as usize,
-            (1 << self.nb) as usize , // Here, was self.nb
+            (self.nb + 1) as usize , 
         ));
 
         Zip::from(scores.outer_iter_mut())
@@ -348,12 +348,11 @@ impl HwLda {
 
         let scores = scores.mapv(|x| -0.5 * x);
 
-        let bin = binomials((self.nb +1 )as u64) // Here, was self.nb
+        let bin = binomials((self.nb)as u64) // Here, was self.nb
             .into_iter()
             .map(|x| x as f64)
             .collect::<Vec<_>>();
         let mut res = Array2::zeros(y.dim());
-
 
         azip!(res.outer_iter_mut(), scores.outer_iter(), y.outer_iter()).for_each(
             |mut res, scores, y| {
@@ -362,9 +361,6 @@ impl HwLda {
                         let max = scores
                             .iter()
                             .fold(f64::NEG_INFINITY, |x, y| f64::max(x, *y));
-                        println!("DEBUG scores {:#?}",scores);
-                        println!("DEBUG bin {:#?}",bin);
-                        println!("DEBUG max {:#?}\n",max);
                         let sum = scores
                             .iter()
                             .zip(bin.iter())
@@ -382,7 +378,7 @@ impl HwLda {
 
     // Predict the probabilities associated to the HW
     pub fn predict_hw_probas(&self, traces: ArrayView2<i16>) -> Array3<f64> {
-        let binoms = binomials((self.nb + 1).into());
+        let binoms = binomials((self.nb).into());
         let ohot = one_hot_values(self.nb as u64);
         let (n, _) = traces.dim();
         let mut hw_prs =
@@ -392,7 +388,6 @@ impl HwLda {
             let y = Array2::<u64>::from_elem((n as usize, self.nv as usize), ohot[hwi as usize]);
             // log probas associated to the hw (nv, n)
             let lprs = self.predict_log2p1(traces.view(), y.view());
-            println!("{:#?}",lprs);
             // scaled with binomial
             let prs = lprs.exp2() * f64::from(binoms[hwi as usize] as u32);
             // assign
@@ -458,11 +453,11 @@ mod tests_hwlda {
     }
 
     fn test_simple_run() {
-        let seed = 0 as u64;
+        let seed = 1 as u64;
         let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
 
         // Generate data
-        let n = 100;
+        let n = 4;
         let nv = 1;
         let ns = nv;
         let nb = 2;
@@ -490,7 +485,8 @@ mod tests_hwlda {
 
         // Predict
         let probs = hwlda.predict_proba(vtraces.view(), 0);
-        let mprs = probs.fold_axis(Axis(1), -1000000.0, |m, e| {
+        println!("==> {:#?}", probs.dim());
+        let mprs = probs.fold_axis(Axis(1), -2.0, |m, e| {
             if e > m {
                 return *e;
             } else {
@@ -499,6 +495,7 @@ mod tests_hwlda {
         });
 
         let hwprobs = hwlda.predict_hw_probas(vtraces.view());
+        let lprobs = hwlda.predict_log2p1(vtraces.view(), vclasses.view());
 
         for ni in 0..n_validation {
             // max values found for the entry
@@ -516,9 +513,14 @@ mod tests_hwlda {
                 vtraces[(ni as usize, 0)],
                 vhwraw[(ni as usize, 0)]
             );
+            let pr_prob = pr.log2();
+            println!("log pr from pr {}", pr_prob);
+            println!("log pr from fn {}", lprobs[(ni as usize, 0)]);
+            assert!((pr_prob - lprobs[(ni as usize, 0)]).abs() < 0.00001, "log2 FAILURE");
+
             println!("{} {} {}\n", cl, mv, pr);
             // assert that the proba is in fact the maximum
-            assert!((mv - pr).abs() < 0.00001, "FAILURE");
+            assert!((mv - pr).abs() < 0.00001, "Max FAILURE");
         }
     }
 
