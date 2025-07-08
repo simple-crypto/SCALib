@@ -46,6 +46,8 @@ pub struct HwLda {
     norm_proj: Array3<f64>,
     /// Regression coefficients in the projected subspace. Shape of (nv,1,2)
     proj_coefs: Array3<f64>,
+    // Regression coeficient at each time sample
+    pub reg_coefs: Array3<f64>,
 }
 
 fn center_hw(hw: u32, nb: u32) -> f64 {
@@ -104,7 +106,7 @@ impl HwLdaAcc {
 
         self.n_traces += u64::try_from(nt).unwrap();
         let traces_buf = traces.mapv(|x| x as f64);
-        self.traces_sum.add_assign(&traces_buf.sum_axis(Axis(0)));
+        self.traces_sum.add_assign(&traces_buf.sum_axis(Axis(0))); // len (ns,)
 
         // Accumulate leakage outer product into scatter
         crate::matrixmul::opt_dgemm(
@@ -120,28 +122,32 @@ impl HwLdaAcc {
         Zip::indexed(self.xtx.outer_iter_mut())
             .and(self.xty.outer_iter_mut())
             .into_par_iter()
-            .for_each(|(k, mut xtx, mut xty)| {
-                // len nv
-                let classes = classes.slice(s![k, ..]); // len nt
+            .for_each(|(k, mut xtx, mut xty)| { // xtx: (2,2); xty: (2,ns)
+                let classes = classes.slice(s![k, ..]); 
                 let mut s_hw = 0.0;
                 let mut s_hw_sq = 0.0;
-                // weird, traces_buf.outer_ier will produces ns vector of len nt
+                // classes: (nt, )
+                // traces_buf: (nt, ns)
                 for (c, t) in classes.iter().zip(traces_buf.outer_iter()) {
+                    // c: f64 
+                    // t: (ns, )
                     let hw = centered_hw(*c, self.nb);
                     s_hw += hw;
                     s_hw_sq += hw * hw;
                     azip!(xty.slice_mut(s![0, ..]), &t).for_each(|xty, t| *xty += hw * *t);
+                    azip!(xty.slice_mut(s![1, ..]), &t).for_each(|xty, t| *xty += *t);
                 }
                 *xtx.get_mut((0, 0)).unwrap() += s_hw_sq;
                 *xtx.get_mut((1, 0)).unwrap() += s_hw;
                 *xtx.get_mut((0, 1)).unwrap() += s_hw;
                 *xtx.get_mut((1, 1)).unwrap() += classes.len() as f64;
-                xty.slice_mut(s![1, ..]).add_assign(classes.len() as f64);
+                // Here, should be sum of traces no? 
+                //xty.slice_mut(s![1, ..]).add_assign(classes.len() as f64);
             });
     }
 
     fn solve_variable(
-        reg_coefs: &mut Array2<f64>, // scratch space
+        mut reg_coefs: ArrayViewMut2<f64>, // scratch space
         mut norm_proj: ArrayViewMut2<f64>,
         mut proj_coefs: ArrayViewMut2<f64>,
         xtx: ArrayView2<f64>,
@@ -152,6 +158,9 @@ impl HwLdaAcc {
         // Compute linear regression
         reg_coefs.view_mut().assign(&xty);
         let xtx_nalgebra = xtx.into_nalgebra();
+
+        println!("XTX:\n{:#?}", xtx);
+        println!("XTY:\n{:#?}", xty);
 
         let cholesky = xtx_nalgebra
             .cholesky()
@@ -170,9 +179,9 @@ impl HwLdaAcc {
         //     s_m = sum_{b} (coef^T*b)*(coef^T*b)^T
         //         = coef^T * [sum_{b} b*b^T] * coef
         //         = coef^T * (self.xtx) * coef
-        let nt_mu: Array1<f64> = xtx.slice(s![0usize, ..]).dot(reg_coefs);
+        let nt_mu: Array1<f64> = xtx.slice(s![0usize, ..]).dot(&reg_coefs);
         let mu = nt_mu / n as f64;
-        let s_m = reg_coefs.t().dot(&xtx).dot(reg_coefs);
+        let s_m = reg_coefs.t().dot(&xtx).dot(&reg_coefs);
         let s_b = &s_m - (n as f64) * mu.slice(s![.., NewAxis,]).dot(&mu.slice(s![NewAxis, ..]));
         // Dimentionality reduction (LDA part)
         // The idea is to solve the generalized eigenproblem (l,w)
@@ -185,7 +194,7 @@ impl HwLdaAcc {
         //     = sum_{trace} trace*trace^T - trace*(coefs^T*b)^T - (coefs^T*b)*trace^T  + (coefs^T*b)*(coefs^T*b)^T
         //     = s_t - xty^T*coef - coef.T*xty + s_m
         //     (s_t is self.scatter)
-        let s_w = &scatter + s_m - &xty.t().dot(reg_coefs) - &reg_coefs.t().dot(&xty);
+        let s_w = &scatter + s_m - &xty.t().dot(&reg_coefs) - &reg_coefs.t().dot(&xty);
         let ns = norm_proj.shape()[1];
 
         let projection = if ns == 1 {
@@ -223,12 +232,13 @@ impl HwLdaAcc {
     pub fn solve(&self) -> Result<HwLda, ScalibError> {
         let mut norm_proj = Array3::zeros((self.nv as usize, self.ns as usize, 1));
         let mut proj_coefs = Array3::zeros((self.nv as usize, 1, 2));
+        let mut reg_coefs = Array3::zeros((self.nv as usize, 2, self.ns as usize));
         let res = Zip::indexed(norm_proj.outer_iter_mut())
             .and(proj_coefs.outer_iter_mut())
+            .and(reg_coefs.outer_iter_mut())
             .into_par_iter()
-            .try_for_each_init(
-                || return Array2::zeros((2, self.ns as usize)),
-                |reg_coefs, (k, norm_proj, proj_coefs)| {
+            .try_for_each(
+                |(k, norm_proj, proj_coefs, reg_coefs)| {
                     Self::solve_variable(
                         reg_coefs,
                         norm_proj,
@@ -247,6 +257,7 @@ impl HwLdaAcc {
                 nb: self.nb,
                 norm_proj,
                 proj_coefs,
+                reg_coefs,
             }),
             Err(err) => Err(err),
         }
@@ -425,7 +436,7 @@ mod tests_hwlda {
         for ni in 0..n {
             for vi in 0..nv {
                 for bi in 0..nb {
-                    arr[(ni, vi)] |= data_bits[(ni, vi, bi)] << vi;
+                    arr[(ni, vi)] |= (data_bits[(ni, vi, bi)] << bi);
                 }
             }
         }
@@ -474,18 +485,26 @@ mod tests_hwlda {
         let mut hwldaacc = HwLdaAcc::new(nb, nv, nv);
         hwldaacc.update(traces.view(), classes.t().view(), 0);
 
+        println!("TRACES\n{}",traces);
+        println!("BITS\n{}",data_bits);
+        println!("CLASSES\n{}",classes);
+        println!("\n");
+
         // Solve to test
         let hwlda = hwldaacc.solve().unwrap();
 
         // Validation data
-        let n_validation = 10;
+        let n_validation = 1;
         let vdata_bits = generate_data_bits(&mut rng, n_validation, nv, nb);
         let vclasses = data_u32_from_bits(vdata_bits.view()).mapv(|v| v as u64);
         let (vtraces, vhwraw) = hw_leakage_from_bits(vdata_bits.view(), nstd, &mut rng);
 
+
+
         // Predict
         let probs = hwlda.predict_proba(vtraces.view(), 0);
-        println!("==> {:#?}", probs.dim());
+        println!("REG_COEFS\n{:#?}",hwlda.reg_coefs);
+
         let mprs = probs.fold_axis(Axis(1), -2.0, |m, e| {
             if e > m {
                 return *e;
