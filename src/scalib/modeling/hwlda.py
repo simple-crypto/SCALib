@@ -127,6 +127,7 @@ class HwLda:
         array_like, f64
             Probabilities. Shape ``(n, nc)``.
         """
+        traces = scalib.utils.clean_traces(traces, self._ns)
         return self._inner.predict_proba(traces, var, get_config())
 
     def predict_log2p1(
@@ -146,7 +147,9 @@ class HwLda:
         array_like, f64
             Probabilities. Shape ``(nv,n)``.
         """
-        return self._inner.predict_log2_proba_class(traces, labels.T, get_config())
+        traces = scalib.utils.clean_traces(traces, self._ns)
+        labels = scalib.utils.clean_labels(labels, self._nv, exp_type=np.uint64)
+        return self._inner.predict_log2_proba_class(traces, labels, get_config())
 
     def predict_hw_probas(
         self, traces: npt.NDArray[np.int16]
@@ -163,6 +166,7 @@ class HwLda:
         array_like, f64
             Probabilities. Shape ``(nv,n, 2**nb + 1)``.
         """
+        traces = scalib.utils.clean_traces(traces, self._ns)
         return self._inner.predict_hw_probas(traces, get_config())
 
     def project(
