@@ -211,10 +211,11 @@ impl HwLdaAcc {
         // (we'd like it to be for later simplicity), hence a apply a rotation.
         // The new residual is projection*(trace-coefs^T*b), hence its scatter is
         // projection*s_w*projection^T
-        #[cfg(test)]{
-            println!("[DEBUG] shape norm_proj: {:#?}",norm_proj.shape());
-            println!("[DEBUG] ns: {}",ns);
-            println!("[DEBUG] Projection: {}",projection);
+        #[cfg(test)]
+        {
+            println!("[DEBUG] shape norm_proj: {:#?}", norm_proj.shape());
+            println!("[DEBUG] ns: {}", ns);
+            println!("[DEBUG] Projection: {}", projection);
         }
         let cov_proj_res = projection.view().dot(&s_w).dot(&projection.t()) / (n as f64);
         // We decompose cov_proj_res N as N = V*W*V^T where V is orthonormal and W diagonal
@@ -228,10 +229,14 @@ impl HwLdaAcc {
         evals.mapv_inplace(|v| 1.0 / v.sqrt());
         let normalizing_proj_t = evecs * evals.slice(s![.., NewAxis]);
         // Storing projections and projected coefficients
-        #[cfg(test)]{
-            println!("[DEBUG] shape normalizing_proj_t: {:#?}",normalizing_proj_t.shape());
-            println!("[DEBUG] shape projection: {:#?}",projection.shape());
-            println!("[DEBUG] shape reg_coef: {:#?}",reg_coefs.shape());
+        #[cfg(test)]
+        {
+            println!(
+                "[DEBUG] shape normalizing_proj_t: {:#?}",
+                normalizing_proj_t.shape()
+            );
+            println!("[DEBUG] shape projection: {:#?}", projection.shape());
+            println!("[DEBUG] shape reg_coef: {:#?}", reg_coefs.shape());
         }
         //norm_proj.assign(&normalizing_proj_t.t().dot(&projection));
         norm_proj.assign(&projection.t().dot(&normalizing_proj_t));
@@ -278,7 +283,7 @@ impl HwLda {
     pub fn project(&self, traces: ArrayView2<i16>, v: u32) -> Array2<f64> {
         traces
             .mapv(|x| x as f64)
-            .dot(&self.norm_proj.slice(s![v as usize, .., ..]).t())
+            .dot(&self.norm_proj.slice(s![v as usize, .., ..])) //.t())
     }
     /// return the probability of each of the possible value for leakage samples
     /// x : traces with shape (n,ns)
@@ -495,13 +500,67 @@ mod tests_hwlda {
         let mut hwldaacc = HwLdaAcc::new(nb, nv, nv);
         hwldaacc.update(traces.view(), classes.t().view(), 0);
 
-        println!("[DEBUG] top ns: {}",ns);
-        println!("[DEBUG] shape traces: {:#?}",traces.dim());
-        println!("[DEBUG] shape classes: {:#?}",classes.dim());
+        println!("[DEBUG] top ns: {}", ns);
+        println!("[DEBUG] shape traces: {:#?}", traces.dim());
+        println!("[DEBUG] shape classes: {:#?}", classes.dim());
         // Solve to test
         let hwlda = hwldaacc.solve().unwrap();
-    }
 
+        // Validation data
+        let n_validation = 10;
+        let vdata_bits = generate_data_bits(&mut rng, n_validation, nv, nb);
+        let vclasses = data_u32_from_bits(vdata_bits.view()).mapv(|v| v as u64);
+        let (vtraces, vhwraw) = hw_leakage_from_bits(vdata_bits.view(), nstd, &mut rng);
+
+        // Global predict
+        let hwprobs = hwlda.predict_hw_probas(vtraces.view());
+        let lprobs = hwlda.predict_log2p1(vtraces.view(), vclasses.view());
+
+        // Predict
+        for vi in 0..nv {
+            println!("== Var {}", vi);
+            //// Predict probas
+            let probs = hwlda.predict_proba(vtraces.view(), vi);
+            // compute max probability
+            let mprs = probs.fold_axis(Axis(1), -2.0, |m, e| {
+                if e > m {
+                    return *e;
+                } else {
+                    return *m;
+                }
+            });
+            // Iterate over the trace
+            for ni in 0..n_validation {
+                let mv = mprs[ni as usize];
+                let cl = vclasses[(ni as usize, vi as usize)] as u32;
+                let pr = probs[(ni as usize, cl as usize)];
+                let pr_prob = pr.log2();
+                println!("==> V:{} ; n:{}", vi, ni);
+                println!("{}", probs.slice(s![ni as usize, ..]));
+                println!(
+                    "> pr {} = {}",
+                    cl,
+                    probs.slice(s![ni as usize, cl as usize])
+                );
+                println!("{}", vdata_bits.slice(s![ni as usize, vi as usize, ..]));
+                println!("{}", hwprobs.slice(s![vi as usize, ni as usize, ..]));
+                println!(
+                    "L(x) {:#?} ; scaled: {} (raw: {:#?})",
+                    vtraces[(ni as usize, vi as usize)],
+                    (vtraces[(ni as usize, vi as usize)] as f64) / (SCALE as f64),
+                    vhwraw[(ni as usize, vi as usize)]
+                );
+                println!("log pr from pr {}", pr_prob);
+                println!("log pr from fn {}", lprobs[(ni as usize, vi as usize)]);
+                // Verify max probability
+                assert!((mv - pr).abs() < 0.00001, "Max FAILURE");
+                assert!(
+                    (pr_prob - lprobs[(ni as usize, vi as usize)]).abs() < 0.00001,
+                    "Log2 failure"
+                );
+            }
+        }
+    }
 
     fn test_simple_run() {
         let seed = 1 as u64;
