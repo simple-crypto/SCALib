@@ -47,53 +47,6 @@ def generate_noisy_scaled_hw_mv(dbits, nstd, scale=1 << 10):
     return traces, noiseless_hw
 
 
-def test_run_hwlda_mvars_lownoise():
-    nb = 8
-    nv = 3
-    n = 10000
-    nstd = 0.1
-
-    SCALE = 1 << 10
-
-    # data generation for training
-    dbits = generate_random_data_bits(n, nv, nb)
-    traces, hw = generate_noisy_scaled_hw_mv(dbits, nstd, scale=SCALE)
-    du64 = u64_data_from_bits(dbits)
-
-    # Accumulator
-    hwldaacc = HwLdaAcc(nb)
-    hwldaacc.fit_u(traces, du64)
-
-    # Solve
-    hwlda = HwLda(hwldaacc)
-
-    # Data generation for prediction
-    nval = 20
-    pdbits = generate_random_data_bits(nval, nv, nb)
-    ptraces, phw = generate_noisy_scaled_hw_mv(pdbits, nstd)
-    pdu64 = u64_data_from_bits(pdbits)
-
-    # HW probas
-    hwprobaas = hwlda.predict_hw_probas(ptraces)
-    lprobas = hwlda.predict_log2p1(ptraces,pdu64)
-
-    for vi in range(nv):
-        # Prediction classes
-        proba = hwlda.predict_proba(ptraces, vi)
-        mproba = np.max(proba, axis=1)
-        for ni in range(nval):
-            print(f'\n## n: {ni} ; vi: {vi}')
-            print(f'L(x): {ptraces[ni,vi]} ; HW(x): {phw[ni,vi]} ; class: {pdu64[ni,vi]}')
-            c = pdu64[ni,vi]
-            prv = proba[ni,c]
-            print(f'Pr class:"{c}": {prv} (max is {mproba[ni]})')
-            assert np.allclose(prv, mproba[ni])
-            lprob = np.log2(prv)
-            print(f'lPr class:"{c}": {lprob} ; l2p1: {lprobas[ni, vi]}')
-            assert np.allclose(lprobas[ni, vi], lprob), "Log2 failure"
-            max_hwpr = np.argmax(hwprobaas[vi, ni])
-            assert max_hwpr==phw[ni, vi] 
-
 def test_run_hwlda_univariate_lownoise():
     nb = 4
     nv = 1
@@ -164,3 +117,54 @@ def test_run_hwlda_univariate_lownoise():
         print(f"logpr class {c}: {lpr[c]}")
         print(f"logpr: {lprl}")
         assert np.allclose(lpr[c], lprl), "Log proba failure"
+
+
+def test_run_hwlda_mvars_lownoise():
+    nb = 8
+    nv = 3
+    n = 10000
+    nstd = 0.1
+
+    SCALE = 1 << 10
+
+    # data generation for training
+    dbits = generate_random_data_bits(n, nv, nb)
+    traces, hw = generate_noisy_scaled_hw_mv(dbits, nstd, scale=SCALE)
+    du64 = u64_data_from_bits(dbits)
+
+    # Accumulator
+    hwldaacc = HwLdaAcc(nb)
+    hwldaacc.fit_u(traces, du64)
+
+    # Solve
+    hwlda = HwLda(hwldaacc)
+
+    # Data generation for prediction
+    nval = 20
+    pdbits = generate_random_data_bits(nval, nv, nb)
+    ptraces, phw = generate_noisy_scaled_hw_mv(pdbits, nstd)
+    pdu64 = u64_data_from_bits(pdbits)
+
+
+    # HW probas
+    hwprobaas = hwlda.predict_hw_probas(ptraces)
+    lprobas = hwlda.predict_log2p1(ptraces,pdu64)
+
+    for vi in range(nv):
+        # Prediction classes
+        proba = hwlda.predict_proba(ptraces, vi)
+        mproba = np.max(proba, axis=1)
+        for ni in range(nval):
+            print(f'\n## n: {ni} ; vi: {vi}')
+            print(f'L(x): {ptraces[ni,vi]} ; HW(x): {phw[ni,vi]} ; class: {pdu64[ni,vi]}')
+            c = pdu64[ni,vi]
+            prv = proba[ni,c]
+            print(f'Pr class:"{c}": {prv} (max is {mproba[ni]})')
+            assert np.allclose(prv, mproba[ni])
+            lprob = np.log2(prv)
+            print(f'lPr class:"{c}": {lprob} ; l2p1: {lprobas[ni, vi]}')
+            assert np.allclose(lprobas[ni, vi], lprob), "Log2 failure"
+            max_hwpr = np.argmax(hwprobaas[vi, ni])
+            assert max_hwpr==phw[ni, vi] 
+
+    print(ptraces)
