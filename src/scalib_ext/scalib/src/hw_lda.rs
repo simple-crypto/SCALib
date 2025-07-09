@@ -7,6 +7,7 @@ use ndarray::{
     ArrayViewMut3, Axis, NewAxis, Zip,
 };
 use nshare::{IntoNalgebra, IntoNdarray1, IntoNdarray2};
+use num_traits::one;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
@@ -166,6 +167,9 @@ impl HwLdaAcc {
             .cholesky()
             .expect("Failed Cholesky decomposition. ");
         cholesky.solve_mut(&mut reg_coefs.view_mut().into_nalgebra());
+
+        println!("REG_COEFS\n{:#?}",reg_coefs);
+
         // Between class scatter for LDA
         // Original LDA: sb = sum_{traces} (trace-mu)*(trace-mu)^T
         // here, we replace trace with the model coefs^T*b and we get
@@ -182,6 +186,7 @@ impl HwLdaAcc {
         let nt_mu: Array1<f64> = xtx.slice(s![0usize, ..]).dot(&reg_coefs);
         let mu = nt_mu / n as f64;
         let s_m = reg_coefs.t().dot(&xtx).dot(&reg_coefs);
+        println!("SM:{}",s_m);
         let s_b = &s_m - (n as f64) * mu.slice(s![.., NewAxis,]).dot(&mu.slice(s![NewAxis, ..]));
         // Dimentionality reduction (LDA part)
         // The idea is to solve the generalized eigenproblem (l,w)
@@ -194,8 +199,13 @@ impl HwLdaAcc {
         //     = sum_{trace} trace*trace^T - trace*(coefs^T*b)^T - (coefs^T*b)*trace^T  + (coefs^T*b)*(coefs^T*b)^T
         //     = s_t - xty^T*coef - coef.T*xty + s_m
         //     (s_t is self.scatter)
+
+        // CAUTION: seems wrong from within scatter result
         let s_w = &scatter + s_m - &xty.t().dot(&reg_coefs) - &reg_coefs.t().dot(&xty);
         let ns = norm_proj.shape()[1];
+
+        println!("SCATTER:{}",scatter);
+        println!("SW:{}",s_w);
 
         let projection = if ns == 1 {
             Array2::eye(ns)
@@ -212,6 +222,10 @@ impl HwLdaAcc {
         // The new residual is projection*(trace-coefs^T*b), hence its scatter is
         // projection*s_w*projection^T
         let cov_proj_res = projection.view().dot(&s_w).dot(&projection.t()) / (n as f64);
+        #[cfg(test)]{
+            println!("PROJECTION:{}",projection);
+            println!("COV_PROJ_RES:{}",cov_proj_res);
+        }
         // We decompose cov_proj_res N as N = V*W*V^T where V is orthonormal and W diagonal
         // then if we re-project with W^-1/2*V^T, we get an identity covariance.
         let nalgebra::linalg::SymmetricEigen {
@@ -220,9 +234,14 @@ impl HwLdaAcc {
         } = nalgebra::linalg::SymmetricEigen::new(cov_proj_res.into_nalgebra());
         let mut evals = eigenvalues.into_ndarray1();
         let evecs = eigenvectors.into_ndarray2();
+        #[cfg(test)]{
+            println!("EVALS:{}",evals);
+            println!("EVECS:{}",evecs);
+        }
         evals.mapv_inplace(|v| 1.0 / v.sqrt());
         let normalizing_proj_t = evecs * evals.slice(s![.., NewAxis]);
         // Storing projections and projected coefficients
+        println!("NORM_PROJECTION_T:{}",normalizing_proj_t);
         norm_proj.assign(&normalizing_proj_t.t().dot(&projection));
         proj_coefs.assign(&norm_proj.dot(&reg_coefs.t()));
         return Ok(());
@@ -285,7 +304,12 @@ impl HwLda {
             v.into_par_iter().for_each(|s| *s /= tot);
         }
 
+        println!("\n");
+        println!("NORM_PROJ:{}",self.norm_proj);
+        println!("PREDICT_TRACES:{}",traces);
         let traces = self.project(traces, v);
+        println!("PREDICT_PROJ_TRACES:{}",traces);
+
 
         // score will contain the squared distance between the trace and the mean of each class
         // it has shape (nt,1<<nb) where nt is the number of traces we need to predict
@@ -447,6 +471,7 @@ mod tests_hwlda {
         data_bits.sum_axis(Axis(2))
     }
 
+    const SCALE: i16 =1<<10;
     fn hw_leakage_from_bits(
         data_bits: ArrayView3<u32>,
         nstd: f64,
@@ -459,7 +484,7 @@ mod tests_hwlda {
         // Simulate the noise
         let noise =
             Array2::<f64>::random_using((n, nv), Normal::new(f64::from(0.0), nstd).unwrap(), rng);
-        let ret = noise + hw;
+        let ret = (noise + hw)*f64::from(SCALE);
         (ret.mapv(|v| v.round() as i16), hwraw)
     }
 
@@ -468,33 +493,52 @@ mod tests_hwlda {
         let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
 
         // Generate data
-        let n = 4;
+        let n = 10000;
         let nv = 1;
         let ns = nv;
         let nb = 2;
 
         // Noise std for traces simulation
-        let nstd = 0.0;
+        let nstd = 0.2;
 
         // Training data
         let data_bits = generate_data_bits(&mut rng, n, nv, nb);
         let classes = data_u32_from_bits(data_bits.view()).mapv(|v| v as u64);
         let (traces, hwraw) = hw_leakage_from_bits(data_bits.view(), nstd, &mut rng);
 
+        // Some stat
+        let thw = 2;
+        let mut vtarget = vec![0];
+        for (i, hw) in hwraw.iter().enumerate(){
+            if thw == *hw {
+                vtarget.push(i);
+            }
+        }
+        let tdata = traces.select(Axis(0), &vtarget).mapv(|v| v as f64);
+        let practical_std = tdata.std(1.);
+
         // Create the HwLdaAcc
         let mut hwldaacc = HwLdaAcc::new(nb, nv, nv);
         hwldaacc.update(traces.view(), classes.t().view(), 0);
 
-        println!("TRACES\n{}",traces);
-        println!("BITS\n{}",data_bits);
-        println!("CLASSES\n{}",classes);
-        println!("\n");
-
         // Solve to test
         let hwlda = hwldaacc.solve().unwrap();
 
+        // Print scaled statistic
+        let unscaled_hw = hwlda.reg_coefs[(0,0,0)] / (SCALE as f64);
+        let unscaled_noise_std = practical_std/(SCALE as f64);
+        let scaled_var = nstd * nstd * (SCALE as f64) * (SCALE as f64);
+
+        println!("\n--- STATISTIC CHECK ---");
+        println!("SCALING FACTOR: {}", SCALE);
+        println!("UNSCALED COEF: {} (must be 1.0)",unscaled_hw);
+        println!("SCALED STD: {} (must be {})", practical_std, (SCALE as f64)*nstd);
+        println!("UNSCALED STD: {} (must be {})",unscaled_noise_std,nstd);
+        println!("SCALED VAR: {}",scaled_var);
+        println!("\n");
+
         // Validation data
-        let n_validation = 1;
+        let n_validation = 10;
         let vdata_bits = generate_data_bits(&mut rng, n_validation, nv, nb);
         let vclasses = data_u32_from_bits(vdata_bits.view()).mapv(|v| v as u64);
         let (vtraces, vhwraw) = hw_leakage_from_bits(vdata_bits.view(), nstd, &mut rng);
@@ -503,7 +547,6 @@ mod tests_hwlda {
 
         // Predict
         let probs = hwlda.predict_proba(vtraces.view(), 0);
-        println!("REG_COEFS\n{:#?}",hwlda.reg_coefs);
 
         let mprs = probs.fold_axis(Axis(1), -2.0, |m, e| {
             if e > m {
@@ -528,8 +571,9 @@ mod tests_hwlda {
             println!("{}", vdata_bits.slice(s![ni as usize, 0, ..]));
             println!("{}", hwprobs.slice(s![0, ni as usize, ..]));
             println!(
-                "L(x) {:#?} (raw: {:#?})",
+                "L(x) {:#?} ; scaled: {} (raw: {:#?})",
                 vtraces[(ni as usize, 0)],
+                (vtraces[(ni as usize, 0)] as f64) / (SCALE as f64),
                 vhwraw[(ni as usize, 0)]
             );
             let pr_prob = pr.log2();
