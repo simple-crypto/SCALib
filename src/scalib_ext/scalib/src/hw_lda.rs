@@ -195,7 +195,7 @@ impl HwLdaAcc {
         //     = s_t - xty^T*coef - coef.T*xty + s_m
         //     (s_t is self.scatter)
         let s_w = &scatter + s_m - &xty.t().dot(&reg_coefs) - &reg_coefs.t().dot(&xty);
-        let ns = norm_proj.shape()[1];
+        let ns = norm_proj.shape()[0];
 
         let projection = if ns == 1 {
             Array2::eye(ns)
@@ -211,6 +211,11 @@ impl HwLdaAcc {
         // (we'd like it to be for later simplicity), hence a apply a rotation.
         // The new residual is projection*(trace-coefs^T*b), hence its scatter is
         // projection*s_w*projection^T
+        #[cfg(test)]{
+            println!("[DEBUG] shape norm_proj: {:#?}",norm_proj.shape());
+            println!("[DEBUG] ns: {}",ns);
+            println!("[DEBUG] Projection: {}",projection);
+        }
         let cov_proj_res = projection.view().dot(&s_w).dot(&projection.t()) / (n as f64);
         // We decompose cov_proj_res N as N = V*W*V^T where V is orthonormal and W diagonal
         // then if we re-project with W^-1/2*V^T, we get an identity covariance.
@@ -223,8 +228,15 @@ impl HwLdaAcc {
         evals.mapv_inplace(|v| 1.0 / v.sqrt());
         let normalizing_proj_t = evecs * evals.slice(s![.., NewAxis]);
         // Storing projections and projected coefficients
-        norm_proj.assign(&normalizing_proj_t.t().dot(&projection));
-        proj_coefs.assign(&norm_proj.dot(&reg_coefs.t()));
+        #[cfg(test)]{
+            println!("[DEBUG] shape normalizing_proj_t: {:#?}",normalizing_proj_t.shape());
+            println!("[DEBUG] shape projection: {:#?}",projection.shape());
+            println!("[DEBUG] shape reg_coef: {:#?}",reg_coefs.shape());
+        }
+        //norm_proj.assign(&normalizing_proj_t.t().dot(&projection));
+        norm_proj.assign(&projection.t().dot(&normalizing_proj_t));
+        //proj_coefs.assign(&norm_proj.dot(&reg_coefs.t()));
+        proj_coefs.assign(&norm_proj.t().dot(&reg_coefs.t()));
         return Ok(());
     }
 
@@ -461,6 +473,36 @@ mod tests_hwlda {
         (ret.mapv(|v| v.round() as i16), hwraw)
     }
 
+    fn test_simple_run_mv() {
+        let seed = 1 as u64;
+        let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
+
+        // Generate data
+        let n = 10000;
+        let nv = 3;
+        let ns = nv;
+        let nb = 2;
+
+        // Noise std for traces simulation
+        let nstd = 0.2;
+
+        // Training data
+        let data_bits = generate_data_bits(&mut rng, n, nv, nb);
+        let classes = data_u32_from_bits(data_bits.view()).mapv(|v| v as u64);
+        let (traces, hwraw) = hw_leakage_from_bits(data_bits.view(), nstd, &mut rng);
+
+        // Create the HwLdaAcc
+        let mut hwldaacc = HwLdaAcc::new(nb, nv, nv);
+        hwldaacc.update(traces.view(), classes.t().view(), 0);
+
+        println!("[DEBUG] top ns: {}",ns);
+        println!("[DEBUG] shape traces: {:#?}",traces.dim());
+        println!("[DEBUG] shape classes: {:#?}",classes.dim());
+        // Solve to test
+        let hwlda = hwldaacc.solve().unwrap();
+    }
+
+
     fn test_simple_run() {
         let seed = 1 as u64;
         let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
@@ -567,6 +609,7 @@ mod tests_hwlda {
 
     #[test]
     fn test_ref() {
-        test_simple_run();
+        //test_simple_run();
+        test_simple_run_mv();
     }
 }
