@@ -320,7 +320,7 @@ impl HwLda {
     /// return the log2 probability of one possible value for leakage samples
     /// traces with shape (n,ns)
     /// y with shape (n, nv)
-    /// return prs with shape (nv, n), proba of the corresponding y
+    /// return prs with shape (n, nv), proba of the corresponding y
     pub fn predict_log2p1(&self, traces: ArrayView2<i16>, y: ArrayView2<u64>) -> Array2<f64> {
         // Shape (nv, n, 1)
         let mut proj_traces = Array3::zeros((self.nv as usize, traces.len_of(Axis(0)), 1));
