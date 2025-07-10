@@ -167,4 +167,62 @@ def test_run_hwlda_mvars_lownoise():
             max_hwpr = np.argmax(hwprobaas[vi, ni])
             assert max_hwpr==phw[ni, vi] 
 
-    print(ptraces)
+
+def test_mvars_batches():
+    nb = 8
+    nv = 3
+    n = 10000
+    nval = 1000
+    nstd = 1
+
+    batch_size = 1000
+
+    SCALE = 1 << 10
+    # data generation for training
+    dbits = generate_random_data_bits(n, nv, nb)
+    traces, hw = generate_noisy_scaled_hw_mv(dbits, nstd, scale=SCALE)
+    du64 = u64_data_from_bits(dbits)
+
+    # Accumulator for single fit 
+    sf_hwldaacc = HwLdaAcc(nb)
+    sf_hwldaacc.fit_u(traces, du64)
+
+    # Accumulator for multiple fit 
+    bf_hwldaacc = HwLdaAcc(nb)
+    ambatch = int(np.ceil(n/batch_size))
+    for bi in range(ambatch):
+        ptraces = bi*batch_size
+        rtraces = n-ptraces 
+        if rtraces>=batch_size:
+            utraces = batch_size
+        else:
+            utraces = rtraces
+        # Fit the batch 
+        i0 = ptraces 
+        i1 = ptraces  + utraces
+        bf_hwldaacc.fit_u(traces[i0:i1,:], du64[i0:i1,:])
+    
+    # Solve 
+    sf_hwlda = HwLda(sf_hwldaacc)
+    bf_hwlda = HwLda(bf_hwldaacc)
+
+    # data generation for validation
+    dbits = generate_random_data_bits(nval, nv, nb)
+    traces, hw = generate_noisy_scaled_hw_mv(dbits, nstd, scale=SCALE)
+    du64 = u64_data_from_bits(dbits)
+
+    # Predict logprob 
+    sf_lprs = sf_hwlda.predict_log2p1(traces, du64) 
+    bf_lprs = bf_hwlda.predict_log2p1(traces, du64) 
+
+    # Predict
+    for vi in range(nv):
+        # Predict 
+        sf_prs = sf_hwlda.predict_proba(traces, vi)
+        bf_prs = bf_hwlda.predict_proba(traces, vi)
+        assert np.allclose(sf_prs, bf_prs), f'\nsf_prs:\n{sf_prs}\nbf_prs:\n{bf_prs}'
+        assert np.allclose(sf_lprs[vi], bf_lprs[vi]), f'\nsf_lprs:\n{sf_lprs[vi]}\nbf_lprs:\n{bf_lprs[vi]}'
+
+        
+
+
