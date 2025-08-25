@@ -145,27 +145,28 @@ def test_run_hwlda_mvars_lownoise():
     ptraces, phw = generate_noisy_scaled_hw_mv(pdbits, nstd)
     pdu64 = u64_data_from_bits(pdbits)
 
-
     # HW probas
     hwprobaas = hwlda.predict_hw_probas(ptraces)
-    lprobas = hwlda.predict_log2p1(ptraces,pdu64)
+    lprobas = hwlda.predict_log2p1(ptraces, pdu64)
 
     for vi in range(nv):
         # Prediction classes
         proba = hwlda.predict_proba(ptraces, vi)
         mproba = np.max(proba, axis=1)
         for ni in range(nval):
-            print(f'\n## n: {ni} ; vi: {vi}')
-            print(f'L(x): {ptraces[ni,vi]} ; HW(x): {phw[ni,vi]} ; class: {pdu64[ni,vi]}')
-            c = pdu64[ni,vi]
-            prv = proba[ni,c]
+            print(f"\n## n: {ni} ; vi: {vi}")
+            print(
+                f"L(x): {ptraces[ni,vi]} ; HW(x): {phw[ni,vi]} ; class: {pdu64[ni,vi]}"
+            )
+            c = pdu64[ni, vi]
+            prv = proba[ni, c]
             print(f'Pr class:"{c}": {prv} (max is {mproba[ni]})')
             assert np.allclose(prv, mproba[ni])
             lprob = np.log2(prv)
             print(f'lPr class:"{c}": {lprob} ; l2p1: {lprobas[ni, vi]}')
             assert np.allclose(lprobas[ni, vi], lprob), "Log2 failure"
             max_hwpr = np.argmax(hwprobaas[vi, ni])
-            assert max_hwpr==phw[ni, vi] 
+            assert max_hwpr == phw[ni, vi]
 
 
 def test_mvars_batches():
@@ -183,26 +184,26 @@ def test_mvars_batches():
     traces, hw = generate_noisy_scaled_hw_mv(dbits, nstd, scale=SCALE)
     du64 = u64_data_from_bits(dbits)
 
-    # Accumulator for single fit 
+    # Accumulator for single fit
     sf_hwldaacc = HwLdaAcc(nb)
     sf_hwldaacc.fit_u(traces, du64)
 
-    # Accumulator for multiple fit 
+    # Accumulator for multiple fit
     bf_hwldaacc = HwLdaAcc(nb)
-    ambatch = int(np.ceil(n/batch_size))
+    ambatch = int(np.ceil(n / batch_size))
     for bi in range(ambatch):
-        ptraces = bi*batch_size
-        rtraces = n-ptraces 
-        if rtraces>=batch_size:
+        ptraces = bi * batch_size
+        rtraces = n - ptraces
+        if rtraces >= batch_size:
             utraces = batch_size
         else:
             utraces = rtraces
-        # Fit the batch 
-        i0 = ptraces 
-        i1 = ptraces  + utraces
-        bf_hwldaacc.fit_u(traces[i0:i1,:], du64[i0:i1,:])
-    
-    # Solve 
+        # Fit the batch
+        i0 = ptraces
+        i1 = ptraces + utraces
+        bf_hwldaacc.fit_u(traces[i0:i1, :], du64[i0:i1, :])
+
+    # Solve
     sf_hwlda = HwLda(sf_hwldaacc)
     bf_hwlda = HwLda(bf_hwldaacc)
 
@@ -211,18 +212,16 @@ def test_mvars_batches():
     traces, hw = generate_noisy_scaled_hw_mv(dbits, nstd, scale=SCALE)
     du64 = u64_data_from_bits(dbits)
 
-    # Predict logprob 
-    sf_lprs = sf_hwlda.predict_log2p1(traces, du64) 
-    bf_lprs = bf_hwlda.predict_log2p1(traces, du64) 
+    # Predict logprob
+    sf_lprs = sf_hwlda.predict_log2p1(traces, du64)
+    bf_lprs = bf_hwlda.predict_log2p1(traces, du64)
 
     # Predict
     for vi in range(nv):
-        # Predict 
+        # Predict
         sf_prs = sf_hwlda.predict_proba(traces, vi)
         bf_prs = bf_hwlda.predict_proba(traces, vi)
-        assert np.allclose(sf_prs, bf_prs), f'\nsf_prs:\n{sf_prs}\nbf_prs:\n{bf_prs}'
-        assert np.allclose(sf_lprs[vi], bf_lprs[vi]), f'\nsf_lprs:\n{sf_lprs[vi]}\nbf_lprs:\n{bf_lprs[vi]}'
-
-        
-
-
+        assert np.allclose(sf_prs, bf_prs), f"\nsf_prs:\n{sf_prs}\nbf_prs:\n{bf_prs}"
+        assert np.allclose(
+            sf_lprs[vi], bf_lprs[vi]
+        ), f"\nsf_lprs:\n{sf_lprs[vi]}\nbf_lprs:\n{bf_lprs[vi]}"
