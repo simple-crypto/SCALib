@@ -69,14 +69,12 @@ Help us keeping it up-to-date: add your publications by
 12. "Low-Latency Masking with Arbitrary Protection Order Based on Click
     Elements", M. Simões, L. Bossuet, N. Bruneau, V. Grosso, P. Haddad, T.
     Sarno, HOST 2023.
-13. "Removing the Field Size Loss from Duc et al.’s Conjectured Bound for
-    Masked Encodings.", Béguinot, J. et al., COSADE 2023.
-14. "Self-timed Masking: Implementing Masked S-Boxes Without Registers."
+13. "Self-timed Masking: Implementing Masked S-Boxes Without Registers."
     Simões, M., Bossuet, L., Bruneau, N., Grosso, V., Haddad, P., Sarno, T.,
     CARDIS 2022
-15. "Prime-Field Masking in Hardware and its Soundness against Low-Noise SCA
+14. "Prime-Field Masking in Hardware and its Soundness against Low-Noise SCA
     Attacks", Cassiers, G., Masure, L., Momin, C., Moos, T., Standaert, F.-X.,
     TCHES 2023.
-16. "Effective and Efficient Masking with Low Noise Using Small-Mersenne-Prime
+15. "Effective and Efficient Masking with Low Noise Using Small-Mersenne-Prime
     Ciphers.", Masure, L., Méaux, P., Moos, T., Standaert, F. X., EUROCRYPT
     2023.
