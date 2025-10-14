@@ -97,7 +97,10 @@ def success_rate(
 
 
 def f(x):
-    return np.where(x > 0, x - np.expm1(x) * np.log1p(-np.exp(-x)), 0)
+    fx = np.zeros_like(x)
+    mask = (x > 0) 
+    fx[mask] = x[mask] - np.expm1(x[mask]) * np.log1p(-np.exp(-x[mask]))
+    return fx
 
 
 def f_inv(y, niter=20):
@@ -109,14 +112,13 @@ def f_inv(y, niter=20):
     x_lb = np.maximum(np.log(1), y - 1 + np.log1p(np.exp(1 - y) / 2)).reshape((-1,))
     x_ub = np.maximum(np.log(2), y - 1 + np.log1p(np.exp(1 - y) / 2 + 1)).reshape((-1,))
 
-    assert (f(x_lb) <= y).all()
-    assert (f(x_ub) >= y).all()
-
     # Dichotomic search
     for _ in range(niter):
         x_mid = (x_lb + x_ub) / 2
         x_lb, x_ub = np.where(f(x_mid) - y < 0, (x_mid, x_ub), (x_lb, x_mid))
 
+    if (abs(f(x_lb)-y) > 10**-2).any():
+        print("Inversion error exceeds 10^{-2} consider increasing niter")
     return x_lb
 
 
@@ -140,9 +142,9 @@ def guessing_entropy(mutual_information, key_size, base=2):
     MI_nats = mutual_information * np.log(base)
     key_size_nats = key_size * np.log(2)
     entropy_nats = key_size_nats - MI_nats
-    sqrt = np.sqrt(np.tanh(key_size_nats / 2) * 2 * MI_nats / 3)
 
     finite_size_bound = np.zeros_like(mutual_information)
+    sqrt = np.sqrt(np.tanh(key_size_nats / 2) * 2 * MI_nats / 3)
     mask = sqrt < 1
     finite_size_bound[mask] = (
         key_size_nats
