@@ -98,7 +98,7 @@ def success_rate(
 
 def f(x):
     fx = np.zeros_like(x)
-    mask = (x > 0) 
+    mask = x > 0
     fx[mask] = x[mask] - np.expm1(x[mask]) * np.log1p(-np.exp(-x[mask]))
     return fx
 
@@ -117,7 +117,7 @@ def f_inv(y, niter=20):
         x_mid = (x_lb + x_ub) / 2
         x_lb, x_ub = np.where(f(x_mid) - y < 0, (x_mid, x_ub), (x_lb, x_mid))
 
-    if (abs(f(x_lb)-y) > 10**-2).any():
+    if (abs(f(x_lb) - y) > 10**-2).any():
         print("Inversion error exceeds 10^{-2} consider increasing niter")
     return x_lb
 
