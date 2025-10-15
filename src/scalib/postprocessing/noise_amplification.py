@@ -149,7 +149,7 @@ def mrs_gerber_lemma(MI_shares: float, group_order: int, base=2) -> float:
 
     Returns
     -------
-    Upper bound on the mutual information for all nv sensitive values based on Mrs Gerber's Lemma
+    Upper bound on the mutual information for all nv sensitive values based on Mrs Gerber's Lemma.
     """
 
     MI_shares = np.asarray(MI_shares)
