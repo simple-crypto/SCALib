@@ -168,7 +168,7 @@ def mrs_gerber_lemma(MI_shares: float, group_order: int, base=2) -> float:
         bellow = 2 * MI_shares * np.log(base) < 1
 
         # Multipy only the terms bellow the noise amplification ratio
-        product = np.prod(np.where(bellow, 2 * MI_shares * np.log(base), 1), axis=0) / 4
+        product = np.prod(np.where(below, 2 * MI_shares * np.log(base), 1), axis=0) / 4
 
         # If there is no share bellow the noise amplification ratio we return the minimum instead
         min_shares = np.min(MI_shares * np.log(base), axis=0)
