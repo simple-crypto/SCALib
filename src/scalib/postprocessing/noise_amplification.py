@@ -165,7 +165,7 @@ def mrs_gerber_lemma(MI_shares: float, group_order: int, base=2) -> float:
         beta = group_order**2 * 4 ** (1 / group_order)
 
         # Detect which shares are below the noise amplification ratio.
-        bellow = 2 * MI_shares * np.log(base) < 1
+        below = 2 * MI_shares * np.log(base) < 1
 
         # Multipy only the terms bellow the noise amplification ratio
         product = np.prod(np.where(below, 2 * MI_shares * np.log(base), 1), axis=0) / 4
