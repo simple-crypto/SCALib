@@ -143,7 +143,7 @@ def mrs_gerber_lemma(MI_shares: float, group_order: int, base=2) -> float:
         Mutual information for each share. Array must be of shape ``(ns,nv)`` where
         ``ns`` is the number of shares, ``nv`` the number of sensitive values.
     group_order : int
-        Order of the Abelian in which the sensitive values are protected by masking.
+        Order of the group in which the sensitive values are protected by masking.
     base : array_like, f64
         The base of information used, by default the information is in bits i.e. base=2.
 
