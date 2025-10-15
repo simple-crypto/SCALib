@@ -173,8 +173,8 @@ def mrs_gerber_lemma(MI_shares: float, group_order: int, base=2) -> float:
         # If there is no share bellow the noise amplification ratio we return the minimum instead
         min_shares = np.min(MI_shares * np.log(base), axis=0)
 
-        # Depending on the case we return either the minimum or the product of shares bellow noise amplification
-        P = np.where(~np.any(bellow, axis=0), min_shares, product)
+        # Depending on the case we return either the minimum or the product of shares below noise amplification
+        P = np.where(~np.any(below, axis=0), min_shares, product)
 
         MI_1 = np.log(1 + beta * P)
         MI_2 = (1 / group_order + np.sqrt(P)) * np.log(1 + group_order * np.sqrt(P))
