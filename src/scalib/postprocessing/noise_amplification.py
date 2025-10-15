@@ -181,7 +181,7 @@ def mrs_gerber_lemma(MI_shares: float, group_order: int, base=2) -> float:
         min_MI = np.minimum(np.minimum(MI_1, MI_2), min_shares)
 
         # Depending on the case we return either the minimum or the amplification lemma
-        MI = np.where(~np.any(bellow, axis=0), min_shares, min_MI)
+        MI = np.where(~np.any(below, axis=0), min_shares, min_MI)
 
     # Conversion from nats to base 'base'
     MI /= np.log(base)
