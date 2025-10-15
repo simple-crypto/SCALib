@@ -158,8 +158,8 @@ def mrs_gerber_lemma(MI_shares: float, group_order: int, base=2) -> float:
     if (group_order & (group_order - 1)) == 0:
         MI_share_bits = MI_shares * np.log2(base)
         k = np.min(np.floor(MI_share_bits), axis=0)
-        cliped_MI_shares = np.clip(0, 1, MI_share_bits - k) * np.log(2)
-        MI = k * np.log(2) + phi(np.prod(phi_inv(cliped_MI_shares), axis=0))
+        clipped_MI_shares = np.clip(0, 1, MI_share_bits - k) * np.log(2)
+        MI = k * np.log(2) + phi(np.prod(phi_inv(clipped_MI_shares), axis=0))
     # Otherwise, use a weaker MGL based on Pinsker/reverse Pinsker inequalities
     else:
         beta = group_order**2 * 4 ** (1 / group_order)
