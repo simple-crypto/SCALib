@@ -13,7 +13,7 @@ Rank Estimation
    scalib.postprocessing.noise_amplification
 """
 
-__all__ = ["rankestimation", "mrs_gerber_lemma"]
+__all__ = ["rankestimation", "mgl"]
 
 from .rankestimation import rank_nbin, rank_accuracy
-from .noise_amplification import mrs_gerber_lemma
+from .noise_amplification import mgl
