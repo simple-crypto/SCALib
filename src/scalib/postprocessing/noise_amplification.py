@@ -1,10 +1,14 @@
 r"""Estimation of the mutual information between a sensitive value protected by masking and leakages in terms of the mutual information between each share and its corresponding leakages 
 
 This function is usefull in the following setting.
-You know that a sensitive value X is protected by masking so that it is shared into (S_0,...,S_d).  
-You can observe leakages Y_0,...,Y_d for each corresponding shares.  
-You have have estimated the leakages on each share via the mutual information I(S_i;Y_i).
-Then, the mgl function provides an upper bound on the mutual information I(X; Y_0,...,Y_d).  
+You know that a sensitive value :math:`X` valued in group of order :math:`M` is protected by masking so that it is shared into :math:`(S_0,...,S_d)`.  
+You can observe leakages :math:`Y_0,...,Y_d` for each corresponding shares.  
+You have have estimated the leakages on each share via the mutual information :math:`I(S_i;Y_i)`.
+Then, the mgl function provides an upper bound on the mutual information :math:`I(X; Y_0,...,Y_d)`: 
+
+.. math::
+    I(X; Y_0,\ldots,Y_d) \leq f_{\mathrm{MGL},M}( I(S_0;Y_0), \ldots, I(S_d;Y_d) ).
+
 The obtained upper bound can then be used with other functions that provides security guarantees (such as success rate of an attack) in terms of mutual information. 
 
 The `mgl` function takes as input the mutual information for each share separately (eventually for multiple sensitive values) 
