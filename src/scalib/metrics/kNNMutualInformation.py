@@ -6,7 +6,7 @@ from scipy.spatial import cKDTree
 
 class kNNInformationEstimator:
     r"""Mutual Information Estimator for discrete X and continous Y
-    
+
     Based on "Mutual Information between Discrete and Continuous Data Sets" from Brian C. Ross
     """
 

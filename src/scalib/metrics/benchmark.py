@@ -83,9 +83,9 @@ def multiple_estimations(
 n = 8
 n_sigma = 15
 repeat = 50
-n_sample = 5*10**4
+n_sample = 5 * 10**4
 dummy_dim = 0
-Sigma = np.geomspace(5 * 10**-2, 5*10**2, n_sigma)
+Sigma = np.geomspace(5 * 10**-2, 5 * 10**2, n_sigma)
 
 ensemble_k = [
     3,
