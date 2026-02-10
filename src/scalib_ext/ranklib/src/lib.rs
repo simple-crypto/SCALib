@@ -1,26 +1,30 @@
 mod histogram;
 mod rank;
 
-#[derive(Debug)]
-pub struct RankError {
-    s: String,
-}
-impl<'a> From<&'a str> for RankError {
-    fn from(s: &'a str) -> Self {
-        Self { s: s.into() }
-    }
-}
+use thiserror::Error;
 
-impl std::fmt::Display for RankError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Ranking error: {}", self.s)
-    }
-}
-
-impl std::error::Error for RankError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
-    }
+#[derive(Error, Debug)]
+pub enum RankError {
+    #[error("Merge value larger than number of subkeys.")]
+    MergeTooHigh,
+    #[error("There must be 16 subkeys for hellib.")]
+    HellibNbSubkeys,
+    #[error("For Hellib, all subkeys must be 8 bits, hence 256 costs.")]
+    HellibNbCosts,
+    #[error("Number of costs and subkeys differ.")]
+    NbCosts,
+    #[error("There must be at least one subkey.")]
+    NoSubKey,
+    #[error("Key value too large wrt cost array size.")]
+    SubKeyOutOfBound,
+    #[error("Non-finite score: {0}")]
+    NotFiniteScore(f64),
+    #[error("Infinite true key total score.")]
+    InfiniteKeyScore,
+    #[error("Too low bin count.")]
+    TooFewBins,
+    #[error("Too high bin count.")]
+    TooManyBins,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -63,7 +67,7 @@ impl RankingMethod {
     ) -> Result<RankEstimation, RankError> {
         let merged_problem = if let Some(merge) = merge {
             if merge < 1 || merge > problem.costs.len() {
-                Err("Merge value not supported.")?;
+                Err(RankError::MergeTooHigh)?;
             }
             problem.merge(merge)
         } else {
@@ -116,9 +120,16 @@ impl RankingMethod {
     ) -> Result<RankEstimation, RankError> {
         let problem = rank::RankProblem::new(costs, key)?;
         for nb_bin in (4..).map(|i| 1 << i).take_while(|x| *x < max_nb_bin) {
-            let res = self.rank_inner(&problem, nb_bin, merge)?;
-            if res.margin() <= acc {
-                return Ok(res);
+            match self.rank_inner(&problem, nb_bin, merge) {
+                Ok(res) => {
+                    if res.margin() <= acc {
+                        return Ok(res);
+                    }
+                }
+                Err(RankError::TooFewBins) => {}
+                Err(e) => {
+                    return Err(e);
+                }
             }
         }
         // We do best-effort. If we cannot reach desired accuracy, we still return the best result
@@ -137,13 +148,13 @@ fn rank_hellib(
     // Hellib only supports fixed key length and key size, I believe (otherwise you have to
     // recompile).
     if key.len() != 16 {
-        Err("There must be 16 subkeys for hellib.")?;
+        Err(RankError::HellibNbSubkeys)?;
     }
     if costs.len() != key.len() {
-        Err("There must be as many costs as subkeys.")?;
+        Err(RankError::NbCosts)?;
     }
     if costs.iter().any(|c| c.len() != 256) {
-        Err("All subkeys must be 8 bits, hence 256 costs.")?;
+        Err(RankError::HellibNbCosts)?;
     }
     let scores: Vec<Vec<f64>> = costs
         .iter()

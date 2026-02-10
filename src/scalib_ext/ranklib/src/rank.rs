@@ -51,10 +51,10 @@ impl RankProblem {
     }
     pub fn assert_valid(&self) -> Result<(), RankError> {
         if self.costs.len() != self.real_key.len() {
-            Err("Not same length cost and key")?;
+            Err(RankError::NbCosts)?;
         }
         if self.real_key.len() == 0 {
-            Err("Empty key")?;
+            Err(RankError::NoSubKey)?;
         }
         if self
             .real_key
@@ -62,18 +62,15 @@ impl RankProblem {
             .zip(self.costs.iter())
             .any(|(k, sc)| *k >= sc.len())
         {
-            Err("Key value too large wrt cost")?;
+            Err(RankError::SubKeyOutOfBound)?;
         }
         for s in self.costs.iter().flat_map(|sc| sc.iter()) {
-            if s.is_nan() {
-                Err("Nan score")?;
-            }
-            if *s == f64::NEG_INFINITY {
-                Err("-Inf score")?;
+            if s.is_nan() || *s == f64::NEG_INFINITY {
+                Err(RankError::NotFiniteScore(*s))?;
             }
         }
         if self.key_cost() == f64::INFINITY {
-            Err("Infinite cost for the key.")?;
+            Err(RankError::InfiniteKeyScore)?;
         }
         Ok(())
     }
@@ -164,9 +161,11 @@ impl RankProblem {
         // We take key_cost = (nb_bins-margin-1)*bin_size.
         let nb_subkeys = self.costs.len();
         let margin = (nb_subkeys / 2) + (nb_subkeys & 0x1);
-        let effective_nb_bins = nb_bins.checked_sub(margin + 1).ok_or("nb_bins too small")?;
+        let effective_nb_bins = nb_bins
+            .checked_sub(margin + 1)
+            .ok_or(RankError::TooFewBins)?;
         if effective_nb_bins == 0 {
-            Err("nb_bins too small")?;
+            Err(RankError::TooFewBins)?;
         }
         return Ok(self.key_cost() / (effective_nb_bins as f64));
     }
@@ -204,8 +203,11 @@ impl RankProblem {
     }
     /// Estimate rank using a convolution of histograms
     pub fn rank_hist<H: Histogram>(&self, nb_bins: usize) -> Result<RankEstimation, RankError> {
-        if nb_bins < 1 || nb_bins > MAX_NB_BINS {
-            Err("Bin count out of limits.")?;
+        if nb_bins < 1 {
+            Err(RankError::TooFewBins)?;
+        }
+        if nb_bins > MAX_NB_BINS {
+            Err(RankError::TooManyBins)?;
         }
         let (hist, bin_size): (H, _) = self.build_histogram(nb_bins)?;
         let hist = hist.scale_back();

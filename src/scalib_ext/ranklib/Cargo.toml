@@ -12,6 +12,7 @@ hellib = []
 itertools = "0.14"
 arbitrary = { version = "1.4", features = ["derive"], optional = true }
 realfft = "3.4"
+thiserror = "2.0.9"
 
 [build-dependencies]
 cc = "1.2.6"
