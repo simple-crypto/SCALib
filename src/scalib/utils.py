@@ -18,7 +18,7 @@ def interruptible():
     interrupted. This results in unclean python shutdown but it is better than
     requiring to kill the process.
 
-    This is only feasable on the main thread. In other threads, this function
+    This is only feasible on the main thread. In other threads, this function
     is a no-op.
     """
     if threading.current_thread() is threading.main_thread():
